@@ -1179,6 +1179,22 @@ namespace LevelGate
             // by the main player's level.
             if (!LevelGateCheck.IsOwnInventoryController(__instance)) return true;
 
+            // Out of raid (stash/hideout) the controller is a
+            // BackEndInventoryController, and this CanExecute runs INSIDE
+            // its backend operation queue (ClientBackendSession
+            // .ReadWaitingQueue), after the action was already accepted and
+            // sent. Refusing there makes the queue retry the same operation
+            // forever — the freeze with the looping loot sound when dropping
+            // M882 into an MP-5 chamber in the stash. Out of raid, actions
+            // are refused BEFORE they're queued instead
+            // (Patch_BlockOperationResult / MoveResult / LoadMagazine /
+            // ApplyItem), so this one must never block.
+            if (IsBackendQueueController(__instance))
+            {
+                DiagnosticLogging.LogCall($"Patch_BlockOperation skipped (backend queue) op={operation?.GetType().Name ?? "NULL"}");
+                return true;
+            }
+
             bool allowed = true;
             Evaluate(operation, ref allowed, "Patch_BlockOperation", startingResult: true);
             if (!allowed)
@@ -1187,6 +1203,24 @@ namespace LevelGate
                 return false; // skip original
             }
             return true; // let the real logic decide
+        }
+
+        private static readonly Dictionary<Type, bool> _backendTypeCache = new Dictionary<Type, bool>();
+
+        internal static bool IsBackendQueueController(object controller)
+        {
+            if (controller == null) return false;
+            var type = controller.GetType();
+            if (!_backendTypeCache.TryGetValue(type, out bool isBackend))
+            {
+                isBackend = false;
+                for (var t = type; t != null; t = t.BaseType)
+                {
+                    if (t.Name == "BackEndInventoryController") { isBackend = true; break; }
+                }
+                _backendTypeCache[type] = isBackend;
+            }
+            return isBackend;
         }
 
         // Shared by both the base ItemController.CanExecute patch above (used by
@@ -1749,7 +1783,7 @@ namespace LevelGate
         }
 
         [HarmonyPriority(Priority.First)]
-        static bool Prefix(object[] __args, ref bool __result)
+        static bool Prefix(object __instance, object[] __args, ref bool __result)
         {
             try
             {
@@ -1760,13 +1794,24 @@ namespace LevelGate
                     return true;
                 }
 
+                // In raid every bot has a health controller too — only judge
+                // the local player's.
+                if (ReflectionUtil.GetMember(__instance, "Player") is EFT.Player owner &&
+                    !ReferenceEquals(owner, LevelGateCheck.GetMainPlayer()))
+                {
+                    return true;
+                }
+
                 var player = LevelGateCheck.GetMainPlayer();
                 bool inConfig = LevelGatePlugin.Data.Items.TryGetValue(item.TemplateId, out int configuredLevel);
                 int currentLevel = player?.Profile?.Info?.Level ?? -1;
                 DiagnosticLogging.LogCall(
                     $"ApplyItem item={item.TemplateId} player={(player == null ? "NULL" : "found")} " +
                     $"inConfig={inConfig} configuredLevel={configuredLevel} currentLevel={currentLevel}");
-                if (player == null) return true;
+                // player == null: out of raid — the stash "Use" button runs
+                // through OfflineHealthController.ApplyItem with no in-raid
+                // player (how the MRE got through). IsBlocked then uses the
+                // PMC profile's level.
 
                 if (LevelGateCheck.IsBlocked(player, item.TemplateId, out int required))
                 {
@@ -1799,6 +1844,71 @@ namespace LevelGate
     // public Item/To properties. MoveResult is a normal, non-nested class,
     // so no reflection is needed.
     // -----------------------------------------------------------------
+    // -----------------------------------------------------------------
+    // Pre-check for EVERY kind of operation result — split, merge,
+    // transfer, swap, not just MoveResult. ItemController
+    // .CanExecute(IOperationResult) is what the UI (GridView.AcceptOnce /
+    // RunNetworkTransaction, per the logs) asks before running a drop or
+    // a transaction. Only MoveResult was covered before, so splitting a few
+    // gated rounds off a stack into a chamber showed green and went ahead
+    // — out of raid straight into the backend queue, where the late refusal
+    // looped forever. The item and destination are read by name
+    // ("Item"/"To") so any result type exposing them is covered; types
+    // that don't are logged once.
+    // -----------------------------------------------------------------
+    [HarmonyPatch(typeof(EFT.InventoryLogic.ItemController), "CanExecute", new[] { typeof(EFT.InventoryLogic.IOperationResult) })]
+    internal static class Patch_BlockOperationResult
+    {
+        [HarmonyPriority(Priority.First)]
+        static bool Prefix(EFT.InventoryLogic.ItemController __instance, EFT.InventoryLogic.IOperationResult __0, ref bool __result)
+        {
+            try
+            {
+                if (__0 == null || !LevelGateCheck.IsOwnInventoryController(__instance)) return true;
+
+                var item = ReflectionUtil.GetMember(__0, "Item") as EFT.InventoryLogic.Item;
+                var to = ReflectionUtil.GetMember(__0, "To") as EFT.InventoryLogic.ItemAddress;
+                if (item == null || to == null)
+                {
+                    DiagnosticLogging.LogCall($"Patch_BlockOperationResult no Item/To on {__0.GetType().Name}");
+                    return true;
+                }
+
+                var player = LevelGateCheck.GetMainPlayer(); // null out of raid -> profile level
+                bool blocked;
+                int required = 0;
+                if (item is EFT.InventoryLogic.Ammo)
+                {
+                    blocked = LevelGateCheck.IsLoadIntoWeaponOrMagazine(to)
+                              && !LevelGateCheck.IsAlreadyInside(item, to)
+                              && LevelGateCheck.IsBlocked(player, item.TemplateId, out required);
+                }
+                else
+                {
+                    blocked = to is EFT.InventoryLogic.SlotItemAddress slotAddress
+                              && LevelGateCheck.EquipSlotIds.Contains(slotAddress.Slot.ID)
+                              && LevelGateCheck.IsBlocked(player, item.TemplateId, out required);
+                }
+
+                if (blocked)
+                {
+                    DiagnosticLogging.LogCall($"Patch_BlockOperationResult blocked {__0.GetType().Name} item={item.TemplateId}");
+                    // Ammo into a gun/magazine is one of the deliberate
+                    // actions that shows "Ammo Level Too High" (this may now
+                    // be the first check a manual chamber load hits).
+                    LevelGateCheck.Notify(required, item, onScreen: item is EFT.InventoryLogic.Ammo);
+                    __result = false;
+                    return false;
+                }
+            }
+            catch (Exception e)
+            {
+                LevelGatePlugin.Log.LogError("LevelGate Patch_BlockOperationResult error: " + e);
+            }
+            return true;
+        }
+    }
+
     [HarmonyPatch(typeof(EFT.InventoryLogic.MoveResult), "CanExecute")]
     internal static class Patch_BlockMoveResult
     {
