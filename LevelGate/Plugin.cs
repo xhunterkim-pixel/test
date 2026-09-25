@@ -65,6 +65,7 @@ namespace LevelGate
             OnScreenNotifier.Resolve();
             FireGate.PatchTriggerPress(harmony);
             MagazineSemiLock.PatchNames(harmony);
+            GearSlotGate.Apply(harmony);
             DiagnosticLogging.ApplyAll(harmony);
 
             Log.LogInfo("LevelGate loaded, " + Data.Items.Count + " restricted item(s).");
@@ -322,14 +323,26 @@ namespace LevelGate
         {
             requiredLevel = 0;
 
-            if (player == null) return false;
-            if (!player.IsYourPlayer) return false;   // not the local human
-            if (player.IsAI) return false;            // never touch bots
-
             if (itemTplId == null) return false;
             if (!LevelGatePlugin.Data.Items.TryGetValue(itemTplId, out requiredLevel)) return false;
 
-            int currentLevel = player.Profile.Info.Level;
+            int currentLevel;
+            if (player != null)
+            {
+                if (!player.IsYourPlayer) return false;   // not the local human
+                if (player.IsAI) return false;            // never touch bots
+                currentLevel = player.Profile.Info.Level;
+            }
+            else
+            {
+                // No in-raid player: main menu / stash / traders. There is no
+                // GameWorld there, which is why labels and colors used to
+                // only show up after visiting the hideout or a raid. Use the
+                // logged-in PMC profile's level instead.
+                int? level = OutOfRaidProfile.GetLevel();
+                if (level == null) return false;
+                currentLevel = level.Value;
+            }
             return currentLevel < requiredLevel;
         }
 
@@ -406,6 +419,22 @@ namespace LevelGate
             if (container != null) return IsOwnItem(container);
             var ammo = args.OfType<EFT.InventoryLogic.Ammo>().FirstOrDefault();
             return IsOwnItem(ammo);
+        }
+
+        // The local player's Equipment item (the parent of the gear slots):
+        // from the in-raid player, else the out-of-raid PMC profile.
+        public static object GetLocalEquipment()
+        {
+            try
+            {
+                var player = GetMainPlayer();
+                object profile = player != null ? (object)player.Profile : OutOfRaidProfile.Get();
+                return ReflectionUtil.GetMember(ReflectionUtil.GetMember(profile, "Inventory"), "Equipment");
+            }
+            catch
+            {
+                return null;
+            }
         }
 
         public static bool IsOwnHandsController(object handsController)
@@ -681,6 +710,160 @@ namespace LevelGate
             float height = _fallbackStyle.CalcHeight(content, width);
             var rect = new Rect(Screen.width - width - 24f, Screen.height - height - 90f, width, height);
             GUI.Box(rect, content, _fallbackStyle);
+        }
+    }
+
+    // -----------------------------------------------------------------
+    // Gear slots refuse gated items when asked "can you take this?".
+    //
+    // Picking up loose loot (InteractionContextHelper -> PickUpState, per
+    // the log) lets the game choose where the item goes, and it prefers an
+    // EMPTY matching gear slot — a second weapon slot, headset, helmet,
+    // armor, face cover, eyewear. For a gated item that slot was chosen,
+    // then the equip block refused it, and the game reported "No space"
+    // instead of trying your backpack. Answering "no" from the slot's own
+    // compatibility check makes the game skip it and fall through to the
+    // backpack/rig/pockets, exactly as if the slot were occupied — and a
+    // drag onto that slot now simply shows it as not accepting the item.
+    //
+    // Only the local player's own gear slots (EquipSlotIds on YOUR
+    // equipment) are affected, never an item already sitting in the slot,
+    // and never bots or containers. The Slot type and its CanAccept /
+    // CheckCompatibility(Item) -> bool methods are found by reflection and
+    // each patched method is logged at startup.
+    // -----------------------------------------------------------------
+    internal static class GearSlotGate
+    {
+        public static void Apply(Harmony harmony)
+        {
+            try
+            {
+                var slotType = typeof(EFT.InventoryLogic.SlotItemAddress).GetProperty("Slot")?.PropertyType;
+                if (slotType == null)
+                {
+                    LevelGatePlugin.Log.LogWarning("LevelGate: could not resolve the Slot type — loose-loot auto-equip fix not applied.");
+                    return;
+                }
+
+                var postfix = new HarmonyMethod(typeof(GearSlotGate), nameof(Postfix));
+                int patched = 0;
+                for (var t = slotType; t != null && t != typeof(object); t = t.BaseType)
+                {
+                    foreach (var m in t.GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly))
+                    {
+                        if (m.Name != "CanAccept" && m.Name != "CheckCompatibility") continue;
+                        if (m.ReturnType != typeof(bool) || m.IsAbstract) continue;
+                        var ps = m.GetParameters();
+                        if (ps.Length < 1 || ps[0].ParameterType != typeof(EFT.InventoryLogic.Item)) continue;
+                        try
+                        {
+                            harmony.Patch(m, postfix: postfix);
+                            patched++;
+                            LevelGatePlugin.Log.LogInfo($"LevelGate: gear slot check hooked: {t.FullName}.{m.Name}({string.Join(",", ps.Select(p => p.ParameterType.Name))})");
+                        }
+                        catch (Exception e)
+                        {
+                            LevelGatePlugin.Log.LogError($"LevelGate: failed to patch {t.Name}.{m.Name}. " + e);
+                        }
+                    }
+                }
+                if (patched == 0)
+                    LevelGatePlugin.Log.LogWarning("LevelGate: no Slot.CanAccept/CheckCompatibility(Item) found — loose-loot auto-equip fix not applied.");
+            }
+            catch (Exception e)
+            {
+                LevelGatePlugin.Log.LogError("LevelGate: failed to apply gear slot gate. " + e);
+            }
+        }
+
+        private static void Postfix(object __instance, object[] __args, ref bool __result)
+        {
+            try
+            {
+                if (!__result || __args == null || __args.Length == 0) return;
+                if (!(__args[0] is EFT.InventoryLogic.Item item)) return;
+
+                if (!(ReflectionUtil.GetMember(__instance, "ID") is string slotId) ||
+                    !LevelGateCheck.EquipSlotIds.Contains(slotId)) return;
+
+                // Already in this slot (e.g. equipped before the gate was set)
+                // — never make the game think it's invalid there.
+                if (ReferenceEquals(ReflectionUtil.GetMember(__instance, "ContainedItem"), item)) return;
+
+                var equipment = LevelGateCheck.GetLocalEquipment();
+                if (equipment == null || !ReferenceEquals(ReflectionUtil.GetMember(__instance, "ParentItem"), equipment)) return;
+
+                if (LevelGateCheck.IsBlocked(LevelGateCheck.GetMainPlayer(), item.TemplateId, out _))
+                {
+                    DiagnosticLogging.LogCall($"GearSlotGate refused slot={slotId} item={item.TemplateId}");
+                    __result = false;
+                }
+            }
+            catch
+            {
+                // never break slot checks
+            }
+        }
+    }
+
+    // The logged-in PMC profile while there's no raid/hideout GameWorld
+    // (main menu, stash, traders, flea). Found via the running
+    // EFT.TarkovApplication -> Session -> Profile (the session's PMC
+    // profile), all by reflection so a rename can't break the build; the
+    // lookup is refreshed every couple of seconds so a level-up shows up.
+    internal static class OutOfRaidProfile
+    {
+        private const float RefreshSeconds = 2f;
+
+        private static bool _typeResolved;
+        private static Type _appType;
+        private static float _nextRefresh;
+        private static object _cached;
+
+        public static int? GetLevel()
+        {
+            var level = ReflectionUtil.GetMember(ReflectionUtil.GetMember(Get(), "Info"), "Level");
+            return level is int n ? n : (int?)null;
+        }
+
+        public static object Get()
+        {
+            float now = Time.realtimeSinceStartup;
+            if (now < _nextRefresh) return _cached;
+            _nextRefresh = now + RefreshSeconds;
+
+            try
+            {
+                if (!_typeResolved)
+                {
+                    _typeResolved = true;
+                    _appType = typeof(EFT.Player).Assembly.GetType("EFT.TarkovApplication", false);
+                    if (_appType == null)
+                        LevelGatePlugin.Log.LogWarning("LevelGate: EFT.TarkovApplication not found — out-of-raid labels/blocks will wait for a raid/hideout.");
+                }
+                if (_appType == null) return _cached = null;
+
+                object app = null;
+                var exist = _appType.GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static)
+                    .FirstOrDefault(m => m.Name == "Exist" && m.GetParameters().Length == 1 && m.GetParameters()[0].IsOut);
+                if (exist != null)
+                {
+                    var args = new object[] { null };
+                    exist.Invoke(null, args);
+                    app = args[0];
+                }
+                if (app == null && typeof(UnityEngine.Object).IsAssignableFrom(_appType))
+                    app = UnityEngine.Object.FindObjectOfType(_appType);
+
+                var session = ReflectionUtil.GetMember(app, "Session");
+                _cached = ReflectionUtil.GetMember(session, "Profile");
+            }
+            catch (Exception e)
+            {
+                LevelGatePlugin.Log.LogError("LevelGate OutOfRaidProfile error: " + e);
+                _cached = null;
+            }
+            return _cached;
         }
     }
 
@@ -1021,8 +1204,9 @@ namespace LevelGate
             {
                 DiagnosticLogging.LogCall($"{patchName} operationType={operation?.GetType().Name ?? "NULL"}");
 
+                // May be null out of raid (stash) — IsBlocked then uses the
+                // PMC profile's level, so equipping in the stash is gated too.
                 var player = LevelGateCheck.GetMainPlayer();
-                if (player == null) return;
 
                 // Eating/drinking or using a med: item held in a private field.
                 EFT.InventoryLogic.Item consumable = null;
@@ -1787,8 +1971,7 @@ namespace LevelGate
             try
             {
                 if (!IsLabelledMagazine(item)) return 0;
-                var player = LevelGateCheck.GetMainPlayer();
-                if (player == null) return 0;
+                var player = LevelGateCheck.GetMainPlayer(); // null out of raid -> profile level
 
                 var contents = FireGate.InvokeNoArgs(item, "GetAllItems") as System.Collections.IEnumerable
                                ?? ReflectionUtil.GetMember(ReflectionUtil.GetMember(item, "Cartridges"), "Items") as System.Collections.IEnumerable;
@@ -1864,8 +2047,8 @@ namespace LevelGate
                 if (!IsLabelledMagazine(__instance)) return;
 
                 // A magazine that is itself LOCKED keeps its [LOCKED] label.
-                var player = LevelGateCheck.GetMainPlayer();
-                if (player == null || LevelGateCheck.IsBlocked(player, __instance.TemplateId, out _)) return;
+                var player = LevelGateCheck.GetMainPlayer(); // null out of raid -> profile level
+                if (LevelGateCheck.IsBlocked(player, __instance.TemplateId, out _)) return;
 
                 int level = GatedAmmoLevel(__instance);
                 if (level > 0) __result = KeyMarker + level + ":" + __result;
@@ -1923,8 +2106,7 @@ namespace LevelGate
                 // Not in the config at all — nothing to label either way.
                 if (!LevelGatePlugin.Data.Items.TryGetValue(templateId, out int required)) return;
 
-                var player = LevelGateCheck.GetMainPlayer();
-                if (player == null) return;
+                var player = LevelGateCheck.GetMainPlayer(); // null out of raid -> profile level
 
                 if (LevelGateCheck.IsBlocked(player, templateId, out required))
                 {
@@ -2411,8 +2593,7 @@ namespace LevelGate
                     return;
                 }
 
-                var player = LevelGateCheck.GetMainPlayer();
-                if (player == null) return;
+                var player = LevelGateCheck.GetMainPlayer(); // null out of raid -> profile level
 
                 // LOCKED (red) wins; a usable magazine holding gated rounds
                 // is SEMI LOCKED (orange); otherwise UNLOCKED (green).

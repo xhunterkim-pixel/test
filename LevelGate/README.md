@@ -60,6 +60,17 @@ gated round shows `[SEMI LOCKED]` (short name) / `[SEMI LOCKED - Lvl X] name`
 with an **orange** background, next to `[LOCKED]`/red and `[UNLOCKED]`/green.
 Magazines only — ammo boxes are excluded.
 
+**Loose loot with an empty gear slot:** picking up a gated weapon, helmet,
+headset, armor, face cover or eyewear no longer says "No space" — your own
+empty gear slots answer "can't accept" for gated items, so the game puts the
+item in your backpack/rig/pockets instead of trying to auto-equip it (logged
+at startup as `LevelGate: gear slot check hooked: ...`).
+
+**Works from launch:** out of raid (main menu, stash, traders) there is no
+in-raid player, so the level now comes from the logged-in PMC profile.
+Labels, colors and equip blocks apply right away instead of only after
+visiting the hideout or a raid.
+
 Unloading is never blocked: taking gated rounds out of a magazine/gun
 (including the internal transfer an `UnloadMagOperation` performs) always
 works. Only putting gated rounds *into* a gun or magazine they aren't
