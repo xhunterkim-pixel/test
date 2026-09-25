@@ -90,7 +90,7 @@ public class CustomTradersMod(
             }
         }
 
-        logger.Info($"[CustomTraders] Loaded {loaded} trader(s) from {tradersFolder}");
+        LogBlue($"[CustomTraders] Loaded {loaded} trader(s) from {tradersFolder}");
         return Task.CompletedTask;
     }
 
@@ -163,7 +163,7 @@ public class CustomTradersMod(
             if (AddQuest(file, quest, folder)) quests++;
         }
 
-        logger.Info($"[CustomTraders] {file.Name}: {assort.LoyalLevelItems?.Count ?? 0} offer(s), {quests} quest(s)");
+        LogBlue($"[CustomTraders] {file.Name}: {assort.LoyalLevelItems?.Count ?? 0} offer(s), {quests} quest(s)");
         return true;
     }
 
@@ -683,6 +683,13 @@ public class CustomTradersMod(
     // Helpers
     // -------------------------------------------------------------------------
 
+    /// <summary>
+    /// Normal CustomTraders messages in bright blue so they stand out in the
+    /// busy server console. Warnings stay yellow and errors red.
+    /// </summary>
+    private void LogBlue(string message) =>
+        logger.LogWithColor(message, Spectre.Console.Color.DodgerBlue1, null, null);
+
     /// <summary>Adds the same strings to every game language (so non-English clients still show text).</summary>
     private void AddLocales(Dictionary<string, string> strings)
     {
@@ -763,7 +770,7 @@ public class CustomTradersMod(
         };
         trader.Save(Path.Combine(folder, "trader.json"));
         File.WriteAllBytes(Path.Combine(folder, "avatar.png"), PlaceholderAvatar.Create());
-        logger.Info($"[CustomTraders] Created example trader 'Iron' in {folder} — edit it with CustomTraders.Editor.exe");
+        LogBlue($"[CustomTraders] Created example trader 'Iron' in {folder} — edit it with CustomTraders.Editor.exe");
     }
 }
 
