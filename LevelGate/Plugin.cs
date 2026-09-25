@@ -62,6 +62,7 @@ namespace LevelGate
             Patch_BlockOperationInRaid.Apply(harmony);
             LevelGatePatches.PatchAmmoLoad(harmony);
             LevelGateReloadPatches.ApplyAll(harmony);
+            FireGate.PatchTriggerPress(harmony);
             DiagnosticLogging.ApplyAll(harmony);
 
             Log.LogInfo("LevelGate loaded, " + Data.Items.Count + " restricted item(s).");
@@ -453,8 +454,14 @@ namespace LevelGate
             }
         }
 
-        public static void Notify(int requiredLevel)
+        public static void Notify(int requiredLevel, EFT.InventoryLogic.Item item = null)
         {
+            // Ammo blocks (loading, reloading, firing) also get Tarkov's own
+            // bottom-right notification, since the console line is easy to
+            // miss mid-raid.
+            if (item is EFT.InventoryLogic.Ammo)
+                OnScreenNotifier.Show($"Ammo Level Too High (requires level {requiredLevel})");
+
             string message = $"LevelGate: requires level {requiredLevel} to use this item.";
             try
             {
@@ -470,6 +477,74 @@ namespace LevelGate
             }
 
             LevelGatePlugin.Log.LogInfo(message);
+        }
+    }
+
+    // Tarkov's own bottom-right notification popup, via the game's static
+    // NotificationManagerClass (the same one SPT mods use for their toasts).
+    // Resolved by reflection with its optional parameters filled from their
+    // defaults, so a signature change can't break the build — if it can't be
+    // found, the message still goes to the console/log via Notify(). Each
+    // distinct message is throttled, because the fire check runs every
+    // frame the trigger is held and CanExecute runs on every drag hover.
+    internal static class OnScreenNotifier
+    {
+        private const float MinSecondsBetweenRepeats = 3f;
+
+        private static bool _resolved;
+        private static MethodInfo _method;
+        private static readonly Dictionary<string, float> _lastShown = new Dictionary<string, float>();
+
+        public static void Show(string message)
+        {
+            try
+            {
+                float now = Time.realtimeSinceStartup;
+                if (_lastShown.TryGetValue(message, out var last) && now - last < MinSecondsBetweenRepeats) return;
+                _lastShown[message] = now;
+
+                if (!_resolved)
+                {
+                    _resolved = true;
+                    var type = AccessTools.TypeByName("NotificationManagerClass");
+                    _method = FindStatic(type, "DisplayWarningNotification") ?? FindStatic(type, "DisplayMessageNotification");
+                    if (_method == null)
+                        LevelGatePlugin.Log.LogWarning("LevelGate: could not find NotificationManagerClass.DisplayWarningNotification/DisplayMessageNotification — on-screen messages disabled.");
+                }
+                if (_method == null) return;
+
+                var ps = _method.GetParameters();
+                var args = new object[ps.Length];
+                args[0] = message;
+                for (int i = 1; i < ps.Length; i++)
+                {
+                    var p = ps[i];
+                    object value = p.HasDefaultValue ? p.DefaultValue : null;
+                    if (value == null || value == DBNull.Value)
+                        value = p.ParameterType.IsValueType && Nullable.GetUnderlyingType(p.ParameterType) == null
+                            ? Activator.CreateInstance(p.ParameterType)
+                            : null;
+                    else if (p.ParameterType.IsEnum && value.GetType() != p.ParameterType)
+                        value = Enum.ToObject(p.ParameterType, value);
+                    args[i] = value;
+                }
+                _method.Invoke(null, args);
+            }
+            catch (Exception e)
+            {
+                LevelGatePlugin.Log.LogError("LevelGate OnScreenNotifier error: " + e);
+            }
+        }
+
+        private static MethodInfo FindStatic(Type type, string name)
+        {
+            return type?.GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static)
+                .Where(m => m.Name == name)
+                .Select(m => new { m, ps = m.GetParameters() })
+                .Where(x => x.ps.Length > 0 && x.ps[0].ParameterType == typeof(string) && x.ps.Skip(1).All(p => p.IsOptional))
+                .OrderBy(x => x.ps.Length)
+                .Select(x => x.m)
+                .FirstOrDefault();
         }
     }
 
@@ -847,7 +922,7 @@ namespace LevelGate
                     (TryBlockEquip(oneItem.Item1, oneItem.To1, player, out int req1) ||
                      TryBlockAmmoLoad(oneItem.Item1, oneItem.To1, player, patchName, operation, out req1)))
                 {
-                    LevelGateCheck.Notify(req1);
+                    LevelGateCheck.Notify(req1, oneItem.Item1);
                     result = false;
                     return;
                 }
@@ -856,7 +931,7 @@ namespace LevelGate
                     (TryBlockEquip(twoItem.Item2, twoItem.To2, player, out int req2) ||
                      TryBlockAmmoLoad(twoItem.Item2, twoItem.To2, player, patchName, operation, out req2)))
                 {
-                    LevelGateCheck.Notify(req2);
+                    LevelGateCheck.Notify(req2, twoItem.Item2);
                     result = false;
                     return;
                 }
@@ -1447,7 +1522,7 @@ namespace LevelGate
 
                 if (shouldCheck && LevelGateCheck.IsBlocked(player, item.TemplateId, out int required))
                 {
-                    LevelGateCheck.Notify(required);
+                    LevelGateCheck.Notify(required, item);
                     __result = false;
                     return false;
                 }
@@ -1670,72 +1745,174 @@ namespace LevelGate
     // attempt taken on at the user's explicit request to accept more risk,
     // not a fully verified fix the way the equip/ammo-loading patches are.
     // -----------------------------------------------------------------
+    //
+    // UPDATE: now also checks every round in the current magazine /
+    // internal magazine / tube, not just the chamber, and shows the
+    // on-screen "Ammo Level Too High" message. That covers a gun picked up
+    // (or loaded before the gate was set) with gated rounds already inside:
+    // pressing M1 is refused until those rounds are ejected/unloaded.
+    // The trigger press itself (FirearmController.SetTriggerPressed) is
+    // hooked too, in case CanPressTrigger isn't consulted on every path.
     [HarmonyPatch(typeof(EFT.ClientFirearmController), "CanPressTrigger")]
     internal static class Patch_BlockFireRestrictedAmmo
     {
-        private static FieldInfo _ammoListField;
-
         [HarmonyPriority(Priority.First)]
         static bool Prefix(EFT.ClientFirearmController __instance, ref bool __result)
         {
+            if (!FireGate.ShouldBlockFire(__instance)) return true;
+            __result = false;
+            return false; // skip original — trigger can't be pressed
+        }
+    }
+
+    internal static class FireGate
+    {
+        public static void PatchTriggerPress(Harmony harmony)
+        {
             try
             {
-                if (!LevelGateCheck.IsOwnHandsController(__instance)) return true;
+                Type baseType = typeof(EFT.ClientFirearmController);
+                while (baseType != null && baseType.Name != "FirearmController") baseType = baseType.BaseType;
+                if (baseType == null) return;
 
-                var player = LevelGateCheck.GetMainPlayer();
-                if (player == null) return true;
-
-                // Prefer the round actually sitting in the chamber(s):
-                // _preallocatedAmmoList is a reusable buffer refilled while
-                // firing, so at prefix time it holds the PREVIOUS shot's
-                // rounds (the same stale-buffer problem LoadAmmoToChamber
-                // had) — it let the first gated shot through and, once it
-                // held a gated round, kept blocking even after reloading
-                // with allowed ammo. Only fall back to the buffer if the
-                // chambers can't be read.
-                System.Collections.IEnumerable rounds = ChamberedRounds(__instance);
-                if (rounds == null)
+                var prefix = new HarmonyMethod(typeof(FireGate), nameof(SetTriggerPressedPrefix)) { priority = Priority.First };
+                foreach (var type in AccessTools.AllTypes().Where(t => baseType.IsAssignableFrom(t)))
                 {
-                    if (_ammoListField == null)
+                    foreach (var method in type.GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly))
                     {
-                        _ammoListField = AccessTools.Field(typeof(EFT.ClientFirearmController), "_preallocatedAmmoList");
-                    }
-                    rounds = _ammoListField?.GetValue(__instance) as System.Collections.IEnumerable;
-                }
-                if (rounds == null) return true;
-
-                foreach (var obj in rounds)
-                {
-                    if (obj is EFT.InventoryLogic.Ammo ammo &&
-                        LevelGateCheck.IsBlocked(player, ammo.TemplateId, out int required))
-                    {
-                        LevelGateCheck.Notify(required);
-                        __result = false;
-                        return false; // skip original — trigger can't be pressed
+                        if (method.Name != "SetTriggerPressed" || method.IsAbstract || method.ReturnType != typeof(void)) continue;
+                        var ps = method.GetParameters();
+                        if (ps.Length != 1 || ps[0].ParameterType != typeof(bool)) continue;
+                        try
+                        {
+                            harmony.Patch(method, prefix: prefix);
+                            LevelGatePlugin.Log.LogInfo($"LevelGate: trigger hooked: {type.FullName}.SetTriggerPressed(Boolean)");
+                        }
+                        catch (Exception e)
+                        {
+                            LevelGatePlugin.Log.LogError($"LevelGate: failed to patch {type.Name}.SetTriggerPressed. " + e);
+                        }
                     }
                 }
             }
             catch (Exception e)
             {
-                LevelGatePlugin.Log.LogError("LevelGate Patch_BlockFireRestrictedAmmo error: " + e);
+                LevelGatePlugin.Log.LogError("LevelGate: failed to patch SetTriggerPressed. " + e);
             }
-
-            return true;
         }
 
-        // Weapon.Chambers (Slot[]) -> each Slot.ContainedItem. Returns null
-        // if any of those members can't be resolved on this game version.
-        private static System.Collections.IEnumerable ChamberedRounds(EFT.ClientFirearmController controller)
+        // Only a PRESS is refused; releasing the trigger always goes through
+        // so the weapon can never get stuck "held".
+        private static bool SetTriggerPressedPrefix(object __instance, bool __0)
         {
-            var weapon = ReflectionUtil.GetMember(controller, "Item") as EFT.InventoryLogic.Weapon;
-            if (!(ReflectionUtil.GetMember(weapon, "Chambers") is System.Collections.IEnumerable chambers)) return null;
+            if (!__0) return true;
+            return !ShouldBlockFire(__instance);
+        }
 
-            var rounds = new List<EFT.InventoryLogic.Ammo>();
-            foreach (var slot in chambers)
+        public static bool ShouldBlockFire(object firearmController)
+        {
+            try
             {
-                if (ReflectionUtil.GetMember(slot, "ContainedItem") is EFT.InventoryLogic.Ammo ammo) rounds.Add(ammo);
+                if (!LevelGateCheck.IsOwnHandsController(firearmController)) return false;
+
+                var player = LevelGateCheck.GetMainPlayer();
+                if (player == null) return false;
+
+                var weapon = ReflectionUtil.GetMember(firearmController, "Item") as EFT.InventoryLogic.Weapon;
+                if (weapon == null) return false;
+
+                foreach (var ammo in LoadedRounds(weapon))
+                {
+                    if (LevelGateCheck.IsBlocked(player, ammo.TemplateId, out int required))
+                    {
+                        DiagnosticLogging.LogCall($"FireGate blocked weapon={weapon.TemplateId} ammo={ammo.TemplateId}");
+                        LevelGateCheck.Notify(required, ammo);
+                        return true;
+                    }
+                }
             }
+            catch (Exception e)
+            {
+                LevelGatePlugin.Log.LogError("LevelGate FireGate error: " + e);
+            }
+            return false;
+        }
+
+        // Chambered round(s) plus everything in the magazine the gun is
+        // using: a box magazine, a Mosin-style internal magazine, or a
+        // shotgun tube (all are Magazine items in the weapon's magazine
+        // slot). Members resolved by reflection: Weapon.Chambers ->
+        // Slot.ContainedItem, Weapon.GetCurrentMagazine(), and the
+        // magazine's own contents via Item.GetAllItems() (falling back to
+        // Cartridges.Items). A revolver cylinder / anything else is covered
+        // by the chamber check plus the GetAllItems fallback on the weapon.
+        public static List<EFT.InventoryLogic.Ammo> LoadedRounds(EFT.InventoryLogic.Weapon weapon)
+        {
+            var rounds = new List<EFT.InventoryLogic.Ammo>();
+
+            if (ReflectionUtil.GetMember(weapon, "Chambers") is System.Collections.IEnumerable chambers)
+            {
+                foreach (var slot in chambers)
+                {
+                    if (ReflectionUtil.GetMember(slot, "ContainedItem") is EFT.InventoryLogic.Ammo chambered)
+                        rounds.Add(chambered);
+                }
+            }
+
+            var magazine = InvokeNoArgs(weapon, "GetCurrentMagazine") as EFT.InventoryLogic.Item;
+            if (magazine != null)
+            {
+                var contents = InvokeNoArgs(magazine, "GetAllItems") as System.Collections.IEnumerable
+                               ?? ReflectionUtil.GetMember(ReflectionUtil.GetMember(magazine, "Cartridges"), "Items") as System.Collections.IEnumerable;
+                if (contents != null)
+                {
+                    foreach (var obj in contents)
+                    {
+                        if (obj is EFT.InventoryLogic.Ammo a && !rounds.Contains(a)) rounds.Add(a);
+                    }
+                }
+            }
+            else
+            {
+                // No detachable/internal magazine found (cylinder, break
+                // action, or the method didn't resolve): fall back to every
+                // round anywhere in the weapon.
+                if (InvokeNoArgs(weapon, "GetAllItems") is System.Collections.IEnumerable all)
+                {
+                    foreach (var obj in all)
+                    {
+                        if (obj is EFT.InventoryLogic.Ammo a && !rounds.Contains(a)) rounds.Add(a);
+                    }
+                }
+            }
+
             return rounds;
+        }
+
+        private static readonly Dictionary<(Type, string), MethodInfo> _methodCache = new Dictionary<(Type, string), MethodInfo>();
+
+        private static object InvokeNoArgs(object instance, string name)
+        {
+            if (instance == null) return null;
+            try
+            {
+                var key = (instance.GetType(), name);
+                if (!_methodCache.TryGetValue(key, out var method))
+                {
+                    method = null;
+                    for (var t = key.Item1; t != null && method == null; t = t.BaseType)
+                    {
+                        method = t.GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly)
+                            .FirstOrDefault(m => m.Name == name && m.GetParameters().Length == 0 && !m.IsGenericMethodDefinition);
+                    }
+                    _methodCache[key] = method;
+                }
+                return method?.Invoke(instance, null);
+            }
+            catch
+            {
+                return null;
+            }
         }
     }
 
@@ -2428,7 +2605,7 @@ namespace LevelGate
 
                 if (LevelGateCheck.IsBlocked(player, ammo.TemplateId, out int required))
                 {
-                    LevelGateCheck.Notify(required);
+                    LevelGateCheck.Notify(required, ammo);
 
                     if (_cachedReturnType == null)
                     {
@@ -2707,7 +2884,7 @@ namespace LevelGate
                 {
                     if (LevelGateCheck.IsBlocked(player, ammo.TemplateId, out int required))
                     {
-                        LevelGateCheck.Notify(required);
+                        LevelGateCheck.Notify(required, ammo);
                         CallbackUtil.TryFail(args.OfType<Comfort.Common.Callback>().FirstOrDefault(),
                             $"LevelGate: requires level {required}");
                         return true;
@@ -2764,7 +2941,7 @@ namespace LevelGate
 
                 if (LevelGateCheck.IsBlocked(player, ammo.TemplateId, out int required))
                 {
-                    LevelGateCheck.Notify(required);
+                    LevelGateCheck.Notify(required, ammo);
 
                     if (_singleBarrelReturnType != null)
                     {
@@ -2902,7 +3079,7 @@ namespace LevelGate
 
                 if (LevelGateCheck.IsBlocked(player, ammo.TemplateId, out int required))
                 {
-                    LevelGateCheck.Notify(required);
+                    LevelGateCheck.Notify(required, ammo);
                     __result = System.Threading.Tasks.Task.FromResult<Comfort.Common.IResult>(Comfort.Common.SuccessfulResult.New);
                     return false;
                 }
@@ -2957,7 +3134,7 @@ namespace LevelGate
 
                 if (LevelGateCheck.IsBlocked(player, item.TemplateId, out int required))
                 {
-                    LevelGateCheck.Notify(required);
+                    LevelGateCheck.Notify(required, item);
                     return false;
                 }
             }

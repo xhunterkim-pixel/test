@@ -31,8 +31,16 @@ three places (see the comments in `Plugin.cs` for the full reasoning):
   `ReloadCylinderMagazine` / `ReloadGrenadeLauncher` / `ReloadBarrels` (and
   overrides): refuses before any reload animation starts. Each hooked method
   is logged at startup as `LevelGate: reload entry hooked: ...`.
-- **Firing** — `ClientFirearmController.CanPressTrigger` checks the round
-  actually in the chamber.
+- **Firing** — `ClientFirearmController.CanPressTrigger` and every
+  `FirearmController.SetTriggerPressed(true)` (logged at startup as
+  `LevelGate: trigger hooked: ...`) check the chambered round(s) **and every
+  round in the current magazine / internal magazine / tube**. A gun that
+  comes pre-loaded with gated rounds (e.g. an MP-153 or Mosin off a body)
+  won't fire until those rounds are ejected/unloaded.
+
+Every ammo block (loading, reloading, firing) shows Tarkov's own
+bottom-right notification **"Ammo Level Too High (requires level X)"**, via
+`NotificationManagerClass`, throttled to once every few seconds.
 
 `FirearmHandsInputTranslator.LoadAmmoToChamber` and the reload operations'
 `OnAddAmmoInChamber` are diagnostic-only now: the first read a reused buffer
