@@ -334,6 +334,110 @@ namespace LevelGate
             return Comfort.Common.Singleton<EFT.GameWorld>.Instance?.MainPlayer;
         }
 
+        // -----------------------------------------------------------------
+        // Ownership checks. IsBlocked() always compares against the MAIN
+        // player's level, so any hook that also runs for bots (every bot has
+        // its own PlayerInventoryController / FirearmController, and the
+        // in-raid CanExecute patch fires for all of them) must first confirm
+        // the call belongs to the local player — otherwise bots get blocked
+        // from reloading/looting gated items based on YOUR level. Resolved
+        // by reflection because the member names aren't compile-verified;
+        // if nothing resolves, returns true (the previous behavior).
+        // -----------------------------------------------------------------
+        private static readonly MemberGetter PlayerInventoryControllerGetter =
+            new MemberGetter("InventoryController", "_inventoryController");
+
+        public static bool IsOwnInventoryController(object controller)
+        {
+            try
+            {
+                if (controller == null) return true;
+                var player = GetMainPlayer();
+                if (player == null) return true;
+
+                var own = PlayerInventoryControllerGetter.Get(player);
+                if (own != null && ReferenceEquals(own, controller)) return true;
+
+                // Not the same object (or not resolvable): ItemController.ID
+                // is the owning profile's ID.
+                if (ReflectionUtil.GetMember(controller, "ID") is string id && !string.IsNullOrEmpty(id))
+                    return id == player.ProfileId;
+
+                // Main player's controller resolved and this isn't it -> a
+                // bot. Nothing resolved at all -> keep the old behavior.
+                return own == null;
+            }
+            catch
+            {
+                return true;
+            }
+        }
+
+        public static bool IsOwnHandsController(object handsController)
+        {
+            try
+            {
+                if (handsController == null) return true;
+                var player = GetMainPlayer();
+                if (player == null) return true;
+
+                if (ReflectionUtil.GetMember(handsController, "_player") is EFT.Player owner)
+                    return ReferenceEquals(owner, player);
+
+                // Could not resolve the owner: only the local player ever
+                // gets a ClientFirearmController, so treat that as ours and
+                // anything else (bot controllers) as not ours.
+                return handsController is EFT.ClientFirearmController;
+            }
+            catch
+            {
+                return handsController is EFT.ClientFirearmController;
+            }
+        }
+
+        // -----------------------------------------------------------------
+        // True if putting a round at "to" loads it into a gun: a chamber
+        // (slot on a Weapon), a box/internal/tube magazine or revolver
+        // cylinder (a StackSlot/Slot/grid whose parent is a Magazine), or
+        // the weapon itself. This is what the equip-slot check in
+        // Evaluate() never covered: every in-raid reload/chamber/top-up
+        // moves the round with a Move/Split/Transfer operation whose
+        // destination is one of these, not one of the EquipSlotIds.
+        // Ammo boxes are also Magazine-derived in EFT but are just storage,
+        // so they're excluded.
+        // -----------------------------------------------------------------
+        public static bool IsLoadIntoWeaponOrMagazine(EFT.InventoryLogic.ItemAddress to)
+        {
+            var parent = GetContainerParentItem(to);
+            if (parent == null) return false;
+            if (parent is EFT.InventoryLogic.Weapon) return true;
+            if (parent is EFT.InventoryLogic.Magazine)
+                return parent.GetType().Name.IndexOf("AmmoBox", StringComparison.OrdinalIgnoreCase) < 0;
+            return false;
+        }
+
+        public static EFT.InventoryLogic.Item GetContainerParentItem(EFT.InventoryLogic.ItemAddress address)
+        {
+            try
+            {
+                if (address == null) return null;
+                if (address is EFT.InventoryLogic.GridItemAddress gridAddr)
+                    return gridAddr.Grid?.ParentItem;
+
+                // SlotItemAddress (.Slot), StackSlotItemAddress (.StackSlot)
+                // and the common ItemAddress.Container all expose the owning
+                // item as ParentItem.
+                var container = ReflectionUtil.GetMember(address, "Container")
+                                ?? ReflectionUtil.GetMember(address, "Slot")
+                                ?? ReflectionUtil.GetMember(address, "StackSlot");
+                return ReflectionUtil.GetMember(container, "ParentItem") as EFT.InventoryLogic.Item;
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
         private static readonly MethodInfo ConsoleLogMethod = ResolveConsoleLogMethod();
 
         private static MethodInfo ResolveConsoleLogMethod()
@@ -366,6 +470,146 @@ namespace LevelGate
             }
 
             LevelGatePlugin.Log.LogInfo(message);
+        }
+    }
+
+    // Cached, exception-safe "read a property or field by name" helpers for
+    // members whose exact names couldn't be verified at compile time.
+    internal static class ReflectionUtil
+    {
+        private static readonly Dictionary<(Type, string), Func<object, object>> _cache =
+            new Dictionary<(Type, string), Func<object, object>>();
+
+        public static object GetMember(object instance, string name)
+        {
+            if (instance == null) return null;
+            try
+            {
+                var key = (instance.GetType(), name);
+                if (!_cache.TryGetValue(key, out var getter))
+                {
+                    getter = null;
+                    var prop = AccessTools.Property(key.Item1, name);
+                    if (prop != null && prop.GetIndexParameters().Length == 0 && prop.GetGetMethod(true) != null)
+                    {
+                        getter = o => prop.GetValue(o, null);
+                    }
+                    else
+                    {
+                        var field = AccessTools.Field(key.Item1, name);
+                        if (field != null) getter = o => field.GetValue(o);
+                    }
+                    _cache[key] = getter;
+                }
+                return getter?.Invoke(instance);
+            }
+            catch
+            {
+                return null;
+            }
+        }
+    }
+
+    internal sealed class MemberGetter
+    {
+        private readonly string[] _names;
+        public MemberGetter(params string[] names) { _names = names; }
+
+        public object Get(object instance)
+        {
+            foreach (var name in _names)
+            {
+                var value = ReflectionUtil.GetMember(instance, name);
+                if (value != null) return value;
+            }
+            return null;
+        }
+    }
+
+    // Pulls every Ammo out of a method argument: the Ammo itself, a list of
+    // rounds, or an "ammo pack" object that holds such a list in a field.
+    // Doesn't look inside other Items (a magazine/weapon argument is not
+    // the rounds being loaded).
+    internal static class AmmoCollector
+    {
+        public static void Collect(object obj, List<EFT.InventoryLogic.Ammo> into, int depth)
+        {
+            if (obj == null || depth > 1) return;
+
+            if (obj is EFT.InventoryLogic.Ammo ammo) { into.Add(ammo); return; }
+            if (obj is EFT.InventoryLogic.Item) return;
+            if (obj is string || obj is Delegate || obj is UnityEngine.Object || obj is EFT.InventoryLogic.ItemAddress) return;
+
+            if (obj is System.Collections.IEnumerable enumerable)
+            {
+                foreach (var element in enumerable)
+                {
+                    if (element is EFT.InventoryLogic.Ammo a) into.Add(a);
+                }
+                return;
+            }
+
+            var type = obj.GetType();
+            if (type.IsPrimitive || type.IsEnum || depth >= 1) return;
+
+            for (var t = type; t != null && t != typeof(object); t = t.BaseType)
+            {
+                foreach (var f in t.GetFields(BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly))
+                {
+                    object value;
+                    try { value = f.GetValue(obj); }
+                    catch { continue; }
+                    Collect(value, into, depth + 1);
+                }
+            }
+        }
+    }
+
+    // Completes a skipped method's Comfort.Common.Callback with a failure,
+    // so whatever started the reload isn't left waiting for it. The failed
+    // result type is resolved by reflection; if it can't be built, the
+    // callback is left alone (the same as before).
+    internal static class CallbackUtil
+    {
+        private static bool _resolved;
+        private static ConstructorInfo _failedCtor;
+
+        public static void TryFail(Comfort.Common.Callback callback, string message)
+        {
+            if (callback == null) return;
+            try
+            {
+                if (!_resolved)
+                {
+                    _resolved = true;
+                    var type = AccessTools.TypeByName("Comfort.Common.FailedResult");
+                    _failedCtor = type?.GetConstructors()
+                        .FirstOrDefault(c =>
+                        {
+                            var ps = c.GetParameters();
+                            return ps.Length > 0 && ps[0].ParameterType == typeof(string);
+                        });
+                    if (_failedCtor == null)
+                        LevelGatePlugin.Log.LogWarning("LevelGate: could not resolve Comfort.Common.FailedResult — blocked reload callbacks won't be completed.");
+                }
+                if (_failedCtor == null) return;
+
+                var ps2 = _failedCtor.GetParameters();
+                var ctorArgs = new object[ps2.Length];
+                ctorArgs[0] = message;
+                for (int i = 1; i < ps2.Length; i++)
+                {
+                    var p = ps2[i];
+                    ctorArgs[i] = p.HasDefaultValue ? p.DefaultValue
+                        : p.ParameterType.IsValueType ? Activator.CreateInstance(p.ParameterType) : null;
+                }
+
+                callback.DynamicInvoke(_failedCtor.Invoke(ctorArgs));
+            }
+            catch (Exception e)
+            {
+                LevelGatePlugin.Log.LogError("LevelGate CallbackUtil error: " + e);
+            }
         }
     }
 
@@ -421,8 +665,12 @@ namespace LevelGate
         // which is what caused the "hands busy" stuck state. Skipping the
         // method outright means that side effect never happens.
         [HarmonyPriority(Priority.First)]
-        static bool Prefix(EFT.InventoryLogic.Operations.AbstractOperation operation, ref bool __result)
+        static bool Prefix(EFT.InventoryLogic.ItemController __instance, EFT.InventoryLogic.Operations.AbstractOperation operation, ref bool __result)
         {
+            // Bots' controllers inherit this method too — never judge them
+            // by the main player's level.
+            if (!LevelGateCheck.IsOwnInventoryController(__instance)) return true;
+
             bool allowed = true;
             Evaluate(operation, ref allowed, "Patch_BlockOperation", startingResult: true);
             if (!allowed)
@@ -483,8 +731,19 @@ namespace LevelGate
                 // Equipping — covers MoveOperation (stash drag/drop) and
                 // TransferOperation (in-raid loot pickup), and any future
                 // operation exposing the same one/two-item interfaces.
+                //
+                // Loading ammo — a round moved/split/transferred into a
+                // chamber, magazine, shotgun tube, internal magazine or
+                // cylinder. This was the missing case behind "M4A1 manually
+                // chambers after a weapon swap", "Mosin still loads gated
+                // ammo" and "MP-153 still loads gated slugs": in raid, every
+                // one of those ends in a Move/Split/Transfer operation that
+                // reaches this method, but the destination is a chamber /
+                // magazine slot rather than one of the EquipSlotIds, so the
+                // equip check alone let it straight through.
                 if (operation is EFT.InventoryLogic.Operations.IOneItemOperation oneItem &&
-                    TryBlockEquip(oneItem.Item1, oneItem.To1, player, out int req1))
+                    (TryBlockEquip(oneItem.Item1, oneItem.To1, player, out int req1) ||
+                     TryBlockAmmoLoad(oneItem.Item1, oneItem.To1, player, patchName, operation, out req1)))
                 {
                     LevelGateCheck.Notify(req1);
                     result = false;
@@ -492,7 +751,8 @@ namespace LevelGate
                 }
 
                 if (operation is EFT.InventoryLogic.Operations.ITwoItemOperation twoItem &&
-                    TryBlockEquip(twoItem.Item2, twoItem.To2, player, out int req2))
+                    (TryBlockEquip(twoItem.Item2, twoItem.To2, player, out int req2) ||
+                     TryBlockAmmoLoad(twoItem.Item2, twoItem.To2, player, patchName, operation, out req2)))
                 {
                     LevelGateCheck.Notify(req2);
                     result = false;
@@ -561,6 +821,27 @@ namespace LevelGate
             if (item == null) return false;
             if (!(to is EFT.InventoryLogic.SlotItemAddress slotAddress)) return false;
             if (!LevelGateCheck.EquipSlotIds.Contains(slotAddress.Slot.ID)) return false;
+            return LevelGateCheck.IsBlocked(player, item.TemplateId, out required);
+        }
+
+        private static bool TryBlockAmmoLoad(
+            EFT.InventoryLogic.Item item,
+            EFT.InventoryLogic.ItemAddress to,
+            EFT.Player player,
+            string patchName,
+            EFT.InventoryLogic.Operations.AbstractOperation operation,
+            out int required)
+        {
+            required = 0;
+            if (!(item is EFT.InventoryLogic.Ammo)) return false;
+
+            bool intoGun = LevelGateCheck.IsLoadIntoWeaponOrMagazine(to);
+            var parent = LevelGateCheck.GetContainerParentItem(to);
+            DiagnosticLogging.LogCall(
+                $"{patchName} AMMO op={operation.GetType().Name} ammo={item.TemplateId} " +
+                $"toType={to?.GetType().Name ?? "null"} toParent={parent?.GetType().Name ?? "null"} intoGun={intoGun}");
+
+            if (!intoGun) return false;
             return LevelGateCheck.IsBlocked(player, item.TemplateId, out required);
         }
     }
@@ -690,8 +971,13 @@ namespace LevelGate
         // "__0" is Harmony's positional-parameter convention — used instead of a
         // named parameter here since we don't have compile-time certainty of the
         // override's exact parameter name.
-        private static bool Prefix(EFT.InventoryLogic.Operations.AbstractOperation __0, ref bool __result)
+        private static bool Prefix(object __instance, EFT.InventoryLogic.Operations.AbstractOperation __0, ref bool __result)
         {
+            // Every bot has its own PlayerInventoryController and reloads
+            // through this same override — only ever evaluate the local
+            // player's own controller.
+            if (!LevelGateCheck.IsOwnInventoryController(__instance)) return true;
+
             bool allowed = true;
             Patch_BlockOperation.Evaluate(__0, ref allowed, "Patch_BlockOperationInRaid", startingResult: true);
             if (!allowed)
@@ -998,10 +1284,14 @@ namespace LevelGate
     internal static class Patch_BlockMoveResult
     {
         [HarmonyPriority(Priority.First)]
-        static bool Prefix(EFT.InventoryLogic.MoveResult __instance, ref bool __result)
+        static bool Prefix(EFT.InventoryLogic.MoveResult __instance, object[] __args, ref bool __result)
         {
             try
             {
+                // CanExecute(ItemController) — skip bots' controllers.
+                if (__args != null && __args.Length > 0 && !LevelGateCheck.IsOwnInventoryController(__args[0]))
+                    return true;
+
                 var item = __instance.Item;
                 if (item == null)
                 {
@@ -1035,14 +1325,17 @@ namespace LevelGate
                 // bypassing the restriction with that narrower check) has
                 // no separate Magazine item at all — the grid's parent is
                 // the Weapon itself. Checking for either covers both.
+                //
+                // Box-magazine cartridges are a StackSlot
+                // (StackSlotItemAddress), which neither check above
+                // matched, so the ammo case now uses the shared
+                // IsLoadIntoWeaponOrMagazine() rule (slot, stack slot or
+                // grid whose parent is a Weapon or Magazine) — the same one
+                // the in-raid CanExecute patch uses.
                 bool shouldCheck;
                 if (item is EFT.InventoryLogic.Ammo)
                 {
-                    bool intoNamedSlot = __instance.To is EFT.InventoryLogic.SlotItemAddress;
-                    bool intoWeaponGrid = __instance.To is EFT.InventoryLogic.GridItemAddress gridAddr
-                        && (gridAddr.Grid?.ParentItem is EFT.InventoryLogic.Magazine
-                            || gridAddr.Grid?.ParentItem is EFT.InventoryLogic.Weapon);
-                    shouldCheck = intoNamedSlot || intoWeaponGrid;
+                    shouldCheck = LevelGateCheck.IsLoadIntoWeaponOrMagazine(__instance.To);
                 }
                 else
                 {
@@ -1285,18 +1578,31 @@ namespace LevelGate
         {
             try
             {
-                if (_ammoListField == null)
-                {
-                    _ammoListField = AccessTools.Field(typeof(EFT.ClientFirearmController), "_preallocatedAmmoList");
-                }
-
-                var list = _ammoListField?.GetValue(__instance) as System.Collections.IEnumerable;
-                if (list == null) return true;
+                if (!LevelGateCheck.IsOwnHandsController(__instance)) return true;
 
                 var player = LevelGateCheck.GetMainPlayer();
                 if (player == null) return true;
 
-                foreach (var obj in list)
+                // Prefer the round actually sitting in the chamber(s):
+                // _preallocatedAmmoList is a reusable buffer refilled while
+                // firing, so at prefix time it holds the PREVIOUS shot's
+                // rounds (the same stale-buffer problem LoadAmmoToChamber
+                // had) — it let the first gated shot through and, once it
+                // held a gated round, kept blocking even after reloading
+                // with allowed ammo. Only fall back to the buffer if the
+                // chambers can't be read.
+                System.Collections.IEnumerable rounds = ChamberedRounds(__instance);
+                if (rounds == null)
+                {
+                    if (_ammoListField == null)
+                    {
+                        _ammoListField = AccessTools.Field(typeof(EFT.ClientFirearmController), "_preallocatedAmmoList");
+                    }
+                    rounds = _ammoListField?.GetValue(__instance) as System.Collections.IEnumerable;
+                }
+                if (rounds == null) return true;
+
+                foreach (var obj in rounds)
                 {
                     if (obj is EFT.InventoryLogic.Ammo ammo &&
                         LevelGateCheck.IsBlocked(player, ammo.TemplateId, out int required))
@@ -1313,6 +1619,21 @@ namespace LevelGate
             }
 
             return true;
+        }
+
+        // Weapon.Chambers (Slot[]) -> each Slot.ContainedItem. Returns null
+        // if any of those members can't be resolved on this game version.
+        private static System.Collections.IEnumerable ChamberedRounds(EFT.ClientFirearmController controller)
+        {
+            var weapon = ReflectionUtil.GetMember(controller, "Item") as EFT.InventoryLogic.Weapon;
+            if (!(ReflectionUtil.GetMember(weapon, "Chambers") is System.Collections.IEnumerable chambers)) return null;
+
+            var rounds = new List<EFT.InventoryLogic.Ammo>();
+            foreach (var slot in chambers)
+            {
+                if (ReflectionUtil.GetMember(slot, "ContainedItem") is EFT.InventoryLogic.Ammo ammo) rounds.Add(ammo);
+            }
+            return rounds;
         }
     }
 
@@ -1793,19 +2114,28 @@ namespace LevelGate
         static void Prefix() => DiagnosticLogging.LogCall("ClientGrenadeHandsController.PullRingForHighThrow");
     }
 
+    // DIAGNOSTIC ONLY now (was a blocking prefix). The prefix read
+    // "_preAllocatedAmmoList", but a pre-allocated list is a reusable
+    // buffer that LoadAmmoToChamber itself clears and refills DURING the
+    // call — so at prefix time it held the PREVIOUS call's rounds, not the
+    // ones about to be chambered. That matches the M4A1 symptom: right
+    // after swapping from the Mosin the buffer was empty, so the first R
+    // always got through ("works once per swap"); after that it held M855
+    // from the last attempt, so later presses were blocked — and once
+    // blocked, the buffer never refreshed, so it would also keep blocking
+    // non-gated ammo until the next swap. The actual chambering move is
+    // now refused at the inventory operation (Evaluate -> TryBlockAmmoLoad)
+    // and at the FirearmController reload entry. This postfix just logs
+    // what the method really picked, after it has filled the buffer.
+    //
+    // (The class also had the [HarmonyPatch] attribute twice — harmless,
+    // but removed.)
     [HarmonyPatch(typeof(EFT.FirearmHandsInputTranslator), "LoadAmmoToChamber")]
-    // Now an actual blocking patch (previously diagnostic-only). This
-    // covers manual chamber-loading for tube-fed shotguns (like the
-    // MP-153) specifically — confirmed via IL to be a real, firing method
-    // with genuine callers, and confirmed via field inspection to hold the
-    // ammo about to be loaded in "_preAllocatedAmmoList" (a List<Ammo>).
-    [HarmonyPatch(typeof(EFT.FirearmHandsInputTranslator), "LoadAmmoToChamber")]
-    internal static class Patch_BlockLoadAmmoToChamber
+    internal static class Patch_DiagnosticLoadAmmoToChamber
     {
         private static FieldInfo _ammoListField;
 
-        [HarmonyPriority(Priority.First)]
-        static bool Prefix(EFT.FirearmHandsInputTranslator __instance, ref bool __result)
+        static void Postfix(EFT.FirearmHandsInputTranslator __instance, bool __result)
         {
             try
             {
@@ -1815,32 +2145,18 @@ namespace LevelGate
                 }
 
                 var list = _ammoListField?.GetValue(__instance) as System.Collections.IEnumerable;
-                if (list == null) return true;
-
-                var player = LevelGateCheck.GetMainPlayer();
-                if (player == null) return true;
-
-                foreach (var obj in list)
-                {
-                    if (obj is EFT.InventoryLogic.Ammo ammo &&
-                        LevelGateCheck.IsBlocked(player, ammo.TemplateId, out int required))
-                    {
-                        LevelGateCheck.Notify(required);
-                        __result = false;
-                        return false; // skip original — no chamber load happens
-                    }
-                }
+                var ids = list == null
+                    ? "no list"
+                    : string.Join(",", list.OfType<EFT.InventoryLogic.Ammo>().Select(a => a.TemplateId).Distinct());
+                DiagnosticLogging.LogCall($"LoadAmmoToChamber result={__result} ammo=[{ids}]");
             }
             catch (Exception e)
             {
-                LevelGatePlugin.Log.LogError("LevelGate Patch_BlockLoadAmmoToChamber error: " + e);
+                LevelGatePlugin.Log.LogError("LevelGate Patch_DiagnosticLoadAmmoToChamber error: " + e);
             }
-
-            return true;
         }
     }
 
-    [HarmonyPatch(typeof(EFT.InventoryLogic.Magazine), "ApplyWithoutRestrictions")]
     // Now an ACTUAL blocking patch (previously diagnostic-only), per
     // explicit request to take on more risk. The return type
     // (Diz.LanguageExtensions.OperationResult<...>) is defined in a DLL we
@@ -1938,6 +2254,13 @@ namespace LevelGate
     // gets intercepted correctly by a Harmony patch on the method itself,
     // regardless of how it's invoked at runtime.
     //
+    // UPDATE: the logs confirmed the animation-event theory (the stack runs
+    // AnimationEventsEmitter -> FirearmController.method_34 ->
+    // OnAddAmmoInChamber), which is also why blocking it never worked: by
+    // then the round has already been moved. OnAddAmmoInChamber is now
+    // diagnostic only; the blocking moved to the reload entry points
+    // (PatchFirearmReloadEntries) and the inventory operation check.
+    //
     // All three classes are nested (no fixed namespace), so found via
     // reflection at runtime rather than compile-time attributes.
     // -----------------------------------------------------------------
@@ -1945,12 +2268,13 @@ namespace LevelGate
     {
         public static void ApplyAll(Harmony harmony)
         {
-            PatchOnAddAmmoInChamber(harmony, "ReloadInternalMagOperation", "_ammoToChamber");
-            PatchOnAddAmmoInChamber(harmony, "ReloadInternalMagWithOpenBoltOperation", "_ammoFromChamber");
+            PatchOnAddAmmoInChamber(harmony, "ReloadInternalMagOperation");
+            PatchOnAddAmmoInChamber(harmony, "ReloadInternalMagWithOpenBoltOperation");
             PatchSingleBarrelRun(harmony);
+            PatchFirearmReloadEntries(harmony);
         }
 
-        private static void PatchOnAddAmmoInChamber(Harmony harmony, string typeName, string fieldName)
+        private static void PatchOnAddAmmoInChamber(Harmony harmony, string typeName)
         {
             try
             {
@@ -1968,14 +2292,6 @@ namespace LevelGate
                     return;
                 }
 
-                var field = AccessTools.Field(type, fieldName);
-                if (field == null)
-                {
-                    LevelGatePlugin.Log.LogWarning($"LevelGate: could not find field '{fieldName}' on {typeName} for internal-mag reload blocking.");
-                    return;
-                }
-
-                _fieldsByMethod[method] = field;
                 harmony.Patch(method, prefix: new HarmonyMethod(typeof(LevelGateReloadPatches), nameof(OnAddAmmoInChamberPrefix)) { priority = Priority.First });
             }
             catch (Exception e)
@@ -1984,38 +2300,169 @@ namespace LevelGate
             }
         }
 
-        private static readonly Dictionary<System.Reflection.MethodBase, FieldInfo> _fieldsByMethod =
-            new Dictionary<System.Reflection.MethodBase, FieldInfo>();
-
-        private static bool OnAddAmmoInChamberPrefix(object __instance, System.Reflection.MethodBase __originalMethod)
+        // DIAGNOSTIC ONLY now — this used to skip the method when the round
+        // was gated, but the logs showed that was wrong on both counts:
+        //  - OnAddAmmoInChamber is an animation EVENT (called from
+        //    AnimationEventsEmitter -> FirearmController.method_34), fired
+        //    after the inventory transaction that actually moves the round
+        //    has already run. Skipping it didn't stop the load; it only left
+        //    the reload operation waiting for an event that never came
+        //    (HandsAreNotBusy logged "Cleared 2 stuck inventory operations"
+        //    right after the Mosin block).
+        //  - _ammoFromChamber on the open-bolt operation (M4A1 bolt locked
+        //    back / Mosin bolt open) is null whenever the chamber was empty,
+        //    which is exactly the manual-chamber case — so it logged
+        //    item=NULL and let every one of those through.
+        // The real block is now on the inventory operation itself
+        // (Patch_BlockOperation.Evaluate -> TryBlockAmmoLoad) and on the
+        // FirearmController reload entry points (PatchFirearmReloadEntries).
+        // This just logs every Item-typed field so the next log shows what
+        // each reload operation actually carries.
+        private static void OnAddAmmoInChamberPrefix(object __instance, System.Reflection.MethodBase __originalMethod)
         {
             try
             {
-                if (!_fieldsByMethod.TryGetValue(__originalMethod, out var field))
+                var sb = new System.Text.StringBuilder();
+                var t = __instance?.GetType();
+                while (t != null && t != typeof(object))
                 {
-                    DiagnosticLogging.LogCall($"OnAddAmmoInChamberPrefix (no field mapping for {__originalMethod?.DeclaringType?.Name})");
-                    return true;
+                    foreach (var f in t.GetFields(BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly))
+                    {
+                        if (!typeof(EFT.InventoryLogic.Item).IsAssignableFrom(f.FieldType)) continue;
+                        var value = f.GetValue(__instance) as EFT.InventoryLogic.Item;
+                        sb.Append(f.Name).Append('=').Append(value == null ? "NULL" : value.TemplateId).Append(' ');
+                    }
+                    t = t.BaseType;
                 }
-
-                var item = field.GetValue(__instance) as EFT.InventoryLogic.Item;
-                DiagnosticLogging.LogCall($"OnAddAmmoInChamberPrefix type={__originalMethod?.DeclaringType?.Name} item={(item == null ? "NULL" : item.TemplateId)}");
-                if (item == null) return true;
-
-                var player = LevelGateCheck.GetMainPlayer();
-                if (player == null) return true;
-
-                if (LevelGateCheck.IsBlocked(player, item.TemplateId, out int required))
-                {
-                    LevelGateCheck.Notify(required);
-                    return false; // skip — the round never gets added to the chamber
-                }
+                DiagnosticLogging.LogCall($"OnAddAmmoInChamber type={__originalMethod?.DeclaringType?.Name} {sb}");
             }
             catch (Exception e)
             {
                 LevelGatePlugin.Log.LogError("LevelGate OnAddAmmoInChamberPrefix error: " + e);
             }
+        }
 
-            return true;
+        // -----------------------------------------------------------------
+        // Reload ENTRY points on the hands controller. Every R-key reload
+        // that pushes loose rounds into the gun — internal magazine (Mosin),
+        // tube (MP-153), single round into an empty chamber with the bolt
+        // locked back (M4A1 manual chamber), revolver cylinder, grenade
+        // launcher, break-action barrels — is started by one of these
+        // Player.FirearmController methods, handed the rounds to load (an
+        // ammo pack). Refusing here stops the reload before any animation
+        // or reload operation starts, so nothing is left half-finished.
+        //
+        // The methods are looked up by name on FirearmController and every
+        // subclass that declares its own override (ClientFirearmController
+        // etc.), since patching only the base misses overrides. Each patched
+        // method is logged at startup so the log shows what was actually
+        // hooked. Box-magazine swaps (ReloadMag) are deliberately not
+        // included: they don't move loose rounds, and loading gated rounds
+        // into a magazine is already blocked by the operation-level check.
+        // -----------------------------------------------------------------
+        private static readonly HashSet<string> ReloadEntryNames = new HashSet<string>
+        {
+            "ReloadWithAmmo", "ReloadCylinderMagazine", "ReloadGrenadeLauncher", "ReloadBarrels"
+        };
+
+        private static void PatchFirearmReloadEntries(Harmony harmony)
+        {
+            try
+            {
+                Type baseType = typeof(EFT.ClientFirearmController);
+                while (baseType != null && baseType.Name != "FirearmController") baseType = baseType.BaseType;
+                if (baseType == null)
+                {
+                    LevelGatePlugin.Log.LogWarning("LevelGate: could not find Player.FirearmController — reload entry blocking not applied.");
+                    return;
+                }
+
+                var voidPrefix = new HarmonyMethod(typeof(LevelGateReloadPatches), nameof(ReloadEntryPrefixVoid)) { priority = Priority.First };
+                var boolPrefix = new HarmonyMethod(typeof(LevelGateReloadPatches), nameof(ReloadEntryPrefixBool)) { priority = Priority.First };
+                int patched = 0;
+
+                foreach (var type in AccessTools.AllTypes().Where(t => baseType.IsAssignableFrom(t)))
+                {
+                    foreach (var method in type.GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly))
+                    {
+                        if (!ReloadEntryNames.Contains(method.Name) || method.IsAbstract) continue;
+
+                        try
+                        {
+                            if (method.ReturnType == typeof(void))
+                                harmony.Patch(method, prefix: voidPrefix);
+                            else if (method.ReturnType == typeof(bool))
+                                harmony.Patch(method, prefix: boolPrefix);
+                            else
+                            {
+                                LevelGatePlugin.Log.LogWarning($"LevelGate: skipping {type.Name}.{method.Name} (unexpected return type {method.ReturnType.Name}).");
+                                continue;
+                            }
+
+                            patched++;
+                            LevelGatePlugin.Log.LogInfo($"LevelGate: reload entry hooked: {type.FullName}.{method.Name}({string.Join(",", method.GetParameters().Select(p => p.ParameterType.Name))})");
+                        }
+                        catch (Exception e)
+                        {
+                            LevelGatePlugin.Log.LogError($"LevelGate: failed to patch {type.Name}.{method.Name}. " + e);
+                        }
+                    }
+                }
+
+                if (patched == 0)
+                    LevelGatePlugin.Log.LogWarning("LevelGate: no FirearmController reload entry methods found — reload entry blocking not applied.");
+            }
+            catch (Exception e)
+            {
+                LevelGatePlugin.Log.LogError("LevelGate: failed to patch FirearmController reload entries. " + e);
+            }
+        }
+
+        private static bool ReloadEntryPrefixVoid(object __instance, object[] __args, System.Reflection.MethodBase __originalMethod)
+        {
+            return !ShouldBlockReloadEntry(__instance, __args, __originalMethod);
+        }
+
+        private static bool ReloadEntryPrefixBool(object __instance, object[] __args, System.Reflection.MethodBase __originalMethod, ref bool __result)
+        {
+            if (!ShouldBlockReloadEntry(__instance, __args, __originalMethod)) return true;
+            __result = false;
+            return false;
+        }
+
+        private static bool ShouldBlockReloadEntry(object instance, object[] args, System.Reflection.MethodBase original)
+        {
+            try
+            {
+                if (!LevelGateCheck.IsOwnHandsController(instance)) return false;
+
+                var player = LevelGateCheck.GetMainPlayer();
+                if (player == null || args == null) return false;
+
+                var ammoList = new List<EFT.InventoryLogic.Ammo>();
+                foreach (var arg in args) AmmoCollector.Collect(arg, ammoList, 0);
+
+                DiagnosticLogging.LogCall(
+                    $"ReloadEntry {original?.DeclaringType?.Name}.{original?.Name} " +
+                    $"ammo=[{string.Join(",", ammoList.Select(a => a.TemplateId).Distinct())}]");
+
+                foreach (var ammo in ammoList)
+                {
+                    if (LevelGateCheck.IsBlocked(player, ammo.TemplateId, out int required))
+                    {
+                        LevelGateCheck.Notify(required);
+                        CallbackUtil.TryFail(args.OfType<Comfort.Common.Callback>().FirstOrDefault(),
+                            $"LevelGate: requires level {required}");
+                        return true;
+                    }
+                }
+            }
+            catch (Exception e)
+            {
+                LevelGatePlugin.Log.LogError("LevelGate ShouldBlockReloadEntry error: " + e);
+            }
+
+            return false;
         }
 
         private static Type _singleBarrelReturnType;
