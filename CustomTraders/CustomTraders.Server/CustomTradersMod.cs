@@ -66,6 +66,7 @@ public class CustomTradersMod(
     // option is just itself; with several, every option is its own game quest
     // and completing one fails the others (see AddQuest).
     private readonly Dictionary<string, List<string>> _questOptionIds = new();
+    private readonly Dictionary<string, QuestDef> _questDefs = new();
 
     // (offer id, game quest id that unlocks it) -> the assort entry id used for it.
     private readonly Dictionary<(string OfferId, string QuestId), string> _offerEntries = new();
@@ -107,7 +108,10 @@ public class CustomTradersMod(
 
         foreach (var (trader, _) in traders)
         foreach (var quest in trader.Quests.Where(q => Ids.IsValid(q.Id)))
+        {
             _questOptionIds[quest.Id] = OptionQuestIds(quest);
+            _questDefs[quest.Id] = quest;
+        }
 
         int loaded = 0;
         foreach (var (trader, folder) in traders)
@@ -440,6 +444,7 @@ public class CustomTradersMod(
 
         var options = def.UsedOptions();
         var gameIds = _questOptionIds.GetValueOrDefault(def.Id) ?? OptionQuestIds(def);
+        LogQuestPlan(file, def, options);
         bool added = false;
         for (int i = 0; i < options.Count; i++)
         {
@@ -447,6 +452,37 @@ public class CustomTradersMod(
             added |= AddQuestOption(file, def, image, options[i], gameIds[i], i == 0, options.Count, siblings);
         }
         return added;
+    }
+
+    /// <summary>
+    /// Spells out in the server log how the quest works, so it's easy to see
+    /// that options and unlocks are wired up (and warns when it can never unlock).
+    /// </summary>
+    private void LogQuestPlan(TraderFile file, QuestDef def, List<int> options)
+    {
+        string ways = options.Count > 1
+            ? $"{options.Count} ways ({string.Join("/", options.Select(QuestDef.OptionLetter))}) — finishing one fails the others"
+            : "1 way";
+        var after = new List<string>();
+        foreach (var prereq in def.PrerequisiteQuestIds.Where(Ids.IsValid))
+        {
+            if (_questDefs.TryGetValue(prereq, out var before))
+            {
+                int n = before.UsedOptions().Count;
+                after.Add(n > 1 ? $"'{before.Name}' (any of its {n} ways)" : $"'{before.Name}'");
+            }
+            else if (templateTable.Quests.ContainsKey(prereq))
+            {
+                after.Add($"game quest {prereq}");
+            }
+            else
+            {
+                logger.Warning($"[CustomTraders] {file.Name}: quest '{def.Name}' requires quest {prereq}, which isn't loaded " +
+                               "(deleted, or its trader is switched off) — it will NEVER unlock.");
+            }
+        }
+        LogBlue($"[CustomTraders]   {file.Name} › {def.Name}: level {Math.Max(1, def.MinLevel)}, {ways}" +
+                (after.Count > 0 ? $", unlocks after {string.Join(" + ", after)}" : ""));
     }
 
     private bool AddQuestOption(TraderFile file, QuestDef def, string image, int option, string gameId, bool firstOption, int optionCount, List<string> siblings)

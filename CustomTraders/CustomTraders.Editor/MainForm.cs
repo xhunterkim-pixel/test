@@ -81,7 +81,7 @@ public sealed class MainForm : Form
     private readonly FieldPanel _questFields = new();
     private readonly Section _requirements = new("Unlock requirements", Theme.Violet);
     private readonly Hint _requirementsText = new("");
-    private readonly CheckedListBox _prereqs = new() { CheckOnClick = true, IntegralHeight = false, Height = 150, BorderStyle = BorderStyle.None };
+    private readonly StackPanel _prereqs = new() { Gap = 2 };
     private readonly ListEditor<ConditionDef> _conditions;
     private readonly FieldPanel _conditionFields = new(140);
     private readonly Section _objectiveSection = new("Objective");
@@ -99,7 +99,7 @@ public sealed class MainForm : Form
     private readonly ListEditor<RewardDef> _rewards;
     private readonly FieldPanel _rewardFields = new(140);
     private readonly Dictionary<ConditionDef, HashSet<string>> _expanded = new(ReferenceEqualityComparer.Instance);
-    private bool _loadingPrereqs, _loadingChecks;
+    private bool _loadingChecks;
 
     // checks
     private readonly RowList _checkList;
@@ -504,7 +504,6 @@ public sealed class MainForm : Form
         };
         q.Changed += () => { MarkDirty(); _quests.RefreshTexts(); UpdateDetailsTitle(); ShowRequirements(); };
 
-        _prereqs.ItemCheck += (_, _) => BeginInvoke(OnPrereqChecked);
 
         // --- objective editor: looks different per type -------------------------------
         var cf = _conditionFields;
@@ -583,7 +582,9 @@ public sealed class MainForm : Form
         details.AddRange(
             _requirements,
             new Section("Quest").Add(q, _questImagePreview, new Toolbar(_removeQuestImage)),
-            new Section("Required quests").Add(new Hint("Tick every quest (any trader) that must be finished first."), _prereqs),
+            new Section("Required quests").Add(new Hint(
+                "Switch on every quest (any trader) that must be finished first. For a quest with several ways (A, B, C...) " +
+                "ANY one finished way counts — the editor and the server handle all its ways for you."), _prereqs),
             new Section("Objectives", Theme.Text).Add(_waysHint, _conditions),
             _objectiveSection,
             new Section("Rewards").Add(new Hint("Every way (option) gives the same rewards."), _rewards, rf));
@@ -798,6 +799,7 @@ public sealed class MainForm : Form
             lines.Add($"Finish these {req.Chain.Count} quest(s) first:");
             foreach (var (trader, quest, depth) in req.Chain.OrderByDescending(c => c.Depth))
                 lines.Add($"{new string(' ', 2 * depth)}• {trader.File.Name}: {quest.Name}  (lvl {quest.MinLevel}){(depth > 1 ? "  — needed by an earlier one" : "")}" +
+                          (quest.UsedOptions().Count is > 1 and var n ? $"  — any of its {n} ways ({string.Join("/", quest.UsedOptions().Select(QuestDef.OptionLetter))})" : "") +
                           (trader.File.Enabled ? "" : $"   ✖ {trader.File.Name} is switched OFF"));
         }
         foreach (var id in req.MissingIds) lines.Add($"✖ Needs a quest that no longer exists ({id}) — untick it below.");
@@ -875,40 +877,40 @@ public sealed class MainForm : Form
         ShowConditionPanels();
     }
 
+    /// <summary>One switch per quest of every trader; multi-way quests say that any way counts.</summary>
     private void ShowPrereqs()
     {
-        _loadingPrereqs = true;
-        _prereqs.Items.Clear();
+        _prereqs.SuspendLayout();
+        foreach (Control c in _prereqs.Controls.Cast<Control>().ToList()) { _prereqs.Controls.Remove(c); c.Dispose(); }
         if (Quest != null)
         {
             foreach (var entry in _traders)
             foreach (var other in entry.File.Quests.Where(x => !ReferenceEquals(x, Quest)))
             {
-                int i = _prereqs.Items.Add(new PrereqItem(other.Id, $"{entry.File.Name}: {other.Name}  (lvl {other.MinLevel})"));
-                _prereqs.SetItemChecked(i, Quest.PrerequisiteQuestIds.Contains(other.Id));
+                int ways = other.UsedOptions().Count;
+                string text = $"{other.Name} · {entry.File.Name} · lvl {other.MinLevel}" +
+                              (ways > 1 ? $" · any of {ways} ways" : "") +
+                              (entry.File.Enabled ? "" : "  · trader OFF");
+                var toggle = new Toggle { Text = text, Checked = Quest.PrerequisiteQuestIds.Contains(other.Id), Tag = other.Id, Font = Theme.Body };
+                toggle.ForeColor = entry.File.Enabled ? Theme.Text : Theme.Muted;
+                toggle.CheckedChanged += (_, _) => OnPrereqChecked((string)toggle.Tag!, toggle.Checked);
+                _prereqs.Controls.Add(toggle);
             }
+            if (_prereqs.Controls.Count == 0)
+                _prereqs.Controls.Add(new Hint("No other quests yet."));
         }
-        _prereqs.Enabled = Quest != null;
-        _loadingPrereqs = false;
+        _prereqs.ResumeLayout();
+        _prereqs.Relayout();
     }
 
-    private void OnPrereqChecked()
+    private void OnPrereqChecked(string id, bool required)
     {
-        if (_loadingPrereqs || Quest == null) return;
-        var known = _prereqs.Items.Cast<PrereqItem>().Select(p => p.Id).ToHashSet();
-        // Keep ids of quests that no longer exist so the checks can report them.
-        var missing = Quest.PrerequisiteQuestIds.Where(id => !known.Contains(id));
-        var updated = missing.Concat(_prereqs.CheckedItems.Cast<PrereqItem>().Select(p => p.Id)).ToList();
-        if (updated.ToHashSet().SetEquals(Quest.PrerequisiteQuestIds)) return; // just (re)loaded, nothing changed
-        Quest.PrerequisiteQuestIds = updated;
+        if (Quest == null || Quest.PrerequisiteQuestIds.Contains(id) == required) return;
+        if (required) Quest.PrerequisiteQuestIds.Add(id);
+        else Quest.PrerequisiteQuestIds.Remove(id);
         MarkDirty();
         ShowRequirements();
         _quests.RefreshTexts();
-    }
-
-    private sealed record PrereqItem(string Id, string Label)
-    {
-        public override string ToString() => Label;
     }
 
     private void ShowChecks()

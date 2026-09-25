@@ -225,6 +225,13 @@ public static class Checks
 
         // --- unlock chain ---------------------------------------------------------------
         var req = Requirements(q, traders);
+        foreach (var id in q.PrerequisiteQuestIds)
+        {
+            var (_, before, _) = req.Chain.FirstOrDefault(c => c.Quest.Id == id);
+            if (before != null && before.UsedOptions().Count is > 1 and var ways)
+                Add(CheckLevel.Info, $"Requires \"{before.Name}\", which has {ways} ways ({string.Join(", ", before.UsedOptions().Select(QuestDef.OptionLetter))}): " +
+                                     "this quest unlocks after ANY one of them is completed (the others are failed automatically).");
+        }
         foreach (var (reqTrader, reqQuest, _) in req.Chain.Where(c => !c.Trader.File.Enabled && t.File.Enabled))
             Add(CheckLevel.Error, $"Requires \"{reqQuest.Name}\" from {reqTrader.File.Name}, which is switched OFF — this quest can never unlock.");
         foreach (var id in req.MissingIds)

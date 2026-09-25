@@ -1041,46 +1041,40 @@ public sealed class ItemListPanel : StackPanel
 /// <summary>Tick boxes over a list of ids (maps, bosses).</summary>
 public sealed class CheckListPanel : StackPanel
 {
-    private readonly CheckedListBox _box = new() { CheckOnClick = true, IntegralHeight = false, BorderStyle = BorderStyle.None, MultiColumn = true, ColumnWidth = 175 };
     private readonly Func<List<string>?> _getList;
-    private bool _loading;
+    private readonly List<(string Id, PillButton Chip)> _chips = new();
 
     public event Action? Changed;
 
-    public CheckListPanel(string title, (string Id, string Name)[] options, Func<List<string>?> getList, Color accent, int height = 120)
+    /// <summary>Clickable chips (lit = picked) over a list of ids, e.g. maps or bosses.</summary>
+    public CheckListPanel(string title, (string Id, string Name)[] options, Func<List<string>?> getList, Color accent, int height = 0)
     {
         _getList = getList;
         Gap = 4;
-        _box.Height = height;
-        _box.BackColor = Theme.Input;
-        _box.ForeColor = Theme.Text;
-        foreach (var (id, name) in options) _box.Items.Add(new Option(id, name));
-        AddRange(new Label { Text = title, AutoSize = false, Height = 24, ForeColor = accent, Font = Theme.BodyBold, BackColor = Color.Transparent }, _box);
-        _box.ItemCheck += (_, _) => BeginInvoke(() =>
+        var bar = new Toolbar();
+        foreach (var (id, name) in options)
         {
-            if (_loading) return;
-            var list = _getList();
-            if (list == null) return;
-            var ticked = _box.CheckedItems.Cast<Option>().Select(o => o.Id).ToList();
-            if (ticked.ToHashSet(StringComparer.OrdinalIgnoreCase).SetEquals(list)) return; // just (re)loaded
-            list.Clear();
-            list.AddRange(ticked);
-            Changed?.Invoke();
-        });
+            var chip = new PillButton(name, PillStyle.Chip) { Height = 30, Tint = accent, Margin = new Padding(0, 2, 6, 2) };
+            chip.Click += (_, _) => Toggle(id, chip);
+            _chips.Add((id, chip));
+            bar.Controls.Add(chip);
+        }
+        AddRange(new Label { Text = title, AutoSize = false, Height = 24, ForeColor = accent, Font = Theme.BodyBold, BackColor = Color.Transparent }, bar);
+    }
+
+    private void Toggle(string id, PillButton chip)
+    {
+        var list = _getList();
+        if (list == null) return;
+        if (list.RemoveAll(x => x.Equals(id, StringComparison.OrdinalIgnoreCase)) == 0) list.Add(id);
+        chip.Selected = list.Contains(id, StringComparer.OrdinalIgnoreCase);
+        Changed?.Invoke();
     }
 
     public void RefreshList()
     {
-        _loading = true;
         var list = _getList() ?? new List<string>();
-        for (int i = 0; i < _box.Items.Count; i++)
-            _box.SetItemChecked(i, list.Contains(((Option)_box.Items[i]).Id, StringComparer.OrdinalIgnoreCase));
-        BeginInvoke(() => _loading = false);
-    }
-
-    private sealed record Option(string Id, string Name)
-    {
-        public override string ToString() => Name;
+        foreach (var (id, chip) in _chips) chip.Selected = list.Contains(id, StringComparer.OrdinalIgnoreCase);
     }
 }
 
