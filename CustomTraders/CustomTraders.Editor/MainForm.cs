@@ -31,7 +31,7 @@ public sealed class MainForm : Form
     private readonly System.Windows.Forms.Timer _checkTimer = new() { Interval = 1200 };
 
     // chrome
-    private readonly Label _folderLabel = new() { Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft, AutoEllipsis = true, ForeColor = Theme.Muted, Font = Theme.Body };
+    private readonly OneLineLabel _folderLabel = new() { Dock = DockStyle.Fill, ForeColor = Theme.Muted, Font = Theme.Body };
     private readonly Label _dbLabel = new() { AutoSize = true, ForeColor = Theme.Muted, Font = Theme.Caption, Padding = new Padding(0, 10, 8, 0) };
     private readonly PillButton _checksButton = new("Checks", PillStyle.Outline);
     private readonly Label _status = new() { Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft, ForeColor = Theme.Muted, AutoEllipsis = true };
@@ -82,13 +82,13 @@ public sealed class MainForm : Form
     private readonly Section _objectiveSection = new("Objective");
     private readonly ItemListPanel _condItems;
     private readonly CheckListPanel _condBosses;
-    private readonly CheckBox _needWeapon = new() { Text = "Must kill with a specific weapon or grenade", AutoSize = true };
+    private readonly Toggle _needWeapon = new() { Text = "Must kill with a specific weapon or grenade" };
     private readonly ItemListPanel _condWeapons;
-    private readonly CheckBox _needCaliber = new() { Text = "Must use specific ammo (caliber)", AutoSize = true };
+    private readonly Toggle _needCaliber = new() { Text = "Must use specific ammo (caliber)" };
     private readonly ItemListPanel _condCalibers;
-    private readonly CheckBox _needWearing = new() { Text = "Must be wearing something", AutoSize = true };
+    private readonly Toggle _needWearing = new() { Text = "Must be wearing something" };
     private readonly ItemListPanel _condWearing;
-    private readonly CheckBox _needMaps = new() { Text = "Only on specific maps", AutoSize = true };
+    private readonly Toggle _needMaps = new() { Text = "Only on specific maps" };
     private readonly CheckListPanel _condMaps;
     private readonly Hint _waysHint = new("");
     private readonly ListEditor<RewardDef> _rewards;
@@ -192,7 +192,8 @@ public sealed class MainForm : Form
     private void BuildChrome()
     {
         // --- top bar ----------------------------------------------------------
-        var top = new TableLayoutPanel { Dock = DockStyle.Top, Height = 62, ColumnCount = 5, Padding = new Padding(4, 4, 4, 8) };
+        var top = new TableLayoutPanel { Dock = DockStyle.Top, Height = 66, ColumnCount = 5, RowCount = 1, Padding = new Padding(4, 4, 4, 10) };
+        top.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         top.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         top.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
         top.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 640));
@@ -366,7 +367,8 @@ public sealed class MainForm : Form
         f.AddNumber("...up to (min)", () => Trader?.RefreshMinutesMax ?? 120, v => Trader!.RefreshMinutesMax = (int)v, 1, 10080);
         f.Changed += () => { MarkDirty(); UpdateHeader(); _traderList.Redraw(); };
 
-        _loyalty.CellValueChanged += (_, _) => MarkDirty();
+        // Only real cell edits (not the "LL1".."LL4" row labels set below).
+        _loyalty.CellValueChanged += (_, e) => { if (e.RowIndex >= 0 && e.ColumnIndex >= 0) MarkDirty(); };
         _loyalty.DataError += (_, e) => { e.ThrowException = false; };
         _loyalty.DataBindingComplete += (_, _) =>
         {
@@ -830,7 +832,9 @@ public sealed class MainForm : Form
         var known = _prereqs.Items.Cast<PrereqItem>().Select(p => p.Id).ToHashSet();
         // Keep ids of quests that no longer exist so the checks can report them.
         var missing = Quest.PrerequisiteQuestIds.Where(id => !known.Contains(id));
-        Quest.PrerequisiteQuestIds = missing.Concat(_prereqs.CheckedItems.Cast<PrereqItem>().Select(p => p.Id)).ToList();
+        var updated = missing.Concat(_prereqs.CheckedItems.Cast<PrereqItem>().Select(p => p.Id)).ToList();
+        if (updated.ToHashSet().SetEquals(Quest.PrerequisiteQuestIds)) return; // just (re)loaded, nothing changed
+        Quest.PrerequisiteQuestIds = updated;
         MarkDirty();
         ShowRequirements();
         _quests.RefreshTexts();
@@ -914,7 +918,7 @@ public sealed class MainForm : Form
                 (options.Count > 1 ? QuestDef.OptionLetter(o) + ": " : "") +
                 string.Join(" + ", q.Conditions.Where(c => c.Option == o || options.Count == 1).Select(ShortCondition))));
         var unlocks = q.Rewards.Where(r => r.Type == RewardTypes.UnlockOffer)
-            .Select(r => Trader?.Offers.FirstOrDefault(o => o.Id == r.OfferId) is { } o ? _db.Get(o.ItemTpl)?.ShortName ?? _db.NameOf(o.ItemTpl) : "?");
+            .Select(r => Trader?.Offers.FirstOrDefault(o => o.Id == r.OfferId) is { } o ? ShortName(o.ItemTpl) : "?");
         return new Row
         {
             Title = q.Name,
@@ -1021,7 +1025,7 @@ public sealed class MainForm : Form
 
     private string ItemsText(List<string> tpls) => tpls.Count == 0 ? "(pick items)" : string.Join(" / ", tpls.Select(ShortName));
 
-    private string ShortName(string tpl) => _db.Get(tpl) is { } i && i.ShortName.Length > 0 && i.Name.Length > 28 ? i.ShortName : _db.NameOf(tpl);
+    private string ShortName(string tpl) => _db.Get(tpl) is { } i && i.ShortName.Length > 0 && i.Name.Length > 24 ? i.ShortName : _db.NameOf(tpl);
 
     private static string Initials(string text)
     {
@@ -1376,7 +1380,7 @@ public sealed class MainForm : Form
         _traders.Clear();
         _avatars.Clear();
         _modFolder = null;
-        _folderLabel.Text = "🔍  Click Browse... and pick …\\SPT_Runtime\\user\\mods\\CustomTraders";
+        _folderLabel.Text = "Click Browse... and pick your SPT_Runtime\\user\\mods\\CustomTraders folder";
         if (string.IsNullOrWhiteSpace(folder) || !Directory.Exists(folder))
         {
             RefreshTraderList();
@@ -1385,7 +1389,7 @@ public sealed class MainForm : Form
         }
 
         _modFolder = folder;
-        _folderLabel.Text = "📁  " + folder;
+        _folderLabel.Text = folder;
         _settings.ModFolder = folder;
         _settings.Save();
 

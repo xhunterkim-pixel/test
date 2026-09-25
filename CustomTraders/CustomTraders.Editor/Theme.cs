@@ -119,6 +119,7 @@ public static class Theme
             case PillButton:
             case GlassPanel:
             case RowList:
+            case Toggle:
                 return; // draw themselves
             case TextBox t:
                 t.ForeColor = Text;
@@ -385,7 +386,7 @@ public class PillButton : Button
             g.DrawPath(pen, path);
         }
         TextRenderer.DrawText(g, Text, Font, ClientRectangle, text,
-            TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine);
+            TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine | TextFormatFlags.NoPrefix);
     }
 }
 
@@ -421,6 +422,94 @@ public class GlassPanel : Panel
             using var path = Theme.Rounded(r, Radius);
             g.DrawPath(pen, path);
         }
+    }
+}
+
+/// <summary>Spotify-style switch (green pill when on) used instead of tick boxes.</summary>
+public sealed class Toggle : CheckBox
+{
+    private bool _hover;
+
+    public Toggle()
+    {
+        SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer |
+                 ControlStyles.SupportsTransparentBackColor | ControlStyles.ResizeRedraw, true);
+        AutoSize = false;
+        BackColor = Color.Transparent;
+        ForeColor = Theme.Text;
+        Cursor = Cursors.Hand;
+        Height = 30;
+        UseMnemonic = false;
+    }
+
+    public override Size GetPreferredSize(Size proposedSize)
+    {
+        var text = TextRenderer.MeasureText(Text, Font);
+        return new Size(52 + text.Width, Math.Max(28, text.Height + 8));
+    }
+
+    protected override void OnTextChanged(EventArgs e)
+    {
+        base.OnTextChanged(e);
+        Size = GetPreferredSize(Size.Empty);
+    }
+
+    protected override void OnFontChanged(EventArgs e)
+    {
+        base.OnFontChanged(e);
+        Size = GetPreferredSize(Size.Empty);
+    }
+
+    protected override void OnCreateControl()
+    {
+        base.OnCreateControl();
+        Size = GetPreferredSize(Size.Empty);
+    }
+
+    protected override void OnMouseEnter(EventArgs e) { _hover = true; Invalidate(); base.OnMouseEnter(e); }
+    protected override void OnMouseLeave(EventArgs e) { _hover = false; Invalidate(); base.OnMouseLeave(e); }
+
+    protected override void OnPaint(PaintEventArgs e)
+    {
+        var g = e.Graphics;
+        g.SmoothingMode = SmoothingMode.AntiAlias;
+        if (Parent != null) // what's behind first
+        {
+            var state = g.Save();
+            g.TranslateTransform(-Left, -Top);
+            InvokePaintBackground(Parent, new PaintEventArgs(g, new Rectangle(Left, Top, Width, Height)));
+            g.Restore(state);
+        }
+
+        var track = new RectangleF(1, (Height - 22) / 2f, 42, 22);
+        Color fill = Checked ? (_hover ? Theme.Lighten(Theme.Accent, 0.12f) : Theme.Accent) : (_hover ? Theme.Border : Theme.CardSelected);
+        if (!Enabled) fill = Color.FromArgb(90, fill);
+        Theme.FillRounded(g, fill, track, 11);
+        float knob = 16;
+        float x = Checked ? track.Right - knob - 3 : track.X + 3;
+        using (var brush = new SolidBrush(Checked ? Color.Black : Theme.Text))
+            g.FillEllipse(brush, x, track.Y + 3, knob, knob);
+
+        var textRect = new Rectangle(52, 0, Width - 52, Height);
+        TextRenderer.DrawText(g, Text, Font, textRect, Enabled ? ForeColor : Theme.Muted,
+            TextFormatFlags.VerticalCenter | TextFormatFlags.Left | TextFormatFlags.SingleLine | TextFormatFlags.NoPrefix | TextFormatFlags.EndEllipsis);
+    }
+}
+
+/// <summary>One line of text, cut with "…" when it doesn't fit (never wraps).</summary>
+public sealed class OneLineLabel : Label
+{
+    public OneLineLabel()
+    {
+        SetStyle(ControlStyles.OptimizedDoubleBuffer | ControlStyles.SupportsTransparentBackColor, true);
+        UseMnemonic = false;
+    }
+
+    protected override void OnPaint(PaintEventArgs e)
+    {
+        TextRenderer.DrawText(e.Graphics, Text, Font, ClientRectangle, ForeColor,
+            TextFormatFlags.VerticalCenter | TextFormatFlags.Left | TextFormatFlags.SingleLine | TextFormatFlags.EndEllipsis |
+            TextFormatFlags.NoPrefix | TextFormatFlags.PathEllipsis);
     }
 }
 

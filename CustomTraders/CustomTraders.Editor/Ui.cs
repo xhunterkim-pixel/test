@@ -16,6 +16,9 @@ public class StackPanel : Panel
 {
     private bool _inLayout, _pending;
 
+    // Top-to-bottom order as added (WinForms' own child order can change, e.g. on focus).
+    private readonly List<Control> _order = new();
+
     public int Gap { get; set; } = 8;
 
     public StackPanel()
@@ -27,8 +30,15 @@ public class StackPanel : Panel
     protected override void OnControlAdded(ControlEventArgs e)
     {
         base.OnControlAdded(e);
+        if (!_order.Contains(e.Control!)) _order.Add(e.Control!);
         e.Control!.VisibleChanged += (_, _) => Relayout();
         e.Control.SizeChanged += (_, _) => { if (!_inLayout && !e.Control.AutoSize && e.Control is not IHeightForWidth) Relayout(); };
+    }
+
+    protected override void OnControlRemoved(ControlEventArgs e)
+    {
+        base.OnControlRemoved(e);
+        _order.Remove(e.Control!);
     }
 
     /// <summary>Lays out this stack and every stack it sits in (after a show/hide).</summary>
@@ -60,7 +70,7 @@ public class StackPanel : Panel
         int width = proposedSize.Width > 0 ? proposedSize.Width : Width;
         int inner = width - Padding.Horizontal;
         int h = Padding.Vertical, n = 0;
-        foreach (Control c in Controls)
+        foreach (var c in _order)
         {
             if (!c.Visible) continue;
             h += HeightFor(c, inner - c.Margin.Horizontal) + c.Margin.Vertical;
@@ -79,7 +89,7 @@ public class StackPanel : Panel
             int y = Padding.Top + (AutoScroll ? AutoScrollPosition.Y : 0);
             int start = y;
             bool first = true;
-            foreach (Control c in Controls)
+            foreach (var c in _order)
             {
                 if (!c.Visible) continue;
                 if (!first) y += Gap;
@@ -89,7 +99,11 @@ public class StackPanel : Panel
                 c.SetBounds(Padding.Left + c.Margin.Left, y + c.Margin.Top, w, h);
                 y += h + c.Margin.Vertical;
             }
-            if (AutoScroll) AutoScrollMinSize = new Size(0, y - start + Padding.Vertical);
+            if (AutoScroll)
+            {
+                AutoScrollMinSize = new Size(0, y - start + Padding.Vertical);
+                AdjustFormScrollbars(true); // normally done by the base layout, which is replaced here
+            }
         }
         finally
         {
@@ -145,7 +159,8 @@ public class Section : GlassPanel
         return this;
     }
 
-    private int HeaderHeight => Math.Max(_title.PreferredHeight, _actions.Controls.Count > 0 ? _actions.PreferredSize.Height : 0) + 8;
+    // The base constructor (GlassPanel) already triggers layout, before _title exists.
+    private int HeaderHeight => _title == null ? 0 : Math.Max(_title.PreferredHeight, _actions.Controls.Count > 0 ? _actions.PreferredSize.Height : 0) + 8;
 
     public override Size GetPreferredSize(Size proposedSize)
     {
@@ -156,6 +171,7 @@ public class Section : GlassPanel
 
     protected override void OnLayout(LayoutEventArgs levent)
     {
+        if (_title == null) return; // still being constructed
         _title.Location = new Point(Padding.Left, Padding.Top);
         var actions = _actions.PreferredSize;
         _actions.SetBounds(Width - Padding.Right - actions.Width, Padding.Top - 4, actions.Width, actions.Height);
@@ -310,7 +326,7 @@ public sealed class FieldPanel : TableLayoutPanel
 
     public CheckBox AddCheck(string label, Func<bool> get, Action<bool> set, string? text = null)
     {
-        var check = new CheckBox { Text = text ?? "", AutoSize = true, Dock = DockStyle.Left, Padding = new Padding(0, 4, 0, 0) };
+        var check = new Toggle { Text = text ?? "", Dock = DockStyle.Left };
         AddRow(label, check);
         check.CheckedChanged += (_, _) => Set(() => set(check.Checked));
         _refreshers.Add(() => check.Checked = get());
@@ -853,8 +869,10 @@ public sealed class CheckListPanel : StackPanel
             if (_loading) return;
             var list = _getList();
             if (list == null) return;
+            var ticked = _box.CheckedItems.Cast<Option>().Select(o => o.Id).ToList();
+            if (ticked.ToHashSet(StringComparer.OrdinalIgnoreCase).SetEquals(list)) return; // just (re)loaded
             list.Clear();
-            list.AddRange(_box.CheckedItems.Cast<Option>().Select(o => o.Id));
+            list.AddRange(ticked);
             Changed?.Invoke();
         });
     }
