@@ -629,7 +629,6 @@ namespace LevelGate
                 _fallbackStyle = new GUIStyle(GUI.skin.box)
                 {
                     fontSize = 16,
-                    alignment = TextAnchor.MiddleLeft,
                     wordWrap = true,
                     padding = new RectOffset(14, 14, 10, 10)
                 };
