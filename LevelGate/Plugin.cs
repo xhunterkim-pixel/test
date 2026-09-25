@@ -64,6 +64,7 @@ namespace LevelGate
             LevelGateReloadPatches.ApplyAll(harmony);
             OnScreenNotifier.Resolve();
             FireGate.PatchTriggerPress(harmony);
+            MagazineSemiLock.PatchNames(harmony);
             DiagnosticLogging.ApplyAll(harmony);
 
             Log.LogInfo("LevelGate loaded, " + Data.Items.Count + " restricted item(s).");
@@ -376,6 +377,37 @@ namespace LevelGate
             }
         }
 
+        // True if this item is in the local player's own inventory (or its
+        // owner can't be determined). Item.Owner is the IItemOwner holding
+        // it — for anything you carry, that's your inventory controller; for
+        // a bot's gear, the bot's controller.
+        public static bool IsOwnItem(EFT.InventoryLogic.Item item)
+        {
+            try
+            {
+                if (item == null) return true;
+                var owner = ReflectionUtil.GetMember(item, "Owner");
+                if (owner == null) return true;
+                return IsOwnInventoryController(owner);
+            }
+            catch
+            {
+                return true;
+            }
+        }
+
+        // Ownership for hooks that only get items as arguments: judged by
+        // the gun/magazine being loaded (you may be loading rounds looted
+        // from a body into your own magazine), else by the round itself.
+        public static bool IsOwnAction(object[] args)
+        {
+            if (args == null) return true;
+            var container = args.OfType<EFT.InventoryLogic.Item>().FirstOrDefault(i => !(i is EFT.InventoryLogic.Ammo));
+            if (container != null) return IsOwnItem(container);
+            var ammo = args.OfType<EFT.InventoryLogic.Ammo>().FirstOrDefault();
+            return IsOwnItem(ammo);
+        }
+
         public static bool IsOwnHandsController(object handsController)
         {
             try
@@ -478,12 +510,16 @@ namespace LevelGate
             }
         }
 
-        public static void Notify(int requiredLevel, EFT.InventoryLogic.Item item = null)
+        public static void Notify(int requiredLevel, EFT.InventoryLogic.Item item = null, bool onScreen = false)
         {
-            // Ammo blocks (loading, reloading, firing) also get Tarkov's own
-            // bottom-right notification, since the console line is easy to
-            // miss mid-raid.
-            if (item is EFT.InventoryLogic.Ammo)
+            // Only the four deliberate player actions pass onScreen: true —
+            // packing a magazine (LoadMagazine), manually chambering /
+            // single-round loading (the Split into a chamber, and the R-key
+            // reload entries), and pressing M1 (SetTriggerPressed). Every
+            // other check (drag hover via MoveResult.CanExecute, the game
+            // polling CanPressTrigger, per-round insert helpers) still
+            // blocks, but silently — those were the "random" popups.
+            if (onScreen && item is EFT.InventoryLogic.Ammo)
                 OnScreenNotifier.Show($"Ammo Level Too High (requires level {requiredLevel})");
 
             string message = $"LevelGate: requires level {requiredLevel} to use this item.";
@@ -519,7 +555,11 @@ namespace LevelGate
     // check runs every frame the trigger is held.
     internal static class OnScreenNotifier
     {
-        private const float MinSecondsBetweenRepeats = 3f;
+        // Not a cooldown: every separate press shows its own message. This
+        // only swallows the duplicate when ONE press passes through two
+        // hooked layers (e.g. a base method and its override) in the same
+        // instant.
+        private const float MinSecondsBetweenRepeats = 0.15f;
         private const float FallbackSeconds = 4f;
 
         private static MethodInfo _method;
@@ -1018,7 +1058,7 @@ namespace LevelGate
                     (TryBlockEquip(oneItem.Item1, oneItem.To1, player, out int req1) ||
                      TryBlockAmmoLoad(oneItem.Item1, oneItem.To1, player, patchName, operation, out req1)))
                 {
-                    LevelGateCheck.Notify(req1, oneItem.Item1);
+                    LevelGateCheck.Notify(req1, oneItem.Item1, onScreen: true);
                     result = false;
                     return;
                 }
@@ -1027,7 +1067,7 @@ namespace LevelGate
                     (TryBlockEquip(twoItem.Item2, twoItem.To2, player, out int req2) ||
                      TryBlockAmmoLoad(twoItem.Item2, twoItem.To2, player, patchName, operation, out req2)))
                 {
-                    LevelGateCheck.Notify(req2, twoItem.Item2);
+                    LevelGateCheck.Notify(req2, twoItem.Item2, onScreen: true);
                     result = false;
                     return;
                 }
@@ -1690,6 +1730,153 @@ namespace LevelGate
         }
     }
 
+    // -----------------------------------------------------------------
+    // SEMI LOCKED magazines — a magazine you're allowed to use, but with
+    // at least one gated round inside, is labelled "[SEMI LOCKED]" (short
+    // name) / "[SEMI LOCKED - Lvl X] <name>" (full name, X = the highest
+    // level its rounds need) with an ORANGE background — alongside the
+    // existing [LOCKED]/red and [UNLOCKED]/green labels. Magazines only
+    // (ammo boxes are Magazine-derived in EFT but excluded).
+    //
+    // The existing labels work per TEMPLATE (the localization key is
+    // "<tplId> Name", with no item instance), but "has gated rounds
+    // inside" is per INSTANCE. So Item.Name / Item.ShortName are patched
+    // for magazines only: while one holds gated rounds, its key gets a
+    // marker prefix ("\u0001LGSEMI:<level>:<tplId> ShortName"). When the UI
+    // localizes that key, the Localized postfix recognises the marker,
+    // resolves the real key itself and returns the SEMI LOCKED text — so
+    // the key never reaches the UI unresolved (which is what broke the
+    // first name-patching attempt described in PATCH 9).
+    // -----------------------------------------------------------------
+    internal static class MagazineSemiLock
+    {
+        private const string KeyMarker = "\u0001LGSEMI:";
+
+        private static bool _orangeResolved;
+        private static JsonType.TaxonomyColor _orange;
+
+        // Resolved by name so it builds whether or not this game version's
+        // TaxonomyColor has "orange" (falls back to yellow).
+        public static JsonType.TaxonomyColor OrangeColor
+        {
+            get
+            {
+                if (!_orangeResolved)
+                {
+                    _orangeResolved = true;
+                    if (!Enum.TryParse("orange", true, out _orange) &&
+                        !Enum.TryParse("yellow", true, out _orange))
+                    {
+                        _orange = JsonType.TaxonomyColor.red;
+                    }
+                }
+                return _orange;
+            }
+        }
+
+        public static bool IsLabelledMagazine(EFT.InventoryLogic.Item item)
+        {
+            return item is EFT.InventoryLogic.Magazine
+                   && item.GetType().Name.IndexOf("AmmoBox", StringComparison.OrdinalIgnoreCase) < 0;
+        }
+
+        // Highest level required by a gated round inside this magazine, or 0
+        // if it isn't a (non-ammo-box) magazine or holds nothing gated.
+        public static int GatedAmmoLevel(EFT.InventoryLogic.Item item)
+        {
+            try
+            {
+                if (!IsLabelledMagazine(item)) return 0;
+                var player = LevelGateCheck.GetMainPlayer();
+                if (player == null) return 0;
+
+                var contents = FireGate.InvokeNoArgs(item, "GetAllItems") as System.Collections.IEnumerable
+                               ?? ReflectionUtil.GetMember(ReflectionUtil.GetMember(item, "Cartridges"), "Items") as System.Collections.IEnumerable;
+                if (contents == null) return 0;
+
+                int max = 0;
+                foreach (var obj in contents)
+                {
+                    if (obj is EFT.InventoryLogic.Ammo ammo &&
+                        LevelGateCheck.IsBlocked(player, ammo.TemplateId, out int required) &&
+                        required > max)
+                    {
+                        max = required;
+                    }
+                }
+                return max;
+            }
+            catch
+            {
+                return 0;
+            }
+        }
+
+        public static bool TryParseKey(string key, out int level, out string realKey)
+        {
+            level = 0;
+            realKey = null;
+            if (key == null || !key.StartsWith(KeyMarker, StringComparison.Ordinal)) return false;
+            int sep = key.IndexOf(':', KeyMarker.Length);
+            if (sep < 0 || !int.TryParse(key.Substring(KeyMarker.Length, sep - KeyMarker.Length), out level)) return false;
+            realKey = key.Substring(sep + 1);
+            return true;
+        }
+
+        public static void PatchNames(Harmony harmony)
+        {
+            try
+            {
+                var postfix = new HarmonyMethod(typeof(MagazineSemiLock), nameof(NamePostfix));
+                var targets = new List<MethodInfo>();
+                foreach (var name in new[] { "Name", "ShortName" })
+                {
+                    var baseGetter = AccessTools.PropertyGetter(typeof(EFT.InventoryLogic.Item), name);
+                    if (baseGetter != null) targets.Add(baseGetter);
+
+                    // Any magazine subclass that overrides the getter needs
+                    // its own patch.
+                    foreach (var t in AccessTools.AllTypes().Where(t => typeof(EFT.InventoryLogic.Magazine).IsAssignableFrom(t)))
+                    {
+                        var prop = t.GetProperty(name, BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly);
+                        var getter = prop?.GetGetMethod(true);
+                        if (getter != null && !getter.IsAbstract && !targets.Contains(getter)) targets.Add(getter);
+                    }
+                }
+
+                foreach (var target in targets)
+                {
+                    harmony.Patch(target, postfix: postfix);
+                    LevelGatePlugin.Log.LogInfo($"LevelGate: SEMI LOCKED label hooked: {target.DeclaringType?.FullName}.{target.Name}");
+                }
+            }
+            catch (Exception e)
+            {
+                LevelGatePlugin.Log.LogError("LevelGate: failed to patch item names for SEMI LOCKED magazines. " + e);
+            }
+        }
+
+        private static void NamePostfix(EFT.InventoryLogic.Item __instance, ref string __result)
+        {
+            try
+            {
+                if (string.IsNullOrEmpty(__result) || __result.StartsWith(KeyMarker, StringComparison.Ordinal)) return;
+                if (!IsLabelledMagazine(__instance)) return;
+
+                // A magazine that is itself LOCKED keeps its [LOCKED] label.
+                var player = LevelGateCheck.GetMainPlayer();
+                if (player == null || LevelGateCheck.IsBlocked(player, __instance.TemplateId, out _)) return;
+
+                int level = GatedAmmoLevel(__instance);
+                if (level > 0) __result = KeyMarker + level + ":" + __result;
+            }
+            catch
+            {
+                // never break item names
+            }
+        }
+    }
+
     internal static class ItemRenameShared
     {
         // Keys look like "<TemplateId> Name" or "<TemplateId> ShortName" —
@@ -1708,6 +1895,17 @@ namespace LevelGate
             try
             {
                 if (string.IsNullOrEmpty(key) || string.IsNullOrEmpty(result)) return;
+
+                if (MagazineSemiLock.TryParseKey(key, out int semiLevel, out string realKey))
+                {
+                    // Resolve the real key (this re-enters this postfix for
+                    // it, which is fine — it's a normal "<tpl> Name" key).
+                    string resolved = EFT.LocalizationExtensions.Localized(realKey, "");
+                    result = realKey.EndsWith(" ShortName", StringComparison.Ordinal)
+                        ? "[SEMI LOCKED]"
+                        : $"[SEMI LOCKED - Lvl {semiLevel}] {resolved}";
+                    return;
+                }
 
                 string templateId = null;
                 bool showLevel = false;
@@ -1866,7 +2064,9 @@ namespace LevelGate
         [HarmonyPriority(Priority.First)]
         static bool Prefix(EFT.ClientFirearmController __instance, ref bool __result)
         {
-            if (!FireGate.ShouldBlockFire(__instance)) return true;
+            // Polled by the game (not only on M1), so block silently here;
+            // the message comes from the actual press in SetTriggerPressed.
+            if (!FireGate.ShouldBlockFire(__instance, showMessage: false)) return true;
             __result = false;
             return false; // skip original — trigger can't be pressed
         }
@@ -1913,10 +2113,10 @@ namespace LevelGate
         private static bool SetTriggerPressedPrefix(object __instance, bool __0)
         {
             if (!__0) return true;
-            return !ShouldBlockFire(__instance);
+            return !ShouldBlockFire(__instance, showMessage: true);
         }
 
-        public static bool ShouldBlockFire(object firearmController)
+        public static bool ShouldBlockFire(object firearmController, bool showMessage)
         {
             try
             {
@@ -1928,12 +2128,16 @@ namespace LevelGate
                 var weapon = ReflectionUtil.GetMember(firearmController, "Item") as EFT.InventoryLogic.Weapon;
                 if (weapon == null) return false;
 
+                // Second ownership check on the gun itself, so a bot's
+                // controller can never be mistaken for yours.
+                if (!LevelGateCheck.IsOwnItem(weapon)) return false;
+
                 foreach (var ammo in LoadedRounds(weapon))
                 {
                     if (LevelGateCheck.IsBlocked(player, ammo.TemplateId, out int required))
                     {
                         DiagnosticLogging.LogCall($"FireGate blocked weapon={weapon.TemplateId} ammo={ammo.TemplateId}");
-                        LevelGateCheck.Notify(required, ammo);
+                        LevelGateCheck.Notify(required, ammo, onScreen: showMessage);
                         return true;
                     }
                 }
@@ -1998,7 +2202,7 @@ namespace LevelGate
 
         private static readonly Dictionary<(Type, string), MethodInfo> _methodCache = new Dictionary<(Type, string), MethodInfo>();
 
-        private static object InvokeNoArgs(object instance, string name)
+        internal static object InvokeNoArgs(object instance, string name)
         {
             if (instance == null) return null;
             try
@@ -2202,14 +2406,20 @@ namespace LevelGate
                     // This used to return straight away, which is why water
                     // stayed at 0/60 after being un-gated.
                     ItemNeutralizer.Sync(__instance, false);
+                    if (MagazineSemiLock.GatedAmmoLevel(__instance) > 0)
+                        __result = MagazineSemiLock.OrangeColor;
                     return;
                 }
 
                 var player = LevelGateCheck.GetMainPlayer();
                 if (player == null) return;
 
+                // LOCKED (red) wins; a usable magazine holding gated rounds
+                // is SEMI LOCKED (orange); otherwise UNLOCKED (green).
                 bool blocked = LevelGateCheck.IsBlocked(player, __instance.TemplateId, out _);
-                __result = blocked ? JsonType.TaxonomyColor.red : JsonType.TaxonomyColor.green;
+                __result = blocked ? JsonType.TaxonomyColor.red
+                    : MagazineSemiLock.GatedAmmoLevel(__instance) > 0 ? MagazineSemiLock.OrangeColor
+                    : JsonType.TaxonomyColor.green;
 
                 // BackgroundColor is queried constantly for every item shown
                 // anywhere in the UI (grid, tooltip, hover, etc.), which
@@ -2314,24 +2524,20 @@ namespace LevelGate
             }
         }
 
+        // The ammo caliber lock is RETIRED. It rewrote AmmoTemplate.Caliber,
+        // which is shared by every copy of that ammo in the raid — so bots
+        // carrying e.g. M855 couldn't reload it either (and it made R on the
+        // M4A1 silently do nothing instead of showing the level message).
+        // Every player load/reload/fire path is now blocked directly, and
+        // only for your own gear, so this only undoes a caliber a previous
+        // build may have changed in this session.
         private static void SyncAmmo(EFT.InventoryLogic.Ammo ammo, bool locked)
         {
             var template = ammo.AmmoTemplate;
             if (template == null) return;
 
-            if (locked)
-            {
-                if (!_originalCalibers.ContainsKey(ammo.TemplateId))
-                {
-                    _originalCalibers[ammo.TemplateId] = template.Caliber;
-                }
-                if (template.Caliber != LockedCaliberMarker)
-                {
-                    template.Caliber = LockedCaliberMarker;
-                }
-            }
-            else if (template.Caliber == LockedCaliberMarker
-                     && _originalCalibers.TryGetValue(ammo.TemplateId, out var original))
+            if (template.Caliber == LockedCaliberMarker
+                && _originalCalibers.TryGetValue(ammo.TemplateId, out var original))
             {
                 template.Caliber = original;
             }
@@ -2700,12 +2906,16 @@ namespace LevelGate
         private static Type _cachedReturnType;
 
         [HarmonyPriority(Priority.First)]
-        static bool Prefix(object[] __args, ref object __result)
+        static bool Prefix(EFT.InventoryLogic.Magazine __instance, object[] __args, ref object __result)
         {
             try
             {
                 var ammo = __args.OfType<EFT.InventoryLogic.Ammo>().FirstOrDefault();
                 if (ammo == null) return true;
+
+                // Bots refill their magazines through this too — only judge
+                // magazines you own.
+                if (!LevelGateCheck.IsOwnItem(__instance)) return true;
 
                 var player = LevelGateCheck.GetMainPlayer();
                 if (player == null) return true;
@@ -2991,7 +3201,7 @@ namespace LevelGate
                 {
                     if (LevelGateCheck.IsBlocked(player, ammo.TemplateId, out int required))
                     {
-                        LevelGateCheck.Notify(required, ammo);
+                        LevelGateCheck.Notify(required, ammo, onScreen: true);
                         CallbackUtil.TryFail(args.OfType<Comfort.Common.Callback>().FirstOrDefault(),
                             $"LevelGate: requires level {required}");
                         return true;
@@ -3042,13 +3252,14 @@ namespace LevelGate
                 var ammo = __args.OfType<EFT.InventoryLogic.Ammo>().FirstOrDefault();
                 DiagnosticLogging.LogCall($"SingleBarrelRunPrefix ammo={(ammo == null ? "NULL" : ammo.TemplateId)}");
                 if (ammo == null) return true;
+                if (!LevelGateCheck.IsOwnAction(__args)) return true;
 
                 var player = LevelGateCheck.GetMainPlayer();
                 if (player == null) return true;
 
                 if (LevelGateCheck.IsBlocked(player, ammo.TemplateId, out int required))
                 {
-                    LevelGateCheck.Notify(required, ammo);
+                    LevelGateCheck.Notify(required, ammo, onScreen: true);
 
                     if (_singleBarrelReturnType != null)
                     {
@@ -3169,10 +3380,12 @@ namespace LevelGate
         // weapon, ammo, count) and return Task<Comfort.Common.IResult> — same
         // pattern as MoveOperation/ThrowOperation, so the same safe substitute
         // (a completed Task wrapping SuccessfulResult.New) applies.
-        private static bool AmmoLoadPrefix(object[] __args, ref System.Threading.Tasks.Task<Comfort.Common.IResult> __result)
+        private static bool AmmoLoadPrefix(object __instance, object[] __args, ref System.Threading.Tasks.Task<Comfort.Common.IResult> __result)
         {
             try
             {
+                if (!LevelGateCheck.IsOwnInventoryController(__instance)) return true;
+
                 var ammo = __args.OfType<EFT.InventoryLogic.Ammo>().FirstOrDefault();
                 if (ammo == null)
                 {
@@ -3186,7 +3399,7 @@ namespace LevelGate
 
                 if (LevelGateCheck.IsBlocked(player, ammo.TemplateId, out int required))
                 {
-                    LevelGateCheck.Notify(required, ammo);
+                    LevelGateCheck.Notify(required, ammo, onScreen: true);
                     __result = System.Threading.Tasks.Task.FromResult<Comfort.Common.IResult>(Comfort.Common.SuccessfulResult.New);
                     return false;
                 }
@@ -3235,6 +3448,7 @@ namespace LevelGate
             try
             {
                 if (item == null) return true;
+                if (!LevelGateCheck.IsOwnItem(item)) return true;
 
                 var player = LevelGateCheck.GetMainPlayer();
                 if (player == null) return true;

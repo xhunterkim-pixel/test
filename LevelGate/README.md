@@ -38,12 +38,27 @@ three places (see the comments in `Plugin.cs` for the full reasoning):
   comes pre-loaded with gated rounds (e.g. an MP-153 or Mosin off a body)
   won't fire until those rounds are ejected/unloaded.
 
-Every ammo block (loading, reloading, firing) shows Tarkov's own
-bottom-right notification **"Ammo Level Too High (requires level X)"**,
-throttled to once every few seconds. SPT 4.1.6 has no `NotificationManagerClass`,
-so the game's notification method is found by name at startup (logged as
-`LevelGate: on-screen messages use ...`); if none is found, LevelGate draws
-its own box in the bottom-right corner instead.
+The bottom-right **"Ammo Level Too High (requires level X)"** message is shown
+only for four deliberate actions, once per press (no cooldown):
+
+1. packing a gated round into a magazine,
+2. manually chambering / single-round loading (MP-153 tube, empty M4A1 with
+   no magazine),
+3. pressing R on internal-magazine guns (Mosin),
+4. pressing M1 with a gated round chambered or anywhere in the magazine.
+
+Everything else (dragging/hovering ammo, the game polling "can the trigger be
+pressed", per-round insert helpers) still blocks but stays silent. Only your
+own actions count — bots' reloads/shots never trigger it, and the old global
+"caliber lock" (which also stopped bots from using that ammo) is retired.
+SPT 4.1.6 has no `NotificationManagerClass`, so the game's notification
+method is found by name at startup (logged as `LevelGate: on-screen messages
+use ...`); if none is found, LevelGate draws its own bottom-right box.
+
+**SEMI LOCKED magazines:** a magazine you may use but that holds at least one
+gated round shows `[SEMI LOCKED]` (short name) / `[SEMI LOCKED - Lvl X] name`
+with an **orange** background, next to `[LOCKED]`/red and `[UNLOCKED]`/green.
+Magazines only — ammo boxes are excluded.
 
 Unloading is never blocked: taking gated rounds out of a magazine/gun
 (including the internal transfer an `UnloadMagOperation` performs) always
