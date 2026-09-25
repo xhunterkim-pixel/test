@@ -126,6 +126,8 @@ public class CustomTradersMod(
             }
         }
 
+        foreach (var (trader, _) in traders) HookTraderUnlock(trader);
+
         LogBlue($"[CustomTraders] Loaded {loaded} trader(s) from {tradersFolder}");
         return Task.CompletedTask;
     }
@@ -154,6 +156,7 @@ public class CustomTradersMod(
         {
             avatarKey += "_" + FileFingerprint(avatarPath);
             imageRouter.AddRoute(avatarKey, avatarPath);
+            LogBlue($"[CustomTraders] {file.Name}: icon {file.Avatar} (version {avatarKey[(avatarKey.LastIndexOf('_') + 1)..]})");
         }
         else
         {
@@ -903,48 +906,83 @@ public class CustomTradersMod(
         }
     }
 
+    /// <summary>
+    /// Objective text in the game's own style (the editor shows the same text
+    /// as the default, see tarkovText in ui/app.js). The count is shown by the
+    /// game itself (0/10), so it isn't part of the text.
+    /// </summary>
     private string DescribeCondition(ConditionDef c)
     {
-        string items = string.Join(" / ", c.ItemTpls.Select(ItemName));
-        string where = c.Locations.Count > 0 ? " on " + string.Join(", ", c.Locations.Select(Maps.Name)) : "";
+        string items = c.ItemTpls.Count > 0 ? string.Join(" or ", c.ItemTpls.Select(ItemName)) : "…";
+        string where = c.Locations.Count > 0 ? " on " + string.Join(" or ", c.Locations.Select(Maps.Name)) : "";
         string wearing = c.WearingTpls.Count > 0 ? " while wearing " + string.Join(" or ", c.WearingTpls.Select(ItemName)) : "";
+        string raid = c.OneRaid ? " in one raid" : "";
         switch (c.Type)
         {
             case ConditionTypes.HandoverItem:
-                return c.ItemTpls.All(IsMoney)
-                    ? $"Hand over {items}"
-                    : $"Hand over {(c.FoundInRaid ? "found in raid " : "")}{items}";
+                return c.ItemTpls.Count > 0 && c.ItemTpls.All(IsMoney)
+                    ? "Hand over " + string.Join(" or ", c.ItemTpls.Select(MoneyName))
+                    : $"Hand over the {(c.FoundInRaid ? "found in raid " : "")}item: {items}";
             case ConditionTypes.FindItem:
-                return $"Find {items} in raid";
+                return $"Find in raid: {items}";
+            case ConditionTypes.UseItem:
+                return $"Use {items} during a raid{where}{raid}";
+            case ConditionTypes.Skill:
+                return $"Reach the required {SkillName(c.Skill)} skill level";
+            case ConditionTypes.Extract:
+                return $"Survive and extract{where}{wearing}{raid}";
             case ConditionTypes.Kill:
             {
-                string target = c.KillTarget switch
+                string who = c.KillTarget switch
                 {
                     "Savage" => "Scavs",
                     "AnyPmc" => "PMC operatives",
-                    "Usec" => "USEC operatives",
-                    "Bear" => "BEAR operatives",
+                    "Usec" => "USEC PMC operatives",
+                    "Bear" => "BEAR PMC operatives",
                     "Boss" => c.BossRoles.Count > 0 ? string.Join(" or ", c.BossRoles.Select(KillTargets.BossName)) : "bosses",
-                    _ => "enemies",
+                    _ => "any target",
                 };
-                string with = c.WeaponTpls.Count > 0 ? " using " + string.Join(" or ", c.WeaponTpls.Select(ItemName)) : "";
-                string caliber = c.Calibers.Count > 0 ? " with " + string.Join(" or ", c.Calibers.Select(CaliberName)) + " ammo" : "";
-                string parts = c.BodyParts.Count > 0 ? " with shots to the " + string.Join(" or ", c.BodyParts.Select(BodyPartName)) : "";
-                string distance = c.Distance > 0 ? (c.DistanceCompare == "<=" ? $" from within {c.Distance} m" : $" from at least {c.Distance} m") : "";
+                string weapon = c.WeaponTpls.Count > 0 ? " while using " + string.Join(" or ", c.WeaponTpls.Select(ItemName)) : "";
+                string ammo = c.Calibers.Count > 0 ? " with " + string.Join(" or ", c.Calibers.Select(CaliberName)) + " ammo" : "";
+                string parts = c.BodyParts.Count == 0 ? "" : c.BodyParts is ["Head"] ? " with headshots"
+                    : " with shots to the " + string.Join(" or ", c.BodyParts.Select(BodyPartName));
+                string distance = c.Distance <= 0 ? "" : c.DistanceCompare == "<=" ? $" from less than {c.Distance} meters away" : $" from over {c.Distance} meters away";
                 string time = c.DaytimeFrom != c.DaytimeTo ? $" between {c.DaytimeFrom:00}:00 and {c.DaytimeTo:00}:00" : "";
-                string raid = c.OneRaid ? " in a single raid" : "";
-                return $"Eliminate {target}{with}{caliber}{parts}{distance}{wearing}{where}{time}{raid}";
+                return $"Eliminate {who}{weapon}{ammo}{parts}{distance}{wearing}{where}{time}{raid}";
             }
-            case ConditionTypes.Extract:
-                return $"Survive and extract{where}{wearing}{(c.OneRaid ? " in a single raid" : "")}";
-            case ConditionTypes.Skill:
-                return $"Reach level {c.Count} in the {c.Skill} skill";
-            case ConditionTypes.UseItem:
-                return $"Use {items} in raid{where}";
             default:
                 return c.Type;
         }
     }
+
+    private static string MoneyName(string tpl) => tpl switch
+    {
+        Currencies.Roubles => "roubles",
+        Currencies.Dollars => "dollars",
+        Currencies.Euros => "euros",
+        Currencies.GpCoin => "GP coins",
+        Currencies.LegaMedal => "Lega medals",
+        _ => tpl,
+    };
+
+    private static string SkillName(string skill) => skill switch
+    {
+        "StressResistance" => "Stress resistance",
+        "AimDrills" => "Aim drills",
+        "TroubleShooting" => "Troubleshooting",
+        "CovertMovement" => "Covert movement",
+        "MagDrills" => "Mag drills",
+        "LightVests" => "Light vests",
+        "HeavyVests" => "Heavy vests",
+        "WeaponTreatment" => "Weapon maintenance",
+        "RecoilControl" => "Recoil control",
+        "HideoutManagement" => "Hideout management",
+        "Sniper" => "Bolt-action rifles",
+        "DMR" => "Marksman rifles",
+        "Assault" => "Assault rifles",
+        "AttachedLauncher" => "UBGL",
+        _ => skill,
+    };
 
     private static string BodyPartName(string part) => part switch
     {
@@ -955,11 +993,66 @@ public class CustomTradersMod(
         _ => part.ToLowerInvariant(),
     };
 
-    /// <summary>"Caliber556x45NATO" -> "5.56x45".</summary>
+    /// <summary>"Caliber556x45NATO" -> "5.56x45 NATO" (same as the editor shows).</summary>
     private static string CaliberName(string caliber)
     {
         var s = caliber.StartsWith("Caliber") ? caliber[7..] : caliber;
-        return s.Replace("NATO", "").Replace("PARA", "");
+        int x = s.IndexOf('x');
+        if (x == 2 && s[..2] is "46" or "57" or "68" or "86" or "93") s = s[0] + "." + s[1..];
+        else if (x == 3 && char.IsDigit(s[0])) s = s[0] + "." + s[1..];
+        else if (x == 4 && char.IsDigit(s[0])) s = s[..2] + "." + s[2..];
+        int tail = s.Length;
+        while (tail > 0 && char.IsLetter(s[tail - 1])) tail--;
+        if (tail > 0 && tail < s.Length && tail - (s.Length - tail) >= 0 && char.IsDigit(s[tail - 1]) && s.Length - tail >= 2) s = s[..tail] + " " + s[tail..];
+        return s;
+    }
+
+    /// <summary>
+    /// A trader that isn't unlocked from the start is unlocked by a quest: the
+    /// game's own "TraderUnlock" reward is added to that quest (one of ours —
+    /// every way of it — or a game quest).
+    /// </summary>
+    private void HookTraderUnlock(TraderFile file)
+    {
+        if (file.UnlockedByDefault || !Ids.IsValid(file.UnlockQuestId)) return;
+        var questIds = _questOptionIds.GetValueOrDefault(file.UnlockQuestId!) ?? new List<string> { file.UnlockQuestId! };
+        int hooked = 0;
+        foreach (var id in questIds)
+        {
+            if (!templateTable.Quests.TryGetValue(id, out var quest)) continue;
+            quest.Rewards ??= new Dictionary<string, List<Reward>>();
+            if (!quest.Rewards.TryGetValue("Success", out var success) || success == null)
+                quest.Rewards["Success"] = success = new List<Reward>();
+            var reward = jsonUtil.Deserialize<Reward>(new JsonObject
+            {
+                ["id"] = Ids.Derive(file.Id + ":unlockedby:" + id),
+                ["index"] = success.Count,
+                ["type"] = "TraderUnlock",
+                ["target"] = file.Id,
+                ["unknown"] = false,
+            }.ToJsonString());
+            if (reward == null) continue;
+            success.Add(reward);
+            hooked++;
+        }
+        if (hooked == 0)
+            logger.Warning($"[CustomTraders] {file.Name}: unlocks after quest {file.UnlockQuestId}, which isn't loaded — the trader will stay locked.");
+        else
+            LogBlue($"[CustomTraders] {file.Name}: locked at start, unlocked by completing '{QuestName(file.UnlockQuestId!)}'.");
+    }
+
+    private string QuestName(string id)
+    {
+        if (_questDefs.TryGetValue(id, out var def)) return def.Name;
+        try
+        {
+            if (localeTable.Global.TryGetValue("en", out var en) && en.Value is { } english && english.TryGetValue(id + " name", out var name)) return name;
+        }
+        catch
+        {
+            // locale not loaded: fall back to the id
+        }
+        return id;
     }
 
     // -------------------------------------------------------------------------

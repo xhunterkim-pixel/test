@@ -34,6 +34,9 @@ public sealed class ItemDatabase
     };
 
     public Dictionary<string, GameItem> Items { get; } = new();
+
+    /// <summary>English texts of the game (item, quest and trader names...).</summary>
+    public Dictionary<string, string> Names { get; private set; } = new();
     public string? SourceFolder { get; private set; }
 
     public bool IsLoaded => Items.Count > 0;
@@ -96,6 +99,7 @@ public sealed class ItemDatabase
         SourceFolder = databaseFolder;
 
         var names = new Dictionary<string, string>();
+        Names = names;
         var localePath = Path.Combine(databaseFolder, "locales", "global", "en.json");
         if (File.Exists(localePath))
         {
@@ -132,6 +136,24 @@ public sealed class ItemDatabase
             string shortName = names.TryGetValue($"{id} ShortName", out var sn) ? sn : "";
             Items[id] = new GameItem(id, name, shortName, parent, CategoryOf(id, parents), caliber);
         }
+    }
+
+    /// <summary>The game's own quests (id, English name, trader nickname), for "unlocked by a game quest".</summary>
+    public List<(string Id, string Name, string Trader)> LoadQuests()
+    {
+        var result = new List<(string, string, string)>();
+        if (SourceFolder == null) return result;
+        var path = Path.Combine(SourceFolder, "templates", "quests.json");
+        if (!File.Exists(path)) return result;
+        using var doc = JsonDocument.Parse(File.ReadAllBytes(path));
+        foreach (var q in doc.RootElement.EnumerateObject())
+        {
+            string trader = q.Value.TryGetProperty("traderId", out var t) ? t.GetString() ?? "" : "";
+            string name = Names.TryGetValue($"{q.Name} name", out var n) ? n : q.Value.TryGetProperty("QuestName", out var qn) ? qn.GetString() ?? q.Name : q.Name;
+            string traderName = Names.TryGetValue($"{trader} Nickname", out var tn) ? tn : "";
+            result.Add((q.Name, name, traderName));
+        }
+        return result.OrderBy(x => x.Item3).ThenBy(x => x.Item2).ToList();
     }
 
     private static ItemCategory CategoryOf(string id, Dictionary<string, string> parents)

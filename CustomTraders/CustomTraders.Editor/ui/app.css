@@ -307,3 +307,39 @@ table.loyalty input { max-width: none; }
   box-shadow: 0 8px 30px rgba(0, 0, 0, .5);
 }
 #toast.show { opacity: 1; transform: translate(-50%, 0); }
+
+/* ------------------------------------------------------------------ foldable cards */
+.card > h3.card-head { margin: 0; }
+.card:not(.folded) > h3.card-head { margin-bottom: 10px; }
+.card-title { cursor: pointer; }
+.fold { width: 26px; height: 26px; border-radius: 50%; color: var(--muted); font-size: 14px; transition: transform .18s, background .12s, color .12s; flex: none; }
+.fold:hover { background: var(--hover); color: #fff; }
+.card.folded .fold { transform: rotate(-90deg); }
+.card.folded > .card-body { display: none; }
+.card.folded { padding-bottom: 14px; }
+
+/* ------------------------------------------------------------------ ways as tabs */
+.waytabs { display: flex; gap: 6px; flex-wrap: wrap; margin: 2px 0 8px; }
+.waytab {
+  height: 34px; padding: 0 14px; border-radius: 17px; font-weight: 800; background: #2a2a2a; color: var(--muted);
+  display: inline-flex; align-items: center; gap: 8px; transition: background .12s, color .12s;
+}
+.waytab span { font-size: 11px; background: rgba(0, 0, 0, .35); border-radius: 9px; padding: 1px 7px; }
+.waytab:hover { background: #3a3a3a; color: #fff; }
+.waytab.on { background: var(--c); color: #000; }
+.waytab.add { background: transparent; box-shadow: inset 0 0 0 1px #727272; color: #fff; }
+.waytab.add:hover { box-shadow: inset 0 0 0 1px #fff; }
+
+/* ------------------------------------------------------------------ tags */
+.tag {
+  display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 6px 0 12px; border-radius: 14px; font-size: 12px; font-weight: 800;
+  color: var(--c); background: color-mix(in srgb, var(--c) 18%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c) 60%, transparent);
+}
+.tag button { color: inherit; opacity: .7; width: 20px; height: 20px; border-radius: 50%; }
+.tag button:hover { opacity: 1; background: rgba(255, 255, 255, .1); }
+
+/* column resize handles must stick out of the header cells */
+.list-head > div { overflow: visible; }
+.list-head .head-text { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.list-head .grip { left: -12px; width: 14px; z-index: 2; }
+.list-head .grip::after { left: 6px; }

@@ -30,6 +30,12 @@ public class TraderFile
 
     public bool UnlockedByDefault { get; set; } = true;
 
+    /// <summary>
+    /// When not unlocked from the start: the quest (one of yours, or a game
+    /// quest id) whose completion unlocks the trader.
+    /// </summary>
+    public string? UnlockQuestId { get; set; }
+
     /// <summary>Off = the server skips this trader completely (its offers and quests aren't loaded). Nothing is deleted.</summary>
     public bool Enabled { get; set; } = true;
 
@@ -165,6 +171,9 @@ public class QuestDef
     public List<ConditionDef> Conditions { get; set; } = new();
 
     public List<RewardDef> Rewards { get; set; } = new();
+
+    /// <summary>Your own labels to keep track of quests (editor only; the game doesn't see them).</summary>
+    public List<string> Tags { get; set; } = new();
 
     /// <summary>The quest fails when the player dies / goes MIA / leaves a raid while it's active; it can be restarted.</summary>
     public bool FailOnDeath { get; set; }

@@ -101,6 +101,8 @@ const S = {
   page: 'trader',
   t: null, offer: null, quest: null, cond: null, reward: null, check: null,
   checks: [], history: [], checkFilter: null,
+  gameQuests: new Map(), // id -> { i, n, t } (the game's own quests)
+  way: 1, tagFilter: null,
   open: new WeakMap(),  // objective -> Set of opened "must ..." sections
 };
 
@@ -154,30 +156,46 @@ function questsUnlocking(t, offer) {
 // Loading & normalising trader files
 // =====================================================================
 
+const def = (o, k, v) => { if (o[k] === undefined || o[k] === null) o[k] = v; };
+
+/** Every field an objective can have (new objectives and old files alike). */
+function fillCond(c) {
+  def(c, 'id', newId()); def(c, 'type', 'HandoverItem'); def(c, 'option', 1); def(c, 'text', ''); def(c, 'count', 1);
+  def(c, 'foundInRaid', true); def(c, 'killTarget', 'Any');
+  for (const k of ['itemTpls', 'bossRoles', 'weaponTpls', 'calibers', 'wearingTpls', 'locations', 'bodyParts', 'exitStatuses']) def(c, k, []);
+  def(c, 'distance', 0); def(c, 'distanceCompare', '>='); def(c, 'daytimeFrom', 0); def(c, 'daytimeTo', 0); def(c, 'oneRaid', false); def(c, 'skill', '');
+  return c;
+}
+function fillReward(r) {
+  def(r, 'id', newId()); def(r, 'type', 'Experience'); def(r, 'value', 0); def(r, 'itemTpl', ''); def(r, 'count', 1);
+  def(r, 'foundInRaid', true); def(r, 'offerId', ''); def(r, 'quantity', 0); def(r, 'onStart', false); def(r, 'skill', '');
+  return r;
+}
+function fillQuest(q) {
+  def(q, 'id', newId()); def(q, 'name', 'Quest'); def(q, 'description', ''); def(q, 'successMessage', '');
+  def(q, 'minLevel', 1); def(q, 'prerequisiteQuestIds', []); def(q, 'conditions', []); def(q, 'rewards', []);
+  def(q, 'failOnDeath', false); def(q, 'tags', []);
+  q.conditions.forEach(fillCond);
+  q.rewards.forEach(fillReward);
+  return q;
+}
+function fillOffer(o) {
+  def(o, 'id', newId()); def(o, 'itemTpl', ''); def(o, 'useDefaultPreset', true); def(o, 'loyaltyLevel', 1);
+  def(o, 'unlimited', true); def(o, 'stock', 1); def(o, 'buyLimit', 0); def(o, 'cost', []);
+  return o;
+}
+
 function normalize(entry) {
   const f = entry.file;
-  const def = (o, k, v) => { if (o[k] === undefined || o[k] === null) o[k] = v; };
   def(f, 'name', entry.folder); def(f, 'nickname', f.name); def(f, 'surname', ''); def(f, 'location', ''); def(f, 'description', '');
-  def(f, 'currency', 'RUB'); def(f, 'unlockedByDefault', true); def(f, 'enabled', true); def(f, 'listOnFlea', true);
+  def(f, 'currency', 'RUB'); def(f, 'unlockedByDefault', true); def(f, 'enabled', true); def(f, 'listOnFlea', true); def(f, 'unlockQuestId', '');
   def(f, 'avatar', 'avatar.png'); def(f, 'refreshMinutesMin', 60); def(f, 'refreshMinutesMax', 120);
   def(f, 'loyaltyLevels', [{ minLevel: 1, minSalesSum: 0, minStanding: 0, buyPriceCoef: 50 }]);
   def(f, 'offers', []); def(f, 'quests', []);
-  for (const o of f.offers) {
-    def(o, 'id', newId()); def(o, 'itemTpl', ''); def(o, 'useDefaultPreset', true); def(o, 'loyaltyLevel', 1);
-    def(o, 'unlimited', true); def(o, 'stock', 1); def(o, 'buyLimit', 0); def(o, 'cost', []);
-  }
+  f.offers.forEach(fillOffer);
   for (const q of f.quests) {
-    def(q, 'id', newId()); def(q, 'name', 'Quest'); def(q, 'description', ''); def(q, 'successMessage', '');
-    def(q, 'minLevel', 1); def(q, 'prerequisiteQuestIds', []); def(q, 'conditions', []); def(q, 'rewards', []); def(q, 'failOnDeath', false);
-    for (const c of q.conditions) {
-      def(c, 'id', newId()); def(c, 'type', 'HandoverItem'); def(c, 'option', 1); def(c, 'text', ''); def(c, 'count', 1);
-      def(c, 'foundInRaid', true); def(c, 'killTarget', 'Any');
-      for (const k of ['itemTpls', 'bossRoles', 'weaponTpls', 'calibers', 'wearingTpls', 'locations', 'bodyParts', 'exitStatuses']) def(c, k, []);
-      def(c, 'distance', 0); def(c, 'distanceCompare', '>='); def(c, 'daytimeFrom', 0); def(c, 'daytimeTo', 0); def(c, 'oneRaid', false); def(c, 'skill', '');
-    }
+    fillQuest(q);
     for (const r of q.rewards) {
-      def(r, 'id', newId()); def(r, 'type', 'Experience'); def(r, 'value', 0); def(r, 'itemTpl', ''); def(r, 'count', 1);
-      def(r, 'foundInRaid', true); def(r, 'offerId', ''); def(r, 'quantity', 0); def(r, 'onStart', false); def(r, 'skill', '');
       // The offer's own stock is the one setting now: move an old "stock after unlock" onto the offer.
       if (r.type === 'UnlockOffer' && r.quantity > 0) {
         const o = f.offers.find(x => x.id === r.offerId);
@@ -195,6 +213,7 @@ function applySnapshot(snap) {
   S.modFolder = snap.modFolder;
   S.ui = snap.ui || S.ui || {};
   S.items = new Map((snap.items || []).map(i => [i.i, i]));
+  S.gameQuests = new Map((snap.gameQuests || []).map(q => [q.i, q]));
   S.itemsStatus = snap.itemsStatus || '';
   S.traders = (snap.traders || []).map(t => normalize({ ...t, dirty: false }));
   for (const p of snap.problems || []) log('error', 'Load', p);
@@ -274,6 +293,35 @@ const ui = {
   hint: text => `<div class="hint">${text}</div>`,
   badge: (text, color) => `<span class="badge" style="--c:${color}">${esc(text)}</span>`,
 };
+
+/** A section card with a ▾ to fold it away (remembered). */
+function card(key, title, body, opts = {}) {
+  const folded = !!S.ui.folded?.[key];
+  return `<div class="card ${folded ? 'folded' : ''} ${opts.cls || ''}" ${opts.style ? `style="${opts.style}"` : ''}>
+    <h3 class="card-head"><button class="fold" data-act="fold" data-arg="${key}" title="${folded ? 'Show' : 'Hide'}">▾</button>
+      <span data-act="fold" data-arg="${key}" class="card-title">${title}</span><span class="grow"></span>${opts.actions || ''}</h3>
+    <div class="card-body">${body}</div></div>`;
+}
+
+const TAG_COLORS = ['#ff7ab6', '#5cc8ff', '#f5cd46', '#a082ff', '#1ed760', '#ffa42b', '#ff6b6b', '#7ee0c3'];
+function tagColor(tag) {
+  let h = 0;
+  for (const ch of tag.toLowerCase()) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+  return TAG_COLORS[h % TAG_COLORS.length];
+}
+const isBarter = o => o.cost.some(c => !isMoney(c.itemTpl));
+const priceKind = o => o.cost.length === 0 ? null : isBarter(o) ? ['BARTER', 'var(--pink)'] : ['BUY', 'var(--blue)'];
+
+/** Name of any quest id: one of yours ("Trader: Quest") or a game quest ("Quest (Prapor)"). */
+function questLabel(id) {
+  const mine = allQuests().find(x => x.q.id === id);
+  if (mine) return `${mine.t.file.name}: ${mine.q.name}`;
+  const g = S.gameQuests.get(id);
+  if (g) return `${g.n}${g.t ? ` (${g.t})` : ''}`;
+  return `unknown quest ${id}`;
+}
+const chainLabel = c => c.game ? `${c.game.n}${c.game.t ? ` (${c.game.t}, game quest)` : ' (game quest)'}` : `${c.t.file.name}: ${c.q.name}`;
+const chainOn = c => c.game || c.t.file.enabled;
 
 function thumb(t) {
   if (t.img) return `<img class="thumb" src="${esc(t.img)}" alt="">`;
@@ -377,6 +425,7 @@ function renderPage(animate) {
 function pageTrader() {
   const f = S.t.file;
   const set = (k, after) => v => { f[k] = v; after?.(); };
+  const cur = { USD: '$', EUR: '€' }[f.currency] || '₽';
   const loyalty = f.loyaltyLevels.map((l, i) => {
     const cell = (k, step, min, max) => {
       const b = bind(() => l[k], v => { l[k] = clamp(v, min, max); }, 'light');
@@ -384,8 +433,11 @@ function pageTrader() {
     };
     return `<tr><td>LL${i + 1}</td>${cell('minLevel', 1, 1, 79)}${cell('minSalesSum', 10000, 0, 1e12)}${cell('minStanding', .01, -10, 10)}${cell('buyPriceCoef', 1, 0, 100)}</tr>`;
   }).join('');
-  return `<div class="card big-fields enter">
-    <h3>Trader</h3>
+  const unlock = f.unlockedByDefault ? '' : `<div class="field"><label>Unlocked by</label><div class="itemline">
+      <span class="name ${f.unlockQuestId ? '' : 'missing'}">${esc(f.unlockQuestId ? questLabel(f.unlockQuestId) : 'nothing yet — pick the quest that unlocks this trader')}</span>
+      <button class="outline" data-act="pickTraderUnlock">Pick quest…</button></div></div>
+      ${ui.hint("The game unlocks traders with a quest reward: completing that quest (one of yours or one of the game's) unlocks this trader. For a level requirement, use a quest that unlocks at that level.")}`;
+  return `<div class="big-fields">${card('t-main', 'Trader', `
     ${ui.toggle('Trader is ON (off = the server skips it; nothing is deleted)', () => f.enabled, set('enabled'), { label: 'In the game', refresh: 'light' })}
     ${ui.text('Name', () => f.name, set('name'))}
     ${ui.text('Nickname', () => f.nickname, set('nickname'))}
@@ -393,23 +445,19 @@ function pageTrader() {
     ${ui.text('Location', () => f.location, set('location'))}
     ${ui.area('Description', () => f.description, set('description'))}
     <div class="field"><label>Currency</label>${ui.chips('', [['RUB', '₽ Roubles'], ['USD', '$ Dollars'], ['EUR', '€ Euros']], () => f.currency, set('currency'), { refresh: 'page' })}</div>
-    ${ui.toggle('Available from the start', () => f.unlockedByDefault, set('unlockedByDefault'), { label: 'Unlocked', refresh: 'light' })}
+    ${ui.toggle('Available from the start', () => f.unlockedByDefault, set('unlockedByDefault'), { label: 'Unlocked', refresh: 'page' })}
+    ${unlock}
     ${ui.toggle("List this trader's offers on the flea market", () => f.listOnFlea, set('listOnFlea'), { label: 'Flea market', refresh: 'light' })}
     ${ui.num('Restock every (min)', () => f.refreshMinutesMin, set('refreshMinutesMin'), { min: 1, max: 10080 })}
-    ${ui.num('…up to (min)', () => f.refreshMinutesMax, set('refreshMinutesMax'), { min: 1, max: 10080 })}
-  </div>
-  <div class="card big-fields">
-    <h3>Loyalty levels</h3>
+    ${ui.num('…up to (min)', () => f.refreshMinutesMax, set('refreshMinutesMax'), { min: 1, max: 10080 })}`)}
+  ${card('t-loyalty', 'Loyalty levels', `
     ${ui.hint(`What a player needs for each loyalty level (LL1 – LL4). Offers can require a loyalty level. "Spent" is counted in the trader's currency (${{ USD: 'dollars', EUR: 'euros' }[f.currency] || 'roubles'}) — the currency only decides this and what the trader pays when players sell to them; each offer's price is set on the offer. "Buys at %" = how much of an item's value the trader pays.`)}
-    <table class="loyalty"><tr><th></th><th>Player level</th><th>Spent (${{ USD: '$', EUR: '€' }[f.currency] || '₽'})</th><th>Standing</th><th>Buys at %</th></tr>${loyalty}</table>
+    <table class="loyalty"><tr><th></th><th>Player level</th><th>Spent (${cur})</th><th>Standing</th><th>Buys at %</th></tr>${loyalty}</table>
     <div class="toolbar">
       <button class="outline" data-act="addLoyalty" ${f.loyaltyLevels.length >= 4 ? 'disabled' : ''}>+ Loyalty level</button>
       <button class="danger" data-act="removeLoyalty" ${f.loyaltyLevels.length <= 1 ? 'disabled' : ''}>Remove last</button>
-    </div>
-  </div>`;
+    </div>`)}</div>`;
 }
-
-// ---- center lists (columns can be dragged wider/narrower)
 
 const COLUMNS = {
   offers: [['Title', null], ['Unlock', 230], ['LL', 60], ['Stock', 120]],
@@ -427,7 +475,7 @@ function applyColumns() {
   });
 }
 function listHead(list) {
-  return `<div class="list-head"><div>#</div>${COLUMNS[list].map((c, i) => `<div>${i > 0 ? `<span class="grip" data-grip="${list}|${i - 1}"></span>` : ''}${esc(c[0])}</div>`).join('')}</div>`;
+  return `<div class="list-head"><div>#</div>${COLUMNS[list].map((c, i) => `<div>${i > 0 ? `<span class="grip" data-grip="${list}|${i - 1}" title="Drag to resize"></span>` : ''}<span class="head-text">${esc(c[0])}</span></div>`).join('')}</div>`;
 }
 
 function row({ act, arg, sel, three, thumb: th, title, titleColor, badges = [], line2, line3, line3Color, cols = [], colColors = [] }) {
@@ -442,20 +490,29 @@ function row({ act, arg, sel, three, thumb: th, title, titleColor, badges = [], 
   </div>`;
 }
 
+function offerUnlock(t, o) {
+  const mine = questsUnlocking(t, o);
+  if (mine.length) return { kind: 'mine', text: '🔒 ' + mine.map(u => u.q.name).join(', '), badge: ['QUEST', 'var(--orange)'] };
+  if (o.unlockedByQuestId) return { kind: 'game', text: '🔒 ' + questLabel(o.unlockedByQuestId), badge: ['GAME QUEST', 'var(--orange)'] };
+  return { kind: 'start', text: 'From start', badge: null };
+}
+
 function pageOffers() {
   const t = S.t;
   const rows = t.file.offers.map((o, i) => {
-    const unl = questsUnlocking(t, o);
-    const locked = unl.length > 0;
+    const u = offerUnlock(t, o);
+    const price = priceKind(o);
+    const badges = [];
+    if (u.badge) badges.push(u.badge);
+    if (price) badges.push(price);
+    if (o.loyaltyLevel > 1) badges.push([`LL${o.loyaltyLevel}`, 'var(--violet)']);
     return row({
       act: 'selOffer', arg: i, sel: o === S.offer,
-      thumb: { text: initials(item(o.itemTpl)?.s || itemName(o.itemTpl)), color: locked ? 'var(--orange)' : '#3a3a3a', dark: locked },
-      title: itemName(o.itemTpl),
-      badges: locked ? [['QUEST', 'var(--orange)']] : [],
+      thumb: { text: initials(item(o.itemTpl)?.s || itemName(o.itemTpl)), color: u.kind !== 'start' ? 'var(--orange)' : '#3a3a3a', dark: u.kind !== 'start' },
+      title: itemName(o.itemTpl), badges,
       line2: costText(o),
-      cols: [locked ? '🔒 ' + unl.map(u => u.q.name).join(', ') : 'From start', `LL${o.loyaltyLevel}`,
-        (o.unlimited ? 'Unlimited' : `${o.stock} / restock`) + (o.buyLimit > 0 ? ` · max ${o.buyLimit}` : '')],
-      colColors: [locked ? 'var(--orange)' : 'var(--green)'],
+      cols: [u.text, `LL${o.loyaltyLevel}`, (o.unlimited ? 'Unlimited' : `${o.stock} / restock`) + (o.buyLimit > 0 ? ` · max ${o.buyLimit}` : '')],
+      colColors: [u.kind !== 'start' ? 'var(--orange)' : 'var(--green)'],
     });
   }).join('');
   return `<div class="toolbar sticky">
@@ -470,10 +527,15 @@ function pageOffers() {
 
 function pageQuests() {
   const t = S.t;
+  const allTags = [...new Set(t.file.quests.flatMap(q => q.tags))].sort((a, b) => a.localeCompare(b));
+  if (S.tagFilter && !allTags.includes(S.tagFilter)) S.tagFilter = null;
   const rows = t.file.quests.map((q, i) => {
+    if (S.tagFilter && !q.tags.includes(S.tagFilter)) return '';
     const w = ways(q);
     const badges = [[`${w.length} WAY${w.length > 1 ? 'S' : ''}`, 'var(--violet)']];
+    if (q.failOnDeath) badges.push(['HARDCORE', 'var(--red)']);
     if (q.prerequisiteQuestIds.length) badges.push([`AFTER ${q.prerequisiteQuestIds.length} QUEST${q.prerequisiteQuestIds.length > 1 ? 'S' : ''}`, 'var(--blue)']);
+    for (const tag of q.tags) badges.push([tag.toUpperCase(), tagColor(tag)]);
     if (S.checks.some(c => c.target === q && c.level === 'error')) badges.push(['✖ PROBLEM', 'var(--red)']);
     const img = q.image && t.images[q.image];
     return row({
@@ -486,13 +548,16 @@ function pageQuests() {
       cols: [`Lvl ${q.minLevel}`, String(w.length)],
     });
   }).join('');
+  const tagBar = allTags.length ? `<div class="toolbar"><span class="muted small">Tags:</span>
+      <button class="chip ${!S.tagFilter ? 'on' : ''}" data-act="tagFilter" data-arg="">All</button>
+      ${allTags.map(tag => `<button class="chip ${S.tagFilter === tag ? 'on' : ''}" style="--c:${tagColor(tag)}" data-act="tagFilter" data-arg="${esc(tag)}">${esc(tag)}</button>`).join('')}</div>` : '';
   return `<div class="toolbar sticky">
       <button class="primary" data-act="addQuest">+ Add quest</button>
       <button class="outline" data-act="dupQuest" ${S.quest ? '' : 'disabled'}>Duplicate</button>
       <button class="danger" data-act="removeQuest" ${S.quest ? '' : 'disabled'}>Remove</button>
       <button class="icon-btn" data-act="moveQuest" data-arg="-1" title="Move up">▲</button>
       <button class="icon-btn" data-act="moveQuest" data-arg="1" title="Move down">▼</button>
-    </div>
+    </div>${tagBar}
     <div class="list" data-list="quests">${listHead('quests')}${rows || '<div class="empty">No quests yet — click + Add quest</div>'}</div>`;
 }
 
@@ -537,28 +602,38 @@ function renderDetails(animate, toTop) {
 function detailsTrader() {
   const t = S.t, f = t.file;
   const img = t.images[f.avatar];
-  const locked = f.offers.filter(o => questsUnlocking(t, o).length).length;
+  const locked = f.offers.filter(o => offerUnlock(t, o).kind !== 'start').length;
   const minLvl = f.quests.length ? Math.min(...f.quests.map(q => q.minLevel)) : 0;
   return [f.name.toUpperCase(), `
-    ${img ? `<img class="bigavatar" src="${esc(img)}" alt="">` : ''}
+    ${img ? `<img class="bigavatar" src="${esc(img)}" alt="">` : '<div class="bigavatar"></div>'}
     <div class="toolbar"><button class="primary" data-act="chooseAvatar">Choose icon from PC…</button><button class="outline" data-act="openFolder">Open folder</button></div>
-    ${ui.hint('Any png or jpg; it\'s cropped to a square. The game shows the new icon after a server restart.')}
-    <div class="card"><h3>Summary</h3><div class="req">Sells ${f.offers.length} thing(s), ${locked} of them unlocked by quests.
+    ${ui.hint('Any png or jpg; it\'s cropped to a square. The game shows the new icon after you Save and restart the SPT server.')}
+    ${card('t-summary', 'Summary', `<div class="req">Sells ${f.offers.length} thing(s), ${locked} of them unlocked by quests.
 ${f.quests.length} quest(s)${f.quests.length ? `, from level ${minLvl}` : ''}.
 Pays ${f.loyaltyLevels[0]?.buyPriceCoef ?? 0}% of an item's value when players sell to them.
-${f.enabled ? 'Switched ON — loads into the game.' : 'Switched OFF — the server skips this trader.'}</div></div>`];
+${f.unlockedByDefault ? 'Unlocked from the start.' : `Locked at start — unlocked by ${f.unlockQuestId ? questLabel(f.unlockQuestId) : 'nothing yet!'}.`}
+${f.enabled ? 'Switched ON — loads into the game.' : 'Switched OFF — the server skips this trader.'}</div>`)}`];
 }
 
 function detailsOffer() {
   const t = S.t, o = S.offer;
   if (!o) return ['Offers & barters', '<div class="empty">Pick an offer, or click + Add offer.</div>'];
   const unl = questsUnlocking(t, o);
+  const u = offerUnlock(t, o);
   const isWeapon = item(o.itemTpl)?.c === 'Weapon';
-  const status = unl.length
-    ? `<div class="status" style="--c:var(--orange)"><h3>🔒 Locked — unlocked by a quest<span class="grow"></span><button class="outline" data-act="goQuest" data-arg="${esc(unl[0].q.id)}">Go to quest</button></h3>
-        <div class="req">${unl.map(u => `• ${esc(u.q.name)} (level ${u.q.minLevel})`).join('\n')}</div>
-        ${ui.hint('It appears in the shop once the quest is completed (any of its ways).')}</div>`
-    : `<div class="status" style="--c:var(--green)"><h3>✔ For sale from the start</h3>${ui.hint(`Anyone with LL${o.loyaltyLevel} with ${esc(t.file.name)} can buy it. To lock it behind a quest, give a quest an "Unlock offer" reward.`)}</div>`;
+  const price = priceKind(o);
+  const status = u.kind === 'mine'
+    ? `<div class="status" style="--c:var(--orange)"><h3>🔒 Locked — unlocked by your quest<span class="grow"></span><button class="outline" data-act="goQuest" data-arg="${esc(unl[0].q.id)}">Go to quest</button></h3>
+        <div class="req">${unl.map(x => `• ${esc(x.q.name)} (level ${x.q.minLevel})`).join('\n')}</div></div>`
+    : u.kind === 'game'
+      ? `<div class="status" style="--c:var(--orange)"><h3>🔒 Locked — unlocked by a game quest</h3><div class="req">• ${esc(questLabel(o.unlockedByQuestId))}</div></div>`
+      : `<div class="status" style="--c:var(--green)"><h3>✔ For sale from the start</h3>${ui.hint(`Anyone with LL${o.loyaltyLevel} with ${esc(t.file.name)} can buy it.`)}</div>`;
+  const unlockBody = `
+    ${ui.chips('', [['start', 'From the start'], ['mine', 'After one of my quests'], ['game', 'After a game quest']], () => u.kind, v => setOfferUnlock(o, v))}
+    ${u.kind === 'mine' ? `<div class="switches">${t.file.quests.map(q => ui.toggle(`${q.name} · lvl ${q.minLevel}`, () => unl.some(x => x.q === q), v => toggleQuestUnlocksOffer(q, o, v))).join('')}</div>
+      ${ui.hint('Switching a quest on gives it an "Unlock offer" reward for this offer (you\'ll see it in the quest\'s rewards).')}` : ''}
+    ${u.kind === 'game' ? `<div class="itemline"><span class="name">${esc(o.unlockedByQuestId ? questLabel(o.unlockedByQuestId) : '(pick a quest)')}</span><button class="outline" data-act="pickOfferGameQuest">Pick game quest…</button></div>` : ''}
+    ${o.loyaltyLevel > 1 ? ui.hint(`Also needs LL${o.loyaltyLevel} with ${esc(t.file.name)}.`) : ''}`;
   const costs = o.cost.map((c, i) => {
     const k = bind(() => c.count, v => { c.count = Math.max(1, v); }, 'light');
     const lk = listRef(o.cost);
@@ -567,25 +642,42 @@ function detailsOffer() {
       <input type="number" data-b="${k}" value="${c.count}" min="1" style="width:140px"><button class="icon-btn" data-act="removeAt" data-arg="${lk}|${i}" title="Remove">✕</button></div></div>`;
   }).join('');
   return [itemName(o.itemTpl), `${status}
-    <div class="card"><h3>Item</h3>
+    ${card('o-unlock', 'How it unlocks', unlockBody)}
+    ${card('o-item', 'Item', `
       ${ui.item('Item', () => o.itemTpl, v => { o.itemTpl = v; }, 'all')}
       ${isWeapon || o.useDefaultPreset === false ? ui.toggle('Sell the assembled gun (not a bare receiver)', () => o.useDefaultPreset, v => { o.useDefaultPreset = v; }, { label: 'Weapon preset', refresh: 'light' }) : ''}
       ${ui.num('Loyalty level', () => o.loyaltyLevel, v => { o.loyaltyLevel = v; }, { min: 1, max: 4 })}
       ${ui.toggle('Unlimited stock', () => o.unlimited, v => { o.unlimited = v; }, { label: 'Stock' })}
       ${o.unlimited ? '' : ui.num('Stock per restock', () => o.stock, v => { o.stock = v; }, { min: 1, max: 100000 })}
       ${ui.num('Buy limit per player', () => o.buyLimit, v => { o.buyLimit = v; }, { min: 0, max: 100000 })}
-      ${ui.hint('<b>Stock per restock</b> = how many the trader has after each restock (shared by everyone). <b>Buy limit</b> = how many one player may buy per restock (0 = no limit). For quest-unlocked offers these apply once it\'s unlocked.')}
-    </div>
-    <div class="card"><h3>Price / barter</h3>
-      ${ui.hint('Everything listed is needed to buy it: money and/or barter items.')}
+      ${ui.hint('<b>Stock per restock</b> = how many the trader has after each restock (shared by everyone). <b>Buy limit</b> = how many one player may buy per restock (0 = no limit).')}`)}
+    ${card('o-price', `Price / barter ${price ? ui.badge(price[0], price[1]) : ''}`, `
+      ${ui.hint('Everything listed is needed to buy it. Only money = <b>BUY</b>; any item in the list = <b>BARTER</b>.')}
       <div class="mini">${costs || '<div class="empty" style="padding:14px">No price yet</div>'}</div>
       <div class="toolbar" style="margin-top:8px">
         <button class="chip" data-act="addCost" data-arg="${CUR.RUB}">+ ₽ Roubles</button>
         <button class="chip" data-act="addCost" data-arg="${CUR.USD}">+ $ Dollars</button>
         <button class="chip" data-act="addCost" data-arg="${CUR.EUR}">+ € Euros</button>
         <button class="outline" data-act="addCost" data-arg="">+ Barter item…</button>
-      </div>
-    </div>`];
+      </div>`)}`];
+}
+
+function setOfferUnlock(o, kind) {
+  const t = S.t;
+  if (kind === 'start' || kind === 'game') {
+    for (const q of t.file.quests) q.rewards = q.rewards.filter(r => !(r.type === 'UnlockOffer' && r.offerId === o.id));
+    if (kind === 'start') delete o.unlockedByQuestId;
+    else setTimeout(() => ACT.pickOfferGameQuest(), 0);
+  }
+  if (kind === 'mine') {
+    delete o.unlockedByQuestId;
+    if (!questsUnlocking(t, o).length && t.file.quests[0]) toggleQuestUnlocksOffer(t.file.quests[0], o, true);
+  }
+}
+
+function toggleQuestUnlocksOffer(q, o, on) {
+  q.rewards = q.rewards.filter(r => !(r.type === 'UnlockOffer' && r.offerId === o.id));
+  if (on) q.rewards.push(fillReward({ type: 'UnlockOffer', offerId: o.id }));
 }
 
 function detailsQuest() {
@@ -597,16 +689,16 @@ function detailsQuest() {
   else {
     reqLines.push(`Finish these ${req.chain.length} quest(s) first:`);
     for (const c of [...req.chain].sort((a, b) => b.depth - a.depth)) {
-      const n = ways(c.q).length;
-      reqLines.push(`${'  '.repeat(c.depth)}• ${c.t.file.name}: ${c.q.name}  (lvl ${c.q.minLevel})${n > 1 ? `  — any of its ${n} ways (${ways(c.q).map(wayLetter).join('/')})` : ''}${c.t.file.enabled ? '' : `  ✖ ${c.t.file.name} is switched OFF`}`);
+      const n = c.game ? 1 : ways(c.q).length;
+      reqLines.push(`${'  '.repeat(c.depth)}• ${chainLabel(c)}${c.game ? '' : `  (lvl ${c.q.minLevel})`}${n > 1 ? `  — any of its ${n} ways (${ways(c.q).map(wayLetter).join('/')})` : ''}${chainOn(c) ? '' : `  ✖ ${c.t.file.name} is switched OFF`}`);
     }
   }
-  for (const id of req.missing) reqLines.push(`✖ Needs a quest that no longer exists (${id}) — remove it below.`);
+  for (const id of req.missing) reqLines.push(`✖ Needs a quest that doesn't exist (${id}) — remove it below.`);
   if (req.cycle) reqLines.push('✖ The required quests go in a circle — this quest can never unlock.');
-  const reqBad = req.missing.length || req.cycle || req.chain.some(c => !c.t.file.enabled);
+  const reqBad = req.missing.length || req.cycle || req.chain.some(c => !chainOn(c));
 
   const img = q.image && t.images[q.image];
-  const prereqs = allQuests().filter(x => x.q !== q).map(({ t: ot, q: oq }) => {
+  const mineSwitches = allQuests().filter(x => x.q !== q).map(({ t: ot, q: oq }) => {
     const n = ways(oq).length;
     const text = `${oq.name} · ${ot.file.name} · lvl ${oq.minLevel}${n > 1 ? ` · any of ${n} ways` : ''}${ot.file.enabled ? '' : ' · trader OFF'}`;
     return ui.toggle(text, () => q.prerequisiteQuestIds.includes(oq.id), v => {
@@ -614,51 +706,65 @@ function detailsQuest() {
       if (v) q.prerequisiteQuestIds.push(oq.id);
     });
   }).join('');
-  const missingPrereqs = req.missing.map(id => `<div class="itemline"><span class="name missing">✖ Missing quest ${esc(id)}</span><button class="danger" data-act="dropPrereq" data-arg="${esc(id)}">Remove</button></div>`).join('');
+  const others = q.prerequisiteQuestIds.filter(id => !allQuests().some(x => x.q.id === id)).map(id => {
+    const g = S.gameQuests.get(id);
+    return `<div class="itemline"><span class="name ${g ? '' : 'missing'}">${g ? '🎮 ' + esc(questLabel(id)) : `✖ Missing quest ${esc(id)}`}</span><button class="icon-btn" data-act="dropPrereq" data-arg="${esc(id)}" title="Remove">✕</button></div>`;
+  }).join('');
 
+  // ---- ways as tabs
   const w = ways(q);
+  if (!w.includes(S.way)) S.way = w[0];
+  const tabs = w.map(o => `<button class="waytab ${o === S.way ? 'on' : ''}" style="--c:${WAY_COLOR[o]}" data-act="selWay" data-arg="${o}">Way ${wayLetter(o)}<span>${q.conditions.filter(c => (c.option || 1) === o).length}</span></button>`).join('') +
+    (w.length < 4 ? '<button class="waytab add" data-act="addWay" title="Give the player another way to finish this quest">＋ Way</button>' : '');
   const waysHint = w.length <= 1
-    ? 'All objectives must be done. Want the player to pick one of several ways (hand in / kill / pay)? Put objectives in way B, C, D.'
-    : `<b>${w.length} ways</b> to complete: ${w.map(o => `${wayLetter(o)} (${q.conditions.filter(c => (c.option || 1) === o).length} objective(s))`).join(', ')}. The player finishes ANY ONE way (all objectives inside it). In game each way is its own quest; when one is turned in, the others are closed automatically and disappear from the list.`;
-  const objectives = q.conditions.map((c, i) => `<div class="row ${c === S.cond ? 'sel' : ''}" data-act="selCond" data-arg="${i}"><div class="cell">
-      ${thumb({ text: wayLetter(c.option || 1), color: WAY_COLOR[c.option || 1], dark: (c.option || 1) === 3 })}
-      <div class="text"><div class="line1"><span class="title">${esc(conditionTitle(c))}</span><span class="badges">${ui.badge(TYPE_SHORT[c.type] || c.type, TYPE_COLOR[c.type] || '#999')}</span></div></div>
+    ? 'Every objective below must be done. Want the player to choose (e.g. hand in <i>or</i> kill <i>or</i> pay)? Click <b>＋ Way</b>.'
+    : `<b>${w.length} ways</b> — the player finishes ANY ONE way (all objectives inside it). In game each way is its own quest; when one is turned in, the others are closed and disappear.`;
+  const objectives = q.conditions.map((c, i) => (c.option || 1) !== S.way ? '' : `<div class="row ${c === S.cond ? 'sel' : ''}" data-act="selCond" data-arg="${i}"><div class="cell">
+      ${thumb({ text: TYPE_SHORT[c.type]?.[0] || '?', color: TYPE_COLOR[c.type] || '#999', dark: true })}
+      <div class="text"><div class="line1"><span class="title">${esc(conditionTitle(c))}</span></div></div>
       <span class="side">${esc(conditionDetail(c))}</span></div></div>`).join('');
   const rewards = q.rewards.map((r, i) => {
     const d = rewardRow(t, r);
     return `<div class="row ${r === S.reward ? 'sel' : ''}" data-act="selReward" data-arg="${i}"><div class="cell">${thumb(d.thumb)}
       <div class="text"><div class="title">${esc(d.title)}</div></div><span class="side">${esc(d.side || '')}</span></div></div>`;
   }).join('');
+  const knownTags = [...new Set(allQuests().flatMap(x => x.q.tags))].filter(tag => !q.tags.includes(tag));
 
   return [q.name, `
-    <div class="card"><h3 style="color:${reqBad ? 'var(--red)' : 'var(--violet)'}">Unlock requirements</h3><div class="req">${esc(reqLines.join('\n'))}</div></div>
-    <div class="card"><h3>Quest</h3>
+    ${card('q-req', `<span style="color:${reqBad ? 'var(--red)' : 'var(--violet)'}">Unlock requirements</span>`, `<div class="req">${esc(reqLines.join('\n'))}</div>`)}
+    ${card('q-info', 'Quest', `
       ${ui.text('Name', () => q.name, v => { q.name = v; $('#detailsTitle').textContent = v; })}
       ${ui.num('Unlocks at level', () => q.minLevel, v => { q.minLevel = v; }, { min: 1, max: 79 })}
       ${ui.area('Description', () => q.description, v => { q.description = v; })}
       ${ui.area('When completed', () => q.successMessage, v => { q.successMessage = v; }, { rows: 2 })}
       ${ui.toggle('Fails if the player dies, goes missing or leaves a raid (can be restarted)', () => q.failOnDeath, v => { q.failOnDeath = v; }, { label: 'Hardcore', refresh: 'light' })}
+      <div class="field top"><label>Tags</label><div>
+        <div class="chips">${q.tags.map(tag => `<span class="tag" style="--c:${tagColor(tag)}">${esc(tag)}<button data-act="removeTag" data-arg="${esc(tag)}" title="Remove">✕</button></span>`).join('')}
+          <input type="text" id="tagInput" placeholder="+ add tag (Enter)" style="width:150px"></div>
+        ${knownTags.length ? `<div class="chips" style="margin-top:6px">${knownTags.map(tag => `<button class="chip" data-act="addTag" data-arg="${esc(tag)}">+ ${esc(tag)}</button>`).join('')}</div>` : ''}
+        ${ui.hint('Your own labels (e.g. "Kappa path", "Main 1") — shown on the quest list and usable as a filter. The game never sees them.')}</div></div>
       <div class="field"><label>Image</label><div class="toolbar" style="padding:0">
         <button class="outline" data-act="chooseQuestImage">Choose quest image…</button>
         ${img ? '<button class="danger" data-act="removeQuestImage">Remove image</button>' : ''}</div></div>
-      ${img ? `<img class="preview" src="${esc(img)}" alt="">` : ''}
-    </div>
-    <div class="card"><h3>Required quests</h3>
-      ${ui.hint('Switch on every quest (any trader) that must be finished first. For a quest with several ways, <b>any one finished way counts</b> — all its ways are handled for you.')}
-      <div class="switches">${prereqs || '<div class="hint">No other quests yet.</div>'}${missingPrereqs}</div>
-    </div>
-    <div class="card"><h3>Objectives</h3>
+      ${img ? `<img class="preview" src="${esc(img)}" alt="">` : ''}`)}
+    ${card('q-prereq', 'Required quests', `
+      ${ui.hint('Switch on every quest that must be finished first. For a quest with several ways, <b>any one finished way counts</b>. Game quests (Prapor, Therapist…) can be required too.')}
+      <div class="switches">${mineSwitches || '<div class="hint">No other quests of yours yet.</div>'}</div>
+      ${others ? `<div class="switches" style="margin-top:8px">${others}</div>` : ''}
+      <div class="toolbar" style="margin-top:8px"><button class="outline" data-act="addGamePrereq">+ Game quest…</button></div>`)}
+    ${card('q-obj', 'Objectives', `
+      <div class="waytabs">${tabs}</div>
       ${ui.hint(waysHint)}
-      <div class="mini">${objectives || '<div class="empty" style="padding:14px">No objectives yet</div>'}</div>
+      <div class="mini">${objectives || '<div class="empty" style="padding:14px">No objectives in this way yet</div>'}</div>
       <div class="toolbar" style="margin-top:8px">
         <button class="primary" data-act="addCond">+ Objective</button>
         <button class="outline" data-act="dupCond" ${S.cond ? '' : 'disabled'}>Duplicate</button>
         <button class="danger" data-act="removeCond" ${S.cond ? '' : 'disabled'}>Remove</button>
         <button class="icon-btn" data-act="moveCond" data-arg="-1">▲</button><button class="icon-btn" data-act="moveCond" data-arg="1">▼</button>
-      </div>
-    </div>
-    ${S.cond ? objectiveEditor(S.cond) : ''}
-    <div class="card"><h3>Rewards</h3>
+        ${w.length > 1 ? `<button class="danger" data-act="removeWay" style="margin-left:auto">Delete way ${wayLetter(S.way)}</button>` : ''}
+      </div>`)}
+    ${S.cond && (S.cond.option || 1) === S.way ? objectiveEditor(S.cond) : ''}
+    ${card('q-rew', 'Rewards', `
       ${ui.hint('Every way gives the same rewards.')}
       <div class="mini">${rewards || '<div class="empty" style="padding:14px">No rewards yet</div>'}</div>
       <div class="toolbar" style="margin-top:8px">
@@ -667,8 +773,7 @@ function detailsQuest() {
         <button class="danger" data-act="removeReward" ${S.reward ? '' : 'disabled'}>Remove</button>
         <button class="icon-btn" data-act="moveReward" data-arg="-1">▲</button><button class="icon-btn" data-act="moveReward" data-arg="1">▼</button>
       </div>
-      ${S.reward ? rewardEditor(t, S.reward) : ''}
-    </div>`];
+      ${S.reward ? rewardEditor(t, S.reward) : ''}`)}`];
 }
 
 function objectiveEditor(c) {
@@ -688,9 +793,8 @@ function objectiveEditor(c) {
     })}${on ? `<div style="margin:6px 0 12px 54px">${content()}</div>` : ''}`;
   };
 
-  return `<div class="card objective-card" style="--c:${color}"><h3>${wayLetter(c.option || 1)} · ${esc((TYPE_LONG[type] || type).toUpperCase())}</h3>
+  return card('q-objedit', `<span style="color:${color}">Way ${wayLetter(c.option || 1)} · ${esc((TYPE_LONG[type] || type).toUpperCase())}</span>`, `
     ${ui.chips('Type', TYPES.map(x => [x, TYPE_SHORT[x], TYPE_COLOR[x]]), () => type, v => { c.type = v; })}
-    ${ui.chips('Way (option)', [1, 2, 3, 4].map(n => [n, wayLetter(n), WAY_COLOR[n]]), () => c.option || 1, v => { c.option = Number(v); })}
     ${kill ? ui.select('Kill who', KILL_TARGETS, () => c.killTarget, v => { c.killTarget = v; }) : ''}
     ${kill && c.killTarget === 'Boss' ? ui.multichips('Which bosses count (none picked = any boss)', BOSSES, c.bossRoles, { color: 'var(--red)' }) : ''}
     ${type === 'Skill' ? ui.select('Skill', SKILLS, () => c.skill, v => { c.skill = v; }) : ''}
@@ -708,9 +812,49 @@ function objectiveEditor(c) {
     ${kill ? timeField(c, open) : ''}
     ${type === 'Extract' ? ui.multichips('Which exits count (none picked = survived or run-through)', EXIT_STATUSES, c.exitStatuses, { color: 'var(--orange)' }) : ''}
     ${['Kill', 'Extract', 'UseItem'].includes(type) ? ui.toggle(`All of it in a single raid (the count restarts every raid)`, () => c.oneRaid, v => { c.oneRaid = v; }, { refresh: 'light' }) : ''}
-    ${ui.text('Custom text', () => c.text, v => { c.text = v; })}
-    ${ui.hint(kill ? 'A kill can require a weapon/grenade AND worn gear at the same time. Weapons listed together are "any one of".' : 'Leave "Custom text" empty to use the generated objective text.')}
-  </div>`;
+    ${objectiveText(c)}
+    ${ui.select('Belongs to way', ways(S.quest).concat(ways(S.quest).length < 4 ? [[1, 2, 3, 4].find(n => !ways(S.quest).includes(n))] : []).map(n => [n, `Way ${wayLetter(n)}`]),
+      () => c.option || 1, v => { c.option = Number(v); S.way = c.option; })}
+    ${kill ? ui.hint('A kill can require a weapon/grenade AND worn gear at the same time. Weapons listed together are "any one of".') : ''}
+  `, { cls: 'objective-card', style: `--c:${color}` });
+}
+
+/** The text the game shows for an objective, Tarkov style (same as the server writes when "Text" is empty). */
+function tarkovText(c) {
+  const items = c.itemTpls.map(itemName).join(' or ') || '…';
+  const where = c.locations.length ? ' on ' + c.locations.map(mapName).join(' or ') : '';
+  const wearing = c.wearingTpls.length ? ' while wearing ' + c.wearingTpls.map(itemName).join(' or ') : '';
+  const raid = c.oneRaid ? ' in one raid' : '';
+  switch (c.type) {
+    case 'HandoverItem':
+      return isMoneyList(c.itemTpls) ? `Hand over ${c.itemTpls.map(id => MONEY_NAME[id].replace(/^\S+ /, '')).join(' or ')}` :
+        `Hand over the ${c.foundInRaid ? 'found in raid ' : ''}item: ${items}`;
+    case 'FindItem': return `Find in raid: ${items}`;
+    case 'UseItem': return `Use ${items} during a raid${where}${raid}`;
+    case 'Skill': return `Reach the required ${skillName(c.skill)} skill level`;
+    case 'Extract': return `Survive and extract${where}${wearing}${raid}`;
+    case 'Kill': {
+      const who = { Savage: 'Scavs', AnyPmc: 'PMC operatives', Usec: 'USEC PMC operatives', Bear: 'BEAR PMC operatives',
+        Boss: c.bossRoles.length ? c.bossRoles.map(bossName).join(' or ') : 'bosses' }[c.killTarget] || 'any target';
+      const weapon = c.weaponTpls.length ? ' while using ' + c.weaponTpls.map(itemName).join(' or ') : '';
+      const ammo = c.calibers.length ? ` with ${c.calibers.map(caliberName).join(' or ')} ammo` : '';
+      const parts = c.bodyParts.length ? (c.bodyParts.length === 1 && c.bodyParts[0] === 'Head' ? ' with headshots' :
+        ' with shots to the ' + c.bodyParts.map(p => (BODY_PARTS.find(b => b[0] === p) || [p, p])[1].toLowerCase()).join(' or ')) : '';
+      const dist = c.distance > 0 ? (c.distanceCompare === '<=' ? ` from less than ${c.distance} meters away` : ` from over ${c.distance} meters away`) : '';
+      const time = c.daytimeFrom !== c.daytimeTo ? ` between ${String(c.daytimeFrom).padStart(2, '0')}:00 and ${String(c.daytimeTo).padStart(2, '0')}:00` : '';
+      return `Eliminate ${who}${weapon}${ammo}${parts}${dist}${wearing}${where}${time}${raid}`;
+    }
+    default: return c.type;
+  }
+}
+
+function objectiveText(c) {
+  const k = bind(() => c.text, v => { c.text = v; }, 'light');
+  return `<div class="field top"><label>Objective text</label><div>
+    <input type="text" data-b="${k}" value="${esc(c.text)}" placeholder="${esc(tarkovText(c))}" spellcheck="false">
+    ${ui.hint(c.text ? 'Your own text is used in game.' : 'Empty = the game shows the grey text above (Tarkov style), updated automatically.')}
+    <div class="toolbar" style="padding:0"><button class="outline" data-act="useTarkovText">${c.text ? 'Reset to Tarkov text' : 'Edit the Tarkov text'}</button></div>
+  </div></div>`;
 }
 
 function distanceField(c, open) {
@@ -866,7 +1010,7 @@ function rewardsText(t, q) {
     Experience: `${fmt(r.value)} XP`,
     TraderStanding: `${r.value >= 0 ? '+' : ''}${r.value} standing`,
     Item: `${r.count}× ${shortName(r.itemTpl)}`,
-    UnlockOffer: '🔓 ' + (t.file.offers.find(o => o.id === r.offerId) ? shortName(t.file.offers.find(o => o.id === r.offerId).itemTpl) : '?'),
+    UnlockOffer: (o => o ? `${isBarter(o) ? 'BARTER' : 'BUY'} ${shortName(o.itemTpl)}` : 'unlock ?')(t.file.offers.find(o => o.id === r.offerId)),
     Skill: `+${fmt(r.value)} ${skillName(r.skill)}`,
     StashRows: `+${fmt(r.value)} stash rows`,
   }[r.type] || r.type)).join('  ·  ');
@@ -880,7 +1024,7 @@ function rewardRow(t, r) {
     case 'StashRows': return { thumb: { text: '▦', color: '#ff7ab6', dark: true }, title: `+${fmt(r.value)} stash rows` };
     case 'UnlockOffer': {
       const o = t.file.offers.find(x => x.id === r.offerId);
-      return { thumb: { text: '🔓', color: '#1ed760', dark: true }, title: 'Unlocks: ' + (o ? itemName(o.itemTpl) : '(pick an offer)'), side: o ? (o.unlimited ? 'unlimited' : `${o.stock} per restock`) : '' };
+      return { thumb: { text: o && isBarter(o) ? 'BAR' : 'BUY', color: '#1ed760', dark: true }, title: o ? `${isBarter(o) ? 'BARTER' : 'BUY'}: ${itemName(o.itemTpl)}` : 'Unlock: (pick an offer)', side: o ? (o.unlimited ? 'unlimited' : `${o.stock} per restock`) : '' };
     }
     default: return { thumb: { text: '?' }, title: r.type };
   }
@@ -909,9 +1053,14 @@ function requirements(quest) {
   const walk = (q, depth, path) => {
     for (const id of q.prerequisiteQuestIds) {
       if (id === quest.id || path.has(id)) { cycle = true; continue; }
-      const found = byId.get(id);
-      if (!found) { if (!missing.includes(id)) missing.push(id); continue; }
       if (seen.has(id)) continue;
+      const found = byId.get(id);
+      if (!found) {
+        const g = S.gameQuests.get(id);
+        if (g) { seen.add(id); chain.push({ game: g, depth }); }
+        else if (!missing.includes(id)) missing.push(id);
+        continue;
+      }
       seen.add(id);
       chain.push({ ...found, depth });
       level = Math.max(level, found.q.minLevel);
@@ -919,7 +1068,9 @@ function requirements(quest) {
     }
   };
   walk(quest, 1, new Set([quest.id]));
-  return { own: Math.max(1, quest.minLevel), effective: level, chain, missing, cycle };
+  // Without the game's database, game quest ids can't be told apart from deleted quests.
+  const unknownOk = S.gameQuests.size === 0;
+  return { own: Math.max(1, quest.minLevel), effective: level, chain, missing: unknownOk ? [] : missing, unknown: unknownOk ? missing : [], cycle };
 }
 
 function runChecks() {
@@ -952,6 +1103,9 @@ function runChecks() {
     }
     if (!f.offers.length) add('info', f.name, 'Trader sells nothing yet (Offers page → + Add offer).', t);
     if (!f.enabled) add('info', f.name, "Switched OFF — the server won't load this trader, its offers or its quests.", t);
+    if (!f.unlockedByDefault && !f.unlockQuestId) add('warning', f.name, 'Locked at start and no quest unlocks it — players can never use this trader. Pick a quest under "Unlocked by".', t);
+    if (!f.unlockedByDefault && f.unlockQuestId && !allQuests().some(x => x.q.id === f.unlockQuestId) && S.gameQuests.size && !S.gameQuests.has(f.unlockQuestId))
+      add('error', f.name, `Unlocked by quest ${f.unlockQuestId}, which doesn't exist — the trader stays locked.`, t);
     if (out.length === before) add('ok', f.name, `Trader OK — ${f.offers.length} offer(s), ${f.quests.length} quest(s).`, t);
 
     for (const o of f.offers) {
@@ -966,6 +1120,8 @@ function runChecks() {
       if (o.loyaltyLevel < 1 || o.loyaltyLevel > f.loyaltyLevels.length) add('warning', where, `Needs LL${o.loyaltyLevel} but the trader has ${f.loyaltyLevels.length} loyalty level(s).`, t, o);
       if (!o.unlimited && o.stock < 1) add('error', where, 'Limited stock of 0 — nobody can buy it.', t, o);
       if (!o.unlimited && o.buyLimit > o.stock) add('info', where, `Buy limit (${o.buyLimit}) is higher than the stock (${o.stock}); the stock is the real limit.`, t, o);
+      if (o.unlockedByQuestId && !questsUnlocking(t, o).length && S.gameQuests.size && !S.gameQuests.has(o.unlockedByQuestId) && !allQuests().some(x => x.q.id === o.unlockedByQuestId))
+        add('error', where, `Unlocked by quest ${o.unlockedByQuestId}, which doesn't exist — it will never be for sale.`, t, o);
       const unl = questsUnlocking(t, o);
       if (unl.length > 1) add('info', where, `Unlocked by ${unl.length} quests (${unl.map(u => u.q.name).join(', ')}) — each quest unlocks its own copy.`, t, o);
     }
@@ -1037,14 +1193,14 @@ function checkQuest(t, q, add, known) {
   if (req.cycle) A('error', 'Required quests go in a circle (this quest ends up requiring itself) — it can never unlock.');
   if (req.effective > req.own) A('info', `Set to unlock at level ${req.own}, but its required quests need level ${req.effective} — so really level ${req.effective}.`);
   for (const id of q.prerequisiteQuestIds) {
-    const before = req.chain.find(c => c.q.id === id);
+    const before = req.chain.find(c => !c.game && c.q.id === id);
     if (before && ways(before.q).length > 1)
       A('info', `Requires "${before.q.name}", which has ${ways(before.q).length} ways (${ways(before.q).map(wayLetter).join(', ')}): this quest unlocks after ANY one of them is completed.`);
   }
-  for (const c of req.chain) if (!c.t.file.enabled && t.file.enabled)
+  for (const c of req.chain) if (!c.game && !c.t.file.enabled && t.file.enabled)
     A('error', `Requires "${c.q.name}" from ${c.t.file.name}, which is switched OFF — this quest can never unlock.`);
   if (errors === 0) {
-    const chain = req.chain.length ? `after ${req.chain.length} quest(s): ${[...req.chain].sort((a, b) => b.depth - a.depth).map(c => c.q.name).join(' → ')}` : 'no quests before it';
+    const chain = req.chain.length ? `after ${req.chain.length} quest(s): ${[...req.chain].sort((a, b) => b.depth - a.depth).map(c => c.game ? c.game.n : c.q.name).join(' → ')}` : 'no quests before it';
     A('ok', `Quest will work — unlocks at level ${req.effective}, ${chain}.`);
   }
 }
@@ -1063,13 +1219,15 @@ function selectTrader(t, animate = true) {
   S.t = t;
   S.offer = t?.file.offers[0] || null;
   S.quest = t?.file.quests[0] || null;
-  S.cond = S.quest?.conditions[0] || null;
+  S.way = S.quest ? ways(S.quest)[0] : 1;
+  S.cond = S.quest?.conditions.find(c => (c.option || 1) === S.way) || null;
   S.reward = S.quest?.rewards[0] || null;
   if (animate) renderAll(true);
 }
 function selectQuest(q) {
   S.quest = q;
-  S.cond = q?.conditions[0] || null;
+  S.way = q ? ways(q)[0] : 1;
+  S.cond = q?.conditions.find(c => (c.option || 1) === S.way) || null;
   S.reward = q?.rewards[0] || null;
 }
 function showPage(page) {
@@ -1146,6 +1304,7 @@ document.addEventListener('dblclick', e => {
 });
 
 document.addEventListener('keydown', e => {
+  if (e.target.id === 'tagInput' && e.key === 'Enter') { ACT.addTag(e.target.value); return; }
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') { e.preventDefault(); ACT.save(); return; }
   if (e.key === 'Escape' && !$('#modal').hidden) { closeModal(null); return; }
   const typing = /INPUT|TEXTAREA|SELECT/.test(document.activeElement?.tagName || '');
@@ -1222,13 +1381,63 @@ const ACT = {
   selReward: arg => { S.reward = S.quest.rewards[Number(arg)]; renderDetails(false); },
   selCheck: arg => { S.check = S.shownChecks?.[Number(arg)] || null; renderPage(false); renderDetails(false, true); },
   checkFilter: arg => { S.checkFilter = arg || null; renderPage(false); },
+  tagFilter: arg => { S.tagFilter = arg || null; renderPage(false); },
+  fold(key) {
+    const folded = (S.ui.folded ||= {});
+    folded[key] = !folded[key];
+    saveUi();
+    renderPage(false);
+    renderDetails(false);
+  },
+  selWay: arg => { S.way = Number(arg); S.cond = S.quest.conditions.find(c => (c.option || 1) === S.way) || null; renderDetails(false); },
+  addWay() {
+    const w = ways(S.quest);
+    const next = [1, 2, 3, 4].find(n => !w.includes(n)) || null;
+    if (!next || !S.quest.conditions.length) {
+      if (!S.quest.conditions.length) toast('Add an objective to way A first');
+      return;
+    }
+    const c = fillCond({ option: next });
+    S.quest.conditions.push(c);
+    S.way = next; S.cond = c;
+    changed(false);
+    toast(`Way ${wayLetter(next)} added — set up its objective below`);
+  },
+  async removeWay() {
+    const n = S.quest.conditions.filter(c => (c.option || 1) === S.way).length;
+    if (!await confirmBox('Delete way', `Delete way ${wayLetter(S.way)} and its ${n} objective(s)?`, 'Delete')) return;
+    S.quest.conditions = S.quest.conditions.filter(c => (c.option || 1) !== S.way);
+    S.way = ways(S.quest)[0];
+    S.cond = S.quest.conditions.find(c => (c.option || 1) === S.way) || null;
+    changed(false);
+  },
+  useTarkovText() { if (!S.cond) return; S.cond.text = S.cond.text ? '' : tarkovText(S.cond); changed(false); },
+  addTag(tag) {
+    tag = (tag || '').trim();
+    if (!tag || !S.quest || S.quest.tags.includes(tag)) return;
+    S.quest.tags.push(tag);
+    changed(false);
+  },
+  removeTag(tag) { S.quest.tags = S.quest.tags.filter(x => x !== tag); changed(false); },
+  async addGamePrereq() {
+    const id = await pickQuest('Pick a quest that must be finished first', true);
+    if (id && id !== S.quest.id && !S.quest.prerequisiteQuestIds.includes(id)) { S.quest.prerequisiteQuestIds.push(id); changed(false); }
+  },
+  async pickOfferGameQuest() {
+    const id = await pickQuest('Which game quest unlocks this offer?', false);
+    if (id) { S.offer.unlockedByQuestId = id; changed(false); }
+  },
+  async pickTraderUnlock() {
+    const id = await pickQuest(`Which quest unlocks ${S.t.file.name}?`, true);
+    if (id) { S.t.file.unlockQuestId = id; changed(true); renderPage(false); }
+  },
   runChecks: () => { runChecks(); renderAll(false); toast('Checks done'); },
 
   // ---- offers
   async addOffer() {
     const tpl = await pickItem('Weapon');
     if (!tpl) return;
-    const o = { id: newId(), itemTpl: tpl, useDefaultPreset: true, loyaltyLevel: 1, unlimited: true, stock: 1, buyLimit: 0, cost: [{ itemTpl: CUR.RUB, count: 50000 }] };
+    const o = fillOffer({ itemTpl: tpl, cost: [{ itemTpl: CUR.RUB, count: 50000 }] });
     const list = S.t.file.offers;
     list.splice(S.offer ? list.indexOf(S.offer) + 1 : list.length, 0, o);
     S.offer = o;
@@ -1261,7 +1470,7 @@ const ACT = {
 
   // ---- quests
   addQuest() {
-    const q = { id: newId(), name: 'New quest', description: '', successMessage: '', minLevel: 1, prerequisiteQuestIds: [], conditions: [], rewards: [] };
+    const q = fillQuest({ name: 'New quest' });
     const list = S.t.file.quests;
     list.splice(S.quest ? list.indexOf(S.quest) + 1 : list.length, 0, q);
     selectQuest(q);
@@ -1269,7 +1478,7 @@ const ACT = {
   },
   dupQuest() {
     if (!S.quest) return;
-    const q = clone(S.quest); q.id = newId(); q.name += ' (copy)'; delete q.image;
+    const q = clone(S.quest); q.id = newId(); q.name += ' (copy)'; delete q.image; fillQuest(q);
     q.conditions.forEach(c => c.id = newId()); q.rewards.forEach(r => r.id = newId());
     const list = S.t.file.quests; list.splice(list.indexOf(S.quest) + 1, 0, q); selectQuest(q);
     changed(true);
@@ -1285,15 +1494,21 @@ const ACT = {
   moveQuest: d => { if (S.quest && move(S.t.file.quests, S.quest, d)) changed(false); },
   dropPrereq: id => { S.quest.prerequisiteQuestIds = S.quest.prerequisiteQuestIds.filter(x => x !== id); changed(false); },
   addCond() {
-    const c = { id: newId(), type: 'HandoverItem', option: S.cond?.option || 1, text: '', itemTpls: [], count: 1, foundInRaid: true, killTarget: 'Any', bossRoles: [], weaponTpls: [], calibers: [], wearingTpls: [], locations: [] };
+    const c = fillCond({ option: S.way || 1 });
     const list = S.quest.conditions; list.splice(S.cond ? list.indexOf(S.cond) + 1 : list.length, 0, c); S.cond = c;
     changed(false);
   },
   dupCond() { if (!S.cond) return; const c = clone(S.cond); c.id = newId(); const l = S.quest.conditions; l.splice(l.indexOf(S.cond) + 1, 0, c); S.cond = c; changed(false); },
-  removeCond() { if (!S.cond) return; const l = S.quest.conditions, i = l.indexOf(S.cond); l.splice(i, 1); S.cond = l[Math.min(i, l.length - 1)] || null; changed(false); },
+  removeCond() {
+    if (!S.cond) return;
+    const l = S.quest.conditions; l.splice(l.indexOf(S.cond), 1);
+    S.cond = l.find(c => (c.option || 1) === S.way) || null;
+    if (!S.cond) { S.way = ways(S.quest)[0]; S.cond = l.find(c => (c.option || 1) === S.way) || null; }
+    changed(false);
+  },
   moveCond: d => { if (S.cond && move(S.quest.conditions, S.cond, d)) changed(false); },
   addReward() {
-    const r = { id: newId(), type: 'Experience', value: 1000, itemTpl: '', count: 1, foundInRaid: true, offerId: '', quantity: 0 };
+    const r = fillReward({ value: 1000 });
     const l = S.quest.rewards; l.splice(S.reward ? l.indexOf(S.reward) + 1 : l.length, 0, r); S.reward = r;
     changed(false);
   },
@@ -1566,6 +1781,38 @@ function pickItem(filter = 'all') {
     m.querySelector('[data-m="1"]').onclick = () => {
       const id = m.querySelector('#pickId').value.trim().toLowerCase();
       if (validId(id)) closeModal(id); else toast('An item id is 24 characters of 0-9 / a-f');
+    };
+    draw(m);
+  });
+}
+
+/** Pick one of your quests (any trader) and/or one of the game's quests. */
+function pickQuest(title, includeMine = true) {
+  let query = '';
+  const mine = includeMine ? allQuests().filter(x => x.q !== S.quest).map(x => ({ id: x.q.id, n: x.q.name, t: x.t.file.name, mine: true })) : [];
+  const game = [...S.gameQuests.values()].map(g => ({ id: g.i, n: g.n, t: g.t, mine: false }));
+  const all = [...mine, ...game];
+  const draw = m => {
+    const found = all.filter(x => !query || x.n.toLowerCase().includes(query) || (x.t || '').toLowerCase().includes(query) || x.id.startsWith(query)).slice(0, 400);
+    m.querySelector('.picker-list').innerHTML = found.map(x => `<div class="row" data-pick="${x.id}"><div class="cell">
+      ${thumb({ text: x.mine ? 'MY' : (x.t || '?').slice(0, 3), color: x.mine ? 'var(--violet)' : '#3a3a3a' })}<div class="text"><div class="title">${esc(x.n)}</div><div class="line2">${esc(x.t || '')}</div></div></div>
+      <div class="col">${x.mine ? 'your quest' : 'game quest'}</div></div>`).join('') ||
+      `<div class="empty">${S.gameQuests.size ? 'Nothing found' : 'Game quest list not loaded — paste a quest id below'}</div>`;
+  };
+  return openModal(`<div class="dialog"><h2>${esc(title)}</h2>
+    <div class="picker-search">🔍<input type="text" id="pickQuery" placeholder="Search by quest or trader name"></div>
+    <div class="picker-list"></div>
+    <div class="buttons"><input type="text" id="pickId" placeholder="or paste a quest id" style="max-width:260px;margin-right:auto">
+      <button class="outline" data-m="0">Cancel</button><button class="primary" data-m="1">Use pasted id</button></div></div>`, m => {
+    const q = m.querySelector('#pickQuery');
+    q.focus();
+    let timer = 0;
+    q.oninput = () => { clearTimeout(timer); timer = setTimeout(() => { query = q.value.trim().toLowerCase(); draw(m); }, 80); };
+    m.querySelector('.picker-list').onclick = e => { const r = e.target.closest('[data-pick]'); if (r) closeModal(r.dataset.pick); };
+    m.querySelector('[data-m="0"]').onclick = () => closeModal(null);
+    m.querySelector('[data-m="1"]').onclick = () => {
+      const id = m.querySelector('#pickId').value.trim().toLowerCase();
+      if (validId(id)) closeModal(id); else toast('A quest id is 24 characters of 0-9 / a-f');
     };
     draw(m);
   });

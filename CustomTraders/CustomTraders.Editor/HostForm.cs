@@ -20,8 +20,9 @@ namespace CustomTraders.Editor;
 public sealed class HostForm : Form
 {
     private const string AppHost = "app.local";
-    private const string TradersHost = "traders.local";
-    private const string BackgroundHost = "bg.local";
+    // Pictures (trader icons, quest images, background) are served by this
+    // window itself from disk, so a changed picture always shows right away.
+    private const string FilesHost = "files.local";
 
     private readonly WebView2 _web = new() { Dock = DockStyle.Fill, DefaultBackgroundColor = Color.Black };
     private readonly Settings _settings = Settings.Load();
@@ -71,7 +72,8 @@ public sealed class HostForm : Form
 
         var uiFolder = Path.Combine(AppContext.BaseDirectory, "ui");
         core.SetVirtualHostNameToFolderMapping(AppHost, uiFolder, CoreWebView2HostResourceAccessKind.Allow);
-        MapBackground();
+        core.AddWebResourceRequestedFilter($"https://{FilesHost}/*", CoreWebView2WebResourceContext.All);
+        core.WebResourceRequested += ServeFile;
 
         core.WebMessageReceived += (_, e) => HandleMessage(e.WebMessageAsJson);
         core.NewWindowRequested += (_, e) => { e.Handled = true; OpenUrl(e.Uri); }; // links open in the normal browser
@@ -144,8 +146,6 @@ public sealed class HostForm : Form
 
         var tradersFolder = Path.Combine(folder, "traders");
         Directory.CreateDirectory(tradersFolder);
-        _web.CoreWebView2.ClearVirtualHostNameToFolderMapping(TradersHost);
-        _web.CoreWebView2.SetVirtualHostNameToFolderMapping(TradersHost, tradersFolder, CoreWebView2HostResourceAccessKind.Allow);
 
         var traders = (JsonArray)result["traders"]!;
         foreach (var dir in Directory.GetDirectories(tradersFolder).OrderBy(d => d))
@@ -196,7 +196,7 @@ public sealed class HostForm : Form
     {
         var path = Path.Combine(_modFolder!, "traders", folder, file);
         long v = File.Exists(path) ? File.GetLastWriteTimeUtc(path).Ticks : 0;
-        return $"https://{TradersHost}/{Uri.EscapeDataString(folder)}/{Uri.EscapeDataString(file)}?v={v}";
+        return $"https://{FilesHost}/traders/{Uri.EscapeDataString(folder)}/{Uri.EscapeDataString(file)}?v={v}";
     }
 
     private void LoadItems(string modFolder, JsonObject result)
@@ -224,6 +224,10 @@ public sealed class HostForm : Form
             }
             result["items"] = items;
             result["itemsStatus"] = $"{_db.Items.Count:N0} items";
+            var quests = new JsonArray();
+            foreach (var (id, name, trader) in _db.LoadQuests())
+                quests.Add(new JsonObject { ["i"] = id, ["n"] = name, ["t"] = trader });
+            result["gameQuests"] = quests;
         }
         catch (Exception e)
         {
@@ -336,7 +340,6 @@ public sealed class HostForm : Form
         if (source == null) return null;
         _settings.BackgroundImage = source;
         _settings.Save();
-        MapBackground();
         return BackgroundUrl();
     }
 
@@ -347,19 +350,53 @@ public sealed class HostForm : Form
         return true;
     }
 
-    private void MapBackground()
-    {
-        var path = _settings.BackgroundImage;
-        if (string.IsNullOrWhiteSpace(path) || !File.Exists(path)) return;
-        _web.CoreWebView2.ClearVirtualHostNameToFolderMapping(BackgroundHost);
-        _web.CoreWebView2.SetVirtualHostNameToFolderMapping(BackgroundHost, Path.GetDirectoryName(path)!, CoreWebView2HostResourceAccessKind.Allow);
-    }
-
     private string? BackgroundUrl()
     {
         var path = _settings.BackgroundImage;
         if (string.IsNullOrWhiteSpace(path) || !File.Exists(path)) return null;
-        return $"https://{BackgroundHost}/{Uri.EscapeDataString(Path.GetFileName(path))}?v={File.GetLastWriteTimeUtc(path).Ticks}";
+        return $"https://{FilesHost}/background?v={File.GetLastWriteTimeUtc(path).Ticks}";
+    }
+
+    /// <summary>
+    /// Answers https://files.local/traders/&lt;folder&gt;/&lt;file&gt; and
+    /// https://files.local/background with the file from disk (never cached).
+    /// </summary>
+    private void ServeFile(object? sender, CoreWebView2WebResourceRequestedEventArgs e)
+    {
+        var env = _web.CoreWebView2.Environment;
+        try
+        {
+            var uri = new Uri(e.Request.Uri);
+            var parts = uri.AbsolutePath.Trim('/').Split('/').Select(Uri.UnescapeDataString).ToArray();
+            string? path = null;
+            if (parts is ["background"]) path = _settings.BackgroundImage;
+            else if (parts is ["traders", var folder, var file] && _modFolder != null &&
+                     !folder.Contains("..") && !file.Contains("..") &&
+                     folder.IndexOfAny(Path.GetInvalidFileNameChars()) < 0 && file.IndexOfAny(Path.GetInvalidFileNameChars()) < 0)
+                path = Path.Combine(_modFolder, "traders", folder, file);
+
+            if (path == null || !File.Exists(path))
+            {
+                e.Response = env.CreateWebResourceResponse(null, 404, "Not found", "Cache-Control: no-store");
+                return;
+            }
+            var type = Path.GetExtension(path).ToLowerInvariant() switch
+            {
+                ".png" => "image/png",
+                ".jpg" or ".jpeg" => "image/jpeg",
+                ".gif" => "image/gif",
+                ".webp" => "image/webp",
+                ".bmp" => "image/bmp",
+                _ => "application/octet-stream",
+            };
+            var stream = new MemoryStream(File.ReadAllBytes(path));
+            e.Response = env.CreateWebResourceResponse(stream, 200, "OK",
+                $"Content-Type: {type}\r\nCache-Control: no-store\r\nAccess-Control-Allow-Origin: *");
+        }
+        catch
+        {
+            e.Response = env.CreateWebResourceResponse(null, 500, "Error", "Cache-Control: no-store");
+        }
     }
 
     private static Bitmap LoadBitmap(string path)
