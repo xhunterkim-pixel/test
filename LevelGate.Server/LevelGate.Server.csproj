@@ -1,0 +1,39 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Tiny SPT 4.1.x SERVER mod for LevelGate. It adds nothing to gameplay —
+    all the gating runs in the BepInEx client plugin (../LevelGate). It
+    exists so the server lists LevelGate among its mods at startup:
+
+      Mod: LevelGate version: 1.1.0 (GUID: com.yourname.levelgate | targets SPT: ~4.1.0) by: ... loaded
+
+    and prints how many item limits the client config holds.
+
+    Build: set SptServerDir below to the folder containing user\mods (in
+    this install: C:\SPT\SPT_Runtime), then Build. The DLL is copied to
+    user\mods\LevelGate\ automatically. The SPTarkov.* package versions
+    should match your server (4.1.6); if restore can't find that exact
+    version, use the closest 4.1.x.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AssemblyName>LevelGate.Server</AssemblyName>
+    <RootNamespace>LevelGate.Server</RootNamespace>
+    <SptServerDir>C:\SPT\SPT_Runtime</SptServerDir>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Provided by the server at runtime, so compile against them only. -->
+    <PackageReference Include="SPTarkov.Common" Version="4.1.6" ExcludeAssets="runtime" />
+    <PackageReference Include="SPTarkov.DI" Version="4.1.6" ExcludeAssets="runtime" />
+    <PackageReference Include="SPTarkov.Server.Core" Version="4.1.6" ExcludeAssets="runtime" />
+  </ItemGroup>
+
+  <Target Name="CopyToServerMods" AfterTargets="Build">
+    <MakeDir Directories="$(SptServerDir)\user\mods\LevelGate" />
+    <Copy SourceFiles="$(TargetPath)" DestinationFolder="$(SptServerDir)\user\mods\LevelGate\" />
+  </Target>
+
+</Project>

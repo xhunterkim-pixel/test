@@ -146,6 +146,16 @@ Search that file for the item's name — you'll find lines like:
 The ID is the part before ` Name` — copy that exactly into the F9 menu or
 `level_requirements.json`.
 
+## Server mod (optional)
+
+`../LevelGate.Server` is a tiny SPT 4.1.x server mod. It changes nothing in
+gameplay; it only makes the server list LevelGate at startup
+(`Mod: LevelGate version: 1.1.0 (GUID: com.yourname.levelgate | targets SPT:
+~4.1.0) ... loaded`) and log how many item limits the client config holds.
+Open `LevelGate.Server/LevelGate.Server.csproj`, check `<SptServerDir>` (the
+folder containing `user\mods`, e.g. `C:\SPT\SPT_Runtime`), and build; the
+DLL is copied to `user\mods\LevelGate\`. Needs the .NET 9 SDK.
+
 ## Build steps
 
 1. Visual Studio 2022 Community, ".NET desktop development" workload.

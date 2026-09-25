@@ -548,8 +548,13 @@ namespace LevelGate
             // other check (drag hover via MoveResult.CanExecute, the game
             // polling CanPressTrigger, per-round insert helpers) still
             // blocks, but silently — those were the "random" popups.
-            if (onScreen && item is EFT.InventoryLogic.Ammo)
-                OnScreenNotifier.Show($"Ammo Level Too High (requires level {requiredLevel})");
+            // Equip blocks get a message too: out of raid the game's own text
+            // for a refused equip is just "hands are busy", which doesn't
+            // say why.
+            if (onScreen && item != null)
+                OnScreenNotifier.Show(item is EFT.InventoryLogic.Ammo
+                    ? $"Ammo Level Too High (requires level {requiredLevel})"
+                    : $"Item Level Too High (requires level {requiredLevel})");
 
             string message = $"LevelGate: requires level {requiredLevel} to use this item.";
             try
@@ -738,7 +743,12 @@ namespace LevelGate
         {
             try
             {
-                var slotType = typeof(EFT.InventoryLogic.SlotItemAddress).GetProperty("Slot")?.PropertyType;
+                // Take the type straight from the expression "address.Slot"
+                // (already used elsewhere in this plugin), so it resolves at
+                // compile time whether Slot is a field or a property — the
+                // reflection lookup of a *property* named Slot failed on SPT
+                // 4.1.6 ("could not resolve the Slot type").
+                var slotType = TypeOf((EFT.InventoryLogic.SlotItemAddress a) => a.Slot);
                 if (slotType == null)
                 {
                     LevelGatePlugin.Log.LogWarning("LevelGate: could not resolve the Slot type — loose-loot auto-equip fix not applied.");
@@ -775,6 +785,8 @@ namespace LevelGate
                 LevelGatePlugin.Log.LogError("LevelGate: failed to apply gear slot gate. " + e);
             }
         }
+
+        private static Type TypeOf<TAddress, TSlot>(Func<TAddress, TSlot> member) => typeof(TSlot);
 
         private static void Postfix(object __instance, object[] __args, ref bool __result)
         {
