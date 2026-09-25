@@ -488,15 +488,20 @@ namespace LevelGate
                 var key = (instance.GetType(), name);
                 if (!_cache.TryGetValue(key, out var getter))
                 {
+                    // Looked up by hand rather than via AccessTools.Property/
+                    // Field, which print a HarmonyX warning for every miss
+                    // (the log showed "Could not find property ... _player").
                     getter = null;
-                    var prop = AccessTools.Property(key.Item1, name);
-                    if (prop != null && prop.GetIndexParameters().Length == 0 && prop.GetGetMethod(true) != null)
+                    const BindingFlags flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly;
+                    for (var t = key.Item1; t != null && getter == null; t = t.BaseType)
                     {
-                        getter = o => prop.GetValue(o, null);
-                    }
-                    else
-                    {
-                        var field = AccessTools.Field(key.Item1, name);
+                        var prop = t.GetProperty(name, flags);
+                        if (prop != null && prop.GetIndexParameters().Length == 0 && prop.GetGetMethod(true) != null)
+                        {
+                            getter = o => prop.GetValue(o, null);
+                            break;
+                        }
+                        var field = t.GetField(name, flags);
                         if (field != null) getter = o => field.GetValue(o);
                     }
                     _cache[key] = getter;
@@ -527,42 +532,139 @@ namespace LevelGate
     }
 
     // Pulls every Ammo out of a method argument: the Ammo itself, a list of
-    // rounds, or an "ammo pack" object that holds such a list in a field.
-    // Doesn't look inside other Items (a magazine/weapon argument is not
-    // the rounds being loaded).
+    // rounds, or an "ammo pack" object holding them — searched a few levels
+    // deep through fields, properties and collections, because the first
+    // version (one level, fields only, and it stopped at the first
+    // collection it met) read EFT.InventoryLogic.AmmoPack as empty
+    // ("ReloadWithAmmo ammo=[]" in the log) while the Mosin/MP-153 reload
+    // went ahead with gated rounds.
+    //
+    // Never descends into other Items (a magazine or weapon argument isn't
+    // the rounds being loaded) or into controllers/inventories/players —
+    // those would drag in every round you carry and block reloads that
+    // aren't using gated ammo at all.
     internal static class AmmoCollector
     {
-        public static void Collect(object obj, List<EFT.InventoryLogic.Ammo> into, int depth)
+        private const int MaxDepth = 4;
+
+        public static List<EFT.InventoryLogic.Ammo> CollectAll(IEnumerable<object> roots)
         {
-            if (obj == null || depth > 1) return;
+            var into = new List<EFT.InventoryLogic.Ammo>();
+            var visited = new HashSet<object>(ReferenceEqualityComparer.Instance);
+            foreach (var root in roots) Collect(root, into, visited, 0);
+            return into;
+        }
 
-            if (obj is EFT.InventoryLogic.Ammo ammo) { into.Add(ammo); return; }
-            if (obj is EFT.InventoryLogic.Item) return;
-            if (obj is string || obj is Delegate || obj is UnityEngine.Object || obj is EFT.InventoryLogic.ItemAddress) return;
+        private static void Collect(object obj, List<EFT.InventoryLogic.Ammo> into, HashSet<object> visited, int depth)
+        {
+            if (obj == null || depth > MaxDepth) return;
 
-            if (obj is System.Collections.IEnumerable enumerable)
+            if (obj is EFT.InventoryLogic.Ammo ammo)
             {
-                foreach (var element in enumerable)
-                {
-                    if (element is EFT.InventoryLogic.Ammo a) into.Add(a);
-                }
+                if (!into.Contains(ammo)) into.Add(ammo);
+                return;
+            }
+            if (!ShouldDescend(obj)) return;
+
+            var type = obj.GetType();
+            if (!type.IsValueType && !visited.Add(obj)) return;
+
+            // Dictionary entries: System types are otherwise not walked.
+            if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(KeyValuePair<,>))
+            {
+                Collect(type.GetProperty("Key")?.GetValue(obj, null), into, visited, depth + 1);
+                Collect(type.GetProperty("Value")?.GetValue(obj, null), into, visited, depth + 1);
                 return;
             }
 
-            var type = obj.GetType();
-            if (type.IsPrimitive || type.IsEnum || depth >= 1) return;
+            if (obj is System.Collections.IEnumerable enumerable)
+            {
+                int n = 0;
+                foreach (var element in enumerable)
+                {
+                    if (++n > 512) break;
+                    Collect(element, into, visited, depth + 1);
+                }
+            }
 
             for (var t = type; t != null && t != typeof(object); t = t.BaseType)
             {
+                if (t.Namespace != null && t.Namespace.StartsWith("System", StringComparison.Ordinal)) break;
+
                 foreach (var f in t.GetFields(BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly))
                 {
                     object value;
                     try { value = f.GetValue(obj); }
                     catch { continue; }
-                    Collect(value, into, depth + 1);
+                    Collect(value, into, visited, depth + 1);
+                }
+
+                foreach (var prop in t.GetProperties(BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly))
+                {
+                    if (prop.GetIndexParameters().Length != 0 || prop.GetGetMethod(true) == null) continue;
+                    // Only plain collection/ammo-typed properties: an arbitrary
+                    // getter could do work or have side effects.
+                    var pt = prop.PropertyType;
+                    if (!typeof(EFT.InventoryLogic.Ammo).IsAssignableFrom(pt) &&
+                        !typeof(System.Collections.IEnumerable).IsAssignableFrom(pt)) continue;
+                    object value;
+                    try { value = prop.GetValue(obj, null); }
+                    catch { continue; }
+                    Collect(value, into, visited, depth + 1);
                 }
             }
         }
+
+        private static bool ShouldDescend(object obj)
+        {
+            if (obj is EFT.InventoryLogic.Item) return false;
+            if (obj is string || obj is Delegate || obj is UnityEngine.Object) return false;
+            if (obj is EFT.InventoryLogic.ItemAddress || obj is EFT.Player) return false;
+
+            var type = obj.GetType();
+            if (type.IsPrimitive || type.IsEnum || type.IsPointer) return false;
+
+            // Short type name only: the namespace "EFT.InventoryLogic" would
+            // otherwise match "Inventory" and exclude AmmoPack itself.
+            var name = type.Name;
+            if (name.IndexOf("Controller", StringComparison.Ordinal) >= 0) return false;
+            if (name.IndexOf("Inventory", StringComparison.Ordinal) >= 0) return false;
+            if (name.IndexOf("Profile", StringComparison.Ordinal) >= 0) return false;
+            return true;
+        }
+
+        // Field/property layout of an object, for diagnostics.
+        public static string Describe(object obj)
+        {
+            if (obj == null) return "null";
+            var sb = new System.Text.StringBuilder(obj.GetType().FullName).Append(" { ");
+            for (var t = obj.GetType(); t != null && t != typeof(object); t = t.BaseType)
+            {
+                foreach (var f in t.GetFields(BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly))
+                {
+                    object value;
+                    try { value = f.GetValue(obj); }
+                    catch { value = "<error>"; }
+                    sb.Append(f.Name).Append('(').Append(f.FieldType.Name).Append(")=").Append(Short(value)).Append("; ");
+                }
+            }
+            return sb.Append('}').ToString();
+        }
+
+        private static string Short(object value)
+        {
+            if (value == null) return "null";
+            if (value is EFT.InventoryLogic.Item item) return item.GetType().Name + ":" + item.TemplateId;
+            if (value is System.Collections.ICollection c) return value.GetType().Name + "[" + c.Count + "]";
+            return value.ToString();
+        }
+    }
+
+    internal sealed class ReferenceEqualityComparer : IEqualityComparer<object>
+    {
+        public static readonly ReferenceEqualityComparer Instance = new ReferenceEqualityComparer();
+        public new bool Equals(object x, object y) => ReferenceEquals(x, y);
+        public int GetHashCode(object obj) => System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(obj);
     }
 
     // Completes a skipped method's Comfort.Common.Callback with a failure,
@@ -1809,7 +1911,15 @@ namespace LevelGate
                 if (__instance == null) return;
 
                 bool inConfig = LevelGatePlugin.Data.Items.ContainsKey(__instance.TemplateId);
-                if (!inConfig) return;
+                if (!inConfig)
+                {
+                    // Removed from the limiter (F9 "X" / "Level Limit
+                    // Remove") — still undo any earlier neutralization.
+                    // This used to return straight away, which is why water
+                    // stayed at 0/60 after being un-gated.
+                    ItemNeutralizer.Sync(__instance, false);
+                    return;
+                }
 
                 var player = LevelGateCheck.GetMainPlayer();
                 if (player == null) return;
@@ -1856,8 +1966,12 @@ namespace LevelGate
     //   (so it doesn't rely on any untested code path).
     //
     // All three cache the original value the first time an item is locked
-    // and restore it once the player reaches the required level, so nothing
-    // is lost — an item just becomes usable again exactly as it was.
+    // and restore it once the player reaches the required level OR the item
+    // is removed from the limiter, so nothing is lost — an item just becomes
+    // usable again exactly as it was. Med/food originals are saved to
+    // config/neutralized_resources.json by item id so they survive restarts
+    // and raids (the ammo caliber lives on the shared template, which the
+    // game reloads from the server on every start, so it needs no file).
     //
     // Grenades are NOT included here: their equivalent lever (an enum,
     // ThrowWeapTemplate.ThrowType) risks undefined behavior if game code
@@ -1870,8 +1984,18 @@ namespace LevelGate
         private const string LockedCaliberMarker = "LevelGateLocked_Incompatible";
 
         private static readonly Dictionary<string, string> _originalCalibers = new Dictionary<string, string>();
-        private static readonly Dictionary<object, float> _originalMedResource = new Dictionary<object, float>();
-        private static readonly Dictionary<object, float> _originalFoodResource = new Dictionary<object, float>();
+
+        // Original med/food resource per item INSTANCE id, saved to
+        // config/neutralized_resources.json. It used to live only in memory
+        // (keyed by the component object), but the zeroed value is saved to
+        // your profile like any other item change — so after a restart, or
+        // once the raid re-created the item, the original was gone and the
+        // item stayed at 0/60 even after the level was met. Item ids survive
+        // restarts, so keying the saved file by id makes the restore exact.
+        private static Dictionary<string, float> _originalResources;
+
+        private static string ResourceFile =>
+            Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location) ?? ".", "config", "neutralized_resources.json");
 
         public static void Sync(EFT.InventoryLogic.Item item, bool shouldBeLocked)
         {
@@ -1883,11 +2007,21 @@ namespace LevelGate
                 }
                 else if (item is EFT.InventoryLogic.Meds meds)
                 {
-                    SyncMeds(meds, shouldBeLocked);
+                    var component = meds.MedKitComponent;
+                    if (component == null) return;
+                    SyncResource(item, shouldBeLocked,
+                        () => component.HpResource,
+                        v => component.HpResource = v,
+                        component, "MaxHpResource", "MaxResource");
                 }
                 else if (item is EFT.InventoryLogic.FoodDrink food)
                 {
-                    SyncFood(food, shouldBeLocked);
+                    var component = food.FoodDrinkComponent;
+                    if (component == null) return;
+                    SyncResource(item, shouldBeLocked,
+                        () => component.HpPercent,
+                        v => component.HpPercent = v,
+                        component, "MaxResource", "MaxHpPercent");
                 }
             }
             catch (Exception e)
@@ -1919,43 +2053,83 @@ namespace LevelGate
             }
         }
 
-        private static void SyncMeds(EFT.InventoryLogic.Meds meds, bool locked)
+        private static void SyncResource(
+            EFT.InventoryLogic.Item item,
+            bool locked,
+            Func<float> get,
+            Action<float> set,
+            object component,
+            params string[] maxMemberNames)
         {
-            var component = meds.MedKitComponent;
-            if (component == null) return;
+            var store = LoadStore();
+            string id = item.Id;
+            if (string.IsNullOrEmpty(id)) return;
 
             if (locked)
             {
-                if (!_originalMedResource.ContainsKey(component))
+                float current = get();
+                if (!store.ContainsKey(id) && current > 0f)
                 {
-                    _originalMedResource[component] = component.HpResource;
+                    store[id] = current;
+                    SaveStore();
                 }
-                component.HpResource = 0f;
+                if (current != 0f) set(0f);
+                return;
             }
-            else if (_originalMedResource.TryGetValue(component, out var original))
+
+            if (store.TryGetValue(id, out var original))
             {
-                component.HpResource = original;
-                _originalMedResource.Remove(component);
+                set(original);
+                store.Remove(id);
+                SaveStore();
+                return;
+            }
+
+            // Zeroed by an older build that only remembered the original in
+            // memory, so there's nothing to restore from. An emptied
+            // med/food item is normally destroyed by the game, so one still
+            // sitting at 0 was almost certainly zeroed by LevelGate: give it
+            // back its full amount rather than leave it unusable forever.
+            if (get() <= 0f)
+            {
+                foreach (var name in maxMemberNames)
+                {
+                    var max = ReflectionUtil.GetMember(component, name);
+                    if (max is float f && f > 0f) { set(f); return; }
+                    if (max is int n && n > 0) { set(n); return; }
+                }
             }
         }
 
-        private static void SyncFood(EFT.InventoryLogic.FoodDrink food, bool locked)
+        private static Dictionary<string, float> LoadStore()
         {
-            var component = food.FoodDrinkComponent;
-            if (component == null) return;
-
-            if (locked)
+            if (_originalResources != null) return _originalResources;
+            _originalResources = new Dictionary<string, float>();
+            try
             {
-                if (!_originalFoodResource.ContainsKey(component))
+                if (File.Exists(ResourceFile))
                 {
-                    _originalFoodResource[component] = component.HpPercent;
+                    _originalResources = JsonConvert.DeserializeObject<Dictionary<string, float>>(File.ReadAllText(ResourceFile))
+                                         ?? new Dictionary<string, float>();
                 }
-                component.HpPercent = 0f;
             }
-            else if (_originalFoodResource.TryGetValue(component, out var original))
+            catch (Exception e)
             {
-                component.HpPercent = original;
-                _originalFoodResource.Remove(component);
+                LevelGatePlugin.Log.LogError("LevelGate: failed to read neutralized_resources.json. " + e);
+            }
+            return _originalResources;
+        }
+
+        private static void SaveStore()
+        {
+            try
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(ResourceFile));
+                File.WriteAllText(ResourceFile, JsonConvert.SerializeObject(_originalResources, Formatting.Indented));
+            }
+            catch (Exception e)
+            {
+                LevelGatePlugin.Log.LogError("LevelGate: failed to save neutralized_resources.json. " + e);
             }
         }
     }
@@ -2112,6 +2286,72 @@ namespace LevelGate
     internal static class Patch_DiagnosticGrenadePullRing
     {
         static void Prefix() => DiagnosticLogging.LogCall("ClientGrenadeHandsController.PullRingForHighThrow");
+    }
+
+    // Remembers which FirearmHandsInputTranslator is in the middle of
+    // ReloadWithAmmo(Weapon) — the R-key path that, per the log's stack
+    // traces, calls FirearmController.ReloadWithAmmo(AmmoPack, Callback) for
+    // the Mosin and MP-153. The reload-entry check reads the translator's
+    // freshly filled ammo buffer while the call is still in progress.
+    [HarmonyPatch(typeof(EFT.FirearmHandsInputTranslator), "ReloadWithAmmo", new[] { typeof(EFT.InventoryLogic.Weapon) })]
+    internal static class TranslatorReloadTracker
+    {
+        private static EFT.FirearmHandsInputTranslator _current;
+        private static FieldInfo _ammoListField;
+
+        static void Prefix(EFT.FirearmHandsInputTranslator __instance) => _current = __instance;
+
+        static Exception Finalizer(Exception __exception)
+        {
+            _current = null;
+            return __exception;
+        }
+
+        public static List<EFT.InventoryLogic.Ammo> CurrentAmmo()
+        {
+            var result = new List<EFT.InventoryLogic.Ammo>();
+            try
+            {
+                if (_current == null) return result;
+                if (_ammoListField == null)
+                    _ammoListField = AccessTools.Field(typeof(EFT.FirearmHandsInputTranslator), "_preAllocatedAmmoList");
+                if (_ammoListField?.GetValue(_current) is System.Collections.IEnumerable list)
+                    result.AddRange(list.OfType<EFT.InventoryLogic.Ammo>());
+            }
+            catch (Exception e)
+            {
+                LevelGatePlugin.Log.LogError("LevelGate TranslatorReloadTracker error: " + e);
+            }
+            return result;
+        }
+    }
+
+    // Empties the translator's reusable ammo buffer at the start of the
+    // R-key handler (TranslateCommand -> Reload, per the log's stacks), so
+    // anything in it by the time FirearmController.ReloadWithAmmo runs was
+    // put there by THIS key press — never leftovers from an earlier call
+    // (e.g. the M4A1's M855 blocking a Mosin reload with allowed ammo). Done
+    // at the top-level handler rather than inside ReloadWithAmmo(Weapon) in
+    // case Reload() itself fills the buffer before handing off.
+    [HarmonyPatch(typeof(EFT.FirearmHandsInputTranslator), "Reload", new Type[0])]
+    internal static class Patch_ClearTranslatorAmmoBuffer
+    {
+        private static FieldInfo _ammoListField;
+
+        [HarmonyPriority(Priority.First)]
+        static void Prefix(EFT.FirearmHandsInputTranslator __instance)
+        {
+            try
+            {
+                if (_ammoListField == null)
+                    _ammoListField = AccessTools.Field(typeof(EFT.FirearmHandsInputTranslator), "_preAllocatedAmmoList");
+                (_ammoListField?.GetValue(__instance) as System.Collections.IList)?.Clear();
+            }
+            catch
+            {
+                // fallback only — never break the reload
+            }
+        }
     }
 
     // DIAGNOSTIC ONLY now (was a blocking prefix). The prefix read
@@ -2439,12 +2679,29 @@ namespace LevelGate
                 var player = LevelGateCheck.GetMainPlayer();
                 if (player == null || args == null) return false;
 
-                var ammoList = new List<EFT.InventoryLogic.Ammo>();
-                foreach (var arg in args) AmmoCollector.Collect(arg, ammoList, 0);
+                var packAmmo = AmmoCollector.CollectAll(args);
+
+                // Fallback: when this call comes from the R key, the input
+                // translator has just filled its _preAllocatedAmmoList with
+                // the rounds it found for THIS reload (it's mid-call, so the
+                // buffer is fresh here — unlike the stale read the old
+                // LoadAmmoToChamber prefix did).
+                var translatorAmmo = TranslatorReloadTracker.CurrentAmmo();
+
+                var ammoList = packAmmo.Count > 0 ? packAmmo : translatorAmmo;
 
                 DiagnosticLogging.LogCall(
                     $"ReloadEntry {original?.DeclaringType?.Name}.{original?.Name} " +
-                    $"ammo=[{string.Join(",", ammoList.Select(a => a.TemplateId).Distinct())}]");
+                    $"pack=[{string.Join(",", packAmmo.Select(a => a.TemplateId).Distinct())}] " +
+                    $"translator=[{string.Join(",", translatorAmmo.Select(a => a.TemplateId).Distinct())}]");
+                if (packAmmo.Count == 0)
+                {
+                    foreach (var arg in args)
+                    {
+                        if (arg != null && arg.GetType().Name.IndexOf("AmmoPack", StringComparison.Ordinal) >= 0)
+                            DiagnosticLogging.LogCall("AmmoPack layout: " + AmmoCollector.Describe(arg));
+                    }
+                }
 
                 foreach (var ammo in ammoList)
                 {

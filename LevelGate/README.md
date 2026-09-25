@@ -39,7 +39,23 @@ three places (see the comments in `Plugin.cs` for the full reasoning):
 holding the *previous* call's rounds, and the second is an animation event
 that fires after the round has already moved (skipping it left hands stuck).
 
+For the Mosin / MP-153 path (`ReloadWithAmmo(AmmoPack, Callback)`), the
+rounds are read from the ammo pack (searched several levels deep) and, if
+that comes back empty, from the input translator's ammo buffer for the same
+key press. If a reload still gets through, the log line
+`ReloadEntry ... pack=[...] translator=[...]` plus an `AmmoPack layout:`
+line show exactly what the game passed.
+
 All of these skip bots' controllers, so bots are never judged by your level.
+
+### Locked meds / food (0/60)
+
+While locked, a med or food item's remaining amount is set to 0 so the game
+itself refuses to use it. The original amount is saved per item in
+`config/neutralized_resources.json` and put back when you reach the level
+**or** the item is removed from the limiter — including after a game restart.
+Items zeroed by an older build (which only remembered the amount in memory)
+have no saved value, so they are refilled to full instead of staying at 0.
 
 Two earlier approaches were tried and abandoned before landing on this one —
 kept as history in the code comments, in case a future SPT update breaks
