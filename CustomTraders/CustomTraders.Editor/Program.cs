@@ -20,6 +20,7 @@ internal static class Program
 #pragma warning disable WFO5001 // dark scrollbars / common controls (Windows 10+)
             Application.SetColorMode(SystemColorMode.Dark);
 #pragma warning restore WFO5001
+            Application.AddMessageFilter(new WheelRouter()); // wheel scrolls what's under the mouse, smoothly
             Application.Run(new MainForm());
         }
         catch (Exception e)

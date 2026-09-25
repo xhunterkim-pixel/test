@@ -598,12 +598,18 @@ public sealed class RowList : Control
         UpdateScroll();
     }
 
-    protected override void OnMouseWheel(MouseEventArgs e)
+    // Mouse wheel: handled by WheelRouter / SmoothScroll through these.
+    public bool CanScroll => _scroll.Visible;
+    public int MaxScroll => Math.Max(0, _items.Count * _rowHeight - ViewHeight);
+
+    public int ScrollOffset
     {
-        base.OnMouseWheel(e);
-        if (!_scroll.Visible) return;
-        ScrollTo(_offset - Math.Sign(e.Delta) * _rowHeight * 2);
-        if (e is HandledMouseEventArgs h) h.Handled = true;
+        get => _offset;
+        set
+        {
+            ScrollTo(value);
+            Update(); // draw this animation frame now
+        }
     }
 
     // ------------------------------------------------------------ mouse / keys

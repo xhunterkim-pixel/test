@@ -26,6 +26,8 @@ public sealed class MainForm : Form
     private readonly PictureBox _questImagePreview = new() { Height = 150, SizeMode = PictureBoxSizeMode.Zoom, Visible = false };
     private readonly PillButton _removeQuestImage = new("Remove image", PillStyle.Danger) { Height = 30, Visible = false };
     private Control _root = null!;
+    private Control _rightPanel = null!;
+    private readonly Crossfader _fade;
     private int _freeze;
     private readonly List<CheckEntry> _history = new();
     private List<CheckEntry> _checks = new();
@@ -118,6 +120,7 @@ public sealed class MainForm : Form
 
     public MainForm()
     {
+        _fade = new Crossfader(this);
         if (_settings.AccentColor is { Length: 7 } hex && hex[0] == '#')
         {
             try { Theme.Accent = ColorTranslator.FromHtml(hex); }
@@ -181,7 +184,7 @@ public sealed class MainForm : Form
         Theme.Apply(this);
         ShowPage(Page.Trader);
 
-        _traderList.SelectionChanged += ShowTrader;
+        _traderList.SelectionChanged += () => _fade.Run(_root, ShowTrader);
         _checkTimer.Tick += (_, _) => { _checkTimer.Stop(); RunChecks(); };
         _backgroundTimer.Tick += (_, _) => { _backgroundTimer.Stop(); RenderBackground(); };
         Resize += (_, _) => { if (_backgroundSource != null) _backgroundTimer.Start(); };
@@ -234,7 +237,7 @@ public sealed class MainForm : Form
         var right = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Margin = new Padding(0) };
         var background = new PillButton("Appearance", PillStyle.Outline);
         background.Click += (_, _) => BackgroundMenu().Show(background, new Point(0, background.Height + 4));
-        _checksButton.Click += (_, _) => ShowPage(Page.Checks);
+        _checksButton.Click += (_, _) => { if (_page != Page.Checks) _fade.Run(_root, () => ShowPage(Page.Checks)); };
         right.Controls.AddRange(new Control[] { _dbLabel, background, _checksButton });
         top.Controls.Add(right, 4, 0);
 
@@ -247,7 +250,7 @@ public sealed class MainForm : Form
         var save = new PillButton("Save all", PillStyle.Primary) { Height = 42, Width = 140, Font = new Font("Segoe UI", 11f, FontStyle.Bold) };
         save.Click += (_, _) => SaveAll();
         new ToolTip().SetToolTip(save, "Save every changed trader (Ctrl+S). Restart the SPT server afterwards.");
-        _checkSummary.Click += (_, _) => ShowPage(Page.Checks);
+        _checkSummary.Click += (_, _) => { if (_page != Page.Checks) _fade.Run(_root, () => ShowPage(Page.Checks)); };
         bottom.Controls.Add(_status, 0, 0);
         bottom.Controls.Add(_checkSummary, 1, 0);
         bottom.Controls.Add(_unsaved, 2, 0);
@@ -315,7 +318,7 @@ public sealed class MainForm : Form
         foreach (var (page, text) in new[] { (Page.Trader, "Trader"), (Page.Offers, "Offers & barters"), (Page.Quests, "Quests"), (Page.Checks, "Checks & log") })
         {
             var chip = new PillButton(text, PillStyle.Chip) { Height = 34, Margin = new Padding(0, 9, 8, 0) };
-            chip.Click += (_, _) => ShowPage(page);
+            chip.Click += (_, _) => { if (_page != page) _fade.Run(_root, () => ShowPage(page)); };
             _chips[page] = chip;
             chips.Controls.Add(chip);
         }
@@ -329,6 +332,7 @@ public sealed class MainForm : Form
     private Control BuildRight()
     {
         var panel = new GlassPanel { Dock = DockStyle.Fill, Margin = new Padding(4, 0, 0, 0), Padding = new Padding(14, 8, 6, 8), Tint = Theme.Surface };
+        _rightPanel = panel;
         panel.Controls.Add(_details);
         panel.Controls.Add(_detailsTitle);
         return panel;
@@ -466,7 +470,7 @@ public sealed class MainForm : Form
         _offerStatus.AddAction(_offerGoToQuest);
         _offerStatus.Add(_offerStatusText);
 
-        _offers.SelectionChanged += ShowOffer;
+        _offers.SelectionChanged += () => _fade.Run(_rightPanel, ShowOffer);
         _offers.ListChanged += () => { MarkDirty(); ShowOffer(); UpdateHeader(); };
         _costs.SelectionChanged += () => { _costFields.Enabled = Cost != null; _costFields.RefreshValues(); };
         _costs.ListChanged += () => { MarkDirty(); _offers.RefreshTexts(); };
@@ -570,7 +574,7 @@ public sealed class MainForm : Form
         rf.ShowWhen(() => Reward?.Type == RewardTypes.UnlockOffer);
         rf.Changed += () => { MarkDirty(); _rewards.RefreshTexts(); _offers.RefreshTexts(); _quests.RefreshTexts(); _rewardFields.RefreshVisibility(); };
 
-        _quests.SelectionChanged += ShowQuest;
+        _quests.SelectionChanged += () => _fade.Run(_rightPanel, ShowQuest);
         _quests.ListChanged += () => { MarkDirty(); ShowQuest(); UpdateHeader(); };
         _conditions.SelectionChanged += ShowCondition;
         _conditions.ListChanged += () => { MarkDirty(); ShowCondition(); _quests.RefreshTexts(); UpdateWaysHint(); };
