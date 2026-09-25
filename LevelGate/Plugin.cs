@@ -824,8 +824,8 @@ namespace LevelGate
     // Lock icon on LOCKED items. Every half second, finds the item views on
     // screen (EFT.UI.DragAndDrop.ItemView and every subclass — stash grid,
     // equipment slots, containers, loot, traders) and, for each one showing
-    // an item that's [LOCKED] for you, adds a small lock image in its
-    // bottom-left corner; it's hidden again once the item unlocks or the
+    // an item that's [LOCKED] for you, adds a small lock image in the
+    // middle of it; it's hidden again once the item unlocks or the
     // view is reused for another item.
     //
     // Done by scanning rather than patching an ItemView method, because the
@@ -842,7 +842,7 @@ namespace LevelGate
         private const float ScanInterval = 0.5f;
         private const float IconSizeFraction = 0.35f;   // of the item's smaller side
         private const float MinIconSize = 14f;
-        private const float MaxIconSize = 26f;
+        private const float MaxIconSize = 32f;
 
         private static float _nextScan;
         private static bool _typeResolved;
@@ -927,8 +927,11 @@ namespace LevelGate
                 var r = viewRect.rect;
                 size = Mathf.Clamp(Mathf.Min(r.width, r.height) * IconSizeFraction, MinIconSize, MaxIconSize);
             }
-            rect.anchorMin = rect.anchorMax = rect.pivot = Vector2.zero; // bottom-left corner
-            rect.anchoredPosition = new Vector2(2f, 2f);
+            // Centered on the item whatever its size (1x1 up to 4x4+
+            // backpacks/rigs), clear of the name (top) and count/durability
+            // text (bottom corners).
+            rect.anchorMin = rect.anchorMax = rect.pivot = new Vector2(0.5f, 0.5f);
+            rect.anchoredPosition = Vector2.zero;
             rect.sizeDelta = new Vector2(size, size);
 
             if (!existing.gameObject.activeSelf)

@@ -61,7 +61,7 @@ with an **orange** background, next to `[LOCKED]`/red and `[UNLOCKED]`/green.
 Magazines only — ammo boxes are excluded.
 
 **Lock icon:** every item that is `[LOCKED]` for you also gets a small lock
-image in the bottom-left corner of its icon (stash, raid inventory, loot,
+image in the middle of its icon (stash, raid inventory, loot,
 traders), refreshed twice a second and removed once you reach the level.
 The image is `config/lock.png` next to the DLL — replace it with your own
 (`lock.png`, or `lock.jpg`; PNG keeps a transparent background). Builds
