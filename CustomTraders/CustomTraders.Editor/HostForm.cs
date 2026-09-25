@@ -110,6 +110,7 @@ public sealed class HostForm : Form
         "saveTrader" => SaveTrader(Str(a, "folder"), Str(a, "text")),
         "newTrader" => NewTrader(Str(a, "name")),
         "deleteTrader" => DeleteTrader(Str(a, "folder")),
+        "duplicateTrader" => DuplicateTrader(Str(a, "folder"), Str(a, "name"), Str(a, "text")),
         "chooseAvatar" => ChooseAvatar(Str(a, "folder")),
         "chooseQuestImage" => ChooseQuestImage(Str(a, "folder"), Str(a, "questId")),
         "chooseBackground" => ChooseBackground(),
@@ -220,6 +221,11 @@ public sealed class HostForm : Form
                     ["s"] = item.ShortName,
                     ["c"] = item.Category.ToString(),
                     ["k"] = item.Caliber.Length > 0 ? item.Caliber : null,
+                    ["h"] = _db.Handbook.TryGetValue(item.Id, out var h) ? Math.Round(h) : null,
+                    ["p"] = _db.TraderSellPrice(item.Id) is var p && p > 0 ? p : null,
+                    ["f"] = _db.Flea.TryGetValue(item.Id, out var f) ? Math.Round(f) : null,
+                    ["ph"] = _db.Presets.TryGetValue(item.Id, out var preset) ? Math.Round(preset.Handbook) : null,
+                    ["pf"] = _db.Presets.TryGetValue(item.Id, out var preset2) ? Math.Round(preset2.Flea) : null,
                 });
             }
             result["items"] = items;
@@ -228,6 +234,7 @@ public sealed class HostForm : Form
             foreach (var (id, name, trader) in _db.LoadQuests())
                 quests.Add(new JsonObject { ["i"] = id, ["n"] = name, ["t"] = trader });
             result["gameQuests"] = quests;
+            result["traderRate"] = Math.Round(_db.BestTraderRate * 100);
         }
         catch (Exception e)
         {
@@ -280,6 +287,25 @@ public sealed class HostForm : Form
         SavePlaceholderAvatar(Path.Combine(dir, "avatar.png"), name);
         file.Save(Path.Combine(dir, "trader.json"));
         return TraderPayload(dir, JsonNode.Parse(File.ReadAllText(Path.Combine(dir, "trader.json")))!);
+    }
+
+    /// <summary>Copies a trader folder (icons, quest images) and writes the copy's trader.json (with new ids, made by the page).</summary>
+    private JsonNode DuplicateTrader(string folder, string name, string text)
+    {
+        JsonNode.Parse(text); // never write something that isn't JSON
+        var source = TraderDir(folder);
+        string safe = string.Concat(name.Where(ch => char.IsLetterOrDigit(ch) || ch is '_' or '-' or ' ')).Trim();
+        if (safe.Length == 0) safe = "Trader";
+        string dir = Path.Combine(_modFolder!, "traders", safe);
+        for (int n = 2; Directory.Exists(dir); n++) dir = Path.Combine(_modFolder!, "traders", $"{safe} {n}");
+        Directory.CreateDirectory(dir);
+        foreach (var file in Directory.EnumerateFiles(source))
+        {
+            if (Path.GetFileName(file).Equals("trader.json", StringComparison.OrdinalIgnoreCase)) continue;
+            File.Copy(file, Path.Combine(dir, Path.GetFileName(file)));
+        }
+        File.WriteAllText(Path.Combine(dir, "trader.json"), text);
+        return TraderPayload(dir, JsonNode.Parse(text)!);
     }
 
     private JsonNode DeleteTrader(string folder)

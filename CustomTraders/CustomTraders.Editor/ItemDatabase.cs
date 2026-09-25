@@ -35,6 +35,24 @@ public sealed class ItemDatabase
 
     public Dictionary<string, GameItem> Items { get; } = new();
 
+    /// <summary>Handbook value in roubles (what traders base their prices on).</summary>
+    public Dictionary<string, double> Handbook { get; } = new();
+
+    /// <summary>Flea market reference price in roubles (templates/prices.json).</summary>
+    public Dictionary<string, double> Flea { get; } = new();
+
+    /// <summary>Whole default preset of a weapon (the gun with all its parts): handbook / flea value in roubles.</summary>
+    public Dictionary<string, (double Handbook, double Flea)> Presets { get; } = new();
+
+    /// <summary>
+    /// Best share of the handbook value any trader pays when a player sells to them
+    /// (100 - LL1 buy_price_coef, same as the server's GetHighestSellToTraderPrice).
+    /// </summary>
+    public double BestTraderRate { get; private set; } = 0.6;
+
+    /// <summary>What the best-paying trader gives a player for the item, in roubles (0 = unknown).</summary>
+    public double TraderSellPrice(string tpl) => Handbook.TryGetValue(tpl, out var h) ? Math.Round(h * BestTraderRate) : 0;
+
     /// <summary>English texts of the game (item, quest and trader names...).</summary>
     public Dictionary<string, string> Names { get; private set; } = new();
     public string? SourceFolder { get; private set; }
@@ -135,6 +153,72 @@ public sealed class ItemDatabase
             string name = names.TryGetValue($"{id} Name", out var nm) && !string.IsNullOrWhiteSpace(nm) ? nm : internalName;
             string shortName = names.TryGetValue($"{id} ShortName", out var sn) ? sn : "";
             Items[id] = new GameItem(id, name, shortName, parent, CategoryOf(id, parents), caliber);
+        }
+        LoadPrices(databaseFolder);
+    }
+
+    private void LoadPrices(string databaseFolder)
+    {
+        Handbook.Clear();
+        Flea.Clear();
+        Presets.Clear();
+        try
+        {
+            var handbook = Path.Combine(databaseFolder, "templates", "handbook.json");
+            if (File.Exists(handbook))
+            {
+                using var doc = JsonDocument.Parse(File.ReadAllBytes(handbook));
+                if (doc.RootElement.TryGetProperty("Items", out var list) && list.ValueKind == JsonValueKind.Array)
+                    foreach (var e in list.EnumerateArray())
+                        if (e.TryGetProperty("Id", out var id) && e.TryGetProperty("Price", out var price) && price.ValueKind == JsonValueKind.Number)
+                            Handbook[id.GetString() ?? ""] = price.GetDouble();
+            }
+            var prices = Path.Combine(databaseFolder, "templates", "prices.json");
+            if (File.Exists(prices))
+            {
+                using var doc = JsonDocument.Parse(File.ReadAllBytes(prices));
+                foreach (var p in doc.RootElement.EnumerateObject())
+                    if (p.Value.ValueKind == JsonValueKind.Number) Flea[p.Name] = p.Value.GetDouble();
+            }
+            double best = 0;
+            var traders = Path.Combine(databaseFolder, "traders");
+            if (Directory.Exists(traders))
+                foreach (var dir in Directory.GetDirectories(traders))
+                {
+                    var file = Path.Combine(dir, "base.json");
+                    if (!File.Exists(file)) continue;
+                    using var doc = JsonDocument.Parse(File.ReadAllBytes(file));
+                    if (!doc.RootElement.TryGetProperty("loyaltyLevels", out var levels) || levels.ValueKind != JsonValueKind.Array || levels.GetArrayLength() == 0) continue;
+                    if (!levels[0].TryGetProperty("buy_price_coef", out var coef) || coef.ValueKind != JsonValueKind.Number) continue;
+                    best = Math.Max(best, (100 - coef.GetDouble()) / 100);
+                }
+            if (best > 0) BestTraderRate = Math.Min(1, best);
+
+            // default presets (what an offer with "sell the assembled gun" really sells)
+            var globals = Path.Combine(databaseFolder, "globals.json");
+            if (File.Exists(globals) && Handbook.Count > 0)
+            {
+                using var doc = JsonDocument.Parse(File.ReadAllBytes(globals));
+                if (doc.RootElement.TryGetProperty("ItemPresets", out var presets) && presets.ValueKind == JsonValueKind.Object)
+                    foreach (var p in presets.EnumerateObject())
+                    {
+                        if (!p.Value.TryGetProperty("_encyclopedia", out var enc) || enc.ValueKind != JsonValueKind.String) continue;
+                        if (!p.Value.TryGetProperty("_items", out var parts) || parts.ValueKind != JsonValueKind.Array) continue;
+                        double hb = 0, flea = 0;
+                        foreach (var part in parts.EnumerateArray())
+                        {
+                            string tpl = part.TryGetProperty("_tpl", out var t) ? t.GetString() ?? "" : "";
+                            double h = Handbook.TryGetValue(tpl, out var hv) ? hv : 0;
+                            hb += h;
+                            flea += Flea.TryGetValue(tpl, out var fv) ? fv : h;
+                        }
+                        if (hb > 0) Presets[enc.GetString()!] = (hb, flea);
+                    }
+            }
+        }
+        catch
+        {
+            // Prices are only a convenience for the editor.
         }
     }
 

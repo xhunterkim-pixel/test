@@ -25,12 +25,22 @@
 
   <main id="main">
     <aside id="left" class="panel">
-      <div class="left-head">
-        <button class="round chip-btn" data-act="newTrader" title="New trader">＋</button>
-        <button class="round ghost" data-act="deleteTrader" title="Remove the selected trader (moved to deleted_traders, nothing is erased)">✕</button>
+      <nav id="nav">
+        <button class="nav" data-act="page" data-arg="trader"><svg viewBox="0 0 24 24"><path d="M12 12a4.5 4.5 0 1 0 0-9 4.5 4.5 0 0 0 0 9Zm0 2c-4.4 0-8 2.3-8 5.2V21h16v-1.8c0-2.9-3.6-5.2-8-5.2Z"/></svg><span>Trader</span><em id="navTrader"></em></button>
+        <button class="nav" data-act="page" data-arg="offers"><svg viewBox="0 0 24 24"><path d="M4 7h16l-1.4 12.2A2 2 0 0 1 16.6 21H7.4a2 2 0 0 1-2-1.8L4 7Zm4 0a4 4 0 1 1 8 0h-2a2 2 0 1 0-4 0H8Z"/></svg><span>Offers &amp; Barters</span><em id="navOffers"></em></button>
+        <button class="nav" data-act="page" data-arg="quests"><svg viewBox="0 0 24 24"><path d="M6 2h9l5 5v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2Zm2 9v2h8v-2H8Zm0 4v2h6v-2H8Zm6-11v4h4l-4-4Z"/></svg><span>Quests</span><em id="navQuests"></em></button>
+        <button class="nav" data-act="page" data-arg="checks"><svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 1 1 0 20 10 10 0 0 1 0-20Zm-1.2 13.6 6.3-6.3-1.4-1.4-4.9 4.9-2.3-2.3-1.4 1.4 3.7 3.7Z"/></svg><span>Checks &amp; Log</span><em id="navChecks"></em></button>
+      </nav>
+      <div class="grow"></div>
+      <div id="traderMenu" hidden>
+        <div class="menu-title">All Traders</div>
+        <div id="traders" class="scroll"></div>
+        <button class="menu-add" data-act="newTrader">＋ New Trader</button>
       </div>
-      <div id="traders" class="scroll"></div>
+      <div id="me" data-act="toggleTraders" title="Show all traders (right-click for more)"></div>
     </aside>
+
+    <div class="splitter" id="splitLeft" title="Drag to resize · double-click to reset"></div>
 
     <section id="center" class="panel">
       <div id="header">
@@ -42,16 +52,16 @@
         </div>
       </div>
       <nav id="chips">
-        <button class="play" data-act="save" title="Save all (Ctrl+S)">✓</button>
-        <button class="chip" data-act="page" data-arg="trader">Trader</button>
-        <button class="chip" data-act="page" data-arg="offers">Offers &amp; barters</button>
-        <button class="chip" data-act="page" data-arg="quests">Quests</button>
-        <button class="chip" data-act="page" data-arg="checks" id="checksChip">Checks &amp; log</button>
+        <button class="play" data-act="save" title="Save All (Ctrl+S)">✓</button>
+        <div id="searchBox" class="search"><svg viewBox="0 0 24 24"><path d="M10.5 3a7.5 7.5 0 0 1 6 12l4.7 4.7-1.4 1.4-4.7-4.7A7.5 7.5 0 1 1 10.5 3Zm0 2a5.5 5.5 0 1 0 0 11 5.5 5.5 0 0 0 0-11Z"/></svg>
+          <input type="text" id="search" placeholder="Search" spellcheck="false"><button class="icon-btn" id="searchClear" data-act="clearSearch" title="Clear">✕</button></div>
+        <span class="grow"></span>
+        <button class="icon-btn gear" data-act="viewMenu" title="View Options: Columns, Tags, Colors">⚙</button>
       </nav>
       <div id="page" class="scroll"></div>
     </section>
 
-    <div id="splitter" title="Drag to resize"></div>
+    <div class="splitter" id="splitter" title="Drag to resize · double-click to reset"></div>
 
     <aside id="right" class="panel">
       <h2 id="detailsTitle"></h2>
@@ -67,7 +77,7 @@
       <button class="icon-btn big-icon" id="undoBtn" data-act="undo" title="Undo (Ctrl+Z)">↶</button>
       <button class="icon-btn big-icon" id="redoBtn" data-act="redo" title="Redo (Ctrl+Shift+Z)">↷</button>
     </div>
-    <button class="primary big" data-act="save">Save all</button>
+    <button class="primary big" data-act="save">Save All</button>
   </footer>
 
   <div id="modal" hidden></div>

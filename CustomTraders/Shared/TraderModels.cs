@@ -102,6 +102,9 @@ public class OfferDef
 
     public string ItemTpl { get; set; } = "";
 
+    /// <summary>Your own notes (editor only; the game never sees them).</summary>
+    public string Notes { get; set; } = "";
+
     /// <summary>Weapons: sell the game's default fully-assembled preset instead of a bare receiver.</summary>
     public bool UseDefaultPreset { get; set; } = true;
 
@@ -158,6 +161,9 @@ public class QuestDef
     public string Name { get; set; } = "New quest";
     public string Description { get; set; } = "";
     public string SuccessMessage { get; set; } = "";
+
+    /// <summary>Your own notes (editor only; the game never sees them).</summary>
+    public string Notes { get; set; } = "";
 
     /// <summary>Player level needed before the quest is offered.</summary>
     public int MinLevel { get; set; } = 1;
