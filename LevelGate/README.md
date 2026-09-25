@@ -60,6 +60,13 @@ gated round shows `[SEMI LOCKED]` (short name) / `[SEMI LOCKED - Lvl X] name`
 with an **orange** background, next to `[LOCKED]`/red and `[UNLOCKED]`/green.
 Magazines only — ammo boxes are excluded.
 
+**Labels & colors:** the F9 window (and BepInEx config sections "Labels"
+and "Colors") lets you change the LOCKED / UNLOCKED / SEMI LOCKED text, turn
+the `[ ]` brackets and the " - Lvl X" part on/off, and pick each state's
+background from the game's item colors (click the color button to cycle).
+Changes apply live; item names already on screen update when the inventory
+is reopened. An empty label keeps the game's own short name.
+
 **Lock icon:** every item that is `[LOCKED]` for you also gets a small lock
 image in the middle of its icon (stash, raid inventory, loot,
 traders), refreshed twice a second and removed once you reach the level.

@@ -32,6 +32,14 @@ namespace LevelGate
         internal static ManualLogSource Log;
         internal static ConfigEntry<KeyboardShortcut> ToggleMenuKey;
         internal static ConfigEntry<bool> LockIconsEnabled;
+        internal static ConfigEntry<string> LockedLabel;
+        internal static ConfigEntry<string> UnlockedLabel;
+        internal static ConfigEntry<string> SemiLockedLabel;
+        internal static ConfigEntry<bool> LabelBrackets;
+        internal static ConfigEntry<bool> LabelShowLevel;
+        internal static ConfigEntry<string> LockedColor;
+        internal static ConfigEntry<string> UnlockedColor;
+        internal static ConfigEntry<string> SemiLockedColor;
         internal static ConfigEntry<float> LockIconRefreshSeconds;
 
         // Only these refresh rates are offered: 0 (every frame) made the
@@ -45,7 +53,7 @@ namespace LevelGate
         private static string ConfigFile => Path.Combine(ConfigFolder, "level_requirements.json");
 
         private bool _menuOpen;
-        private Rect _menuRect = new Rect(60, 60, 420, 560);
+        private Rect _menuRect = new Rect(60, 60, 440, 720);
         private string _newItemId = "";
         private string _newItemLevel = "";
         private Vector2 _scroll;
@@ -76,6 +84,31 @@ namespace LevelGate
                 new ConfigDescription(
                     "How often the lock icons are refreshed. Lower = appears faster, costs a little more CPU.",
                     new AcceptableValueList<float>(LockIconRefreshChoices)));
+
+            // Label text and background colors for the three states. Also
+            // editable live from the F9 window. Colors are the game's own
+            // item background colors (JsonType.TaxonomyColor) — the grid
+            // can only show those, not arbitrary RGB.
+            LockedLabel = Config.Bind("Labels", "LockedText", "LOCKED",
+                "Label for items above your level. Short name shows [LOCKED], full name [LOCKED - Lvl X] Name.");
+            UnlockedLabel = Config.Bind("Labels", "UnlockedText", "UNLOCKED",
+                "Label for limited items you've reached the level for.");
+            SemiLockedLabel = Config.Bind("Labels", "SemiLockedText", "SEMI LOCKED",
+                "Label for magazines holding rounds above your level.");
+            LabelBrackets = Config.Bind("Labels", "UseBrackets", true,
+                "Wrap the label in [ ] (e.g. turn off for just  X  or  ✓).");
+            LabelShowLevel = Config.Bind("Labels", "ShowLevelInFullName", true,
+                "Add ' - Lvl X' to the label in the full item name.");
+
+            var colorNames = Enum.GetNames(typeof(JsonType.TaxonomyColor));
+            string Pick(string preferred, string fallback) =>
+                colorNames.Contains(preferred) ? preferred : colorNames.Contains(fallback) ? fallback : colorNames[0];
+            LockedColor = Config.Bind("Colors", "LockedBackground", Pick("red", "red"),
+                new ConfigDescription("Background color of LOCKED items.", new AcceptableValueList<string>(colorNames)));
+            UnlockedColor = Config.Bind("Colors", "UnlockedBackground", Pick("green", "green"),
+                new ConfigDescription("Background color of UNLOCKED items.", new AcceptableValueList<string>(colorNames)));
+            SemiLockedColor = Config.Bind("Colors", "SemiLockedBackground", Pick("orange", "yellow"),
+                new ConfigDescription("Background color of SEMI LOCKED magazines.", new AcceptableValueList<string>(colorNames)));
 
             LoadConfig();
 
@@ -170,6 +203,24 @@ namespace LevelGate
             }
             GUILayout.EndHorizontal();
 
+            GUILayout.Space(6);
+            GUILayout.Label("Labels & colors (applied live; reopen the inventory to refresh names):");
+            DrawLabelRow("Locked:", LockedLabel, LockedColor);
+            DrawLabelRow("Unlocked:", UnlockedLabel, UnlockedColor);
+            DrawLabelRow("Semi locked:", SemiLockedLabel, SemiLockedColor);
+
+            GUILayout.BeginHorizontal();
+            if (GUILayout.Button("Brackets [ ]: " + (LabelBrackets.Value ? "ON" : "OFF"), GUILayout.Width(130)))
+                LabelBrackets.Value = !LabelBrackets.Value;
+            if (GUILayout.Button("Show level: " + (LabelShowLevel.Value ? "ON" : "OFF"), GUILayout.Width(120)))
+                LabelShowLevel.Value = !LabelShowLevel.Value;
+            if (GUILayout.Button("Defaults", GUILayout.Width(80)))
+            {
+                foreach (var entry in new ConfigEntryBase[] { LockedLabel, UnlockedLabel, SemiLockedLabel, LabelBrackets, LabelShowLevel, LockedColor, UnlockedColor, SemiLockedColor })
+                    entry.BoxedValue = entry.DefaultValue;
+            }
+            GUILayout.EndHorizontal();
+
             GUILayout.Space(10);
             GUILayout.Label("Add / update an entry:");
             GUILayout.BeginHorizontal();
@@ -260,6 +311,24 @@ namespace LevelGate
             }
 
             GUILayout.EndVertical();
+        }
+
+        // One row: label text field + a color button that cycles through the
+        // game's item background colors.
+        private static void DrawLabelRow(string title, ConfigEntry<string> label, ConfigEntry<string> color)
+        {
+            GUILayout.BeginHorizontal();
+            GUILayout.Label(title, GUILayout.Width(80));
+            string text = GUILayout.TextField(label.Value ?? "", 24, GUILayout.Width(150));
+            if (text != label.Value) label.Value = text;
+
+            if (GUILayout.Button(color.Value, GUILayout.Width(120)))
+            {
+                var names = Enum.GetNames(typeof(JsonType.TaxonomyColor));
+                int i = Array.IndexOf(names, color.Value);
+                color.Value = names[(i + 1) % names.Length];
+            }
+            GUILayout.EndHorizontal();
         }
 
         // Uses the same Localized() fallback behavior discovered earlier
@@ -2522,6 +2591,53 @@ namespace LevelGate
         }
     }
 
+    // Builds the label text and background colors from the user's settings
+    // (F9 window / BepInEx config sections "Labels" and "Colors").
+    internal static class LabelStyle
+    {
+        // An empty label leaves the game's own short name untouched.
+        public static string Short(ConfigEntry<string> label, string original)
+        {
+            string tag = Wrap(Text(label));
+            return string.IsNullOrEmpty(tag) ? original : tag;
+        }
+
+        public static string Full(ConfigEntry<string> label, int level, string name)
+        {
+            string tag = LevelGatePlugin.LabelShowLevel?.Value ?? true ? $"{Text(label)} - Lvl {level}" : Text(label);
+            tag = Wrap(tag);
+            return string.IsNullOrEmpty(tag) ? name : tag + " " + name;
+        }
+
+        private static string Text(ConfigEntry<string> label) => label?.Value ?? "";
+
+        private static string Wrap(string text)
+        {
+            if (string.IsNullOrEmpty(text)) return "";
+            return LevelGatePlugin.LabelBrackets?.Value ?? true ? "[" + text + "]" : text;
+        }
+
+        public static JsonType.TaxonomyColor LockedColor => Parse(LevelGatePlugin.LockedColor, JsonType.TaxonomyColor.red);
+        public static JsonType.TaxonomyColor UnlockedColor => Parse(LevelGatePlugin.UnlockedColor, JsonType.TaxonomyColor.green);
+        public static JsonType.TaxonomyColor SemiLockedColor => Parse(LevelGatePlugin.SemiLockedColor, MagazineSemiLock.OrangeColor);
+
+        // BackgroundColor is queried constantly, so parsed values are cached
+        // per name.
+        private static readonly Dictionary<string, JsonType.TaxonomyColor> _parsed = new Dictionary<string, JsonType.TaxonomyColor>();
+
+        private static JsonType.TaxonomyColor Parse(ConfigEntry<string> entry, JsonType.TaxonomyColor fallback)
+        {
+            string name = entry?.Value;
+            if (string.IsNullOrEmpty(name)) return fallback;
+            if (!_parsed.TryGetValue(name, out var color))
+            {
+                if (!Enum.TryParse(name, true, out color)) color = fallback;
+                _parsed[name] = color;
+            }
+            return color;
+        }
+    }
+
     internal static class ItemRenameShared
     {
         // Keys look like "<TemplateId> Name" or "<TemplateId> ShortName" —
@@ -2547,8 +2663,8 @@ namespace LevelGate
                     // it, which is fine — it's a normal "<tpl> Name" key).
                     string resolved = EFT.LocalizationExtensions.Localized(realKey, "");
                     result = realKey.EndsWith(" ShortName", StringComparison.Ordinal)
-                        ? "[SEMI LOCKED]"
-                        : $"[SEMI LOCKED - Lvl {semiLevel}] {resolved}";
+                        ? LabelStyle.Short(LevelGatePlugin.SemiLockedLabel, resolved)
+                        : LabelStyle.Full(LevelGatePlugin.SemiLockedLabel, semiLevel, resolved);
                     return;
                 }
 
@@ -2573,8 +2689,8 @@ namespace LevelGate
                 if (LevelGateCheck.IsBlocked(player, templateId, out required))
                 {
                     result = showLevel
-                        ? $"[LOCKED - Lvl {required}] {result}"
-                        : "[LOCKED]";
+                        ? LabelStyle.Full(LevelGatePlugin.LockedLabel, required, result)
+                        : LabelStyle.Short(LevelGatePlugin.LockedLabel, result);
                 }
                 else
                 {
@@ -2583,8 +2699,8 @@ namespace LevelGate
                     // the plain original name, so it's clear at a glance
                     // this item is still tracked by the level limiter.
                     result = showLevel
-                        ? $"[UNLOCKED - Lvl {required}] {result}"
-                        : "[UNLOCKED]";
+                        ? LabelStyle.Full(LevelGatePlugin.UnlockedLabel, required, result)
+                        : LabelStyle.Short(LevelGatePlugin.UnlockedLabel, result);
                 }
             }
             catch (Exception e)
@@ -3051,7 +3167,7 @@ namespace LevelGate
                     // stayed at 0/60 after being un-gated.
                     ItemNeutralizer.Sync(__instance, false);
                     if (MagazineSemiLock.GatedAmmoLevel(__instance) > 0)
-                        __result = MagazineSemiLock.OrangeColor;
+                        __result = LabelStyle.SemiLockedColor;
                     return;
                 }
 
@@ -3060,9 +3176,9 @@ namespace LevelGate
                 // LOCKED (red) wins; a usable magazine holding gated rounds
                 // is SEMI LOCKED (orange); otherwise UNLOCKED (green).
                 bool blocked = LevelGateCheck.IsBlocked(player, __instance.TemplateId, out _);
-                __result = blocked ? JsonType.TaxonomyColor.red
-                    : MagazineSemiLock.GatedAmmoLevel(__instance) > 0 ? MagazineSemiLock.OrangeColor
-                    : JsonType.TaxonomyColor.green;
+                __result = blocked ? LabelStyle.LockedColor
+                    : MagazineSemiLock.GatedAmmoLevel(__instance) > 0 ? LabelStyle.SemiLockedColor
+                    : LabelStyle.UnlockedColor;
 
                 // BackgroundColor is queried constantly for every item shown
                 // anywhere in the UI (grid, tooltip, hover, etc.), which
