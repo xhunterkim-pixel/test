@@ -1,37 +1,41 @@
 using System.Text.Json;
+using SPTarkov.Common.Models.Logging;
 using SPTarkov.DI.Annotations;
 using SPTarkov.Server.Core.DI;
 using SPTarkov.Server.Core.Models.Spt.Mod;
-using SPTarkov.Server.Core.Models.Utils;
 
 namespace LevelGate.Server;
 
 // The server reads this record to list the mod at startup
 // ("Mod: LevelGate version: ... loaded"). GUID and version match the
 // BepInEx client plugin (LevelGatePlugin.PluginGuid / PluginVersion).
-public record ModMetadata : AbstractModMetadata
+//
+// SPT 4.1 API, checked against the SPTarkov.Server.Core 4.1.2 package and a
+// working 4.1 server mod: metadata is the IModMetadata interface (init-only
+// properties, incl. HasPrepatcher) — not the 4.0 AbstractModMetadata record.
+public record ModMetadata : IModMetadata
 {
-    public override string ModGuid { get; init; } = "com.yourname.levelgate";
-    public override string Name { get; init; } = "LevelGate";
-    public override string Author { get; init; } = "xhunterkim";
-    public override List<string>? Contributors { get; init; }
-    public override SemanticVersioning.Version Version { get; init; } = new("1.1.0");
-    public override SemanticVersioning.Range SptVersion { get; init; } = new("~4.1.0");
-    public override List<string>? Incompatibilities { get; init; }
-    public override Dictionary<string, SemanticVersioning.Range>? ModDependencies { get; init; }
-    public override string? Url { get; init; }
-    public override bool? IsBundleMod { get; init; }
-    public override string? License { get; init; } = "MIT";
+    public string ModGuid { get; init; } = "com.yourname.levelgate";
+    public string Name { get; init; } = "LevelGate";
+    public string Author { get; init; } = "xhunterkim";
+    public List<string>? Contributors { get; init; }
+    public SemanticVersioning.Version Version { get; init; } = new("1.1.0");
+    public SemanticVersioning.Range SptVersion { get; init; } = new("~4.1.0");
+    public bool HasPrepatcher { get; init; }
+    public List<string>? Incompatibilities { get; init; }
+    public Dictionary<string, SemanticVersioning.Range>? ModDependencies { get; init; }
+    public string? Url { get; init; }
+    public string? License { get; init; } = "MIT";
 }
 
-// Startup banner line, after the database has loaded. Also reports how many
-// item limits the CLIENT plugin's config holds, if it can find it
-// (<SPT>\BepInEx\plugins\LevelGate\config\level_requirements.json, one
-// folder up from the server's SPT_Runtime folder).
-[Injectable(TypePriority = OnLoadOrder.PostDBModLoader + 1)]
+// Startup log line, after the server has finished loading. Also reports how
+// many item limits the CLIENT plugin's config holds, if it can find it
+// (<SPT>\BepInEx\plugins\LevelGate\config\level_requirements.json, a few
+// folders up from the server's SPT_Runtime folder).
+[Injectable(TypePriority = OnLoadOrder.PostLoad + 1)]
 public class LevelGateServerMod(ISptLogger<LevelGateServerMod> logger) : IOnLoad
 {
-    public Task OnLoad()
+    public Task OnLoadAsync(CancellationToken cancellationToken)
     {
         string detail = "client plugin config not found (install BepInEx/plugins/LevelGate)";
         try
