@@ -125,7 +125,20 @@ public static class Currencies
     public const string Dollars = "5696686a4bdc2da3298b456a";
     public const string Euros = "569668774bdc2da2298b4568";
 
+    public const string GpCoin = "5d235b4d86f7742e017bc88a";
+    public const string LegaMedal = "6656560053eaaa7a23349c86";
+
     public static bool IsCurrency(string tpl) => tpl == Roubles || tpl == Dollars || tpl == Euros;
+
+    public static string Symbol(string tpl) => tpl switch
+    {
+        Roubles => "₽",
+        Dollars => "$",
+        Euros => "€",
+        GpCoin => "GP",
+        LegaMedal => "Lega",
+        _ => "",
+    };
 }
 
 public class QuestDef
@@ -149,39 +162,139 @@ public class QuestDef
     public List<ConditionDef> Conditions { get; set; } = new();
 
     public List<RewardDef> Rewards { get; set; } = new();
+
+    /// <summary>The options (1-4) that have at least one objective, in order. Always at least one.</summary>
+    public List<int> UsedOptions()
+    {
+        var used = Conditions.Select(c => Math.Clamp(c.Option, 1, 4)).Distinct().OrderBy(o => o).ToList();
+        return used.Count == 0 ? new List<int> { 1 } : used;
+    }
+
+    public static string OptionLetter(int option) => ((char)('A' + Math.Clamp(option, 1, 4) - 1)).ToString();
 }
 
 public static class ConditionTypes
 {
-    public const string HandoverItem = "HandoverItem";   // hand items to the trader
+    public const string HandoverItem = "HandoverItem";   // hand items (or money) to the trader
     public const string FindItem = "FindItem";           // have items found in raid (no hand-in)
-    public const string Kill = "Kill";                   // kill N targets, optional maps
+    public const string Kill = "Kill";                   // kill N targets (weapon / worn gear / caliber / maps)
+    public const string Extract = "Extract";             // survive and extract N times (maps / worn gear)
+    public const string UseItem = "UseItem";             // use (eat, drink, inject, apply) items N times in raid
 
-    public static readonly string[] All = { HandoverItem, FindItem, Kill };
+    public static readonly string[] All = { HandoverItem, FindItem, Kill, Extract, UseItem };
+
+    public static string Label(string type) => type switch
+    {
+        HandoverItem => "Hand over items / money",
+        FindItem => "Find in raid",
+        Kill => "Kill",
+        Extract => "Extract",
+        UseItem => "Use items in raid",
+        _ => type,
+    };
 }
 
 public class ConditionDef
 {
     public string Id { get; set; } = "";
 
-    /// <summary>HandoverItem, FindItem or Kill.</summary>
+    /// <summary>HandoverItem, FindItem, Kill, Extract or UseItem.</summary>
     public string Type { get; set; } = ConditionTypes.HandoverItem;
+
+    /// <summary>
+    /// Which way of completing the quest this objective belongs to (1-4 = A-D).
+    /// All objectives of one option must be done; finishing any one option
+    /// completes the quest and cancels the other options.
+    /// </summary>
+    public int Option { get; set; } = 1;
 
     /// <summary>Objective text shown in the quest. Empty = generated.</summary>
     public string Text { get; set; } = "";
 
-    /// <summary>HandoverItem/FindItem: any of these items counts.</summary>
+    /// <summary>HandoverItem/FindItem/UseItem: any of these items counts.</summary>
     public List<string> ItemTpls { get; set; } = new();
 
     public int Count { get; set; } = 1;
 
     public bool FoundInRaid { get; set; } = true;
 
-    /// <summary>Kill: Any, Savage, AnyPmc, Usec or Bear.</summary>
+    /// <summary>Kill: Any, Savage, AnyPmc, Usec, Bear or Boss.</summary>
     public string KillTarget { get; set; } = "Any";
 
-    /// <summary>Kill: map ids (bigmap, factory4_day, Woods, Shoreline, Interchange, laboratory, RezervBase, TarkovStreets, Lighthouse, Sandbox...). Empty = any map.</summary>
+    /// <summary>Kill with KillTarget Boss: which bosses count (bot roles, e.g. bossKilla). Empty = any boss.</summary>
+    public List<string> BossRoles { get; set; } = new();
+
+    /// <summary>Kill: the kill must be made with one of these weapons / grenades. Empty = any weapon.</summary>
+    public List<string> WeaponTpls { get; set; } = new();
+
+    /// <summary>Kill: the kill must be made with ammo of one of these calibers (e.g. Caliber556x45NATO). Empty = any.</summary>
+    public List<string> Calibers { get; set; } = new();
+
+    /// <summary>Kill/Extract: the player must be wearing one of these items. Empty = no requirement.</summary>
+    public List<string> WearingTpls { get; set; } = new();
+
+    /// <summary>Kill/Extract/UseItem: map ids (see <see cref="Maps"/>). Empty = any map.</summary>
     public List<string> Locations { get; set; } = new();
+}
+
+/// <summary>Map ids as the game uses them in quests, with readable names.</summary>
+public static class Maps
+{
+    public static readonly (string Id, string Name)[] All =
+    {
+        ("bigmap", "Customs"),
+        ("factory4_day", "Factory (day)"),
+        ("factory4_night", "Factory (night)"),
+        ("Woods", "Woods"),
+        ("Shoreline", "Shoreline"),
+        ("Interchange", "Interchange"),
+        ("laboratory", "The Lab"),
+        ("RezervBase", "Reserve"),
+        ("Lighthouse", "Lighthouse"),
+        ("TarkovStreets", "Streets of Tarkov"),
+        ("Sandbox", "Ground Zero"),
+        ("Sandbox_high", "Ground Zero (21+)"),
+        ("Labyrinth", "The Labyrinth"),
+    };
+
+    public static string Name(string id) => All.FirstOrDefault(m => m.Id.Equals(id, StringComparison.OrdinalIgnoreCase)).Name ?? id;
+}
+
+/// <summary>Kill targets and boss bot roles.</summary>
+public static class KillTargets
+{
+    public static readonly (string Id, string Name)[] All =
+    {
+        ("Any", "Anyone (PMCs, Scavs, bosses...)"),
+        ("AnyPmc", "Any PMC"),
+        ("Usec", "USEC PMCs"),
+        ("Bear", "BEAR PMCs"),
+        ("Savage", "Scavs (incl. raiders, rogues, bosses)"),
+        ("Boss", "Bosses (pick which)"),
+    };
+
+    public static readonly (string Role, string Name)[] Bosses =
+    {
+        ("bossBully", "Reshala"),
+        ("bossKilla", "Killa"),
+        ("bossKojaniy", "Shturman"),
+        ("bossGluhar", "Glukhar"),
+        ("bossSanitar", "Sanitar"),
+        ("bossTagilla", "Tagilla"),
+        ("bossKnight", "Knight"),
+        ("followerBigPipe", "Big Pipe"),
+        ("followerBirdEye", "Birdeye"),
+        ("bossZryachiy", "Zryachiy"),
+        ("bossBoar", "Kaban"),
+        ("bossKolontay", "Kollontay"),
+        ("bossPartisan", "Partisan"),
+        ("sectantPriest", "Cultist priest"),
+        ("pmcBot", "Raider"),
+        ("exUsec", "Rogue"),
+    };
+
+    public static string Name(string id) => All.FirstOrDefault(t => t.Id == id).Name ?? id;
+    public static string BossName(string role) => Bosses.FirstOrDefault(b => b.Role == role).Name ?? role;
 }
 
 public static class RewardTypes

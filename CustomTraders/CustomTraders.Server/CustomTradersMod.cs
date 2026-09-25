@@ -62,6 +62,14 @@ public class CustomTradersMod(
 
     private Dictionary<string, string>? _englishNames;
 
+    // Quest id -> the game quest ids of its options (A, B, ...). A quest with one
+    // option is just itself; with several, every option is its own game quest
+    // and completing one fails the others (see AddQuest).
+    private readonly Dictionary<string, List<string>> _questOptionIds = new();
+
+    // (offer id, game quest id that unlocks it) -> the assort entry id used for it.
+    private readonly Dictionary<(string OfferId, string QuestId), string> _offerEntries = new();
+
     public Task OnLoadAsync(CancellationToken cancellationToken)
     {
         var modFolder = modHelper.GetAbsolutePathToModFolder(Assembly.GetExecutingAssembly());
@@ -72,7 +80,9 @@ public class CustomTradersMod(
             CreateExampleTrader(tradersFolder);
         }
 
-        int loaded = 0;
+        // Read every trader first: quests may require quests of other traders,
+        // and those need to be known (with their options) before building.
+        var traders = new List<(TraderFile Trader, string Folder)>();
         foreach (var folder in Directory.GetDirectories(tradersFolder).OrderBy(f => f))
         {
             var file = Path.Combine(folder, "trader.json");
@@ -82,11 +92,28 @@ public class CustomTradersMod(
             {
                 var trader = TraderFile.Load(file);
                 if (EnsureIds(trader)) trader.Save(file); // give new offers/quests stable ids once
+                traders.Add((trader, folder));
+            }
+            catch (Exception e)
+            {
+                logger.Error($"[CustomTraders] Failed to read {file}: {e.Message}", e);
+            }
+        }
+
+        foreach (var (trader, _) in traders)
+        foreach (var quest in trader.Quests.Where(q => Ids.IsValid(q.Id)))
+            _questOptionIds[quest.Id] = OptionQuestIds(quest);
+
+        int loaded = 0;
+        foreach (var (trader, folder) in traders)
+        {
+            try
+            {
                 if (AddTrader(trader, folder)) loaded++;
             }
             catch (Exception e)
             {
-                logger.Error($"[CustomTraders] Failed to load {file}: {e.Message}", e);
+                logger.Error($"[CustomTraders] Failed to load {trader.Name} ({folder}): {e.Message}", e);
             }
         }
 
@@ -172,7 +199,7 @@ public class CustomTradersMod(
             if (AddQuest(file, quest, folder)) quests++;
         }
 
-        LogBlue($"[CustomTraders] {file.Name}: {assort.LoyalLevelItems?.Count ?? 0} offer(s), {quests} quest(s)");
+        LogBlue($"[CustomTraders] {file.Name}: {file.Offers.Count} offer(s), {quests} quest(s)");
         return true;
     }
 
@@ -263,11 +290,18 @@ public class CustomTradersMod(
         var barterScheme = new JsonObject();
         var loyalLevelItems = new JsonObject();
 
-        // Quantity overrides and quest locks coming from UnlockOffer rewards.
-        var unlockedBy = new Dictionary<string, (string QuestId, int Quantity)>();
-        foreach (var quest in file.Quests)
+        // Quest locks and quantity overrides coming from UnlockOffer rewards. An
+        // offer the game can only tie to ONE quest, so an offer unlocked by
+        // several quests (or by a quest with several options) is added once
+        // per quest; only the copy of the quest the player finished shows up.
+        var unlockedBy = new Dictionary<string, List<(string QuestId, int Quantity)>>();
+        foreach (var quest in file.Quests.Where(q => Ids.IsValid(q.Id)))
         foreach (var reward in quest.Rewards.Where(r => r.Type == RewardTypes.UnlockOffer && Ids.IsValid(r.OfferId)))
-            unlockedBy[reward.OfferId] = (quest.Id, reward.Quantity);
+        foreach (var gameQuestId in _questOptionIds.GetValueOrDefault(quest.Id) ?? new List<string> { quest.Id })
+        {
+            if (!unlockedBy.TryGetValue(reward.OfferId, out var list)) unlockedBy[reward.OfferId] = list = new();
+            if (list.All(u => u.QuestId != gameQuestId)) list.Add((gameQuestId, reward.Quantity));
+        }
 
         foreach (var offer in file.Offers)
         {
@@ -282,34 +316,41 @@ public class CustomTradersMod(
                 continue;
             }
 
-            bool unlimited = offer.Unlimited;
-            int stock = Math.Max(1, offer.Stock);
-            string? questId = offer.UnlockedByQuestId;
-            if (unlockedBy.TryGetValue(offer.Id, out var unlock))
+            var entries = unlockedBy.GetValueOrDefault(offer.Id) ?? new List<(string QuestId, int Quantity)>
             {
-                questId = unlock.QuestId;
-                if (unlock.Quantity > 0) { unlimited = false; stock = unlock.Quantity; }
-            }
-
-            var upd = new JsonObject
-            {
-                ["UnlimitedCount"] = unlimited,
-                ["StackObjectsCount"] = unlimited ? 999999 : stock,
+                (Ids.IsValid(offer.UnlockedByQuestId) ? offer.UnlockedByQuestId! : "", 0),
             };
-            if (offer.BuyLimit > 0)
+
+            for (int i = 0; i < entries.Count; i++)
             {
-                upd["BuyRestrictionMax"] = offer.BuyLimit;
-                upd["BuyRestrictionCurrent"] = 0;
+                var (questId, quantity) = entries[i];
+                string entryId = i == 0 ? offer.Id : Ids.Derive(offer.Id + ":" + questId);
+                if (questId.Length > 0) _offerEntries[(offer.Id, questId)] = entryId;
+
+                bool unlimited = offer.Unlimited;
+                int stock = Math.Max(1, offer.Stock);
+                if (quantity > 0) { unlimited = false; stock = quantity; }
+
+                var upd = new JsonObject
+                {
+                    ["UnlimitedCount"] = unlimited,
+                    ["StackObjectsCount"] = unlimited ? 999999 : stock,
+                };
+                if (offer.BuyLimit > 0)
+                {
+                    upd["BuyRestrictionMax"] = offer.BuyLimit;
+                    upd["BuyRestrictionCurrent"] = 0;
+                }
+
+                foreach (var node in BuildItemTree(offer.ItemTpl, entryId, offer.UseDefaultPreset, "hideout", "hideout", upd))
+                    items.Add(node);
+
+                barterScheme[entryId] = new JsonArray(new JsonArray(cost.Select(c => c!.DeepClone()).ToArray()));
+                loyalLevelItems[entryId] = Math.Clamp(offer.LoyaltyLevel, 1, 4);
+
+                if (questId.Length > 0)
+                    ((JsonObject)questAssort["success"]!)[entryId] = questId;
             }
-
-            foreach (var node in BuildItemTree(offer.ItemTpl, offer.Id, offer.UseDefaultPreset, "hideout", "hideout", upd))
-                items.Add(node);
-
-            barterScheme[offer.Id] = new JsonArray(cost);
-            loyalLevelItems[offer.Id] = Math.Clamp(offer.LoyaltyLevel, 1, 4);
-
-            if (Ids.IsValid(questId))
-                ((JsonObject)questAssort["success"]!)[offer.Id] = questId;
         }
 
         return new JsonObject
@@ -369,15 +410,19 @@ public class CustomTradersMod(
     // Quests
     // -------------------------------------------------------------------------
 
+    /// <summary>The game quest id of each option: option A keeps the quest's own id.</summary>
+    private static List<string> OptionQuestIds(QuestDef def) =>
+        def.UsedOptions().Select((option, position) => position == 0 ? def.Id : Ids.Derive(def.Id + ":option:" + option)).ToList();
+
+    /// <summary>
+    /// Adds the quest. A quest whose objectives are split into options (A-D)
+    /// becomes one game quest per option, all offered together; each fails
+    /// when another one is completed (the game's own "one of these quests"
+    /// mechanic), so finishing any one option completes the quest.
+    /// </summary>
     private bool AddQuest(TraderFile file, QuestDef def, string folder)
     {
         if (!Ids.IsValid(def.Id)) return false;
-        MongoId questId = def.Id;
-        if (templateTable.Quests.ContainsKey(questId))
-        {
-            logger.Warning($"[CustomTraders] Quest id {def.Id} ({def.Name}) already exists — skipped.");
-            return false;
-        }
 
         string image = DefaultQuestImage;
         if (!string.IsNullOrWhiteSpace(def.Image) && File.Exists(Path.Combine(folder, def.Image)))
@@ -388,76 +433,115 @@ public class CustomTradersMod(
             image = key + ".jpg";
         }
 
+        var options = def.UsedOptions();
+        var gameIds = _questOptionIds.GetValueOrDefault(def.Id) ?? OptionQuestIds(def);
+        bool added = false;
+        for (int i = 0; i < options.Count; i++)
+        {
+            var siblings = gameIds.Where((_, j) => j != i).ToList();
+            added |= AddQuestOption(file, def, image, options[i], gameIds[i], i == 0, options.Count, siblings);
+        }
+        return added;
+    }
+
+    private bool AddQuestOption(TraderFile file, QuestDef def, string image, int option, string gameId, bool firstOption, int optionCount, List<string> siblings)
+    {
+        MongoId questId = gameId;
+        if (templateTable.Quests.ContainsKey(questId))
+        {
+            logger.Warning($"[CustomTraders] Quest id {gameId} ({def.Name}) already exists — skipped.");
+            return false;
+        }
+
+        // Ids of objectives/rewards: option A keeps the ids from the file,
+        // the other options derive their own from them.
+        string Sub(string id) => firstOption ? id : Ids.Derive(id + ":" + gameId);
+
+        string letter = QuestDef.OptionLetter(option);
+        string name = optionCount > 1 ? $"{def.Name} — Option {letter}" : def.Name;
+        string description = def.Description;
+        if (optionCount > 1)
+        {
+            string letters = string.Join(", ", def.UsedOptions().Select(QuestDef.OptionLetter));
+            description = (description.Length > 0 ? description + "\n\n" : "") +
+                          $"This job can be done {optionCount} ways (options {letters}). Finish any ONE option — the others are then cancelled.";
+        }
+
         var locales = new Dictionary<string, string>
         {
-            [$"{def.Id} name"] = def.Name,
-            [$"{def.Id} description"] = def.Description,
-            [$"{def.Id} note"] = "",
-            [$"{def.Id} startedMessageText"] = def.Description,
-            [$"{def.Id} successMessageText"] = string.IsNullOrWhiteSpace(def.SuccessMessage) ? "Good work." : def.SuccessMessage,
-            [$"{def.Id} failMessageText"] = "",
-            [$"{def.Id} changeQuestMessageText"] = "",
-            [$"{def.Id} acceptPlayerMessage"] = "",
-            [$"{def.Id} declinePlayerMessage"] = "",
-            [$"{def.Id} completePlayerMessage"] = "",
+            [$"{gameId} name"] = name,
+            [$"{gameId} description"] = description,
+            [$"{gameId} note"] = "",
+            [$"{gameId} startedMessageText"] = description,
+            [$"{gameId} successMessageText"] = string.IsNullOrWhiteSpace(def.SuccessMessage) ? "Good work." : def.SuccessMessage,
+            [$"{gameId} failMessageText"] = optionCount > 1 ? $"{def.Name}: another option was completed." : "",
+            [$"{gameId} changeQuestMessageText"] = "",
+            [$"{gameId} acceptPlayerMessage"] = "",
+            [$"{gameId} declinePlayerMessage"] = "",
+            [$"{gameId} completePlayerMessage"] = "",
         };
 
         // --- start conditions: level + prerequisite quests -------------------
-        var start = new JsonArray
-        {
-            new JsonObject
-            {
-                ["id"] = Ids.Derive(def.Id + ":level"),
-                ["index"] = 0,
-                ["parentId"] = "",
-                ["dynamicLocale"] = false,
-                ["globalQuestCounterId"] = "",
-                ["visibilityConditions"] = new JsonArray(),
-                ["conditionType"] = "Level",
-                ["compareMethod"] = ">=",
-                ["value"] = Math.Max(1, def.MinLevel),
-            },
-        };
+        var start = new JsonArray { QuestCondition(Ids.Derive(gameId + ":level"), 0, "Level", c => { c["compareMethod"] = ">="; c["value"] = Math.Max(1, def.MinLevel); }) };
         int index = 1;
         foreach (var prereq in def.PrerequisiteQuestIds.Where(Ids.IsValid))
         {
-            start.Add(new JsonObject
+            // A prerequisite with several options is done when one option
+            // succeeded and the rest failed: require every option in Success
+            // or Fail (they only fail when a sibling is completed).
+            var prereqIds = _questOptionIds.GetValueOrDefault(prereq) ?? new List<string> { prereq };
+            var statuses = prereqIds.Count > 1 ? new[] { 4, 5 } : new[] { 4 };
+            foreach (var target in prereqIds)
             {
-                ["id"] = Ids.Derive(def.Id + ":after:" + prereq),
-                ["index"] = index++,
-                ["parentId"] = "",
-                ["dynamicLocale"] = false,
-                ["globalQuestCounterId"] = "",
-                ["visibilityConditions"] = new JsonArray(),
-                ["conditionType"] = "Quest",
-                ["target"] = prereq,
-                ["status"] = new JsonArray(4), // Success
-                ["availableAfter"] = 0,
-                ["dispersion"] = 0,
-            });
+                start.Add(QuestCondition(Ids.Derive(gameId + ":after:" + target), index++, "Quest", c =>
+                {
+                    c["target"] = target;
+                    c["status"] = new JsonArray(statuses.Select(x => (JsonNode)x).ToArray());
+                    c["availableAfter"] = 0;
+                    c["dispersion"] = 0;
+                }));
+            }
         }
 
-        // --- objectives -------------------------------------------------------
+        // --- objectives of this option ----------------------------------------
         var finish = new JsonArray();
         index = 0;
-        bool allKills = def.Conditions.Count > 0;
-        foreach (var condition in def.Conditions)
+        bool allKills = true;
+        foreach (var condition in def.Conditions.Where(c => Math.Clamp(c.Option, 1, 4) == option))
         {
             if (!Ids.IsValid(condition.Id)) condition.Id = Ids.Derive(def.Id + ":cond:" + index);
-            var node = BuildCondition(condition, index++);
+            string conditionId = Sub(condition.Id);
+            var node = BuildCondition(condition, conditionId, index++);
             if (node == null) continue;
             finish.Add(node);
             allKills &= condition.Type == ConditionTypes.Kill;
-            locales[condition.Id] = string.IsNullOrWhiteSpace(condition.Text) ? DescribeCondition(condition) : condition.Text;
+            locales[conditionId] = string.IsNullOrWhiteSpace(condition.Text) ? DescribeCondition(condition) : condition.Text;
+        }
+        if (finish.Count == 0) allKills = false;
+
+        // --- fail when another option is completed ----------------------------
+        var fail = new JsonArray();
+        index = 0;
+        foreach (var sibling in siblings)
+        {
+            string failId = Ids.Derive(gameId + ":failwith:" + sibling);
+            fail.Add(QuestCondition(failId, index++, "Quest", c =>
+            {
+                c["target"] = sibling;
+                c["status"] = new JsonArray(4); // Success
+                c["availableAfter"] = 0;
+                c["dispersion"] = 0;
+            }));
+            locales[failId] = "Another option of this job was completed";
         }
 
-        // --- rewards ----------------------------------------------------------
+        // --- rewards (the same for every option) ------------------------------
         var success = new JsonArray();
         index = 0;
         foreach (var reward in def.Rewards)
         {
             if (!Ids.IsValid(reward.Id)) reward.Id = Ids.Derive(def.Id + ":reward:" + index);
-            var node = BuildReward(file, reward, index);
+            var node = BuildReward(file, reward, Sub(reward.Id), gameId, index);
             if (node == null) continue;
             success.Add(node);
             index++;
@@ -465,9 +549,9 @@ public class CustomTradersMod(
 
         var quest = new JsonObject
         {
-            ["_id"] = def.Id,
-            ["QuestName"] = def.Name,
-            ["templateId"] = def.Id,
+            ["_id"] = gameId,
+            ["QuestName"] = name,
+            ["templateId"] = gameId,
             ["traderId"] = file.Id,
             ["location"] = "any",
             ["image"] = image,
@@ -478,21 +562,21 @@ public class CustomTradersMod(
             ["instantComplete"] = false,
             ["secretQuest"] = false,
             ["canShowNotificationsInGame"] = true,
-            ["name"] = $"{def.Id} name",
-            ["description"] = $"{def.Id} description",
-            ["note"] = $"{def.Id} note",
-            ["startedMessageText"] = $"{def.Id} startedMessageText",
-            ["successMessageText"] = $"{def.Id} successMessageText",
-            ["failMessageText"] = $"{def.Id} failMessageText",
-            ["changeQuestMessageText"] = $"{def.Id} changeQuestMessageText",
-            ["acceptPlayerMessage"] = $"{def.Id} acceptPlayerMessage",
-            ["declinePlayerMessage"] = $"{def.Id} declinePlayerMessage",
-            ["completePlayerMessage"] = $"{def.Id} completePlayerMessage",
+            ["name"] = $"{gameId} name",
+            ["description"] = $"{gameId} description",
+            ["note"] = $"{gameId} note",
+            ["startedMessageText"] = $"{gameId} startedMessageText",
+            ["successMessageText"] = $"{gameId} successMessageText",
+            ["failMessageText"] = $"{gameId} failMessageText",
+            ["changeQuestMessageText"] = $"{gameId} changeQuestMessageText",
+            ["acceptPlayerMessage"] = $"{gameId} acceptPlayerMessage",
+            ["declinePlayerMessage"] = $"{gameId} declinePlayerMessage",
+            ["completePlayerMessage"] = $"{gameId} completePlayerMessage",
             ["conditions"] = new JsonObject
             {
                 ["AvailableForStart"] = start,
                 ["AvailableForFinish"] = finish,
-                ["Fail"] = new JsonArray(),
+                ["Fail"] = fail,
             },
             ["rewards"] = new JsonObject
             {
@@ -505,7 +589,7 @@ public class CustomTradersMod(
         var parsed = jsonUtil.Deserialize<Quest>(quest.ToJsonString());
         if (parsed == null)
         {
-            logger.Warning($"[CustomTraders] Quest {def.Name} did not deserialize — skipped.");
+            logger.Warning($"[CustomTraders] Quest {name} did not deserialize — skipped.");
             return false;
         }
 
@@ -514,11 +598,29 @@ public class CustomTradersMod(
         return true;
     }
 
-    private JsonObject? BuildCondition(ConditionDef c, int index)
+    private static JsonObject QuestCondition(string id, int index, string type, Action<JsonObject> fill)
+    {
+        var node = new JsonObject
+        {
+            ["id"] = id,
+            ["index"] = index,
+            ["parentId"] = "",
+            ["dynamicLocale"] = false,
+            ["globalQuestCounterId"] = "",
+            ["visibilityConditions"] = new JsonArray(),
+            ["conditionType"] = type,
+        };
+        fill(node);
+        return node;
+    }
+
+    private static JsonArray Strings(IEnumerable<string> values) => new(values.Select(v => (JsonNode)v).ToArray());
+
+    private JsonObject? BuildCondition(ConditionDef c, string id, int index)
     {
         var common = new JsonObject
         {
-            ["id"] = c.Id,
+            ["id"] = id,
             ["index"] = index,
             ["parentId"] = "",
             ["dynamicLocale"] = false,
@@ -526,19 +628,64 @@ public class CustomTradersMod(
             ["visibilityConditions"] = new JsonArray(),
         };
 
+        var maps = c.Locations.Where(l => !string.IsNullOrWhiteSpace(l)).ToList();
+        var wearing = c.WearingTpls.Where(t => IsKnownItem(t, "quest condition (wearing)")).ToList();
+
+        // Parts of a counter ("do X N times, while Y, on map Z").
+        JsonObject Counter(string key, string conditionType, Action<JsonObject>? fill = null)
+        {
+            var node = new JsonObject
+            {
+                ["id"] = Ids.Derive(id + ":" + key),
+                ["dynamicLocale"] = false,
+                ["conditionType"] = conditionType,
+            };
+            fill?.Invoke(node);
+            return node;
+        }
+
+        JsonObject CounterCreator(string type, JsonArray counterConditions)
+        {
+            if (wearing.Count > 0)
+            {
+                counterConditions.Add(Counter("equipment", "Equipment", n =>
+                {
+                    // Any one of the listed items (each inner list is one set to wear).
+                    n["equipmentInclusive"] = new JsonArray(wearing.Select(t => (JsonNode)new JsonArray(t)).ToArray());
+                    n["equipmentExclusive"] = new JsonArray();
+                    n["IncludeNotEquippedItems"] = false;
+                }));
+            }
+            if (maps.Count > 0)
+                counterConditions.Add(Counter("location", "Location", n => n["target"] = Strings(maps)));
+
+            common["conditionType"] = "CounterCreator";
+            common["type"] = type;
+            common["value"] = Math.Max(1, c.Count);
+            common["oneSessionOnly"] = false;
+            common["doNotResetIfCounterCompleted"] = false;
+            common["completeInSeconds"] = 0;
+            common["counter"] = new JsonObject
+            {
+                ["id"] = Ids.Derive(id + ":counter"),
+                ["conditions"] = counterConditions,
+            };
+            return common;
+        }
+
         switch (c.Type)
         {
             case ConditionTypes.HandoverItem:
             case ConditionTypes.FindItem:
             {
-                var targets = new JsonArray();
-                foreach (var tpl in c.ItemTpls.Where(t => IsKnownItem(t, "quest condition"))) targets.Add(tpl);
+                var targets = c.ItemTpls.Where(t => IsKnownItem(t, "quest condition")).ToList();
                 if (targets.Count == 0) return null;
 
+                bool money = targets.All(IsMoney);
                 common["conditionType"] = c.Type;
-                common["target"] = targets;
+                common["target"] = Strings(targets);
                 common["value"] = Math.Max(1, c.Count);
-                common["onlyFoundInRaid"] = c.FoundInRaid;
+                common["onlyFoundInRaid"] = c.FoundInRaid && !money;
                 common["minDurability"] = 0;
                 common["maxDurability"] = 100;
                 common["dogtagLevel"] = 0;
@@ -549,56 +696,47 @@ public class CustomTradersMod(
 
             case ConditionTypes.Kill:
             {
-                var counterConditions = new JsonArray
+                bool boss = c.KillTarget == "Boss";
+                var roles = boss ? (c.BossRoles.Count > 0 ? c.BossRoles : KillTargets.Bosses.Select(b => b.Role).ToList()) : new List<string>();
+                var weapons = c.WeaponTpls.Where(t => IsKnownItem(t, "quest condition (weapon)")).ToList();
+                var kills = Counter("kills", "Kills", n =>
                 {
-                    new JsonObject
-                    {
-                        ["id"] = Ids.Derive(c.Id + ":kills"),
-                        ["dynamicLocale"] = false,
-                        ["conditionType"] = "Kills",
-                        ["target"] = string.IsNullOrWhiteSpace(c.KillTarget) ? "Any" : c.KillTarget,
-                        ["value"] = 1,
-                        ["compareMethod"] = ">=",
-                        ["bodyPart"] = new JsonArray(),
-                        ["daytime"] = new JsonObject { ["from"] = 0, ["to"] = 0 },
-                        ["distance"] = new JsonObject { ["compareMethod"] = ">=", ["value"] = 0 },
-                        ["enemyEquipmentExclusive"] = new JsonArray(),
-                        ["enemyEquipmentInclusive"] = new JsonArray(),
-                        ["enemyHealthEffects"] = new JsonArray(),
-                        ["resetOnSessionEnd"] = false,
-                        ["savageRole"] = new JsonArray(),
-                        ["weapon"] = new JsonArray(),
-                        ["weaponCaliber"] = new JsonArray(),
-                        ["weaponModsExclusive"] = new JsonArray(),
-                        ["weaponModsInclusive"] = new JsonArray(),
-                    },
-                };
-                var maps = c.Locations.Where(l => !string.IsNullOrWhiteSpace(l)).ToList();
-                if (maps.Count > 0)
-                {
-                    var mapArray = new JsonArray();
-                    foreach (var map in maps) mapArray.Add(map);
-                    counterConditions.Add(new JsonObject
-                    {
-                        ["id"] = Ids.Derive(c.Id + ":location"),
-                        ["dynamicLocale"] = false,
-                        ["conditionType"] = "Location",
-                        ["target"] = mapArray,
-                    });
-                }
+                    n["target"] = boss ? "Savage" : string.IsNullOrWhiteSpace(c.KillTarget) ? "Any" : c.KillTarget;
+                    n["value"] = 1;
+                    n["compareMethod"] = ">=";
+                    n["bodyPart"] = new JsonArray();
+                    n["daytime"] = new JsonObject { ["from"] = 0, ["to"] = 0 };
+                    n["distance"] = new JsonObject { ["compareMethod"] = ">=", ["value"] = 0 };
+                    n["enemyEquipmentExclusive"] = new JsonArray();
+                    n["enemyEquipmentInclusive"] = new JsonArray();
+                    n["enemyHealthEffects"] = new JsonArray();
+                    n["resetOnSessionEnd"] = false;
+                    n["savageRole"] = Strings(roles);
+                    n["weapon"] = Strings(weapons);
+                    n["weaponCaliber"] = Strings(c.Calibers.Where(x => !string.IsNullOrWhiteSpace(x)));
+                    n["weaponModsExclusive"] = new JsonArray();
+                    n["weaponModsInclusive"] = new JsonArray();
+                });
+                return CounterCreator("Elimination", new JsonArray { kills });
+            }
 
-                common["conditionType"] = "CounterCreator";
-                common["type"] = "Elimination";
-                common["value"] = Math.Max(1, c.Count);
-                common["oneSessionOnly"] = false;
-                common["doNotResetIfCounterCompleted"] = false;
-                common["completeInSeconds"] = 0;
-                common["counter"] = new JsonObject
+            case ConditionTypes.Extract:
+            {
+                var exit = Counter("exit", "ExitStatus", n => n["status"] = Strings(new[] { "Survived", "Runner" }));
+                return CounterCreator("Completion", new JsonArray { exit });
+            }
+
+            case ConditionTypes.UseItem:
+            {
+                var targets = c.ItemTpls.Where(t => IsKnownItem(t, "quest condition (use item)")).ToList();
+                if (targets.Count == 0) return null;
+                var use = Counter("use", "UseItem", n =>
                 {
-                    ["id"] = Ids.Derive(c.Id + ":counter"),
-                    ["conditions"] = counterConditions,
-                };
-                return common;
+                    n["target"] = Strings(targets);
+                    n["value"] = 1;
+                    n["compareMethod"] = ">=";
+                });
+                return CounterCreator("Completion", new JsonArray { use });
             }
 
             default:
@@ -607,27 +745,29 @@ public class CustomTradersMod(
         }
     }
 
-    private JsonObject? BuildReward(TraderFile file, RewardDef r, int index)
+    private static bool IsMoney(string tpl) => Currencies.IsCurrency(tpl) || tpl == Currencies.GpCoin || tpl == Currencies.LegaMedal;
+
+    private JsonObject? BuildReward(TraderFile file, RewardDef r, string id, string gameQuestId, int index)
     {
         switch (r.Type)
         {
             case RewardTypes.Experience:
-                return new JsonObject { ["id"] = r.Id, ["index"] = index, ["type"] = "Experience", ["value"] = r.Value };
+                return new JsonObject { ["id"] = id, ["index"] = index, ["type"] = "Experience", ["value"] = r.Value };
 
             case RewardTypes.TraderStanding:
-                return new JsonObject { ["id"] = r.Id, ["index"] = index, ["type"] = "TraderStanding", ["value"] = r.Value, ["target"] = file.Id };
+                return new JsonObject { ["id"] = id, ["index"] = index, ["type"] = "TraderStanding", ["value"] = r.Value, ["target"] = file.Id };
 
             case RewardTypes.Item:
             {
                 if (!IsKnownItem(r.ItemTpl, "quest reward")) return null;
-                var rootId = Ids.Derive(r.Id + ":item");
+                var rootId = Ids.Derive(id + ":item");
                 var tree = BuildItemTree(r.ItemTpl, rootId, true, null, null,
                     new JsonObject { ["StackObjectsCount"] = Math.Max(1, r.Count) });
                 var items = new JsonArray();
                 foreach (var node in tree) items.Add(node);
                 return new JsonObject
                 {
-                    ["id"] = r.Id,
+                    ["id"] = id,
                     ["index"] = index,
                     ["type"] = "Item",
                     ["value"] = Math.Max(1, r.Count),
@@ -646,16 +786,18 @@ public class CustomTradersMod(
                     logger.Warning($"[CustomTraders] {file.Name}: UnlockOffer reward points at a missing offer {r.OfferId} — skipped.");
                     return null;
                 }
+                // The copy of the offer that this quest (option) unlocks, see BuildAssort.
+                string entryId = _offerEntries.GetValueOrDefault((offer.Id, gameQuestId)) ?? offer.Id;
                 return new JsonObject
                 {
-                    ["id"] = r.Id,
+                    ["id"] = id,
                     ["index"] = index,
                     ["type"] = "AssortmentUnlock",
-                    ["target"] = offer.Id,
+                    ["target"] = entryId,
                     ["traderId"] = file.Id,
                     ["loyaltyLevel"] = Math.Clamp(offer.LoyaltyLevel, 1, 4),
                     ["unknown"] = false,
-                    ["items"] = new JsonArray(new JsonObject { ["_id"] = offer.Id, ["_tpl"] = offer.ItemTpl }),
+                    ["items"] = new JsonArray(new JsonObject { ["_id"] = entryId, ["_tpl"] = offer.ItemTpl }),
                 };
             }
 
@@ -668,26 +810,45 @@ public class CustomTradersMod(
     private string DescribeCondition(ConditionDef c)
     {
         string items = string.Join(" / ", c.ItemTpls.Select(ItemName));
+        string where = c.Locations.Count > 0 ? " on " + string.Join(", ", c.Locations.Select(Maps.Name)) : "";
+        string wearing = c.WearingTpls.Count > 0 ? " while wearing " + string.Join(" or ", c.WearingTpls.Select(ItemName)) : "";
         switch (c.Type)
         {
             case ConditionTypes.HandoverItem:
-                return $"Hand over {(c.FoundInRaid ? "found in raid " : "")}{items}";
+                return c.ItemTpls.All(IsMoney)
+                    ? $"Hand over {items}"
+                    : $"Hand over {(c.FoundInRaid ? "found in raid " : "")}{items}";
             case ConditionTypes.FindItem:
                 return $"Find {items} in raid";
             case ConditionTypes.Kill:
+            {
                 string target = c.KillTarget switch
                 {
                     "Savage" => "Scavs",
                     "AnyPmc" => "PMC operatives",
                     "Usec" => "USEC operatives",
                     "Bear" => "BEAR operatives",
+                    "Boss" => c.BossRoles.Count > 0 ? string.Join(" or ", c.BossRoles.Select(KillTargets.BossName)) : "bosses",
                     _ => "enemies",
                 };
-                string where = c.Locations.Count > 0 ? " on " + string.Join(", ", c.Locations) : "";
-                return $"Eliminate {target}{where}";
+                string with = c.WeaponTpls.Count > 0 ? " using " + string.Join(" or ", c.WeaponTpls.Select(ItemName)) : "";
+                string caliber = c.Calibers.Count > 0 ? " with " + string.Join(" or ", c.Calibers.Select(CaliberName)) + " ammo" : "";
+                return $"Eliminate {target}{with}{caliber}{wearing}{where}";
+            }
+            case ConditionTypes.Extract:
+                return $"Survive and extract{where}{wearing}";
+            case ConditionTypes.UseItem:
+                return $"Use {items} in raid{where}";
             default:
                 return c.Type;
         }
+    }
+
+    /// <summary>"Caliber556x45NATO" -> "5.56x45".</summary>
+    private static string CaliberName(string caliber)
+    {
+        var s = caliber.StartsWith("Caliber") ? caliber[7..] : caliber;
+        return s.Replace("NATO", "").Replace("PARA", "");
     }
 
     // -------------------------------------------------------------------------

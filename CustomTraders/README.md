@@ -21,36 +21,57 @@ Completely separate from LevelGate.
 
 ## The editor
 
-- **Traders list** — *New trader* (creates a folder with a placeholder icon),
-  *Delete* (moves the folder to `deleted_traders`, nothing is erased).
-- **Trader tab** — name, nickname, surname, location, description, currency,
-  unlocked from the start, flea listing, restock time, loyalty levels, and
-  **Choose icon from PC...** (any png/jpg; saved as a square `avatar.png`).
-- **Offers / barters tab** — *Add offer* opens the item search (weapons by
-  default, untick to see everything). Per offer: loyalty level, unlimited or
-  limited stock, buy limit, and the cost: any mix of money
-  (*+ Roubles / + Dollars / + Euros*) and barter items (*Add cost* → *Pick...*).
-  Weapons are sold as the game's default assembled preset (untick
-  *Weapon preset* for a bare receiver).
-- **Quests tab** — name, description, completion message, unlock level,
-  optional image, prerequisite quests (tick any quest of any of your
-  traders), objectives and rewards:
+Laid out like Spotify: your traders on the left (like playlists), the
+selected trader in the middle with its offers/quests as a numbered list, and
+the details of whatever you click on the right.
 
-  | Objective | Meaning |
-  |---|---|
-  | HandoverItem | hand N of the listed items to the trader (optionally found in raid) |
-  | FindItem | have N of the listed items found in raid |
-  | Kill | kill N of Any / Savage / AnyPmc / Usec / Bear, optionally only on certain maps (`bigmap, Woods, Shoreline, Interchange, factory4_day, factory4_night, laboratory, RezervBase, TarkovStreets, Lighthouse, Sandbox`) |
+- **Top bar** — mod folder (**Browse...** / **Reload**), **Background** (any
+  picture from your PC, darkened so text stays readable — bright / medium /
+  dark), and the checks counter.
+- **Your traders** — **+** new trader (placeholder icon), **✕** remove
+  (moves the folder to `deleted_traders`, nothing is erased).
+- **Trader** page — name, nickname, location, description, currency,
+  unlocked from the start, flea listing, restock time, loyalty levels (big
+  text). Right side: the icon and **Choose icon from PC...**
+- **Offers & barters** — every offer shows its price and, in orange with 🔒,
+  which quest unlocks it (or "From start" in green), its LL and stock.
+  **Duplicate** copies an offer. Right side: the lock status (with **Go to
+  quest**), item, stock, buy limit, and the price: any mix of money
+  (**+ ₽ / + $ / + €**) and barter items.
+- **Quests** — level, how many ways to complete it, what it unlocks.
+  **Duplicate** copies a quest with new ids. Right side:
+  - **Unlock requirements** — the level and *every* quest needed before
+    it (all the way back, across traders), and the real unlock level.
+  - **Required quests** — tick the quests that must be finished first.
+  - **Objectives** — each objective belongs to a *way* (A–D):
 
-  | Reward | Meaning |
-  |---|---|
-  | Experience | XP |
-  | TraderStanding | standing with this trader (e.g. 0.05) |
-  | Item | N of an item (weapons come as presets) |
-  | UnlockOffer | unlocks one of this trader's offers when the quest is done; **Unlocked quantity** sets its stock per restock (0 = the offer's own setting) |
+    | Type | Options |
+    |---|---|
+    | Hand over | items or money (**+ ₽ $ € GP coin Lega medal**), found in raid |
+    | Find | items found in raid |
+    | Kill | Anyone / PMC / USEC / BEAR / Scavs / **Bosses** (pick which); ☐ with a specific weapon or grenade; ☐ with specific ammo (caliber); ☐ while wearing something; ☐ only on specific maps |
+    | Extract | survive and extract N times; ☐ wearing something; ☐ specific maps |
+    | Use item | use food / drinks / meds N times in raid; ☐ specific maps |
 
-Objective text is generated automatically (e.g. "Hand over found in raid
-Bolts") unless you type your own.
+    **Ways (options):** put objectives in way A, B, C, D and the player
+    finishes **any one** way (all objectives inside it). Example — level 38
+    "Grizzly": A = hand in 20 FIR Grizzly, B = use 10 Grizzly in raid,
+    C = hand over 5,000,000 ₽. In game each way appears as its own quest
+    ("Grizzly — Option A"...), and finishing one cancels the others (the
+    game's own "one of these quests" mechanic). Quests that require it
+    unlock after whichever way was done.
+  - **Rewards** — XP, standing, items, **Unlock offer** (with the stock
+    after unlocking). Every way gives the same rewards.
+- **Checks & log** — runs when the editor opens, a moment after every
+  change, and before saving. ✖ errors (the server would skip it, or the quest
+  can never be done/unlocked: unknown item ids, 0 amounts, a weapon that
+  can't fire the chosen caliber, a gear item used as a weapon, missing or
+  circular required quests...), ⚠ warnings, i info, ✔ "Quest will work —
+  unlocks at level N after ...". Double-click a line (or **Go to it**) to
+  jump there. Saves and icon changes are logged too.
+
+Kill "with ammo" works by caliber (the game counts kills per caliber, not per
+exact bullet): pick any bullet and its caliber is used.
 
 ## Files
 

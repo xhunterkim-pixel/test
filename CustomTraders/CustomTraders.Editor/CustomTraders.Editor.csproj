@@ -14,6 +14,7 @@
     <AssemblyName>CustomTraders.Editor</AssemblyName>
     <RootNamespace>CustomTraders.Editor</RootNamespace>
     <ApplicationHighDpiMode>SystemAware</ApplicationHighDpiMode>
+    <NoWarn>$(NoWarn);WFO5001</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
