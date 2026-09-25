@@ -576,16 +576,52 @@ public class CustomTradersMod(
             }));
             locales[failId] = "Another option of this job was completed";
         }
+        if (def.FailOnDeath)
+        {
+            // Fails when the player dies, goes missing or leaves a raid while the quest is active (it can be restarted).
+            string deathId = Ids.Derive(gameId + ":failondeath");
+            fail.Add(new JsonObject
+            {
+                ["id"] = deathId,
+                ["index"] = index++,
+                ["parentId"] = "",
+                ["dynamicLocale"] = false,
+                ["globalQuestCounterId"] = "",
+                ["visibilityConditions"] = new JsonArray(),
+                ["conditionType"] = "CounterCreator",
+                ["type"] = "Completion",
+                ["value"] = 1,
+                ["oneSessionOnly"] = false,
+                ["doNotResetIfCounterCompleted"] = false,
+                ["completeInSeconds"] = 0,
+                ["counter"] = new JsonObject
+                {
+                    ["id"] = Ids.Derive(deathId + ":counter"),
+                    ["conditions"] = new JsonArray(new JsonObject
+                    {
+                        ["id"] = Ids.Derive(deathId + ":exit"),
+                        ["dynamicLocale"] = false,
+                        ["conditionType"] = "ExitStatus",
+                        ["status"] = Strings(new[] { "Killed", "MissingInAction", "Left" }),
+                    }),
+                },
+            });
+            locales[deathId] = "Don't die, go missing or leave a raid";
+        }
 
         // --- rewards (the same for every option) ------------------------------
         var success = new JsonArray();
+        var started = new JsonArray();
         index = 0;
         foreach (var reward in def.Rewards)
         {
             if (!Ids.IsValid(reward.Id)) reward.Id = Ids.Derive(def.Id + ":reward:" + index);
-            var node = BuildReward(file, reward, Sub(reward.Id), def.Id, index);
+            bool onStart = reward.OnStart && reward.Type == RewardTypes.Item;
+            // Items given on accept: only on way A, or players could collect them once per way.
+            if (onStart && !firstOption) continue;
+            var node = BuildReward(file, reward, Sub(reward.Id), def.Id, onStart ? started.Count : success.Count);
             if (node == null) continue;
-            success.Add(node);
+            (onStart ? started : success).Add(node);
             index++;
         }
 
@@ -600,7 +636,7 @@ public class CustomTradersMod(
             ["type"] = allKills ? "Elimination" : "PickUp",
             ["side"] = "Pmc",
             ["isKey"] = false,
-            ["restartable"] = false,
+            ["restartable"] = def.FailOnDeath,
             ["instantComplete"] = false,
             ["secretQuest"] = false,
             ["canShowNotificationsInGame"] = true,
@@ -622,7 +658,7 @@ public class CustomTradersMod(
             },
             ["rewards"] = new JsonObject
             {
-                ["Started"] = new JsonArray(),
+                ["Started"] = started,
                 ["Success"] = success,
                 ["Fail"] = new JsonArray(),
             },
@@ -704,7 +740,7 @@ public class CustomTradersMod(
             common["conditionType"] = "CounterCreator";
             common["type"] = type;
             common["value"] = Math.Max(1, c.Count);
-            common["oneSessionOnly"] = false;
+            common["oneSessionOnly"] = c.OneRaid;
             common["doNotResetIfCounterCompleted"] = false;
             common["completeInSeconds"] = 0;
             common["counter"] = new JsonObject
@@ -746,9 +782,9 @@ public class CustomTradersMod(
                     n["target"] = boss ? "Savage" : string.IsNullOrWhiteSpace(c.KillTarget) ? "Any" : c.KillTarget;
                     n["value"] = 1;
                     n["compareMethod"] = ">=";
-                    n["bodyPart"] = new JsonArray();
-                    n["daytime"] = new JsonObject { ["from"] = 0, ["to"] = 0 };
-                    n["distance"] = new JsonObject { ["compareMethod"] = ">=", ["value"] = 0 };
+                    n["bodyPart"] = Strings(c.BodyParts.Where(p => !string.IsNullOrWhiteSpace(p)));
+                    n["daytime"] = new JsonObject { ["from"] = Math.Clamp(c.DaytimeFrom, 0, 23), ["to"] = Math.Clamp(c.DaytimeTo, 0, 23) };
+                    n["distance"] = new JsonObject { ["compareMethod"] = c.DistanceCompare == "<=" ? "<=" : ">=", ["value"] = Math.Max(0, c.Distance) };
                     n["enemyEquipmentExclusive"] = new JsonArray();
                     n["enemyEquipmentInclusive"] = new JsonArray();
                     n["enemyHealthEffects"] = new JsonArray();
@@ -764,7 +800,8 @@ public class CustomTradersMod(
 
             case ConditionTypes.Extract:
             {
-                var exit = Counter("exit", "ExitStatus", n => n["status"] = Strings(new[] { "Survived", "Runner" }));
+                var statuses = c.ExitStatuses.Count > 0 ? c.ExitStatuses : new List<string> { "Survived", "Runner" };
+                var exit = Counter("exit", "ExitStatus", n => n["status"] = Strings(statuses));
                 return CounterCreator("Completion", new JsonArray { exit });
             }
 
@@ -779,6 +816,16 @@ public class CustomTradersMod(
                     n["compareMethod"] = ">=";
                 });
                 return CounterCreator("Completion", new JsonArray { use });
+            }
+
+            case ConditionTypes.Skill:
+            {
+                if (string.IsNullOrWhiteSpace(c.Skill)) return null;
+                common["conditionType"] = "Skill";
+                common["target"] = c.Skill;
+                common["value"] = Math.Max(1, c.Count);
+                common["compareMethod"] = ">=";
+                return common;
             }
 
             default:
@@ -798,6 +845,13 @@ public class CustomTradersMod(
 
             case RewardTypes.TraderStanding:
                 return new JsonObject { ["id"] = id, ["index"] = index, ["type"] = "TraderStanding", ["value"] = r.Value, ["target"] = file.Id };
+
+            case RewardTypes.Skill:
+                if (string.IsNullOrWhiteSpace(r.Skill)) return null;
+                return new JsonObject { ["id"] = id, ["index"] = index, ["type"] = "Skill", ["target"] = r.Skill, ["value"] = r.Value.ToString(System.Globalization.CultureInfo.InvariantCulture) };
+
+            case RewardTypes.StashRows:
+                return new JsonObject { ["id"] = id, ["index"] = index, ["type"] = "StashRows", ["value"] = Math.Max(1, (int)r.Value).ToString() };
 
             case RewardTypes.Item:
             {
@@ -875,16 +929,31 @@ public class CustomTradersMod(
                 };
                 string with = c.WeaponTpls.Count > 0 ? " using " + string.Join(" or ", c.WeaponTpls.Select(ItemName)) : "";
                 string caliber = c.Calibers.Count > 0 ? " with " + string.Join(" or ", c.Calibers.Select(CaliberName)) + " ammo" : "";
-                return $"Eliminate {target}{with}{caliber}{wearing}{where}";
+                string parts = c.BodyParts.Count > 0 ? " with shots to the " + string.Join(" or ", c.BodyParts.Select(BodyPartName)) : "";
+                string distance = c.Distance > 0 ? (c.DistanceCompare == "<=" ? $" from within {c.Distance} m" : $" from at least {c.Distance} m") : "";
+                string time = c.DaytimeFrom != c.DaytimeTo ? $" between {c.DaytimeFrom:00}:00 and {c.DaytimeTo:00}:00" : "";
+                string raid = c.OneRaid ? " in a single raid" : "";
+                return $"Eliminate {target}{with}{caliber}{parts}{distance}{wearing}{where}{time}{raid}";
             }
             case ConditionTypes.Extract:
-                return $"Survive and extract{where}{wearing}";
+                return $"Survive and extract{where}{wearing}{(c.OneRaid ? " in a single raid" : "")}";
+            case ConditionTypes.Skill:
+                return $"Reach level {c.Count} in the {c.Skill} skill";
             case ConditionTypes.UseItem:
                 return $"Use {items} in raid{where}";
             default:
                 return c.Type;
         }
     }
+
+    private static string BodyPartName(string part) => part switch
+    {
+        "LeftArm" => "left arm",
+        "RightArm" => "right arm",
+        "LeftLeg" => "left leg",
+        "RightLeg" => "right leg",
+        _ => part.ToLowerInvariant(),
+    };
 
     /// <summary>"Caliber556x45NATO" -> "5.56x45".</summary>
     private static string CaliberName(string caliber)

@@ -166,6 +166,9 @@ public class QuestDef
 
     public List<RewardDef> Rewards { get; set; } = new();
 
+    /// <summary>The quest fails when the player dies / goes MIA / leaves a raid while it's active; it can be restarted.</summary>
+    public bool FailOnDeath { get; set; }
+
     /// <summary>The options (1-4) that have at least one objective, in order. Always at least one.</summary>
     public List<int> UsedOptions()
     {
@@ -183,8 +186,9 @@ public static class ConditionTypes
     public const string Kill = "Kill";                   // kill N targets (weapon / worn gear / caliber / maps)
     public const string Extract = "Extract";             // survive and extract N times (maps / worn gear)
     public const string UseItem = "UseItem";             // use (eat, drink, inject, apply) items N times in raid
+    public const string Skill = "Skill";                 // reach level N in a skill
 
-    public static readonly string[] All = { HandoverItem, FindItem, Kill, Extract, UseItem };
+    public static readonly string[] All = { HandoverItem, FindItem, Kill, Extract, UseItem, Skill };
 
     public static string Label(string type) => type switch
     {
@@ -193,6 +197,7 @@ public static class ConditionTypes
         Kill => "Kill",
         Extract => "Extract",
         UseItem => "Use items in raid",
+        Skill => "Reach a skill level",
         _ => type,
     };
 }
@@ -238,6 +243,26 @@ public class ConditionDef
 
     /// <summary>Kill/Extract/UseItem: map ids (see <see cref="Maps"/>). Empty = any map.</summary>
     public List<string> Locations { get; set; } = new();
+
+    /// <summary>Kill: body parts that must be hit for the kill (Head, Chest, Stomach, LeftArm, RightArm, LeftLeg, RightLeg). Empty = any.</summary>
+    public List<string> BodyParts { get; set; } = new();
+
+    /// <summary>Kill: distance in meters (0 = any), compared with <see cref="DistanceCompare"/> (">=" at least, "<=" within).</summary>
+    public int Distance { get; set; }
+    public string DistanceCompare { get; set; } = ">=";
+
+    /// <summary>Kill: in-raid hours from–to (e.g. 21 → 7 = at night). Both 0 = any time.</summary>
+    public int DaytimeFrom { get; set; }
+    public int DaytimeTo { get; set; }
+
+    /// <summary>Kill/Extract/UseItem: all of it in a single raid (the count resets each raid).</summary>
+    public bool OneRaid { get; set; }
+
+    /// <summary>Extract: which ways of leaving count (Survived, Runner, Killed, MissingInAction, Left). Empty = Survived + Runner.</summary>
+    public List<string> ExitStatuses { get; set; } = new();
+
+    /// <summary>Skill: the skill id (e.g. Endurance, Assault) — the level to reach is <see cref="Count"/>.</summary>
+    public string Skill { get; set; } = "";
 }
 
 /// <summary>Map ids as the game uses them in quests, with readable names.</summary>
@@ -306,8 +331,10 @@ public static class RewardTypes
     public const string TraderStanding = "TraderStanding";
     public const string Item = "Item";
     public const string UnlockOffer = "UnlockOffer";
+    public const string Skill = "Skill";          // skill points (100 = one level) in Target skill
+    public const string StashRows = "StashRows";  // extra stash rows
 
-    public static readonly string[] All = { Experience, TraderStanding, Item, UnlockOffer };
+    public static readonly string[] All = { Experience, TraderStanding, Item, UnlockOffer, Skill, StashRows };
 }
 
 public class RewardDef
@@ -330,6 +357,12 @@ public class RewardDef
 
     /// <summary>UnlockOffer: stock of the unlocked offer per restock (0 = keep the offer's own stock setting).</summary>
     public int Quantity { get; set; }
+
+    /// <summary>Item: given when the quest is accepted instead of when it's completed.</summary>
+    public bool OnStart { get; set; }
+
+    /// <summary>Skill: the skill id that gets <see cref="Value"/> points.</summary>
+    public string Skill { get; set; } = "";
 }
 
 /// <summary>Random 24-hex ids in the same shape as the game's ids.</summary>
