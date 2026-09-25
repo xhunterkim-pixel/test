@@ -1,0 +1,13 @@
+{
+  "_comment": "Map of item TplId (the long GUID-looking ID) to the minimum PMC level required to equip/use it. Use the in-game menu (default key: F9) to add entries without editing this by hand, or edit it directly while the game is closed.",
+  "_examples": {
+    "544fb3f34bdc2d03748b456a": "Salewa first aid kit -> requires level 7",
+    "54527a984bdc2d4e668b4567": "M855 5.56x45 ammo -> requires level 20",
+    "5447a9cd4bdc2dbd208b4567": "M4A1 -> requires level 38"
+  },
+  "items": {
+    "544fb3f34bdc2d03748b456a": 7,
+    "54527a984bdc2d4e668b4567": 20,
+    "5447a9cd4bdc2dbd208b4567": 38
+  }
+}

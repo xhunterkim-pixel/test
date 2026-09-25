@@ -1,0 +1,69 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net472</TargetFramework>
+    <AssemblyName>LevelGate</AssemblyName>
+    <Nullable>disable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <RootNamespace>LevelGate</RootNamespace>
+    <!-- Change this to wherever your SPT client install lives -->
+    <SptDir>C:\SPT</SptDir>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!--
+      All of these DLLs must be copied in from YOUR game install — they are
+      not redistributable, which is why they aren't included here:
+        - BepInEx.dll, BepInEx.Harmony.dll        -> SPT\BepInEx\core\
+        - 0Harmony.dll                            -> SPT\BepInEx\core\
+        - Assembly-CSharp.dll                     -> SPT\EscapeFromTarkov_Data\Managed\
+        - UnityEngine*.dll, Comfort.dll           -> SPT\EscapeFromTarkov_Data\Managed\
+        - Newtonsoft.Json.dll                     -> SPT\EscapeFromTarkov_Data\Managed\
+      Easiest approach: point ReferencePath at the Managed + BepInEx\core
+      folders instead of listing each Reference by hand.
+    -->
+    <Reference Include="Assembly-CSharp">
+      <HintPath>$(SptDir)\EscapeFromTarkov_Data\Managed\Assembly-CSharp.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine">
+      <HintPath>$(SptDir)\EscapeFromTarkov_Data\Managed\UnityEngine.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine.CoreModule">
+      <HintPath>$(SptDir)\EscapeFromTarkov_Data\Managed\UnityEngine.CoreModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine.IMGUIModule">
+      <HintPath>$(SptDir)\EscapeFromTarkov_Data\Managed\UnityEngine.IMGUIModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Comfort">
+      <HintPath>$(SptDir)\EscapeFromTarkov_Data\Managed\Comfort.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Newtonsoft.Json">
+      <HintPath>$(SptDir)\EscapeFromTarkov_Data\Managed\Newtonsoft.Json.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="BepInEx">
+      <HintPath>$(SptDir)\BepInEx\core\BepInEx.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="0Harmony">
+      <HintPath>$(SptDir)\BepInEx\core\0Harmony.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+
+  <!-- Auto-copy the built DLL + config folder straight into your plugins folder -->
+  <Target Name="CopyToPlugins" AfterTargets="Build">
+    <ItemGroup>
+      <ConfigFiles Include="config\**\*.*" />
+    </ItemGroup>
+    <MakeDir Directories="$(SptDir)\BepInEx\plugins\LevelGate\config" />
+    <Copy SourceFiles="$(TargetPath)" DestinationFolder="$(SptDir)\BepInEx\plugins\LevelGate\" />
+    <Copy SourceFiles="@(ConfigFiles)" DestinationFolder="$(SptDir)\BepInEx\plugins\LevelGate\config\" SkipUnchangedFiles="true" />
+  </Target>
+
+</Project>
