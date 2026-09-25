@@ -39,8 +39,16 @@ three places (see the comments in `Plugin.cs` for the full reasoning):
   won't fire until those rounds are ejected/unloaded.
 
 Every ammo block (loading, reloading, firing) shows Tarkov's own
-bottom-right notification **"Ammo Level Too High (requires level X)"**, via
-`NotificationManagerClass`, throttled to once every few seconds.
+bottom-right notification **"Ammo Level Too High (requires level X)"**,
+throttled to once every few seconds. SPT 4.1.6 has no `NotificationManagerClass`,
+so the game's notification method is found by name at startup (logged as
+`LevelGate: on-screen messages use ...`); if none is found, LevelGate draws
+its own box in the bottom-right corner instead.
+
+Unloading is never blocked: taking gated rounds out of a magazine/gun
+(including the internal transfer an `UnloadMagOperation` performs) always
+works. Only putting gated rounds *into* a gun or magazine they aren't
+already in is refused.
 
 `FirearmHandsInputTranslator.LoadAmmoToChamber` and the reload operations'
 `OnAddAmmoInChamber` are diagnostic-only now: the first read a reused buffer

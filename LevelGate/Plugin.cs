@@ -62,6 +62,7 @@ namespace LevelGate
             Patch_BlockOperationInRaid.Apply(harmony);
             LevelGatePatches.PatchAmmoLoad(harmony);
             LevelGateReloadPatches.ApplyAll(harmony);
+            OnScreenNotifier.Resolve();
             FireGate.PatchTriggerPress(harmony);
             DiagnosticLogging.ApplyAll(harmony);
 
@@ -112,6 +113,7 @@ namespace LevelGate
             }
 
             LevelLimiterContextMenu.DrawPickerIfOpen();
+            OnScreenNotifier.DrawFallback();
         }
 
         private void DrawMenu(int id)
@@ -417,6 +419,28 @@ namespace LevelGate
             return false;
         }
 
+        // True if the round already sits in the same gun/magazine it's being
+        // "moved" into — shuffling or splitting it out of there (an unload's
+        // transfer/merge can report the magazine as its address) is not
+        // loading anything.
+        private static readonly MemberGetter ItemAddressGetter = new MemberGetter("CurrentAddress", "Parent");
+
+        public static bool IsAlreadyInside(EFT.InventoryLogic.Item item, EFT.InventoryLogic.ItemAddress to)
+        {
+            try
+            {
+                var current = ItemAddressGetter.Get(item) as EFT.InventoryLogic.ItemAddress;
+                if (current == null) return false;
+                var from = GetContainerParentItem(current);
+                var dest = GetContainerParentItem(to);
+                return from != null && ReferenceEquals(from, dest);
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
         public static EFT.InventoryLogic.Item GetContainerParentItem(EFT.InventoryLogic.ItemAddress address)
         {
             try
@@ -480,71 +504,144 @@ namespace LevelGate
         }
     }
 
-    // Tarkov's own bottom-right notification popup, via the game's static
-    // NotificationManagerClass (the same one SPT mods use for their toasts).
-    // Resolved by reflection with its optional parameters filled from their
-    // defaults, so a signature change can't break the build — if it can't be
-    // found, the message still goes to the console/log via Notify(). Each
-    // distinct message is throttled, because the fire check runs every
-    // frame the trigger is held and CanExecute runs on every drag hover.
+    // Tarkov's own bottom-right notification popup — the same box the game
+    // uses for "Can't execute ..." inventory errors. In older EFT this lived
+    // on a static class called NotificationManagerClass, but SPT 4.1.6
+    // doesn't have a type by that name (the log showed "Could not find type
+    // named NotificationManagerClass"), so it's now found by METHOD name:
+    // every type in Assembly-CSharp is scanned once at startup for a static
+    // DisplayWarningNotification / DisplayMessageNotification /
+    // DisplayNotification(string, ...optional). Whatever it finds is logged.
+    //
+    // If nothing matches (or the call throws), LevelGate draws its own
+    // lookalike box in the bottom-right corner instead, so the message is
+    // always shown. Each distinct message is throttled, because the fire
+    // check runs every frame the trigger is held.
     internal static class OnScreenNotifier
     {
         private const float MinSecondsBetweenRepeats = 3f;
+        private const float FallbackSeconds = 4f;
 
-        private static bool _resolved;
         private static MethodInfo _method;
         private static readonly Dictionary<string, float> _lastShown = new Dictionary<string, float>();
 
-        public static void Show(string message)
+        private static string _fallbackText;
+        private static float _fallbackUntil;
+        private static GUIStyle _fallbackStyle;
+        private static Texture2D _fallbackBackground;
+
+        private static readonly string[] CandidateNames =
+            { "DisplayWarningNotification", "DisplayMessageNotification", "DisplayNotification" };
+
+        public static void Resolve()
         {
             try
             {
-                float now = Time.realtimeSinceStartup;
-                if (_lastShown.TryGetValue(message, out var last) && now - last < MinSecondsBetweenRepeats) return;
-                _lastShown[message] = now;
+                var candidates = new List<MethodInfo>();
+                Type[] types;
+                try { types = typeof(EFT.Player).Assembly.GetTypes(); }
+                catch (ReflectionTypeLoadException e) { types = e.Types.Where(t => t != null).ToArray(); }
 
-                if (!_resolved)
+                foreach (var type in types)
                 {
-                    _resolved = true;
-                    var type = AccessTools.TypeByName("NotificationManagerClass");
-                    _method = FindStatic(type, "DisplayWarningNotification") ?? FindStatic(type, "DisplayMessageNotification");
-                    if (_method == null)
-                        LevelGatePlugin.Log.LogWarning("LevelGate: could not find NotificationManagerClass.DisplayWarningNotification/DisplayMessageNotification — on-screen messages disabled.");
-                }
-                if (_method == null) return;
+                    MethodInfo[] methods;
+                    try { methods = type.GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.DeclaredOnly); }
+                    catch { continue; }
 
-                var ps = _method.GetParameters();
-                var args = new object[ps.Length];
-                args[0] = message;
-                for (int i = 1; i < ps.Length; i++)
-                {
-                    var p = ps[i];
-                    object value = p.HasDefaultValue ? p.DefaultValue : null;
-                    if (value == null || value == DBNull.Value)
-                        value = p.ParameterType.IsValueType && Nullable.GetUnderlyingType(p.ParameterType) == null
-                            ? Activator.CreateInstance(p.ParameterType)
-                            : null;
-                    else if (p.ParameterType.IsEnum && value.GetType() != p.ParameterType)
-                        value = Enum.ToObject(p.ParameterType, value);
-                    args[i] = value;
+                    foreach (var m in methods)
+                    {
+                        if (Array.IndexOf(CandidateNames, m.Name) < 0 || m.IsGenericMethodDefinition) continue;
+                        var ps = m.GetParameters();
+                        if (ps.Length == 0 || ps[0].ParameterType != typeof(string)) continue;
+                        if (!ps.Skip(1).All(p => p.IsOptional)) continue;
+                        candidates.Add(m);
+                    }
                 }
-                _method.Invoke(null, args);
+
+                // Prefer the warning style (matches the "Can't execute" box),
+                // then the plain message, then the generic one.
+                _method = candidates
+                    .OrderBy(m => Array.IndexOf(CandidateNames, m.Name))
+                    .ThenBy(m => m.GetParameters().Length)
+                    .FirstOrDefault();
+
+                if (_method != null)
+                    LevelGatePlugin.Log.LogInfo($"LevelGate: on-screen messages use {_method.DeclaringType?.FullName}.{_method.Name}");
+                else
+                    LevelGatePlugin.Log.LogWarning("LevelGate: no game notification method found — on-screen messages use LevelGate's own box instead.");
             }
             catch (Exception e)
             {
-                LevelGatePlugin.Log.LogError("LevelGate OnScreenNotifier error: " + e);
+                LevelGatePlugin.Log.LogError("LevelGate OnScreenNotifier.Resolve error: " + e);
             }
         }
 
-        private static MethodInfo FindStatic(Type type, string name)
+        public static void Show(string message)
         {
-            return type?.GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static)
-                .Where(m => m.Name == name)
-                .Select(m => new { m, ps = m.GetParameters() })
-                .Where(x => x.ps.Length > 0 && x.ps[0].ParameterType == typeof(string) && x.ps.Skip(1).All(p => p.IsOptional))
-                .OrderBy(x => x.ps.Length)
-                .Select(x => x.m)
-                .FirstOrDefault();
+            float now = Time.realtimeSinceStartup;
+            if (_lastShown.TryGetValue(message, out var last) && now - last < MinSecondsBetweenRepeats) return;
+            _lastShown[message] = now;
+
+            if (_method != null)
+            {
+                try
+                {
+                    var ps = _method.GetParameters();
+                    var args = new object[ps.Length];
+                    args[0] = message;
+                    for (int i = 1; i < ps.Length; i++)
+                    {
+                        var p = ps[i];
+                        object value = p.HasDefaultValue ? p.DefaultValue : null;
+                        if (value == null || value == DBNull.Value)
+                            value = p.ParameterType.IsValueType && Nullable.GetUnderlyingType(p.ParameterType) == null
+                                ? Activator.CreateInstance(p.ParameterType)
+                                : null;
+                        else if (p.ParameterType.IsEnum && value.GetType() != p.ParameterType)
+                            value = Enum.ToObject(p.ParameterType, value);
+                        args[i] = value;
+                    }
+                    _method.Invoke(null, args);
+                    return;
+                }
+                catch (Exception e)
+                {
+                    LevelGatePlugin.Log.LogError($"LevelGate: {_method.Name} failed, switching to LevelGate's own box. " + e);
+                    _method = null;
+                }
+            }
+
+            _fallbackText = message;
+            _fallbackUntil = now + FallbackSeconds;
+        }
+
+        // Called from LevelGatePlugin.OnGUI.
+        public static void DrawFallback()
+        {
+            if (_fallbackText == null || Time.realtimeSinceStartup > _fallbackUntil) return;
+
+            if (_fallbackStyle == null)
+            {
+                _fallbackBackground = new Texture2D(1, 1);
+                _fallbackBackground.SetPixel(0, 0, new Color(0f, 0f, 0f, 0.8f));
+                _fallbackBackground.Apply();
+
+                _fallbackStyle = new GUIStyle(GUI.skin.box)
+                {
+                    fontSize = 16,
+                    alignment = TextAnchor.MiddleLeft,
+                    wordWrap = true,
+                    padding = new RectOffset(14, 14, 10, 10)
+                };
+                _fallbackStyle.normal.background = _fallbackBackground;
+                _fallbackStyle.normal.textColor = Color.white;
+            }
+
+            const float width = 420f;
+            var content = new GUIContent("(!)  " + _fallbackText);
+            float height = _fallbackStyle.CalcHeight(content, width);
+            var rect = new Rect(Screen.width - width - 24f, Screen.height - height - 90f, width, height);
+            GUI.Box(rect, content, _fallbackStyle);
         }
     }
 
@@ -1014,11 +1111,21 @@ namespace LevelGate
 
             bool intoGun = LevelGateCheck.IsLoadIntoWeaponOrMagazine(to);
             var parent = LevelGateCheck.GetContainerParentItem(to);
+            // Unloading must always work — getting gated rounds OUT of a
+            // magazine/gun is exactly what the player is supposed to do.
+            // "Unload" in patchName means this is the inner operation of an
+            // UnloadMagOperation (Evaluate appends the wrapper's type name
+            // when it unwraps one), whose internal Transfer/Merge the game
+            // reported as "Can't execute" in the user's screenshot.
+            bool unloading = patchName.IndexOf("Unload", StringComparison.Ordinal) >= 0
+                             || operation.GetType().Name.IndexOf("Unload", StringComparison.Ordinal) >= 0;
+            bool alreadyInside = LevelGateCheck.IsAlreadyInside(item, to);
             DiagnosticLogging.LogCall(
                 $"{patchName} AMMO op={operation.GetType().Name} ammo={item.TemplateId} " +
-                $"toType={to?.GetType().Name ?? "null"} toParent={parent?.GetType().Name ?? "null"} intoGun={intoGun}");
+                $"toType={to?.GetType().Name ?? "null"} toParent={parent?.GetType().Name ?? "null"} " +
+                $"intoGun={intoGun} unloading={unloading} alreadyInside={alreadyInside}");
 
-            if (!intoGun) return false;
+            if (!intoGun || unloading || alreadyInside) return false;
             return LevelGateCheck.IsBlocked(player, item.TemplateId, out required);
         }
     }
@@ -1512,7 +1619,8 @@ namespace LevelGate
                 bool shouldCheck;
                 if (item is EFT.InventoryLogic.Ammo)
                 {
-                    shouldCheck = LevelGateCheck.IsLoadIntoWeaponOrMagazine(__instance.To);
+                    shouldCheck = LevelGateCheck.IsLoadIntoWeaponOrMagazine(__instance.To)
+                                  && !LevelGateCheck.IsAlreadyInside(item, __instance.To);
                 }
                 else
                 {
