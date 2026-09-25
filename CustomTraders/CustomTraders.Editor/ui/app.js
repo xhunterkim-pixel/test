@@ -130,6 +130,7 @@ function shortName(id) {
 }
 const initials = s => (s || '?').replace(/\s+/g, '').slice(0, 3);
 const isMoney = id => MONEY.has(id);
+const moneyShort = id => [CUR.RUB, CUR.USD, CUR.EUR].includes(id) ? MONEY_SYMBOL[id] : MONEY_NAME[id];
 const isMoneyList = l => l.length > 0 && l.every(isMoney);
 function caliberName(c) {
   let s = c.startsWith('Caliber') ? c.slice(7) : c;
@@ -215,7 +216,13 @@ function applySnapshot(snap) {
   S.items = new Map((snap.items || []).map(i => [i.i, i]));
   S.gameQuests = new Map((snap.gameQuests || []).map(q => [q.i, q]));
   S.itemsStatus = snap.itemsStatus || '';
-  S.traders = (snap.traders || []).map(t => normalize({ ...t, dirty: false }));
+  S.traders = (snap.traders || []).map(t => {
+    const e = normalize({ ...t, dirty: false });
+    e.migrated = e.dirty;                 // changed on load (old format) — stays unsaved until saved
+    e.savedJson = JSON.stringify(e.file);
+    return e;
+  });
+  resetHistory();
   for (const p of snap.problems || []) log('error', 'Load', p);
   applyBackground(snap.background);
   applyUi();
@@ -478,13 +485,18 @@ function listHead(list) {
   return `<div class="list-head"><div>#</div>${COLUMNS[list].map((c, i) => `<div>${i > 0 ? `<span class="grip" data-grip="${list}|${i - 1}" title="Drag to resize"></span>` : ''}<span class="head-text">${esc(c[0])}</span></div>`).join('')}</div>`;
 }
 
-function row({ act, arg, sel, three, thumb: th, title, titleColor, badges = [], line2, line3, line3Color, cols = [], colColors = [] }) {
+/** A line of small dark boxes: [{ label, text, color }] — label is drawn in the color (e.g. the way letter). */
+function boxes(list) {
+  return `<div class="boxes">${list.map(b => `<span class="box" style="--c:${b.color || 'var(--muted)'}">${b.label ? `<b>${esc(b.label)}</b>` : ''}${esc(b.text)}</span>`).join('')}</div>`;
+}
+
+function row({ act, arg, sel, three, thumb: th, title, titleColor, badges = [], line2, line3, line3Color, boxes2, boxes3, cols = [], colColors = [] }) {
   return `<div class="row ${sel ? 'sel' : ''} ${three ? 'three' : ''}" data-act="${act}" data-arg="${arg}">
     <div class="idx">${Number(arg) + 1}</div>
     <div class="cell">${thumb(th)}<div class="text">
       <div class="line1"><span class="title" ${titleColor ? `style="color:${titleColor}"` : ''}>${esc(title)}</span><span class="badges">${badges.map(b => ui.badge(b[0], b[1])).join('')}</span></div>
-      ${line2 ? `<div class="line2">${esc(line2)}</div>` : ''}
-      ${line3 ? `<div class="line3" ${line3Color ? `style="color:${line3Color}"` : ''}>${esc(line3)}</div>` : ''}
+      ${boxes2 ? boxes(boxes2) : line2 ? `<div class="line2">${esc(line2)}</div>` : ''}
+      ${boxes3 ? boxes(boxes3) : line3 ? `<div class="line3" ${line3Color ? `style="color:${line3Color}"` : ''}>${esc(line3)}</div>` : ''}
     </div></div>
     ${cols.map((c, i) => `<div class="col" ${colColors[i] ? `style="color:${colColors[i]}"` : ''}>${esc(c)}</div>`).join('')}
   </div>`;
@@ -542,9 +554,10 @@ function pageQuests() {
       act: 'selQuest', arg: i, sel: q === S.quest, three: true,
       thumb: img ? { img } : { text: String(q.minLevel), color: 'var(--violet)' },
       title: q.name, badges,
-      line2: q.conditions.length ? w.map(o => (w.length > 1 ? wayLetter(o) + ': ' : '') +
-        q.conditions.filter(c => (c.option || 1) === o).map(shortCondition).join(' + ')).join('  ·  ') : 'No objectives yet',
-      line3: 'Rewards: ' + rewardsText(t, q),
+      boxes2: q.conditions.length
+        ? w.map(o => ({ label: w.length > 1 ? wayLetter(o) : '', color: WAY_COLOR[o], text: q.conditions.filter(c => (c.option || 1) === o).map(shortCondition).join(' + ') }))
+        : [{ text: 'No objectives yet' }],
+      boxes3: q.rewards.length ? rewardBoxes(t, q) : [{ text: 'No rewards yet' }],
       cols: [`Lvl ${q.minLevel}`, String(w.length)],
     });
   }).join('');
@@ -953,6 +966,7 @@ function renderBottom() {
   $('#checksChip').textContent = errors + warnings ? `Checks & log (${errors + warnings})` : 'Checks & log';
   const unsaved = S.traders.filter(t => t.dirty).length;
   $('#unsaved').textContent = unsaved ? `${unsaved} unsaved` : '';
+  renderUndo();
   if (unsaved !== renderBottom.last) { renderBottom.last = unsaved; host.call('setUnsaved', { count: unsaved }).catch(() => { }); }
 }
 
@@ -965,17 +979,17 @@ function costText(o) {
   return o.cost.map(c => isMoney(c.itemTpl) ? `${fmt(c.count)} ${MONEY_SYMBOL[c.itemTpl]}` : `${fmt(c.count)} × ${itemName(c.itemTpl)}`).join(' + ');
 }
 function killWho(c) {
-  return { Boss: c.bossRoles.length ? c.bossRoles.map(bossName).join(' / ') : 'any boss', AnyPmc: 'PMCs', Usec: 'USEC', Bear: 'BEAR', Savage: 'Scavs' }[c.killTarget] || 'anyone';
+  return { Boss: c.bossRoles.length ? c.bossRoles.map(bossName).join(' / ') : 'Bosses', AnyPmc: 'PMCs', Usec: 'USEC', Bear: 'BEAR', Savage: 'Scavs' }[c.killTarget] || 'Anyone';
 }
 function itemsText(l) { return l.length ? l.map(shortName).join(' / ') : '(pick items)'; }
 function shortCondition(c) {
   switch (c.type) {
-    case 'Kill': return `kill ${c.count} ${killWho(c)}`;
-    case 'Extract': return `extract ${c.count}×`;
-    case 'UseItem': return `use ${c.count}× ${itemsText(c.itemTpls)}`;
-    case 'FindItem': return `find ${c.count}× ${itemsText(c.itemTpls)}`;
+    case 'Kill': return `Kill ${c.count} ${killWho(c)}`;
+    case 'Extract': return `Extract ${c.count}×`;
+    case 'UseItem': return `Use ${c.count}× ${itemsText(c.itemTpls)}`;
+    case 'FindItem': return `Find ${c.count}× ${itemsText(c.itemTpls)}`;
     case 'Skill': return `${skillName(c.skill)} level ${c.count}`;
-    default: return isMoneyList(c.itemTpls) ? `pay ${fmt(c.count)} ${MONEY_NAME[c.itemTpls[0]]}` : `hand in ${c.count}× ${itemsText(c.itemTpls)}`;
+    default: return isMoneyList(c.itemTpls) ? `Pay ${fmt(c.count)} ${moneyShort(c.itemTpls[0])}` : `Hand in ${c.count}× ${itemsText(c.itemTpls)}`;
   }
 }
 function conditionTitle(c) {
@@ -1004,6 +1018,23 @@ function conditionDetail(c) {
   if (['HandoverItem', 'FindItem'].includes(c.type) && c.foundInRaid && !isMoneyList(c.itemTpls)) d.push('found in raid');
   return d.join(' · ');
 }
+function rewardBoxes(t, q) {
+  return q.rewards.map(r => {
+    switch (r.type) {
+      case 'Experience': return { text: `${fmt(r.value)} XP`, color: '#a082ff' };
+      case 'TraderStanding': return { text: `${r.value >= 0 ? '+' : ''}${r.value} Standing`, color: '#509bf5' };
+      case 'Item': return { text: `${r.count}× ${shortName(r.itemTpl)}${r.onStart ? ' (on accept)' : ''}`, color: '#ffa42b' };
+      case 'Skill': return { text: `+${fmt(r.value)} ${skillName(r.skill)}`, color: '#f5cd46' };
+      case 'StashRows': return { text: `+${fmt(r.value)} Stash rows`, color: '#ff7ab6' };
+      case 'UnlockOffer': {
+        const o = t.file.offers.find(x => x.id === r.offerId);
+        return o ? { label: isBarter(o) ? 'BARTER' : 'BUY', text: shortName(o.itemTpl), color: isBarter(o) ? 'var(--pink)' : 'var(--blue)' } : { label: 'UNLOCK', text: '?', color: 'var(--red)' };
+      }
+      default: return { text: r.type };
+    }
+  });
+}
+
 function rewardsText(t, q) {
   if (!q.rewards.length) return '—';
   return q.rewards.map(r => ({
@@ -1243,6 +1274,86 @@ function markDirty(t = S.t) {
   if (!t) return;
   t.dirty = true;
   checksSoon();
+  if (!H.pendingSel) H.pendingSel = snapshotSel(); // where this change happens (restored by undo)
+  clearTimeout(H.timer);
+  H.timer = setTimeout(commitHistory, 450);
+}
+
+// =====================================================================
+// Undo / redo (Ctrl+Z, Ctrl+Shift+Z or Ctrl+Y)
+// =====================================================================
+
+const H = { undo: [], redo: [], current: null, timer: 0, pendingSel: null };
+
+function snapshotData() { return JSON.stringify(S.traders.map(t => t.file)); }
+function snapshotSel() {
+  const t = S.t;
+  return {
+    trader: S.traders.indexOf(t), page: S.page, way: S.way,
+    offer: t ? t.file.offers.indexOf(S.offer) : -1, quest: t ? t.file.quests.indexOf(S.quest) : -1,
+    cond: S.quest ? S.quest.conditions.indexOf(S.cond) : -1, reward: S.quest ? S.quest.rewards.indexOf(S.reward) : -1,
+  };
+}
+function resetHistory() {
+  clearTimeout(H.timer);
+  H.undo = []; H.redo = [];
+  H.current = { data: snapshotData(), sel: snapshotSel() };
+  renderUndo();
+}
+/** Store the state after the latest change as one undo step. */
+function commitHistory() {
+  clearTimeout(H.timer);
+  if (!H.current) return resetHistory();
+  const data = snapshotData();
+  const where = H.pendingSel || snapshotSel();
+  H.pendingSel = null;
+  if (data === H.current.data) return;
+  H.undo.push({ data: H.current.data, sel: where });
+  if (H.undo.length > 200) H.undo.shift();
+  H.redo = [];
+  H.current = { data, sel: where };
+  renderUndo();
+}
+function restore(state) {
+  const files = JSON.parse(state.data);
+  S.traders.forEach((t, i) => {
+    t.file = files[i];
+    const json = JSON.stringify(t.file);
+    t.dirty = t.migrated || json !== t.savedJson;
+  });
+  const s = state.sel;
+  S.t = S.traders[s.trader] || S.traders[0] || null;
+  S.page = s.page;
+  const f = S.t?.file;
+  S.offer = f?.offers[s.offer] || f?.offers[0] || null;
+  S.quest = f?.quests[s.quest] || f?.quests[0] || null;
+  S.way = s.way || 1;
+  S.cond = S.quest?.conditions[s.cond] || null;
+  S.reward = S.quest?.rewards[s.reward] || null;
+  runChecks();
+  renderAll(false);
+  renderUndo();
+}
+function undo() {
+  commitHistory();
+  if (!H.undo.length) return toast('Nothing to undo');
+  H.redo.push({ data: H.current.data, sel: snapshotSel() });
+  H.current = H.undo.pop();
+  restore(H.current);
+  toast('Undone');
+}
+function redo() {
+  commitHistory();
+  if (!H.redo.length) return toast('Nothing to redo');
+  H.undo.push({ data: H.current.data, sel: snapshotSel() });
+  H.current = H.redo.pop();
+  restore(H.current);
+  toast('Redone');
+}
+function renderUndo() {
+  const u = $('#undoBtn'), r = $('#redoBtn');
+  if (u) u.disabled = !H.undo.length && !(H.current && snapshotData() !== H.current.data);
+  if (r) r.disabled = !H.redo.length;
 }
 
 // =====================================================================
@@ -1306,6 +1417,15 @@ document.addEventListener('dblclick', e => {
 document.addEventListener('keydown', e => {
   if (e.target.id === 'tagInput' && e.key === 'Enter') { ACT.addTag(e.target.value); return; }
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') { e.preventDefault(); ACT.save(); return; }
+  if ((e.ctrlKey || e.metaKey) && $('#modal').hidden) {
+    const k = e.key.toLowerCase();
+    if (k === 'z' || k === 'y') {
+      e.preventDefault();
+      document.activeElement?.blur?.();
+      if (k === 'y' || e.shiftKey) redo(); else undo();
+      return;
+    }
+  }
   if (e.key === 'Escape' && !$('#modal').hidden) { closeModal(null); return; }
   const typing = /INPUT|TEXTAREA|SELECT/.test(document.activeElement?.tagName || '');
   if (typing || !$('#modal').hidden) return;
@@ -1570,7 +1690,9 @@ const ACT = {
     if (!name) return;
     try {
       const t = normalize({ ...(await host.call('newTrader', { name })), dirty: false });
+      t.savedJson = JSON.stringify(t.file);
       S.traders.push(t);
+      resetHistory();
       S.page = 'trader';
       selectTrader(t);
       runChecks(); renderAll(true);
@@ -1583,6 +1705,7 @@ const ACT = {
     try {
       const target = await host.call('deleteTrader', { folder: t.folder });
       S.traders.splice(S.traders.indexOf(t), 1);
+      resetHistory();
       selectTrader(S.traders[0] || null);
       log('info', t.file.name, `Moved to ${target}`);
       runChecks(); renderAll(true);
@@ -1612,7 +1735,7 @@ const ACT = {
     for (const t of dirty) {
       try {
         await host.call('saveTrader', { folder: t.folder, text: JSON.stringify(t.file, (k, v) => v === null ? undefined : v, 2) });
-        t.dirty = false; saved++;
+        t.dirty = false; t.migrated = false; t.savedJson = JSON.stringify(t.file); saved++;
         const e = S.checks.filter(c => c.trader === t && c.level === 'error').length;
         log(e ? 'warning' : 'ok', t.file.name, e ? `Saved with ${e} error(s) — see the checks.` : 'Saved. Restart the SPT server to apply.', t);
       } catch (err) { log('error', t.file.name, 'Could not save: ' + err.message, t); }
@@ -1630,6 +1753,8 @@ const ACT = {
     renderAll(true);
   },
   appearance: (arg, el) => appearanceMenu(el),
+  undo: () => undo(),
+  redo: () => redo(),
 };
 
 /** After a structural change: mark unsaved, re-check soon, redraw. */
