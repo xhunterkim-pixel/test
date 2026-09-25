@@ -63,7 +63,12 @@
     </ItemGroup>
     <MakeDir Directories="$(SptDir)\BepInEx\plugins\LevelGate\config" />
     <Copy SourceFiles="$(TargetPath)" DestinationFolder="$(SptDir)\BepInEx\plugins\LevelGate\" />
-    <Copy SourceFiles="@(ConfigFiles)" DestinationFolder="$(SptDir)\BepInEx\plugins\LevelGate\config\" SkipUnchangedFiles="true" />
+    <!-- Only seed the config on first install: SkipUnchangedFiles still copies
+         whenever the files differ, which would overwrite the live
+         level_requirements.json (edited through F9 / the context menu) with
+         this example on every build. -->
+    <Copy SourceFiles="@(ConfigFiles)" DestinationFolder="$(SptDir)\BepInEx\plugins\LevelGate\config\"
+          Condition="!Exists('$(SptDir)\BepInEx\plugins\LevelGate\config\%(ConfigFiles.Filename)%(ConfigFiles.Extension)')" />
   </Target>
 
 </Project>
