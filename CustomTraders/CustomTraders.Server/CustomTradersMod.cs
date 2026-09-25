@@ -107,15 +107,24 @@ public class CustomTradersMod(
             return false;
         }
 
-        // Avatar: the client asks for /files/trader/avatar/<id>.jpg; the image
+        // Avatar: the client asks for /files/trader/avatar/<id>_<hash>.jpg; the image
         // router serves the file from the trader's folder (jpg or png).
+        // The game caches trader images by URL, so replacing avatar.png alone
+        // kept showing the old picture. The URL carries a fingerprint of the
+        // file: new image -> new URL -> the game downloads it again.
         var avatarPath = Path.Combine(folder, file.Avatar ?? "");
+        string avatarKey = $"/files/trader/avatar/{file.Id}";
         if (File.Exists(avatarPath))
-            imageRouter.AddRoute($"/files/trader/avatar/{file.Id}", avatarPath);
+        {
+            avatarKey += "_" + FileFingerprint(avatarPath);
+            imageRouter.AddRoute(avatarKey, avatarPath);
+        }
         else
+        {
             logger.Warning($"[CustomTraders] {file.Name}: avatar '{file.Avatar}' not found in {folder}.");
+        }
 
-        var traderBase = jsonUtil.Deserialize<TraderBase>(BuildTraderBase(file).ToJsonString())
+        var traderBase = jsonUtil.Deserialize<TraderBase>(BuildTraderBase(file, avatarKey + ".jpg").ToJsonString())
                          ?? throw new InvalidOperationException("trader base did not deserialize");
 
         var questAssort = new JsonObject
@@ -167,7 +176,7 @@ public class CustomTradersMod(
         return true;
     }
 
-    private static JsonObject BuildTraderBase(TraderFile file)
+    private static JsonObject BuildTraderBase(TraderFile file, string avatarUrl)
     {
         var loyalty = new JsonArray();
         foreach (var level in file.LoyaltyLevels.Take(4))
@@ -189,7 +198,7 @@ public class CustomTradersMod(
         {
             ["_id"] = file.Id,
             ["availableInRaid"] = false,
-            ["avatar"] = $"/files/trader/avatar/{file.Id}.jpg",
+            ["avatar"] = avatarUrl,
             ["balance_dol"] = 1000000,
             ["balance_eur"] = 1000000,
             ["balance_rub"] = 100000000,
@@ -373,8 +382,10 @@ public class CustomTradersMod(
         string image = DefaultQuestImage;
         if (!string.IsNullOrWhiteSpace(def.Image) && File.Exists(Path.Combine(folder, def.Image)))
         {
-            imageRouter.AddRoute($"/files/quest/icon/{def.Id}", Path.Combine(folder, def.Image));
-            image = $"/files/quest/icon/{def.Id}.jpg";
+            var imagePath = Path.Combine(folder, def.Image);
+            string key = $"/files/quest/icon/{def.Id}_{FileFingerprint(imagePath)}"; // new image -> new URL (see avatar)
+            imageRouter.AddRoute(key, imagePath);
+            image = key + ".jpg";
         }
 
         var locales = new Dictionary<string, string>
@@ -702,6 +713,13 @@ public class CustomTradersMod(
                 return dictionary;
             });
         }
+    }
+
+    /// <summary>8 hex characters that change whenever the file's content changes.</summary>
+    private static string FileFingerprint(string path)
+    {
+        var hash = System.Security.Cryptography.MD5.HashData(File.ReadAllBytes(path));
+        return Convert.ToHexString(hash, 0, 4).ToLowerInvariant();
     }
 
     private bool IsKnownItem(string? tpl, string context)

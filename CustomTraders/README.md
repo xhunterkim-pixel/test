@@ -69,9 +69,24 @@ Ids (trader, offers, quests) are generated once and then stay the same —
 don't change them after players have used a trader, or bought offers and
 quest progress won't match any more.
 
-## Building
+## Building (double-click)
 
 Both need the **.NET 10 SDK** on Windows.
+
+- **`Build-Editor.bat`** — makes a single `Editor\CustomTraders.Editor.exe`
+  next to the script and opens that folder. Put a shortcut to it on your
+  desktop; that's the only thing you need to run from then on.
+- **`Build-Server.bat`** — builds the server mod and copies
+  `CustomTraders.dll` into `SPT_Runtime\user\mods\CustomTraders` (path set by
+  `<SptServerDir>` in `CustomTraders.Server.csproj`, default
+  `C:\SPT\SPT_Runtime`).
+
+Changing a trader's icon: use **Choose icon from PC...** in the editor (or
+replace `avatar.png`) and restart the server. The icon's URL includes a
+fingerprint of the image, so the game downloads the new one instead of
+showing its cached copy.
+
+Building by hand instead:
 
 - **Server mod:** open `CustomTraders.Server\CustomTraders.Server.csproj`,
   set `<SptServerDir>` to the folder containing `user\mods`
