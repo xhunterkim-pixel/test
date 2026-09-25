@@ -1,9 +1,11 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <!--
-    CustomTraders.Editor.exe — Windows editor for the CustomTraders server mod.
-    Edits user\mods\CustomTraders\traders\<trader>\trader.json and the
-    trader icons. Needs the .NET 10 SDK to build (Windows).
+    CustomTraders.Editor.exe (Trader Editor) — Windows editor for the
+    CustomTraders server mod. The window hosts a web page (ui\) drawn by the
+    Edge engine (WebView2, part of Windows 10/11) for a smooth interface; the
+    C# side reads/writes user\mods\CustomTraders\traders\<trader>\trader.json.
+    Needs the .NET 10 SDK to build (Windows).
   -->
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
@@ -13,13 +15,19 @@
     <Nullable>enable</Nullable>
     <AssemblyName>CustomTraders.Editor</AssemblyName>
     <RootNamespace>CustomTraders.Editor</RootNamespace>
-    <ApplicationHighDpiMode>SystemAware</ApplicationHighDpiMode>
-    <!-- WFO1000: designer-serialization hint; the editor builds its UI in code, not the designer. -->
+    <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
+    <!-- WFO1000: designer-serialization hint; the window is built in code, not the designer. -->
     <NoWarn>$(NoWarn);WFO5001;WFO1000</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4191.47" />
+  </ItemGroup>
+
+  <ItemGroup>
     <Compile Include="..\Shared\TraderModels.cs" Link="Shared\TraderModels.cs" />
+    <!-- The interface: copied next to the exe (not packed into it). -->
+    <None Include="ui\**\*" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" ExcludeFromSingleFile="true" />
   </ItemGroup>
 
 </Project>

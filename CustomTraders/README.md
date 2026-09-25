@@ -19,59 +19,54 @@ Completely separate from LevelGate.
    item database (`SPT_Data\database`) so you can search items by name.
 3. Edit, click **Save all**, **restart the SPT server**.
 
-## The editor
+## The editor (Trader Editor)
 
-Laid out like Spotify: your traders on the left (like playlists), the
-selected trader in the middle with its offers/quests as a numbered list, and
-the details of whatever you click on the right.
+Laid out like Spotify: your traders on the left, the selected trader in the
+middle (big header, then **Trader / Offers & barters / Quests / Checks & log**),
+and whatever you click opens on the right. The interface is a web page drawn
+by the Edge engine that's built into Windows 10/11 (WebView2), so scrolling
+and switching pages are smooth. Drag the thin line left of the right panel,
+or the column edges in list headers, to resize.
 
-- **Top bar** — mod folder (**Browse...** / **Reload**), **Background** (any
-  picture from your PC, darkened so text stays readable — bright / medium /
-  dark), and the checks counter.
-- **Your traders** — **+** new trader (placeholder icon), **✕** remove
-  (moves the folder to `deleted_traders`, nothing is erased).
-- **Trader** page — name, nickname, location, description, currency,
-  unlocked from the start, flea listing, restock time, loyalty levels (big
-  text). Right side: the icon and **Choose icon from PC...**
-- **Offers & barters** — every offer shows its price and, in orange with 🔒,
-  which quest unlocks it (or "From start" in green), its LL and stock.
-  **Duplicate** copies an offer. Right side: the lock status (with **Go to
-  quest**), item, stock, buy limit, and the price: any mix of money
-  (**+ ₽ / + $ / + €**) and barter items.
-- **Quests** — level, how many ways to complete it, what it unlocks.
-  **Duplicate** copies a quest with new ids. Right side:
-  - **Unlock requirements** — the level and *every* quest needed before
-    it (all the way back, across traders), and the real unlock level.
-  - **Required quests** — tick the quests that must be finished first.
-  - **Objectives** — each objective belongs to a *way* (A–D):
+- **Appearance** (top right) — background picture from your PC (bright /
+  medium / dark) and the button color (any color).
+- **Trader** — on/off switch (off = the server skips the trader, nothing is
+  deleted), names, description, currency, unlocked from the start, flea,
+  restock time, loyalty levels. The currency is what the trader pays when you
+  sell to him and what "Spent" for loyalty levels is counted in; each offer's
+  price is set on the offer.
+- **Offers & barters** — 🔒 orange = unlocked by a quest (which one), green
+  = for sale from the start. Stock per restock (for everyone) and buy limit
+  per player live on the offer. Price = any mix of money and barter items.
+- **Quests** — each row shows the ways (1 WAY / 2 WAYS...), what it needs
+  first, objectives and all rewards. On the right:
+  - **Unlock requirements** — level and every quest needed before it.
+  - **Required quests** — switch on the quests that must be done first; for a
+    quest with several ways, any finished way counts.
+  - **Hardcore** — the quest fails if the player dies / goes MIA / leaves a
+    raid (it can be restarted).
+  - **Objectives**, each in a way A–D (the player finishes any ONE way):
 
     | Type | Options |
     |---|---|
-    | Hand over | items or money (**+ ₽ $ € GP coin Lega medal**), found in raid |
+    | Hand over | items or money (₽ $ € GP coin Lega medal), found in raid |
     | Find | items found in raid |
-    | Kill | Anyone / PMC / USEC / BEAR / Scavs / **Bosses** (pick which); ☐ with a specific weapon or grenade; ☐ with specific ammo (caliber); ☐ while wearing something; ☐ only on specific maps |
-    | Extract | survive and extract N times; ☐ wearing something; ☐ specific maps |
-    | Use item | use food / drinks / meds N times in raid; ☐ specific maps |
+    | Kill | anyone / PMC / USEC / BEAR / Scavs / bosses (pick which); specific weapon or grenade; ammo caliber; wearing something; maps; body parts (headshots); distance (at least / within N m); in-raid hours; all in one raid |
+    | Extract | which exits count (survived, run-through, killed, MIA, left); wearing something; maps; one raid |
+    | Use item | food / drinks / meds N times; maps; one raid |
+    | Skill level | reach level N in a skill |
 
-    **Ways (options):** put objectives in way A, B, C, D and the player
-    finishes **any one** way (all objectives inside it). Example — level 38
-    "Grizzly": A = hand in 20 FIR Grizzly, B = use 10 Grizzly in raid,
-    C = hand over 5,000,000 ₽. In game each way appears as its own quest
-    ("Grizzly — Option A"...), and finishing one cancels the others (the
-    game's own "one of these quests" mechanic). Quests that require it
-    unlock after whichever way was done.
-  - **Rewards** — XP, standing, items, **Unlock offer** (with the stock
-    after unlocking). Every way gives the same rewards.
-- **Checks & log** — runs when the editor opens, a moment after every
-  change, and before saving. ✖ errors (the server would skip it, or the quest
-  can never be done/unlocked: unknown item ids, 0 amounts, a weapon that
-  can't fire the chosen caliber, a gear item used as a weapon, missing or
-  circular required quests...), ⚠ warnings, i info, ✔ "Quest will work —
-  unlocks at level N after ...". Double-click a line (or **Go to it**) to
-  jump there. Saves and icon changes are logged too.
+    In game each way is its own quest; when one is turned in, the others are
+    marked completed (no rewards) and disappear from the list.
+  - **Rewards** — XP, standing, items (optionally given when the quest is
+    accepted), unlock an offer, skill points, extra stash rows.
+- **Checks & log** — runs on open, shortly after every change and before
+  saving: ✖ errors (the server would skip it, or a quest can never be done /
+  unlocked), ⚠ warnings, i info, ✔ "Quest will work — unlocks at level N
+  after ...". Double-click a line to jump there. Saves are logged too.
 
-Kill "with ammo" works by caliber (the game counts kills per caliber, not per
-exact bullet): pick any bullet and its caliber is used.
+If the editor ever hits an error it shows a message and writes
+`CustomTraders.Editor.crash.txt` next to the exe.
 
 ## Files
 

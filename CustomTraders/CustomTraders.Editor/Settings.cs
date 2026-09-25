@@ -1,11 +1,12 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 
 namespace CustomTraders.Editor;
 
 /// <summary>Editor preferences, kept in %AppData%\CustomTradersEditor\settings.json.</summary>
 public sealed class Settings
 {
-    private static readonly string Folder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "CustomTradersEditor");
+    public static readonly string Folder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "CustomTradersEditor");
     private static readonly string FilePath = Path.Combine(Folder, "settings.json");
 
     public string? ModFolder { get; set; }
@@ -13,14 +14,11 @@ public sealed class Settings
     /// <summary>Picture shown behind the editor (any png/jpg on the PC), or null.</summary>
     public string? BackgroundImage { get; set; }
 
-    /// <summary>How much the picture is darkened, 0-90 %, so text stays readable.</summary>
-    public int BackgroundDim { get; set; } = 55;
-
-    /// <summary>Button / highlight color as #RRGGBB, or null for the default green.</summary>
-    public string? AccentColor { get; set; }
-
-    /// <summary>Column widths the user dragged, per list ("offers", "quests", "checks").</summary>
-    public Dictionary<string, List<int>> ColumnWidths { get; set; } = new();
+    /// <summary>
+    /// Everything the page itself remembers (button color, background darkness,
+    /// column widths, panel width...). The page owns this; C# only stores it.
+    /// </summary>
+    public JsonObject? Ui { get; set; }
 
     public static Settings Load()
     {

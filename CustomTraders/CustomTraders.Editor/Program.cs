@@ -14,14 +14,10 @@ internal static class Program
 
         try
         {
-            Application.SetHighDpiMode(HighDpiMode.SystemAware);
+            Application.SetHighDpiMode(HighDpiMode.PerMonitorV2);
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
-#pragma warning disable WFO5001 // dark scrollbars / common controls (Windows 10+)
-            Application.SetColorMode(SystemColorMode.Dark);
-#pragma warning restore WFO5001
-            Application.AddMessageFilter(new WheelRouter()); // wheel scrolls what's under the mouse, smoothly
-            Application.Run(new MainForm());
+            Application.Run(new HostForm());
         }
         catch (Exception e)
         {
@@ -31,12 +27,12 @@ internal static class Program
 
     private static void Report(Exception? e, bool fatal)
     {
-        string text = $"{DateTime.Now:yyyy-MM-dd HH:mm:ss}  CustomTraders Editor {(fatal ? "crashed" : "error")}\n{e}\n\n";
+        string text = $"{DateTime.Now:yyyy-MM-dd HH:mm:ss}  Trader Editor {(fatal ? "crashed" : "error")}\n{e}\n\n";
         try { File.AppendAllText(CrashLog, text); }
         catch { /* read-only folder: the message box still shows it */ }
         MessageBox.Show(
             $"{(fatal ? "The editor crashed" : "Something went wrong")}:\n\n{e?.Message}\n\n" +
             $"Details were saved to:\n{CrashLog}\n\nSend that file (or a screenshot of this) to get it fixed.",
-            "CustomTraders Editor", MessageBoxButtons.OK, fatal ? MessageBoxIcon.Error : MessageBoxIcon.Warning);
+            "Trader Editor", MessageBoxButtons.OK, fatal ? MessageBoxIcon.Error : MessageBoxIcon.Warning);
     }
 }

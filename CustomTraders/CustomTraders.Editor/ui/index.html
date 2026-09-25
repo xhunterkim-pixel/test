@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Trader Editor</title>
+  <link rel="stylesheet" href="app.css">
+</head>
+<body>
+  <div id="bg"></div>
+
+  <header id="top">
+    <div class="logo">Trader Editor</div>
+    <div class="search-pill">
+      <span class="ico">📁</span>
+      <span id="folder" class="folder">Pick your SPT_Runtime\user\mods\CustomTraders folder</span>
+      <button class="ghost" data-act="reload">Reload</button>
+      <button class="ghost" data-act="browse">Browse…</button>
+    </div>
+    <div class="top-right">
+      <span id="itemsStatus" class="muted small"></span>
+      <button class="outline" data-act="appearance">Appearance</button>
+      <button class="outline" id="checksButton" data-act="page" data-arg="checks">Checks</button>
+    </div>
+  </header>
+
+  <main id="main">
+    <aside id="left" class="panel">
+      <div class="left-head">
+        <button class="round chip-btn" data-act="newTrader" title="New trader">＋</button>
+        <button class="round ghost" data-act="deleteTrader" title="Remove the selected trader (moved to deleted_traders, nothing is erased)">✕</button>
+      </div>
+      <div id="traders" class="scroll"></div>
+    </aside>
+
+    <section id="center" class="panel">
+      <div id="header">
+        <img id="headerAvatar" alt="">
+        <div class="header-text">
+          <div id="headerKind" class="kind">TRADER</div>
+          <h1 id="headerTitle">No trader</h1>
+          <div id="headerSub" class="muted"></div>
+        </div>
+      </div>
+      <nav id="chips">
+        <button class="play" data-act="save" title="Save all (Ctrl+S)">✓</button>
+        <button class="chip" data-act="page" data-arg="trader">Trader</button>
+        <button class="chip" data-act="page" data-arg="offers">Offers &amp; barters</button>
+        <button class="chip" data-act="page" data-arg="quests">Quests</button>
+        <button class="chip" data-act="page" data-arg="checks" id="checksChip">Checks &amp; log</button>
+      </nav>
+      <div id="page" class="scroll"></div>
+    </section>
+
+    <div id="splitter" title="Drag to resize"></div>
+
+    <aside id="right" class="panel">
+      <h2 id="detailsTitle"></h2>
+      <div id="details" class="scroll"></div>
+    </aside>
+  </main>
+
+  <footer id="bottom">
+    <div id="status" class="muted"></div>
+    <div id="checkSummary" data-act="page" data-arg="checks"></div>
+    <div id="unsaved"></div>
+    <button class="primary big" data-act="save">Save all</button>
+  </footer>
+
+  <div id="modal" hidden></div>
+  <div id="toast"></div>
+
+  <script>
+    // Outside the editor (plain browser) a test double of the host is used.
+    if (!(window.chrome && window.chrome.webview)) document.write('<script src="dev-mock.js"><\/script>');
+  </script>
+  <script src="app.js"></script>
+</body>
+</html>
