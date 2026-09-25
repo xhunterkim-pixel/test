@@ -28,7 +28,7 @@ public record ModMetadata : IModMetadata
     public List<string>? Incompatibilities { get; init; }
     public Dictionary<string, SemanticVersioning.Range>? ModDependencies { get; init; }
     public string? Url { get; init; }
-    public string? License { get; init; } = "MIT";
+    public string License { get; init; } = "MIT";
 }
 
 // -----------------------------------------------------------------------------
@@ -131,8 +131,9 @@ public class CustomTradersMod(
         {
             Base = traderBase,
             Assort = assort,
-            QuestAssort = jsonUtil.Deserialize<Dictionary<string, Dictionary<MongoId, MongoId>>>(questAssort.ToJsonString()),
-            Dialogue = new Dictionary<string, List<string>>(),
+            QuestAssort = jsonUtil.Deserialize<Dictionary<string, Dictionary<MongoId, MongoId>>>(questAssort.ToJsonString())
+                          ?? new Dictionary<string, Dictionary<MongoId, MongoId>>(),
+            Dialogue = new Dictionary<string, List<string>?>(),
             Suits = new List<Suit>(),
             Services = new(),
         };
@@ -689,6 +690,7 @@ public class CustomTradersMod(
         {
             lazy.AddTransformer(dictionary =>
             {
+                if (dictionary == null) return dictionary!;
                 foreach (var (key, value) in strings) dictionary[key] = value;
                 return dictionary;
             });
@@ -709,8 +711,8 @@ public class CustomTradersMod(
             if (_englishNames == null)
             {
                 _englishNames = new Dictionary<string, string>();
-                if (localeTable.Global.TryGetValue("en", out var en))
-                    foreach (var (key, value) in en.Value) if (key.EndsWith(" Name")) _englishNames[key[..^5]] = value;
+                if (localeTable.Global.TryGetValue("en", out var en) && en.Value is { } english)
+                    foreach (var (key, value) in english) if (key.EndsWith(" Name")) _englishNames[key[..^5]] = value;
             }
             return _englishNames.TryGetValue(tpl, out var name) ? name : tpl;
         }

@@ -25,7 +25,7 @@ public record ModMetadata : IModMetadata
     public List<string>? Incompatibilities { get; init; }
     public Dictionary<string, SemanticVersioning.Range>? ModDependencies { get; init; }
     public string? Url { get; init; }
-    public string? License { get; init; } = "MIT";
+    public string License { get; init; } = "MIT";
 }
 
 // Startup log line, after the server has finished loading. Also reports how
