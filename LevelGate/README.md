@@ -65,7 +65,9 @@ image in the middle of its icon (stash, raid inventory, loot,
 traders), refreshed twice a second and removed once you reach the level.
 The image is `config/lock.png` next to the DLL — replace it with your own
 (`lock.png`, or `lock.jpg`; PNG keeps a transparent background). Builds
-never overwrite an existing one. Startup log: `LevelGate: lock icons
+never overwrite an existing one. The F9 window has an ON/OFF toggle for the
+icons and a refresh-rate choice (0.5s / 0.2s / 0.1s), applied instantly and
+saved in the BepInEx config (section "Lock Icons"). Startup log: `LevelGate: lock icons
 enabled on EFT.UI.DragAndDrop.ItemView`.
 
 **Loose loot with an empty gear slot:** picking up a gated weapon, helmet,

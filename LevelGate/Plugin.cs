@@ -31,6 +31,12 @@ namespace LevelGate
 
         internal static ManualLogSource Log;
         internal static ConfigEntry<KeyboardShortcut> ToggleMenuKey;
+        internal static ConfigEntry<bool> LockIconsEnabled;
+        internal static ConfigEntry<float> LockIconRefreshSeconds;
+
+        // Only these refresh rates are offered: 0 (every frame) made the
+        // loading screen hang, since each refresh searches all item views.
+        internal static readonly float[] LockIconRefreshChoices = { 0.5f, 0.2f, 0.1f };
         internal static LevelGateConfig Data = new LevelGateConfig();
 
         private static string ConfigFolder =>
@@ -39,7 +45,7 @@ namespace LevelGate
         private static string ConfigFile => Path.Combine(ConfigFolder, "level_requirements.json");
 
         private bool _menuOpen;
-        private Rect _menuRect = new Rect(60, 60, 420, 480);
+        private Rect _menuRect = new Rect(60, 60, 420, 560);
         private string _newItemId = "";
         private string _newItemLevel = "";
         private Vector2 _scroll;
@@ -54,6 +60,22 @@ namespace LevelGate
                 "ToggleMenuKey",
                 new KeyboardShortcut(KeyCode.F9),
                 "Key to open/close the LevelGate item editor.");
+
+            // Lock icon settings — also changeable live from the F9 window
+            // (and BepInEx Configuration Manager); saved to the BepInEx
+            // config file so they persist between sessions.
+            LockIconsEnabled = Config.Bind(
+                "Lock Icons",
+                "Enabled",
+                true,
+                "Show a lock icon on items that are [LOCKED] for you.");
+            LockIconRefreshSeconds = Config.Bind(
+                "Lock Icons",
+                "RefreshSeconds",
+                0.5f,
+                new ConfigDescription(
+                    "How often the lock icons are refreshed. Lower = appears faster, costs a little more CPU.",
+                    new AcceptableValueList<float>(LockIconRefreshChoices)));
 
             LoadConfig();
 
@@ -126,6 +148,29 @@ namespace LevelGate
 
             GUILayout.BeginVertical();
 
+            // Lock icon options (applied immediately, saved automatically).
+            GUILayout.BeginHorizontal();
+            GUILayout.Label("Lock icons:", GUILayout.Width(90));
+            if (GUILayout.Button(LockIconsEnabled.Value ? "ON" : "OFF", GUILayout.Width(60)))
+            {
+                LockIconsEnabled.Value = !LockIconsEnabled.Value;
+            }
+            GUILayout.EndHorizontal();
+
+            GUILayout.BeginHorizontal();
+            GUILayout.Label("Icon refresh:", GUILayout.Width(90));
+            foreach (var choice in LockIconRefreshChoices)
+            {
+                bool selected = Mathf.Approximately(LockIconRefreshSeconds.Value, choice);
+                string label = choice.ToString("0.0#", System.Globalization.CultureInfo.InvariantCulture) + "s";
+                if (GUILayout.Button(selected ? "> " + label + " <" : label, GUILayout.Width(75)))
+                {
+                    LockIconRefreshSeconds.Value = choice;
+                }
+            }
+            GUILayout.EndHorizontal();
+
+            GUILayout.Space(10);
             GUILayout.Label("Add / update an entry:");
             GUILayout.BeginHorizontal();
             GUILayout.Label("Item TplId:", GUILayout.Width(70));
@@ -839,7 +884,7 @@ namespace LevelGate
     internal static class LockIconOverlay
     {
         private const string ChildName = "LevelGateLockIcon";
-        private const float ScanInterval = 0.5f;
+        private static bool _iconsShown;
         private const float IconSizeFraction = 0.35f;   // of the item's smaller side
         private const float MinIconSize = 14f;
         private const float MaxIconSize = 32f;
@@ -855,7 +900,20 @@ namespace LevelGate
         {
             float now = Time.realtimeSinceStartup;
             if (now < _nextScan) return;
-            _nextScan = now + ScanInterval;
+
+            bool enabled = LevelGatePlugin.LockIconsEnabled?.Value ?? true;
+            float interval = LevelGatePlugin.LockIconRefreshSeconds?.Value ?? 0.5f;
+            if (interval < 0.1f) interval = 0.1f; // never every frame
+            _nextScan = now + interval;
+
+            // Switched off in F9: one last pass hides every icon (including
+            // on inactive, pooled views that could be reused later), then
+            // stay idle — no scanning cost while disabled.
+            if (!enabled)
+            {
+                if (_iconsShown) HideAll();
+                return;
+            }
 
             try
             {
@@ -881,6 +939,7 @@ namespace LevelGate
                     bool locked = item != null && LevelGateCheck.IsBlocked(player, item.TemplateId, out _);
                     SetIcon(view, locked);
                 }
+                _iconsShown = true;
 
                 if (views > 0 && withItem == 0 && !_noItemWarned)
                 {
@@ -895,6 +954,23 @@ namespace LevelGate
                     _errorLogged = true;
                     LevelGatePlugin.Log.LogError("LevelGate LockIconOverlay error: " + e);
                 }
+            }
+        }
+
+        private static void HideAll()
+        {
+            _iconsShown = false;
+            try
+            {
+                if (_itemViewType == null) return;
+                foreach (var obj in Resources.FindObjectsOfTypeAll(_itemViewType))
+                {
+                    if (obj is Component view) SetIcon(view, false);
+                }
+            }
+            catch (Exception e)
+            {
+                LevelGatePlugin.Log.LogError("LevelGate LockIconOverlay.HideAll error: " + e);
             }
         }
 
