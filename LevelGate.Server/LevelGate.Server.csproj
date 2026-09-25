@@ -17,7 +17,7 @@
     and the mod API used here is the same across 4.1.x.
   -->
   <PropertyGroup>
-    <TargetFramework>net9.0</TargetFramework>
+    <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <AssemblyName>LevelGate.Server</AssemblyName>
