@@ -14,7 +14,8 @@
     <AssemblyName>CustomTraders.Editor</AssemblyName>
     <RootNamespace>CustomTraders.Editor</RootNamespace>
     <ApplicationHighDpiMode>SystemAware</ApplicationHighDpiMode>
-    <NoWarn>$(NoWarn);WFO5001</NoWarn>
+    <!-- WFO1000: designer-serialization hint; the editor builds its UI in code, not the designer. -->
+    <NoWarn>$(NoWarn);WFO5001;WFO1000</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
