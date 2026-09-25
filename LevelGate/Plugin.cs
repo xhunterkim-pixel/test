@@ -105,6 +105,8 @@ namespace LevelGate
             {
                 _menuOpen = !_menuOpen;
             }
+
+            LockIconOverlay.Tick();
         }
 
         private void OnGUI()
@@ -815,6 +817,200 @@ namespace LevelGate
             {
                 // never break slot checks
             }
+        }
+    }
+
+    // -----------------------------------------------------------------
+    // Lock icon on LOCKED items. Every half second, finds the item views on
+    // screen (EFT.UI.DragAndDrop.ItemView and every subclass — stash grid,
+    // equipment slots, containers, loot, traders) and, for each one showing
+    // an item that's [LOCKED] for you, adds a small lock image in its
+    // bottom-left corner; it's hidden again once the item unlocks or the
+    // view is reused for another item.
+    //
+    // Done by scanning rather than patching an ItemView method, because the
+    // UI's internal method names aren't verified for this game version —
+    // this only relies on the ItemView type (seen in the logs) and its Item.
+    //
+    // The image is config/lock.png (or lock.jpg — PNG keeps transparency)
+    // next to the DLL; replace it with any image you like. If neither file
+    // exists, a simple lock is drawn in code.
+    // -----------------------------------------------------------------
+    internal static class LockIconOverlay
+    {
+        private const string ChildName = "LevelGateLockIcon";
+        private const float ScanInterval = 0.5f;
+        private const float IconSizeFraction = 0.35f;   // of the item's smaller side
+        private const float MinIconSize = 14f;
+        private const float MaxIconSize = 26f;
+
+        private static float _nextScan;
+        private static bool _typeResolved;
+        private static Type _itemViewType;
+        private static Sprite _sprite;
+        private static bool _errorLogged;
+        private static bool _noItemWarned;
+
+        public static void Tick()
+        {
+            float now = Time.realtimeSinceStartup;
+            if (now < _nextScan) return;
+            _nextScan = now + ScanInterval;
+
+            try
+            {
+                if (!_typeResolved)
+                {
+                    _typeResolved = true;
+                    _itemViewType = typeof(EFT.Player).Assembly.GetType("EFT.UI.DragAndDrop.ItemView", false);
+                    if (_itemViewType == null)
+                        LevelGatePlugin.Log.LogWarning("LevelGate: EFT.UI.DragAndDrop.ItemView not found — lock icons disabled.");
+                    else
+                        LevelGatePlugin.Log.LogInfo("LevelGate: lock icons enabled on " + _itemViewType.FullName);
+                }
+                if (_itemViewType == null) return;
+
+                var player = LevelGateCheck.GetMainPlayer(); // null out of raid -> profile level
+                int views = 0, withItem = 0;
+                foreach (var obj in UnityEngine.Object.FindObjectsOfType(_itemViewType))
+                {
+                    if (!(obj is Component view)) continue;
+                    views++;
+                    var item = ReflectionUtil.GetMember(view, "Item") as EFT.InventoryLogic.Item;
+                    if (item != null) withItem++;
+                    bool locked = item != null && LevelGateCheck.IsBlocked(player, item.TemplateId, out _);
+                    SetIcon(view, locked);
+                }
+
+                if (views > 0 && withItem == 0 && !_noItemWarned)
+                {
+                    _noItemWarned = true;
+                    LevelGatePlugin.Log.LogWarning($"LevelGate: {views} item view(s) on screen but none exposed an Item — lock icons can't be placed on this game version.");
+                }
+            }
+            catch (Exception e)
+            {
+                if (!_errorLogged)
+                {
+                    _errorLogged = true;
+                    LevelGatePlugin.Log.LogError("LevelGate LockIconOverlay error: " + e);
+                }
+            }
+        }
+
+        private static void SetIcon(Component view, bool show)
+        {
+            var existing = view.transform.Find(ChildName);
+            if (!show)
+            {
+                if (existing != null && existing.gameObject.activeSelf) existing.gameObject.SetActive(false);
+                return;
+            }
+
+            if (existing == null)
+            {
+                var go = new GameObject(ChildName, typeof(RectTransform));
+                go.transform.SetParent(view.transform, false);
+
+                var image = go.AddComponent<UnityEngine.UI.Image>();
+                image.sprite = GetSprite();
+                image.preserveAspect = true;
+                image.raycastTarget = false; // never steal clicks/drags from the item
+
+                existing = go.transform;
+            }
+
+            var rect = (RectTransform)existing;
+            float size = MinIconSize;
+            if (view.transform is RectTransform viewRect)
+            {
+                var r = viewRect.rect;
+                size = Mathf.Clamp(Mathf.Min(r.width, r.height) * IconSizeFraction, MinIconSize, MaxIconSize);
+            }
+            rect.anchorMin = rect.anchorMax = rect.pivot = Vector2.zero; // bottom-left corner
+            rect.anchoredPosition = new Vector2(2f, 2f);
+            rect.sizeDelta = new Vector2(size, size);
+
+            if (!existing.gameObject.activeSelf)
+            {
+                existing.gameObject.SetActive(true);
+                existing.SetAsLastSibling(); // draw on top of the item art
+            }
+        }
+
+        private static Sprite GetSprite()
+        {
+            if (_sprite != null) return _sprite;
+
+            Texture2D texture = null;
+            try
+            {
+                var folder = Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location) ?? ".", "config");
+                foreach (var name in new[] { "lock.png", "lock.jpg", "lock.jpeg" })
+                {
+                    var path = Path.Combine(folder, name);
+                    if (!File.Exists(path)) continue;
+                    var loaded = new Texture2D(2, 2, TextureFormat.RGBA32, false);
+                    if (loaded.LoadImage(File.ReadAllBytes(path)))
+                    {
+                        texture = loaded;
+                        LevelGatePlugin.Log.LogInfo("LevelGate: lock icon loaded from " + path);
+                        break;
+                    }
+                }
+            }
+            catch (Exception e)
+            {
+                LevelGatePlugin.Log.LogError("LevelGate: failed to load lock icon image, using the built-in one. " + e);
+            }
+
+            if (texture == null) texture = DrawDefaultLock();
+            texture.filterMode = FilterMode.Bilinear;
+            texture.wrapMode = TextureWrapMode.Clamp;
+
+            _sprite = Sprite.Create(texture, new Rect(0, 0, texture.width, texture.height), new Vector2(0.5f, 0.5f));
+            return _sprite;
+        }
+
+        // Fallback 32x32 padlock: grey shackle, gold body, dark outline and keyhole.
+        private static Texture2D DrawDefaultLock()
+        {
+            const int n = 32;
+            var outline = new Color32(20, 20, 20, 255);
+            var body = new Color32(235, 185, 40, 255);
+            var shackle = new Color32(200, 200, 205, 255);
+            var hole = new Color32(40, 30, 10, 255);
+            var clear = new Color32(0, 0, 0, 0);
+
+            var pixels = new Color32[n * n];
+            for (int y = 0; y < n; y++)
+            {
+                for (int x = 0; x < n; x++)
+                {
+                    int ty = n - 1 - y; // draw top-down; Unity textures are bottom-up
+                    float dx = x - 15.5f, dy = ty - 13f;
+                    float d = Mathf.Sqrt(dx * dx + dy * dy);
+                    Color32 c = clear;
+
+                    if ((ty <= 13 && d >= 5f && d <= 9f) || (ty > 13 && ty <= 17 && Mathf.Abs(dx) >= 6.5f && Mathf.Abs(dx) <= 9f))
+                        c = (d > 8.3f && ty <= 13) || d < 5.6f ? outline : shackle;
+
+                    if (ty >= 15 && ty <= 30 && x >= 4 && x <= 27)
+                    {
+                        bool edge = x == 4 || x == 27 || ty == 15 || ty == 30;
+                        c = edge ? outline : body;
+                        if ((Mathf.Sqrt((x - 15.5f) * (x - 15.5f) + (ty - 21f) * (ty - 21f)) <= 2.2f) ||
+                            (ty >= 22 && ty <= 26 && x >= 15 && x <= 16))
+                            c = hole;
+                    }
+                    pixels[y * n + x] = c;
+                }
+            }
+
+            var texture = new Texture2D(n, n, TextureFormat.RGBA32, false);
+            texture.SetPixels32(pixels);
+            texture.Apply();
+            return texture;
         }
     }
 
