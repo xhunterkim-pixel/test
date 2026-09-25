@@ -1,0 +1,37 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    CustomTraders server mod for SPT 4.1.x. Reads traders/<folder>/trader.json
+    (made with CustomTraders.Editor.exe) and adds the traders, offers/barters
+    and quests at server start.
+
+    Build: set SptServerDir to the folder that contains user\mods
+    (e.g. C:\SPT\SPT_Runtime) and build. The DLL goes to
+    user\mods\CustomTraders\. Needs the .NET 10 SDK.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AssemblyName>CustomTraders</AssemblyName>
+    <RootNamespace>CustomTraders.Server</RootNamespace>
+    <SptServerDir>C:\SPT\SPT_Runtime</SptServerDir>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="..\Shared\TraderModels.cs" Link="Shared\TraderModels.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Supplied by the running server; compile-only. -->
+    <PackageReference Include="SPTushonka.Common" Version="4.1.6" ExcludeAssets="runtime" />
+    <PackageReference Include="SPTushonka.DI" Version="4.1.6" ExcludeAssets="runtime" />
+    <PackageReference Include="SPTushonka.Server.Core" Version="4.1.6" ExcludeAssets="runtime" />
+  </ItemGroup>
+
+  <Target Name="CopyToServerMods" AfterTargets="Build">
+    <MakeDir Directories="$(SptServerDir)\user\mods\CustomTraders" />
+    <Copy SourceFiles="$(TargetPath)" DestinationFolder="$(SptServerDir)\user\mods\CustomTraders\" />
+  </Target>
+
+</Project>

@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    CustomTraders.Editor.exe — Windows editor for the CustomTraders server mod.
+    Edits user\mods\CustomTraders\traders\<trader>\trader.json and the
+    trader icons. Needs the .NET 10 SDK to build (Windows).
+  -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AssemblyName>CustomTraders.Editor</AssemblyName>
+    <RootNamespace>CustomTraders.Editor</RootNamespace>
+    <ApplicationHighDpiMode>SystemAware</ApplicationHighDpiMode>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="..\Shared\TraderModels.cs" Link="Shared\TraderModels.cs" />
+  </ItemGroup>
+
+</Project>

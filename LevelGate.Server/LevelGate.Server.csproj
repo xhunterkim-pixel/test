@@ -11,10 +11,8 @@
 
     Build: set SptServerDir below to the folder containing user\mods (in
     this install: C:\SPT\SPT_Runtime), then Build. The DLL is copied to
-    user\mods\LevelGate\ automatically. The SPTarkov.* packages are
-    4.1.2 — the newest published on nuget.org (there is no 4.1.6 package).
-    They're compile-only (the running 4.1.6 server supplies the real DLLs),
-    and the mod API used here is the same across 4.1.x.
+    user\mods\LevelGate\ automatically. SPT's packages are published as
+    SPTushonka.* (4.1.6 matches the server); they're compile-only.
   -->
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
@@ -27,9 +25,9 @@
 
   <ItemGroup>
     <!-- Provided by the server at runtime, so compile against them only. -->
-    <PackageReference Include="SPTarkov.Common" Version="4.1.2" ExcludeAssets="runtime" />
-    <PackageReference Include="SPTarkov.DI" Version="4.1.2" ExcludeAssets="runtime" />
-    <PackageReference Include="SPTarkov.Server.Core" Version="4.1.2" ExcludeAssets="runtime" />
+    <PackageReference Include="SPTushonka.Common" Version="4.1.6" ExcludeAssets="runtime" />
+    <PackageReference Include="SPTushonka.DI" Version="4.1.6" ExcludeAssets="runtime" />
+    <PackageReference Include="SPTushonka.Server.Core" Version="4.1.6" ExcludeAssets="runtime" />
   </ItemGroup>
 
   <Target Name="CopyToServerMods" AfterTargets="Build">
