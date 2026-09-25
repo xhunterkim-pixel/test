@@ -299,17 +299,17 @@ public class CustomTradersMod(
         var barterScheme = new JsonObject();
         var loyalLevelItems = new JsonObject();
 
-        // Quest locks and quantity overrides coming from UnlockOffer rewards. An
-        // offer the game can only tie to ONE quest, so an offer unlocked by
-        // several quests (or by a quest with several options) is added once
-        // per quest; only the copy of the quest the player finished shows up.
+        // Quest locks and quantity overrides coming from UnlockOffer rewards.
+        // The game ties an offer to ONE quest, so an offer unlocked by several
+        // different quests is added once per quest. A quest with several ways
+        // needs only one copy, tied to way A: finishing any way marks all its
+        // ways completed (QuestOptions), way A included.
         var unlockedBy = new Dictionary<string, List<(string QuestId, int Quantity)>>();
         foreach (var quest in file.Quests.Where(q => Ids.IsValid(q.Id)))
         foreach (var reward in quest.Rewards.Where(r => r.Type == RewardTypes.UnlockOffer && Ids.IsValid(r.OfferId)))
-        foreach (var gameQuestId in _questOptionIds.GetValueOrDefault(quest.Id) ?? new List<string> { quest.Id })
         {
             if (!unlockedBy.TryGetValue(reward.OfferId, out var list)) unlockedBy[reward.OfferId] = list = new();
-            if (list.All(u => u.QuestId != gameQuestId)) list.Add((gameQuestId, reward.Quantity));
+            if (list.All(u => u.QuestId != quest.Id)) list.Add((quest.Id, reward.Quantity));
         }
 
         foreach (var offer in file.Offers)
@@ -445,6 +445,7 @@ public class CustomTradersMod(
         var options = def.UsedOptions();
         var gameIds = _questOptionIds.GetValueOrDefault(def.Id) ?? OptionQuestIds(def);
         LogQuestPlan(file, def, options);
+        QuestOptions.Register(gameIds);
         bool added = false;
         for (int i = 0; i < options.Count; i++)
         {
@@ -461,7 +462,7 @@ public class CustomTradersMod(
     private void LogQuestPlan(TraderFile file, QuestDef def, List<int> options)
     {
         string ways = options.Count > 1
-            ? $"{options.Count} ways ({string.Join("/", options.Select(QuestDef.OptionLetter))}) — finishing one fails the others"
+            ? $"{options.Count} ways ({string.Join("/", options.Select(QuestDef.OptionLetter))}) — finishing one closes the others"
             : "1 way";
         var after = new List<string>();
         foreach (var prereq in def.PrerequisiteQuestIds.Where(Ids.IsValid))
@@ -505,7 +506,7 @@ public class CustomTradersMod(
         {
             string letters = string.Join(", ", def.UsedOptions().Select(QuestDef.OptionLetter));
             description = (description.Length > 0 ? description + "\n\n" : "") +
-                          $"This job can be done {optionCount} ways (options {letters}). Finish any ONE option — the others are then cancelled.";
+                          $"This job can be done {optionCount} ways (options {letters}). Finish any ONE option — the others are then closed.";
         }
 
         var locales = new Dictionary<string, string>
@@ -515,7 +516,7 @@ public class CustomTradersMod(
             [$"{gameId} note"] = "",
             [$"{gameId} startedMessageText"] = description,
             [$"{gameId} successMessageText"] = string.IsNullOrWhiteSpace(def.SuccessMessage) ? "Good work." : def.SuccessMessage,
-            [$"{gameId} failMessageText"] = optionCount > 1 ? $"{def.Name}: another option was completed." : "",
+            [$"{gameId} failMessageText"] = "",
             [$"{gameId} changeQuestMessageText"] = "",
             [$"{gameId} acceptPlayerMessage"] = "",
             [$"{gameId} declinePlayerMessage"] = "",
@@ -582,7 +583,7 @@ public class CustomTradersMod(
         foreach (var reward in def.Rewards)
         {
             if (!Ids.IsValid(reward.Id)) reward.Id = Ids.Derive(def.Id + ":reward:" + index);
-            var node = BuildReward(file, reward, Sub(reward.Id), gameId, index);
+            var node = BuildReward(file, reward, Sub(reward.Id), def.Id, index);
             if (node == null) continue;
             success.Add(node);
             index++;
@@ -608,7 +609,7 @@ public class CustomTradersMod(
             ["note"] = $"{gameId} note",
             ["startedMessageText"] = $"{gameId} startedMessageText",
             ["successMessageText"] = $"{gameId} successMessageText",
-            ["failMessageText"] = $"{gameId} failMessageText",
+            ["failMessageText"] = "", // no "task failed" message when another way is completed
             ["changeQuestMessageText"] = $"{gameId} changeQuestMessageText",
             ["acceptPlayerMessage"] = $"{gameId} acceptPlayerMessage",
             ["declinePlayerMessage"] = $"{gameId} declinePlayerMessage",
@@ -827,7 +828,7 @@ public class CustomTradersMod(
                     logger.Warning($"[CustomTraders] {file.Name}: UnlockOffer reward points at a missing offer {r.OfferId} — skipped.");
                     return null;
                 }
-                // The copy of the offer that this quest (option) unlocks, see BuildAssort.
+                // The copy of the offer that this quest unlocks (all its ways share it), see BuildAssort.
                 string entryId = _offerEntries.GetValueOrDefault((offer.Id, gameQuestId)) ?? offer.Id;
                 return new JsonObject
                 {
