@@ -1859,6 +1859,47 @@ namespace LevelGate
     [HarmonyPatch(typeof(EFT.InventoryLogic.ItemController), "CanExecute", new[] { typeof(EFT.InventoryLogic.IOperationResult) })]
     internal static class Patch_BlockOperationResult
     {
+        // For results without a "To" address: the item the round is being
+        // put onto/into. A TargetItem that is itself a gun/magazine is the
+        // destination; a TargetItem that is a stack of rounds means "the
+        // container that stack sits in". Falls back to any Magazine/Weapon
+        // the result carries (e.g. the magazine on a mag-loading result).
+        private static EFT.InventoryLogic.Item DestinationFromTarget(object result, EFT.InventoryLogic.Item movingItem)
+        {
+            var target = ReflectionUtil.GetMember(result, "TargetItem") as EFT.InventoryLogic.Item
+                         ?? ReflectionUtil.GetMember(result, "Target") as EFT.InventoryLogic.Item;
+            if (target == null)
+            {
+                for (var t = result.GetType(); t != null && t != typeof(object) && target == null; t = t.BaseType)
+                {
+                    foreach (var f in t.GetFields(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly))
+                    {
+                        if (!typeof(EFT.InventoryLogic.Magazine).IsAssignableFrom(f.FieldType) &&
+                            !typeof(EFT.InventoryLogic.Weapon).IsAssignableFrom(f.FieldType)) continue;
+                        target = f.GetValue(result) as EFT.InventoryLogic.Item;
+                        if (target != null) break;
+                    }
+                    if (target != null) break;
+                    foreach (var p in t.GetProperties(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly))
+                    {
+                        if (p.GetIndexParameters().Length != 0) continue;
+                        if (!typeof(EFT.InventoryLogic.Magazine).IsAssignableFrom(p.PropertyType) &&
+                            !typeof(EFT.InventoryLogic.Weapon).IsAssignableFrom(p.PropertyType)) continue;
+                        try { target = p.GetValue(result, null) as EFT.InventoryLogic.Item; } catch { }
+                        if (target != null) break;
+                    }
+                }
+            }
+            if (target == null || ReferenceEquals(target, movingItem)) return null;
+
+            if (target is EFT.InventoryLogic.Magazine || target is EFT.InventoryLogic.Weapon)
+                return target;
+
+            var targetAddress = ReflectionUtil.GetMember(target, "CurrentAddress") as EFT.InventoryLogic.ItemAddress
+                                ?? ReflectionUtil.GetMember(target, "Parent") as EFT.InventoryLogic.ItemAddress;
+            return LevelGateCheck.GetContainerParentItem(targetAddress);
+        }
+
         [HarmonyPriority(Priority.First)]
         static bool Prefix(EFT.InventoryLogic.ItemController __instance, EFT.InventoryLogic.IOperationResult __0, ref bool __result)
         {
@@ -1867,23 +1908,47 @@ namespace LevelGate
                 if (__0 == null || !LevelGateCheck.IsOwnInventoryController(__instance)) return true;
 
                 var item = ReflectionUtil.GetMember(__0, "Item") as EFT.InventoryLogic.Item;
-                var to = ReflectionUtil.GetMember(__0, "To") as EFT.InventoryLogic.ItemAddress;
-                if (item == null || to == null)
+                if (item == null)
                 {
-                    DiagnosticLogging.LogCall($"Patch_BlockOperationResult no Item/To on {__0.GetType().Name}");
+                    DiagnosticLogging.LogCall($"Patch_BlockOperationResult no Item on {__0.GetType().Name}: {AmmoCollector.Describe(__0)}");
                     return true;
                 }
 
                 var player = LevelGateCheck.GetMainPlayer(); // null out of raid -> profile level
-                bool blocked;
+                var to = ReflectionUtil.GetMember(__0, "To") as EFT.InventoryLogic.ItemAddress;
+                string resultName = __0.GetType().Name;
+                bool blocked = false;
                 int required = 0;
-                if (item is EFT.InventoryLogic.Ammo)
+
+                if (resultName.IndexOf("Bind", StringComparison.Ordinal) >= 0 &&
+                    resultName.IndexOf("Unbind", StringComparison.Ordinal) < 0)
                 {
-                    blocked = LevelGateCheck.IsLoadIntoWeaponOrMagazine(to)
-                              && !LevelGateCheck.IsAlreadyInside(item, to)
+                    // Quick-slot binding (BindResult: no destination, just
+                    // the item and a slot index). Out of raid the in-queue
+                    // BindItemOperation check can't block, so refuse here.
+                    blocked = LevelGateCheck.IsBlocked(player, item.TemplateId, out required);
+                }
+                else if (item is EFT.InventoryLogic.Ammo)
+                {
+                    // Where the round ends up. Moves/splits have To; merges
+                    // and transfers (stacking onto the rounds already inside
+                    // a Mosin/MP-153 internal magazine or a box magazine)
+                    // have a TargetItem instead; magazine-loading results
+                    // carry the magazine itself.
+                    var destParent = LevelGateCheck.GetContainerParentItem(to) ?? DestinationFromTarget(__0, item);
+                    var fromParent = LevelGateCheck.GetContainerParentItem(
+                        ReflectionUtil.GetMember(item, "CurrentAddress") as EFT.InventoryLogic.ItemAddress
+                        ?? ReflectionUtil.GetMember(item, "Parent") as EFT.InventoryLogic.ItemAddress);
+
+                    bool intoGun = destParent is EFT.InventoryLogic.Weapon ||
+                                   (destParent is EFT.InventoryLogic.Magazine &&
+                                    destParent.GetType().Name.IndexOf("AmmoBox", StringComparison.OrdinalIgnoreCase) < 0);
+
+                    blocked = intoGun
+                              && !ReferenceEquals(fromParent, destParent)   // not unloading/shuffling inside it
                               && LevelGateCheck.IsBlocked(player, item.TemplateId, out required);
                 }
-                else
+                else if (to != null)
                 {
                     blocked = to is EFT.InventoryLogic.SlotItemAddress slotAddress
                               && LevelGateCheck.EquipSlotIds.Contains(slotAddress.Slot.ID)
@@ -1932,7 +1997,7 @@ namespace LevelGate
                 DiagnosticLogging.LogCall($"MoveResult.CanExecute item={item.TemplateId} isAmmo={item is EFT.InventoryLogic.Ammo} toType={toType}");
 
                 var player = LevelGateCheck.GetMainPlayer();
-                if (player == null) return true;
+                // player may be null out of raid -> IsBlocked uses the PMC profile level
 
                 // A chamber/cylinder destination for ammo is a
                 // SlotItemAddress (not one of the top-level wearable slot
@@ -3698,7 +3763,7 @@ namespace LevelGate
 
                 var player = LevelGateCheck.GetMainPlayer();
                 DiagnosticLogging.LogCall($"AmmoLoadPrefix ammo={ammo.TemplateId} player={(player == null ? "NULL" : "found")}");
-                if (player == null) return true;
+                // player may be null out of raid -> IsBlocked uses the PMC profile level
 
                 if (LevelGateCheck.IsBlocked(player, ammo.TemplateId, out int required))
                 {
@@ -3754,7 +3819,7 @@ namespace LevelGate
                 if (!LevelGateCheck.IsOwnItem(item)) return true;
 
                 var player = LevelGateCheck.GetMainPlayer();
-                if (player == null) return true;
+                // player may be null out of raid -> IsBlocked uses the PMC profile level
 
                 if (LevelGateCheck.IsBlocked(player, item.TemplateId, out int required))
                 {
