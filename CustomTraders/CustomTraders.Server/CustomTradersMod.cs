@@ -91,6 +91,11 @@ public class CustomTradersMod(
             try
             {
                 var trader = TraderFile.Load(file);
+                if (!trader.Enabled)
+                {
+                    LogBlue($"[CustomTraders] {trader.Name}: switched off in the editor — not loaded.");
+                    continue;
+                }
                 if (EnsureIds(trader)) trader.Save(file); // give new offers/quests stable ids once
                 traders.Add((trader, folder));
             }

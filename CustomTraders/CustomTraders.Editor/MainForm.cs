@@ -22,6 +22,11 @@ public sealed class MainForm : Form
     private readonly ItemDatabase _db = new();
     private readonly List<TraderEntry> _traders = new();
     private readonly Dictionary<TraderEntry, Image> _avatars = new();
+    private readonly Dictionary<string, (DateTime Written, Image Image)> _questImages = new();
+    private readonly PictureBox _questImagePreview = new() { Height = 150, SizeMode = PictureBoxSizeMode.Zoom, Visible = false };
+    private readonly PillButton _removeQuestImage = new("Remove image", PillStyle.Danger) { Height = 30, Visible = false };
+    private Control _root = null!;
+    private int _freeze;
     private readonly List<CheckEntry> _history = new();
     private List<CheckEntry> _checks = new();
     private string? _modFolder;
@@ -113,7 +118,12 @@ public sealed class MainForm : Form
 
     public MainForm()
     {
-        Text = "CustomTraders Editor";
+        if (_settings.AccentColor is { Length: 7 } hex && hex[0] == '#')
+        {
+            try { Theme.Accent = ColorTranslator.FromHtml(hex); }
+            catch { /* bad value in settings: keep green */ }
+        }
+        Text = "Trader Editor";
         Width = 1640;
         Height = 1000;
         MinimumSize = new Size(1200, 760);
@@ -136,7 +146,7 @@ public sealed class MainForm : Form
             c => new CostDef { ItemTpl = c.ItemTpl, Count = c.Count }, compact: true, height: 200);
         _quests = new ListEditor<QuestDef>(() => Trader?.Quests,
             () => new QuestDef { Id = Ids.New(), Name = "New quest" }, DescribeQuest, "+ Add quest", DuplicateQuest,
-            new[] { new Column("Level", 80), new Column("Ways", 70), new Column("Unlocks", 190) }) { Dock = DockStyle.Fill };
+            new[] { new Column("Level", 70), new Column("Ways", 60) }, lines: 3) { Dock = DockStyle.Fill };
         _quests.EmptyText = "No quests yet — click + Add quest";
         _conditions = new ListEditor<ConditionDef>(() => Quest?.Conditions, NewCondition, DescribeCondition, "+ Objective",
             DuplicateCondition, compact: true, height: 250);
@@ -165,6 +175,9 @@ public sealed class MainForm : Form
         BuildOffersPage();
         BuildQuestsPage();
         BuildChecksPage();
+        RememberColumns("offers", _offers.Rows);
+        RememberColumns("quests", _quests.Rows);
+        RememberColumns("checks", _checkList);
         Theme.Apply(this);
         ShowPage(Page.Trader);
 
@@ -176,8 +189,12 @@ public sealed class MainForm : Form
         HandleCreated += (_, _) => Theme.DarkTitleBar(this);
         Shown += (_, _) =>
         {
-            LoadBackground();
-            LoadModFolder(_settings.ModFolder);
+            using (Freeze())
+            {
+                CreateAllHandles();
+                LoadBackground();
+                LoadModFolder(_settings.ModFolder);
+            }
         };
         KeyDown += (_, e) =>
         {
@@ -200,7 +217,7 @@ public sealed class MainForm : Form
         top.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
         top.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
 
-        var logo = new Label { Text = "CustomTraders", Font = new Font("Segoe UI Black", 15f), ForeColor = Theme.Text, AutoSize = true, Padding = new Padding(8, 8, 0, 0) };
+        var logo = new Label { Text = "Trader Editor", Font = new Font("Segoe UI Black", 16f), ForeColor = Theme.Text, AutoSize = true, Padding = new Padding(8, 7, 0, 0) };
         top.Controls.Add(logo, 0, 0);
 
         // Mod folder in a Spotify-search-style pill.
@@ -215,7 +232,7 @@ public sealed class MainForm : Form
         top.Controls.Add(pill, 2, 0);
 
         var right = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Margin = new Padding(0) };
-        var background = new PillButton("Background", PillStyle.Outline);
+        var background = new PillButton("Appearance", PillStyle.Outline);
         background.Click += (_, _) => BackgroundMenu().Show(background, new Point(0, background.Height + 4));
         _checksButton.Click += (_, _) => ShowPage(Page.Checks);
         right.Controls.AddRange(new Control[] { _dbLabel, background, _checksButton });
@@ -238,11 +255,12 @@ public sealed class MainForm : Form
 
         // --- three panels ---------------------------------------------------------
         var grid = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 3, RowCount = 1, Padding = new Padding(0) };
-        grid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 300));
+        grid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 240));
         grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         grid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 560));
         grid.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
 
+        _root = grid;
         grid.Controls.Add(BuildLeft(), 0, 0);
         grid.Controls.Add(BuildCenter(), 1, 0);
         grid.Controls.Add(BuildRight(), 2, 0);
@@ -329,6 +347,7 @@ public sealed class MainForm : Form
 
     private void ShowPage(Page page)
     {
+        using var _ = Freeze();
         _page = page;
         foreach (var (p, c) in _pages) c.Visible = p == page;
         foreach (var (p, d) in _detailPages) d.Visible = p == page;
@@ -354,6 +373,7 @@ public sealed class MainForm : Form
     private void BuildTraderPage()
     {
         var f = _traderFields;
+        f.AddCheck("In the game", () => Trader?.Enabled ?? true, v => Trader!.Enabled = v, "Trader is ON (off = the server skips it; nothing is deleted)");
         f.AddText("Name", () => Trader?.Name, v => Trader!.Name = v);
         f.AddText("Nickname", () => Trader?.Nickname, v => Trader!.Nickname = v);
         f.AddText("Surname", () => Trader?.Surname, v => Trader!.Surname = v);
@@ -396,7 +416,7 @@ public sealed class MainForm : Form
             _bigAvatar,
             new Toolbar(choose),
             new Hint("Any png or jpg; it's cropped to a square. The game shows the new icon after a server restart."),
-            new Section("At a glance").Add(_traderSummary));
+            new Section("Summary").Add(_traderSummary));
         _details.SizeChanged += (_, _) => _bigAvatar.Height = Math.Max(160, _details.ClientSize.Width - 20);
 
         AddPage(Page.Trader, page, details);
@@ -474,6 +494,14 @@ public sealed class MainForm : Form
         var image = new PillButton("Choose quest image...", PillStyle.Outline) { Height = 32, Dock = DockStyle.Left };
         image.Click += (_, _) => ChooseQuestImage();
         q.AddRow("Image", image);
+        _removeQuestImage.Click += (_, _) =>
+        {
+            if (Quest == null) return;
+            Quest.Image = null;
+            MarkDirty();
+            ShowQuestImage();
+            _quests.RefreshTexts();
+        };
         q.Changed += () => { MarkDirty(); _quests.RefreshTexts(); UpdateDetailsTitle(); ShowRequirements(); };
 
         _prereqs.ItemCheck += (_, _) => BeginInvoke(OnPrereqChecked);
@@ -554,7 +582,7 @@ public sealed class MainForm : Form
         var details = new StackPanel { Gap = 10 };
         details.AddRange(
             _requirements,
-            new Section("Quest").Add(q),
+            new Section("Quest").Add(q, _questImagePreview, new Toolbar(_removeQuestImage)),
             new Section("Required quests").Add(new Hint("Tick every quest (any trader) that must be finished first."), _prereqs),
             new Section("Objectives", Theme.Text).Add(_waysHint, _conditions),
             _objectiveSection,
@@ -637,6 +665,7 @@ public sealed class MainForm : Form
 
     private void ShowTrader()
     {
+        using var _ = Freeze();
         _traderFields.Enabled = Trader != null;
         _traderFields.RefreshValues();
         _loyalty.DataSource = Trader == null ? null : new BindingList<LoyaltyLevelDef>(Trader.LoyaltyLevels);
@@ -652,6 +681,8 @@ public sealed class MainForm : Form
         var t = Trader;
         _headerTitle.Text = t?.Name ?? "No trader";
         _headerAvatar.Image = Current != null ? AvatarOf(Current) : null;
+        _headerKind.Text = t is { Enabled: false } ? "TRADER · SWITCHED OFF" : "TRADER";
+        _headerKind.ForeColor = t is { Enabled: false } ? Theme.Orange : Theme.Text;
         _headerSub.Text = t == null ? "Click + in \"Your traders\" to make one." :
             $"{t.Offers.Count} offer(s) · {t.Quests.Count} quest(s) · restocks every {t.RefreshMinutesMin}–{t.RefreshMinutesMax} min · {(t.UnlockedByDefault ? "unlocked from the start" : "locked at start")}";
         _center.HeaderColor = Current != null ? AverageColor(AvatarOf(Current)) : Theme.Accent;
@@ -664,6 +695,7 @@ public sealed class MainForm : Form
 
     private void ShowOffer()
     {
+        using var _ = Freeze();
         _offerFields.Enabled = Offer != null;
         _offerFields.RefreshValues();
         _costs.RefreshList();
@@ -695,6 +727,7 @@ public sealed class MainForm : Form
 
     private void ShowQuest()
     {
+        using var _ = Freeze();
         _questFields.Enabled = Quest != null;
         _questFields.RefreshValues();
         _conditions.RefreshList();
@@ -704,7 +737,38 @@ public sealed class MainForm : Form
         ShowPrereqs();
         ShowRequirements();
         UpdateWaysHint();
+        ShowQuestImage();
         UpdateDetailsTitle();
+    }
+
+    private void ShowQuestImage()
+    {
+        var image = Current != null && Quest != null ? QuestImage(Current, Quest) : null;
+        _questImagePreview.Image = image;
+        _questImagePreview.Visible = image != null;
+        _removeQuestImage.Visible = image != null;
+    }
+
+    /// <summary>The quest's picture from the trader folder (cached; reloaded when the file changes).</summary>
+    private Image? QuestImage(TraderEntry trader, QuestDef quest)
+    {
+        if (string.IsNullOrWhiteSpace(quest.Image)) return null;
+        var path = Path.Combine(trader.Folder, quest.Image);
+        try
+        {
+            if (!File.Exists(path)) return null;
+            var written = File.GetLastWriteTimeUtc(path);
+            if (_questImages.TryGetValue(path, out var cached) && cached.Written == written) return cached.Image;
+            using var stream = new MemoryStream(File.ReadAllBytes(path));
+            using var loaded = Image.FromStream(stream);
+            var image = new Bitmap(loaded);
+            _questImages[path] = (written, image);
+            return image;
+        }
+        catch
+        {
+            return null;
+        }
     }
 
     private void UpdateWaysHint()
@@ -733,17 +797,19 @@ public sealed class MainForm : Form
         {
             lines.Add($"Finish these {req.Chain.Count} quest(s) first:");
             foreach (var (trader, quest, depth) in req.Chain.OrderByDescending(c => c.Depth))
-                lines.Add($"{new string(' ', 2 * depth)}• {trader.File.Name}: {quest.Name}  (lvl {quest.MinLevel}){(depth > 1 ? "  — needed by an earlier one" : "")}");
+                lines.Add($"{new string(' ', 2 * depth)}• {trader.File.Name}: {quest.Name}  (lvl {quest.MinLevel}){(depth > 1 ? "  — needed by an earlier one" : "")}" +
+                          (trader.File.Enabled ? "" : $"   ✖ {trader.File.Name} is switched OFF"));
         }
         foreach (var id in req.MissingIds) lines.Add($"✖ Needs a quest that no longer exists ({id}) — untick it below.");
         if (req.HasCycle) lines.Add("✖ The required quests go in a circle — this quest can never unlock.");
         _requirementsText.Text = string.Join("\n", lines);
-        _requirements.TitleColor = req.MissingIds.Count > 0 || req.HasCycle ? Theme.Red : Theme.Violet;
+        _requirements.TitleColor = req.MissingIds.Count > 0 || req.HasCycle || req.Chain.Any(c => !c.Trader.File.Enabled) ? Theme.Red : Theme.Violet;
         _details.Relayout();
     }
 
     private void ShowCondition()
     {
+        using var _ = Freeze();
         _objectiveSection.Enabled = Condition != null;
         _conditionFields.RefreshValues();
         ShowConditionPanels();
@@ -761,7 +827,7 @@ public sealed class MainForm : Form
 
         _objectiveSection.Title = c == null ? "Objective" : $"{QuestDef.OptionLetter(c.Option)} · {ConditionTypes.Label(type).ToUpperInvariant()}";
         _objectiveSection.TitleColor = Theme.ForConditionType(type);
-        _objectiveSection.Outline = Theme.ForConditionType(type);
+        _objectiveSection.Outline = Theme.Bg; // pitch black edge; the title carries the type color
 
         _condItems.Visible = items;
         _condItems.Title = type switch
@@ -862,13 +928,15 @@ public sealed class MainForm : Form
     private Row DescribeTrader(TraderEntry t)
     {
         var badges = new List<(string, Color)>();
+        if (!t.File.Enabled) badges.Add(("OFF", Theme.Muted));
         if (t.Dirty) badges.Add(("UNSAVED", Theme.Pink));
         int errors = _checks.Count(c => c.Trader == t && c.Level == CheckLevel.Error);
         if (errors > 0) badges.Add(($"{errors} ✖", Theme.Red));
         return new Row
         {
             Title = t.File.Name,
-            Subtitle = $"Trader · {t.File.Offers.Count} offers · {t.File.Quests.Count} quests",
+            TitleColor = t.File.Enabled ? Theme.Text : Theme.Muted,
+            Subtitle = $"{t.File.Offers.Count} offers · {t.File.Quests.Count} quests",
             Thumb = AvatarOf(t),
             Badges = badges,
         };
@@ -917,19 +985,28 @@ public sealed class MainForm : Form
             string.Join("  ·  ", options.Select(o =>
                 (options.Count > 1 ? QuestDef.OptionLetter(o) + ": " : "") +
                 string.Join(" + ", q.Conditions.Where(c => c.Option == o || options.Count == 1).Select(ShortCondition))));
-        var unlocks = q.Rewards.Where(r => r.Type == RewardTypes.UnlockOffer)
-            .Select(r => Trader?.Offers.FirstOrDefault(o => o.Id == r.OfferId) is { } o ? ShortName(o.ItemTpl) : "?");
         return new Row
         {
             Title = q.Name,
             Subtitle = objectives,
             ThumbText = q.MinLevel.ToString(),
             ThumbColor = Theme.Violet,
+            Thumb = Current != null ? QuestImage(Current, q) : null,
             Badges = badges,
-            Columns = new[] { $"Lvl {q.MinLevel}", options.Count.ToString(), string.Join(", ", unlocks) },
-            ColumnColors = new[] { Theme.Muted, Theme.Muted, Theme.Green },
+            Detail = "Rewards: " + RewardsText(q),
+            Columns = new[] { $"Lvl {q.MinLevel}", options.Count.ToString() },
         };
     }
+
+    /// <summary>"20,000 XP · +0.05 standing · 80× M855 · 🔓 M4A1 ×3" for the quest list.</summary>
+    private string RewardsText(QuestDef q) => q.Rewards.Count == 0 ? "—" : string.Join("  ·  ", q.Rewards.Select(r => r.Type switch
+    {
+        RewardTypes.Experience => $"{r.Value:N0} XP",
+        RewardTypes.TraderStanding => $"{(r.Value >= 0 ? "+" : "")}{r.Value:0.##} standing",
+        RewardTypes.Item => $"{r.Count}× {ShortName(r.ItemTpl)}",
+        RewardTypes.UnlockOffer => "🔓 " + (Trader?.Offers.FirstOrDefault(o => o.Id == r.OfferId) is { } o ? ShortName(o.ItemTpl) : "?") + (r.Quantity > 0 ? $" ×{r.Quantity}" : ""),
+        _ => r.Type,
+    }));
 
     private string ShortCondition(ConditionDef c) => c.Type switch
     {
@@ -1233,6 +1310,8 @@ public sealed class MainForm : Form
             copy.Save(Path.Combine(Current.Folder, name), ImageFormat.Png);
         Quest.Image = name;
         MarkDirty();
+        ShowQuestImage();
+        _quests.RefreshTexts();
         Log(CheckLevel.Ok, $"{Trader!.Name} › {Quest.Name}", $"Quest image saved as {name}", Current, Quest);
     }
 
@@ -1302,8 +1381,26 @@ public sealed class MainForm : Form
             RenderBackground();
         }) { Enabled = _backgroundSource != null, ForeColor = Theme.Text };
         menu.Items.Add(remove);
+        menu.Items.Add(new ToolStripSeparator());
+        menu.Items.Add("Button color...", null, (_, _) => ChooseAccent());
+        menu.Items.Add(new ToolStripMenuItem("Button color: default green", null, (_, _) => SetAccent(null)) { Enabled = _settings.AccentColor != null });
         foreach (ToolStripItem i in menu.Items) i.ForeColor = Theme.Text;
         return menu;
+    }
+
+    private void ChooseAccent()
+    {
+        using var dialog = new ColorDialog { Color = Theme.Accent, FullOpen = true, AnyColor = true };
+        if (dialog.ShowDialog(this) == DialogResult.OK) SetAccent(dialog.Color);
+    }
+
+    /// <summary>Recolors every green button / highlight; null = back to the default green.</summary>
+    private void SetAccent(Color? color)
+    {
+        Theme.Accent = color ?? Theme.DefaultAccent;
+        _settings.AccentColor = color is { } c ? $"#{c.R:X2}{c.G:X2}{c.B:X2}" : null;
+        _settings.Save();
+        using (Freeze()) Invalidate(true);
     }
 
     private void ChooseBackground()
@@ -1338,6 +1435,7 @@ public sealed class MainForm : Form
 
     private void RenderBackground()
     {
+        using var _ = Freeze();
         var old = BackgroundImage;
         BackgroundImage = _backgroundSource == null || ClientSize.Width < 10 ? null : Theme.CoverDarkened(_backgroundSource, ClientSize, _settings.BackgroundDim);
         BackgroundImageLayout = ImageLayout.None;
@@ -1538,6 +1636,79 @@ public sealed class MainForm : Form
     // misc
     // =====================================================================
 
+    /// <summary>Restores dragged column widths and saves new ones.</summary>
+    private void RememberColumns(string key, RowList list)
+    {
+        if (_settings.ColumnWidths.TryGetValue(key, out var widths))
+            for (int i = 0; i < list.Columns.Length && i < widths.Count; i++)
+                list.Columns[i].Width = Math.Clamp(widths[i], 40, 700);
+        list.ColumnsChanged += () =>
+        {
+            _settings.ColumnWidths[key] = list.Columns.Select(c => c.Width).ToList();
+            _settings.Save();
+        };
+    }
+
+    // ---- smooth drawing -----------------------------------------------------------
+
+    /// <summary>
+    /// WS_EX_COMPOSITED: Windows draws the whole window (all child controls)
+    /// off-screen first and shows it in one go — no flicker, no black boxes
+    /// while controls repaint.
+    /// </summary>
+    protected override CreateParams CreateParams
+    {
+        get
+        {
+            var cp = base.CreateParams;
+            cp.ExStyle |= 0x02000000; // WS_EX_COMPOSITED
+            return cp;
+        }
+    }
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern IntPtr SendMessage(IntPtr hWnd, int msg, IntPtr wParam, IntPtr lParam);
+
+    private const int WM_SETREDRAW = 0x000B;
+
+    /// <summary>
+    /// Stops drawing while many things change (switching page/trader/quest),
+    /// then draws once. Use: <c>using (Freeze()) { ... }</c>.
+    /// </summary>
+    private IDisposable Freeze()
+    {
+        if (_freeze++ == 0 && _root != null && _root.IsHandleCreated)
+            SendMessage(_root.Handle, WM_SETREDRAW, IntPtr.Zero, IntPtr.Zero);
+        return new FreezeScope(this);
+    }
+
+    private void Unfreeze()
+    {
+        if (--_freeze > 0 || _root == null || !_root.IsHandleCreated) return;
+        SendMessage(_root.Handle, WM_SETREDRAW, (IntPtr)1, IntPtr.Zero);
+        _root.Invalidate(true);
+        _root.Update();
+    }
+
+    private sealed class FreezeScope(MainForm form) : IDisposable
+    {
+        private bool _done;
+
+        public void Dispose()
+        {
+            if (_done) return;
+            _done = true;
+            form.Unfreeze();
+        }
+    }
+
+    /// <summary>Creates every control's window up front, so a page shown for the first time doesn't flash.</summary>
+    private void CreateAllHandles()
+    {
+        foreach (var c in AllControls(this))
+            if (!c.IsHandleCreated) _ = c.Handle;
+    }
+
     private void MarkDirty()
     {
         if (Current == null) return;
@@ -1620,5 +1791,6 @@ public sealed class MainForm : Form
         public override Color CheckBackground => Theme.Accent;
         public override Color CheckSelectedBackground => Theme.Accent;
         public override Color CheckPressedBackground => Theme.Accent;
+        public override Color ToolStripBorder => Theme.Bg;
     }
 }

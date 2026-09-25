@@ -16,6 +16,12 @@ public sealed class Settings
     /// <summary>How much the picture is darkened, 0-90 %, so text stays readable.</summary>
     public int BackgroundDim { get; set; } = 55;
 
+    /// <summary>Button / highlight color as #RRGGBB, or null for the default green.</summary>
+    public string? AccentColor { get; set; }
+
+    /// <summary>Column widths the user dragged, per list ("offers", "quests", "checks").</summary>
+    public Dictionary<string, List<int>> ColumnWidths { get; set; } = new();
+
     public static Settings Load()
     {
         try

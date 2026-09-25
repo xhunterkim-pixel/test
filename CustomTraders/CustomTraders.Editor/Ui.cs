@@ -436,6 +436,10 @@ public sealed class Row
 {
     public string Title { get; init; } = "";
     public string Subtitle { get; init; } = "";
+
+    /// <summary>Optional third line (lists created with lines: 3), e.g. a quest's rewards.</summary>
+    public string Detail { get; init; } = "";
+    public Color DetailColor { get; init; } = Theme.Green;
     public Color TitleColor { get; init; } = Theme.Text;
     public Color ThumbColor { get; init; } = Theme.CardSelected;
     public string ThumbText { get; init; } = "";
@@ -445,100 +449,263 @@ public sealed class Row
     public Color[]? ColumnColors { get; init; }
 }
 
-public sealed record Column(string Title, int Width);
+/// <summary>A column of a <see cref="RowList"/>; the width can be dragged in the header.</summary>
+public sealed class Column(string title, int width)
+{
+    public string Title { get; } = title;
+    public int Width { get; set; } = width;
+}
 
 /// <summary>
 /// A list drawn like a Spotify playlist: # | thumbnail + title/subtitle |
-/// columns. Selected row gets a green title and number.
+/// columns. Drawn entirely by hand into one double-buffered surface (no
+/// native list box), so selecting, hovering and scrolling never flicker.
+/// Column widths can be changed by dragging the edges in the header.
 /// </summary>
-public sealed class RowList : Panel
+public sealed class RowList : Control
 {
-    private readonly ListBox _box = new DoubleBufferedListBox
-    {
-        Dock = DockStyle.Fill, IntegralHeight = false, BorderStyle = BorderStyle.None,
-        DrawMode = DrawMode.OwnerDrawFixed, BackColor = Theme.Surface,
-    };
-    private readonly Panel _header = new() { Dock = DockStyle.Top, Height = 34, BackColor = Theme.Surface };
+    private const int HeaderHeight = 34;
+    private readonly List<object> _items = new();
+    private readonly VScrollBar _scroll = new() { Dock = DockStyle.Right, Visible = false, SmallChange = 24 };
     private readonly Func<object, Row> _describe;
-    private readonly Label _empty = new() { Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleCenter, ForeColor = Theme.Muted, BackColor = Theme.Surface, Visible = false };
-    private int _hover = -1;
+    private readonly int _rowHeight;
+    private readonly bool _compact, _header;
+    private int _selected = -1, _hover = -1, _offset;
+    private int _dragColumn = -1, _dragStartX, _dragStartWidth;
 
     public Column[] Columns { get; }
     public bool ShowIndex { get; }
-    public string EmptyText { get => _empty.Text; set => _empty.Text = value; }
+    public string EmptyText { get; set; } = "";
 
     public event Action? SelectionChanged;
     public event Action? ItemActivated;
 
-    public RowList(Func<object, Row> describe, Column[]? columns = null, bool showIndex = true, bool compact = false, bool header = true)
+    /// <summary>Raised after the user dragged a column to a new width.</summary>
+    public event Action? ColumnsChanged;
+
+    private readonly bool _threeLines;
+
+    public RowList(Func<object, Row> describe, Column[]? columns = null, bool showIndex = true, bool compact = false, bool header = true, int lines = 2)
     {
+        _threeLines = lines >= 3 && !compact;
+        SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer |
+                 ControlStyles.ResizeRedraw | ControlStyles.Selectable, true);
         _describe = describe;
         Columns = columns ?? Array.Empty<Column>();
         ShowIndex = showIndex;
-        BackColor = Theme.Surface;
-        _box.ItemHeight = compact ? 46 : 58;
-        _box.BackColor = compact ? Theme.Card : Theme.Surface;
-        _empty.BackColor = _box.BackColor;
-        _header.Visible = header;
-
-        Controls.Add(_box);
-        Controls.Add(_empty);
-        Controls.Add(_header);
-
-        _box.DrawItem += DrawRow;
-        _box.SelectedIndexChanged += (_, _) => { _box.Invalidate(); SelectionChanged?.Invoke(); };
-        _box.DoubleClick += (_, _) => ItemActivated?.Invoke();
-        _box.MouseMove += (_, e) =>
-        {
-            int i = _box.IndexFromPoint(e.Location);
-            if (i != _hover) { _hover = i; _box.Invalidate(); }
-        };
-        _box.MouseLeave += (_, _) => { _hover = -1; _box.Invalidate(); };
-        _box.Resize += (_, _) => _box.Invalidate();
-        _header.Paint += DrawHeader;
-        _header.Resize += (_, _) => _header.Invalidate();
+        _compact = compact;
+        _header = header && !compact;
+        _rowHeight = compact ? 44 : _threeLines ? 80 : 60;
+        BackColor = compact ? Theme.Card : Theme.Surface;
+        TabStop = true;
+        Controls.Add(_scroll);
+        _scroll.ValueChanged += (_, _) => { _offset = _scroll.Value; Invalidate(); };
     }
 
     public object? SelectedItem
     {
-        get => _box.SelectedItem;
+        get => _selected >= 0 && _selected < _items.Count ? _items[_selected] : null;
         set
         {
-            if (value == null) { _box.ClearSelected(); return; }
-            int i = IndexOf(value);
-            if (i >= 0) _box.SelectedIndex = i;
+            int i = value == null ? -1 : IndexOf(value);
+            if (i >= 0) Select(i);
         }
     }
 
-    public int SelectedIndex => _box.SelectedIndex;
-    public int Count => _box.Items.Count;
+    public int SelectedIndex => _selected;
+    public int Count => _items.Count;
 
     private int IndexOf(object value)
     {
-        for (int i = 0; i < _box.Items.Count; i++)
-            if (ReferenceEquals(_box.Items[i], value) || Equals(_box.Items[i], value)) return i;
+        for (int i = 0; i < _items.Count; i++)
+            if (ReferenceEquals(_items[i], value) || Equals(_items[i], value)) return i;
         return -1;
     }
 
     /// <summary>Replaces the rows, keeping (or setting) the selection.</summary>
     public void SetItems(IEnumerable<object> items, object? select = null)
     {
-        select ??= _box.SelectedItem;
-        _box.BeginUpdate();
-        _box.Items.Clear();
-        foreach (var item in items) _box.Items.Add(item);
-        _box.EndUpdate();
-        _empty.Visible = _box.Items.Count == 0 && _empty.Text.Length > 0;
-        _box.Visible = !_empty.Visible;
-
+        select ??= SelectedItem;
+        _items.Clear();
+        _items.AddRange(items);
         int index = select == null ? -1 : IndexOf(select);
-        if (index >= 0) _box.SelectedIndex = index;
-        else if (_box.Items.Count > 0) _box.SelectedIndex = 0;
-        else SelectionChanged?.Invoke();
+        _selected = index >= 0 ? index : _items.Count > 0 ? 0 : -1;
+        _hover = -1;
+        UpdateScroll();
+        EnsureVisible(_selected);
+        Invalidate();
+        SelectionChanged?.Invoke();
     }
 
     /// <summary>Redraws the rows (after an edit changed their text).</summary>
-    public void Redraw() => _box.Invalidate();
+    public void Redraw() => Invalidate();
+
+    private void Select(int index)
+    {
+        if (index < 0 || index >= _items.Count || index == _selected) return;
+        _selected = index;
+        EnsureVisible(index);
+        Invalidate();
+        SelectionChanged?.Invoke();
+    }
+
+    // ------------------------------------------------------------ scrolling
+
+    private int ListTop => _header ? HeaderHeight : 0;
+    private int ViewHeight => Math.Max(0, Height - ListTop);
+    private int ContentWidth => Width - (_scroll.Visible ? _scroll.Width : 0);
+
+    private void UpdateScroll()
+    {
+        int total = _items.Count * _rowHeight;
+        if (total > ViewHeight && ViewHeight > 0)
+        {
+            _scroll.Top = ListTop;
+            _scroll.LargeChange = ViewHeight;
+            _scroll.Maximum = total - 1;
+            _offset = Math.Clamp(_offset, 0, total - ViewHeight);
+            _scroll.Value = _offset;
+            _scroll.Visible = true;
+        }
+        else
+        {
+            _scroll.Visible = false;
+            _offset = 0;
+        }
+    }
+
+    private void ScrollTo(int offset)
+    {
+        int max = Math.Max(0, _items.Count * _rowHeight - ViewHeight);
+        offset = Math.Clamp(offset, 0, max);
+        if (offset == _offset) return;
+        _offset = offset;
+        if (_scroll.Visible) _scroll.Value = offset;
+        Invalidate();
+    }
+
+    private void EnsureVisible(int index)
+    {
+        if (index < 0) return;
+        int top = index * _rowHeight;
+        if (top < _offset) ScrollTo(top);
+        else if (top + _rowHeight > _offset + ViewHeight) ScrollTo(top + _rowHeight - ViewHeight);
+    }
+
+    protected override void OnResize(EventArgs e)
+    {
+        base.OnResize(e);
+        UpdateScroll();
+    }
+
+    protected override void OnMouseWheel(MouseEventArgs e)
+    {
+        base.OnMouseWheel(e);
+        if (!_scroll.Visible) return;
+        ScrollTo(_offset - Math.Sign(e.Delta) * _rowHeight * 2);
+        if (e is HandledMouseEventArgs h) h.Handled = true;
+    }
+
+    // ------------------------------------------------------------ mouse / keys
+
+    private int IndexAt(int y)
+    {
+        if (y < ListTop) return -1;
+        int i = (y - ListTop + _offset) / _rowHeight;
+        return i >= 0 && i < _items.Count ? i : -1;
+    }
+
+    /// <summary>Column whose left edge is under x (in the header), for resizing.</summary>
+    private int ColumnEdgeAt(int x)
+    {
+        var rects = ColumnRects(new Rectangle(0, 0, ContentWidth, HeaderHeight), out _, out _);
+        for (int i = 0; i < rects.Length; i++)
+            if (Math.Abs(x - rects[i].Left) <= 5) return i;
+        return -1;
+    }
+
+    protected override void OnMouseMove(MouseEventArgs e)
+    {
+        base.OnMouseMove(e);
+        if (_dragColumn >= 0)
+        {
+            // Dragging a column's left edge to the left makes it wider.
+            int width = Math.Clamp(_dragStartWidth + (_dragStartX - e.X), 40, 700);
+            int others = Columns.Where((_, i) => i != _dragColumn).Sum(c => c.Width);
+            width = Math.Min(width, Math.Max(40, ContentWidth - others - (ShowIndex ? 48 : 0) - 180)); // keep room for the title
+            if (width != Columns[_dragColumn].Width) { Columns[_dragColumn].Width = width; Invalidate(); }
+            return;
+        }
+        if (_header && e.Y < HeaderHeight)
+        {
+            Cursor = ColumnEdgeAt(e.X) >= 0 ? Cursors.VSplit : Cursors.Default;
+            if (_hover != -1) { _hover = -1; Invalidate(); }
+            return;
+        }
+        Cursor = Cursors.Default;
+        int hover = IndexAt(e.Y);
+        if (hover != _hover) { _hover = hover; Invalidate(); }
+    }
+
+    protected override void OnMouseDown(MouseEventArgs e)
+    {
+        base.OnMouseDown(e);
+        Focus();
+        if (e.Button != MouseButtons.Left) return;
+        if (_header && e.Y < HeaderHeight)
+        {
+            _dragColumn = ColumnEdgeAt(e.X);
+            if (_dragColumn >= 0) { _dragStartX = e.X; _dragStartWidth = Columns[_dragColumn].Width; Capture = true; }
+            return;
+        }
+        int i = IndexAt(e.Y);
+        if (i >= 0) Select(i);
+    }
+
+    protected override void OnMouseUp(MouseEventArgs e)
+    {
+        base.OnMouseUp(e);
+        if (_dragColumn < 0) return;
+        _dragColumn = -1;
+        Capture = false;
+        ColumnsChanged?.Invoke();
+    }
+
+    protected override void OnMouseDoubleClick(MouseEventArgs e)
+    {
+        base.OnMouseDoubleClick(e);
+        if (IndexAt(e.Y) >= 0) ItemActivated?.Invoke();
+    }
+
+    protected override void OnMouseLeave(EventArgs e)
+    {
+        base.OnMouseLeave(e);
+        if (_dragColumn < 0) Cursor = Cursors.Default;
+        if (_hover != -1) { _hover = -1; Invalidate(); }
+    }
+
+    protected override bool IsInputKey(Keys keyData) =>
+        keyData is Keys.Up or Keys.Down or Keys.PageUp or Keys.PageDown or Keys.Home or Keys.End || base.IsInputKey(keyData);
+
+    protected override void OnKeyDown(KeyEventArgs e)
+    {
+        base.OnKeyDown(e);
+        int page = Math.Max(1, ViewHeight / _rowHeight);
+        int target = e.KeyCode switch
+        {
+            Keys.Up => _selected - 1,
+            Keys.Down => _selected + 1,
+            Keys.PageUp => _selected - page,
+            Keys.PageDown => _selected + page,
+            Keys.Home => 0,
+            Keys.End => _items.Count - 1,
+            _ => int.MinValue,
+        };
+        if (target != int.MinValue && _items.Count > 0) Select(Math.Clamp(target, 0, _items.Count - 1));
+        if (e.KeyCode == Keys.Enter) ItemActivated?.Invoke();
+    }
+
+    // ------------------------------------------------------------ drawing
 
     private Rectangle[] ColumnRects(Rectangle bounds, out Rectangle index, out Rectangle main)
     {
@@ -556,38 +723,60 @@ public sealed class RowList : Panel
         return rects;
     }
 
-    private void DrawHeader(object? sender, PaintEventArgs e)
+    protected override void OnPaint(PaintEventArgs e)
     {
         var g = e.Graphics;
-        g.Clear(_header.BackColor);
-        var cols = ColumnRects(_header.ClientRectangle, out var index, out var main);
-        var flags = TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis | TextFormatFlags.SingleLine;
-        if (ShowIndex) TextRenderer.DrawText(g, "#", Theme.Caption, index, Theme.Muted, flags | TextFormatFlags.HorizontalCenter);
-        TextRenderer.DrawText(g, "Title", Theme.Caption, main, Theme.Muted, flags);
-        for (int i = 0; i < cols.Length; i++)
-            TextRenderer.DrawText(g, Columns[i].Title, Theme.Caption, cols[i], Theme.Muted, flags);
-        using var pen = new Pen(Theme.CardSelected);
-        g.DrawLine(pen, 8, _header.Height - 1, _header.Width - 8, _header.Height - 1);
+        g.Clear(BackColor);
+        int width = ContentWidth;
+
+        if (_header)
+        {
+            var header = new Rectangle(0, 0, width, HeaderHeight);
+            var cols = ColumnRects(header, out var index, out var main);
+            var flags = TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis | TextFormatFlags.SingleLine | TextFormatFlags.NoPrefix;
+            if (ShowIndex) TextRenderer.DrawText(g, "#", Theme.Caption, index, Theme.Muted, flags | TextFormatFlags.HorizontalCenter);
+            TextRenderer.DrawText(g, "Title", Theme.Caption, main, Theme.Muted, flags);
+            using var grip = new Pen(Theme.CardSelected);
+            for (int i = 0; i < cols.Length; i++)
+            {
+                TextRenderer.DrawText(g, Columns[i].Title, Theme.Caption, cols[i] with { X = cols[i].X + 6, Width = cols[i].Width - 6 }, Theme.Muted, flags);
+                g.DrawLine(grip, cols[i].Left, 9, cols[i].Left, HeaderHeight - 9); // drag handle
+            }
+            using var line = new Pen(Theme.CardSelected);
+            g.DrawLine(line, 8, HeaderHeight - 1, width - 8, HeaderHeight - 1);
+        }
+
+        if (_items.Count == 0)
+        {
+            TextRenderer.DrawText(g, EmptyText, Theme.Body, new Rectangle(0, ListTop, width, Math.Max(_rowHeight, ViewHeight)), Theme.Muted,
+                TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.WordBreak);
+            return;
+        }
+
+        g.SetClip(new Rectangle(0, ListTop, width, ViewHeight));
+        int first = _offset / _rowHeight;
+        for (int i = first; i < _items.Count; i++)
+        {
+            int y = ListTop + i * _rowHeight - _offset;
+            if (y > Height) break;
+            DrawRow(g, i, new Rectangle(0, y, width, _rowHeight));
+        }
+        g.ResetClip();
     }
 
-    private void DrawRow(object? sender, DrawItemEventArgs e)
+    private void DrawRow(Graphics g, int index, Rectangle bounds)
     {
-        var g = e.Graphics;
         g.SmoothingMode = SmoothingMode.AntiAlias;
-        using (var back = new SolidBrush(_box.BackColor)) g.FillRectangle(back, e.Bounds);
-        if (e.Index < 0 || e.Index >= _box.Items.Count) return;
-
-        bool selected = e.Index == _box.SelectedIndex;
-        var row = _describe(_box.Items[e.Index]);
-        var bounds = e.Bounds;
+        bool selected = index == _selected;
+        var row = _describe(_items[index]);
         var card = new RectangleF(bounds.X + 4, bounds.Y + 2, bounds.Width - 8, bounds.Height - 4);
         if (selected) Theme.FillRounded(g, Theme.CardSelected, card, 6);
-        else if (e.Index == _hover) Theme.FillRounded(g, Theme.CardHover, card, 6);
+        else if (index == _hover) Theme.FillRounded(g, Theme.CardHover, card, 6);
 
-        var cols = ColumnRects(bounds, out var index, out var main);
+        var cols = ColumnRects(bounds, out var indexRect, out var main);
         var flags = TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis | TextFormatFlags.SingleLine | TextFormatFlags.NoPrefix;
         if (ShowIndex)
-            TextRenderer.DrawText(g, (e.Index + 1).ToString(), Theme.Big, index, selected ? Theme.Accent : Theme.Muted, flags | TextFormatFlags.HorizontalCenter);
+            TextRenderer.DrawText(g, (index + 1).ToString(), Theme.Big, indexRect, selected ? Theme.Accent : Theme.Muted, flags | TextFormatFlags.HorizontalCenter);
 
         // Thumbnail: picture or a colored rounded square with a symbol/letter.
         int thumb = bounds.Height - 16;
@@ -596,7 +785,7 @@ public sealed class RowList : Panel
         {
             using var path = Theme.Rounded(thumbRect, 5);
             var state = g.Save();
-            g.SetClip(path);
+            g.SetClip(path, CombineMode.Intersect);
             g.InterpolationMode = InterpolationMode.HighQualityBicubic;
             g.DrawImage(row.Thumb, thumbRect);
             g.Restore(state);
@@ -604,66 +793,69 @@ public sealed class RowList : Panel
         else
         {
             Theme.FillRounded(g, row.ThumbColor, thumbRect, 5);
-            TextRenderer.DrawText(g, row.ThumbText, Theme.BodyBold, thumbRect,
+            TextRenderer.DrawText(g, row.ThumbText, Theme.Small, thumbRect,
                 Theme.IsLight(row.ThumbColor) ? Color.Black : Color.White, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPrefix);
         }
 
         int textX = thumbRect.Right + 12;
         int textW = main.Right - textX;
-        bool twoLines = row.Subtitle.Length > 0;
-        int titleH = Theme.RowTitle.Height;
-        var titleRect = new Rectangle(textX, twoLines ? bounds.Y + bounds.Height / 2 - titleH : bounds.Y, textW, twoLines ? titleH : bounds.Height);
-
-        // Title, then badges right after it.
         var titleColor = selected ? Theme.Accent : row.TitleColor;
-        int badgeSpace = row.Badges.Sum(b => TextRenderer.MeasureText(b.Text, Theme.Small).Width + 20);
-        int maxTitle = Math.Max(60, textW - Math.Min(badgeSpace, textW / 2));
-        int titleWidth = Math.Min(maxTitle, TextRenderer.MeasureText(g, row.Title, Theme.RowTitle, Size.Empty, TextFormatFlags.NoPadding).Width + 4);
-        TextRenderer.DrawText(g, row.Title, Theme.RowTitle, titleRect with { Width = titleWidth }, titleColor, flags | TextFormatFlags.NoPadding);
-        int bx = titleRect.X + titleWidth + 8;
-        foreach (var (text, color) in row.Badges)
-        {
-            int w = TextRenderer.MeasureText(text, Theme.Small).Width + 14;
-            if (bx + w > main.Right) break;
-            Theme.DrawBadge(g, text, color, bx, titleRect.Y + (titleRect.Height - Theme.Small.Height - 6) / 2);
-            bx += w + 6;
-        }
+        int titleH = Theme.RowTitle.Height;
 
-        if (twoLines)
+        if (_compact)
         {
-            var subRect = new Rectangle(textX, bounds.Y + bounds.Height / 2 + 1, textW, Theme.Caption.Height + 2);
-            TextRenderer.DrawText(g, row.Subtitle, Theme.Caption, subRect, Theme.Muted, flags | TextFormatFlags.NoPadding);
+            // One line: the title always in the same place, extra info to the side (never shifts the title).
+            int sideW = row.Subtitle.Length == 0 ? 0 : Math.Min(TextRenderer.MeasureText(row.Subtitle, Theme.Caption).Width + 6, textW * 2 / 5);
+            int badgesW = DrawBadges(g, row, 0, 0, measureOnly: true);
+            int titleW = Math.Max(40, textW - sideW - badgesW - 10);
+            int measured = TextRenderer.MeasureText(g, row.Title, Theme.RowTitle, Size.Empty, TextFormatFlags.NoPadding).Width + 4;
+            var titleRect = new Rectangle(textX, bounds.Y, Math.Min(titleW, measured), bounds.Height);
+            TextRenderer.DrawText(g, row.Title, Theme.RowTitle, titleRect, titleColor, flags | TextFormatFlags.NoPadding);
+            DrawBadges(g, row, titleRect.Right + 8, bounds.Y + (bounds.Height - Theme.Small.Height - 6) / 2, measureOnly: false, limit: main.Right - sideW);
+            if (sideW > 0)
+                TextRenderer.DrawText(g, row.Subtitle, Theme.Caption, new Rectangle(main.Right - sideW, bounds.Y, sideW, bounds.Height),
+                    Theme.Muted, flags | TextFormatFlags.Right);
+        }
+        else
+        {
+            // Lines at fixed positions: the title never moves, with or without the lines under it.
+            // The name always gets the room first; badges only use what's left after it.
+            int lineH = Theme.Caption.Height + 3;
+            int blockH = titleH + 2 + lineH * (_threeLines ? 2 : 1);
+            int titleY = bounds.Y + (bounds.Height - blockH) / 2;
+            int measured = TextRenderer.MeasureText(g, row.Title, Theme.RowTitle, Size.Empty, TextFormatFlags.NoPadding).Width + 4;
+            var titleRect = new Rectangle(textX, titleY, Math.Min(measured, textW), titleH + 2);
+            TextRenderer.DrawText(g, row.Title, Theme.RowTitle, titleRect, titleColor, flags | TextFormatFlags.NoPadding);
+            DrawBadges(g, row, titleRect.Right + 8, titleY + (titleH - Theme.Small.Height - 6) / 2 + 1, measureOnly: false, limit: main.Right);
+            int y = titleY + titleH + 3;
+            if (row.Subtitle.Length > 0)
+                TextRenderer.DrawText(g, row.Subtitle, Theme.Caption, new Rectangle(textX, y, textW, lineH), Theme.Muted, flags | TextFormatFlags.NoPadding);
+            if (_threeLines && row.Detail.Length > 0)
+                TextRenderer.DrawText(g, row.Detail, Theme.Caption, new Rectangle(textX, y + lineH, textW, lineH), row.DetailColor, flags | TextFormatFlags.NoPadding);
         }
 
         for (int i = 0; i < cols.Length && i < row.Columns.Length; i++)
         {
             var color = row.ColumnColors != null && i < row.ColumnColors.Length ? row.ColumnColors[i] : Theme.Muted;
-            TextRenderer.DrawText(g, row.Columns[i], Theme.Body, cols[i], color, flags);
+            TextRenderer.DrawText(g, row.Columns[i], Theme.Body, cols[i] with { X = cols[i].X + 6, Width = cols[i].Width - 10 }, color, flags);
         }
     }
 
-    private sealed class DoubleBufferedListBox : ListBox
+    /// <summary>Draws the badges from x; returns the width they take.</summary>
+    private static int DrawBadges(Graphics g, Row row, int x, int y, bool measureOnly, int limit = int.MaxValue)
     {
-        public DoubleBufferedListBox()
+        int start = x;
+        foreach (var (text, color) in row.Badges)
         {
-            SetStyle(ControlStyles.OptimizedDoubleBuffer | ControlStyles.AllPaintingInWmPaint, true);
-        }
-
-        protected override void OnPaintBackground(PaintEventArgs pevent) { }
-
-        protected override void WndProc(ref Message m)
-        {
-            base.WndProc(ref m);
-            // Owner-drawn list boxes leave the area under the last row unpainted.
-            const int WM_PAINT = 0x000F;
-            if (m.Msg == WM_PAINT && Items.Count >= 0)
+            int w = TextRenderer.MeasureText(text, Theme.Small).Width + 14;
+            if (!measureOnly)
             {
-                using var g = CreateGraphics();
-                int bottom = Items.Count == 0 ? 0 : Math.Max(0, (Items.Count - TopIndex) * ItemHeight);
-                if (bottom < ClientSize.Height)
-                    using (var b = new SolidBrush(BackColor)) g.FillRectangle(b, 0, bottom, ClientSize.Width, ClientSize.Height - bottom);
+                if (x + w > limit) break;
+                Theme.DrawBadge(g, text, color, x, y);
             }
+            x += w + 6;
         }
+        return x - start;
     }
 }
 
@@ -688,7 +880,7 @@ public sealed class ListEditor<T> : Panel where T : class
     public Toolbar Buttons => _buttons;
 
     public ListEditor(Func<List<T>?> getList, Func<T?> create, Func<T, Row> describe, string addText = "Add",
-        Func<T, T>? duplicate = null, Column[]? columns = null, bool compact = false, int height = 0)
+        Func<T, T>? duplicate = null, Column[]? columns = null, bool compact = false, int height = 0, int lines = 2)
     {
         _getList = getList;
         _create = create;
@@ -696,7 +888,7 @@ public sealed class ListEditor<T> : Panel where T : class
         BackColor = Color.Transparent;
         if (height > 0) Height = height;
 
-        _rows = new RowList(o => describe((T)o), columns, showIndex: !compact, compact: compact, header: !compact) { Dock = DockStyle.Fill };
+        _rows = new RowList(o => describe((T)o), columns, showIndex: !compact, compact: compact, header: !compact, lines: lines) { Dock = DockStyle.Fill };
         var add = new PillButton(addText, PillStyle.Primary);
         var dup = new PillButton("Duplicate", PillStyle.Outline) { Visible = duplicate != null };
         var remove = new PillButton("Remove", PillStyle.Danger);

@@ -30,6 +30,9 @@ public class TraderFile
 
     public bool UnlockedByDefault { get; set; } = true;
 
+    /// <summary>Off = the server skips this trader completely (its offers and quests aren't loaded). Nothing is deleted.</summary>
+    public bool Enabled { get; set; } = true;
+
     /// <summary>Show this trader's offers on the flea market.</summary>
     public bool ListOnFlea { get; set; } = true;
 

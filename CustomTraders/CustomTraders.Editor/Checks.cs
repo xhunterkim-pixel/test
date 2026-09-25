@@ -81,6 +81,8 @@ public static class Checks
         }
         if (f.Offers.Count == 0)
             log.Add(new(CheckLevel.Info, where, "Trader sells nothing yet (Offers page → + Add offer).", t));
+        if (!f.Enabled)
+            log.Add(new(CheckLevel.Info, where, "Switched OFF — the server won't load this trader, its offers or its quests.", t));
 
         if (log.Count == before)
             log.Add(new(CheckLevel.Ok, where, $"Trader OK — {f.Offers.Count} offer(s), {f.Quests.Count} quest(s).", t));
@@ -223,6 +225,8 @@ public static class Checks
 
         // --- unlock chain ---------------------------------------------------------------
         var req = Requirements(q, traders);
+        foreach (var (reqTrader, reqQuest, _) in req.Chain.Where(c => !c.Trader.File.Enabled && t.File.Enabled))
+            Add(CheckLevel.Error, $"Requires \"{reqQuest.Name}\" from {reqTrader.File.Name}, which is switched OFF — this quest can never unlock.");
         foreach (var id in req.MissingIds)
             Add(CheckLevel.Error, $"Requires quest {id}, which no longer exists — this quest can never unlock. Untick it under Required quests.");
         if (req.HasCycle)

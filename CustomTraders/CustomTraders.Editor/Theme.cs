@@ -21,7 +21,13 @@ public static class Theme
     public static readonly Color Text = Color.FromArgb(255, 255, 255);
     public static readonly Color Muted = Color.FromArgb(179, 179, 179);
 
-    public static readonly Color Accent = Color.FromArgb(30, 215, 96);    // green
+    public static readonly Color DefaultAccent = Color.FromArgb(30, 215, 96); // Spotify green
+
+    /// <summary>Main button / highlight color — the user can pick any color (Appearance menu).</summary>
+    public static Color Accent { get; set; } = DefaultAccent;
+
+    /// <summary>Text color that reads on top of the accent (black on light colors, white on dark ones).</summary>
+    public static Color OnAccent => IsLight(Accent) ? Color.Black : Color.White;
     public static readonly Color Violet = Color.FromArgb(160, 130, 255);
     public static readonly Color Pink = Color.FromArgb(255, 122, 182);
     public static readonly Color Green = Color.FromArgb(30, 215, 96);
@@ -30,15 +36,16 @@ public static class Theme
     public static readonly Color Blue = Color.FromArgb(80, 155, 245);
     public static readonly Color Yellow = Color.FromArgb(245, 205, 70);
 
-    public static readonly Font Body = new("Segoe UI", 10f);
-    public static readonly Font BodyBold = new("Segoe UI Semibold", 10f);
-    public static readonly Font RowTitle = new("Segoe UI Semibold", 11f);
-    public static readonly Font Big = new("Segoe UI", 12f);
+    // Bold, chunky type like Spotify's (Segoe UI weights ship with Windows).
+    public static readonly Font Body = new("Segoe UI Semibold", 10f);
+    public static readonly Font BodyBold = new("Segoe UI", 10f, FontStyle.Bold);
+    public static readonly Font RowTitle = new("Segoe UI", 11f, FontStyle.Bold);
+    public static readonly Font Big = new("Segoe UI Semibold", 12f);
     public static readonly Font Small = new("Segoe UI", 8.5f, FontStyle.Bold);
-    public static readonly Font Caption = new("Segoe UI", 9f);
-    public static readonly Font Heading = new("Segoe UI", 13f, FontStyle.Bold);
-    public static readonly Font Title = new("Segoe UI Black", 30f);
-    public static readonly Font PanelTitle = new("Segoe UI", 16f, FontStyle.Bold);
+    public static readonly Font Caption = new("Segoe UI Semibold", 9f);
+    public static readonly Font Heading = new("Segoe UI Black", 13f);
+    public static readonly Font Title = new("Segoe UI Black", 32f);
+    public static readonly Font PanelTitle = new("Segoe UI Black", 16f);
 
     /// <summary>Color per objective type, so Kill / Hand over / Extract... never look alike.</summary>
     public static Color ForConditionType(string type) => type switch
@@ -125,12 +132,12 @@ public static class Theme
                 t.ForeColor = Text;
                 if (t.BorderStyle == BorderStyle.None) break; // e.g. the search pill
                 t.BackColor = Input;
-                t.BorderStyle = BorderStyle.FixedSingle;
+                t.BorderStyle = BorderStyle.None; // no grey frame; the card around it is the edge
                 break;
             case NumericUpDown n:
                 n.BackColor = Input;
                 n.ForeColor = Text;
-                n.BorderStyle = BorderStyle.FixedSingle;
+                n.BorderStyle = BorderStyle.None;
                 break;
             case ComboBox cb:
                 StyleCombo(cb);
@@ -201,12 +208,14 @@ public static class Theme
     {
         grid.BackgroundColor = Surface;
         grid.BorderStyle = BorderStyle.None;
-        grid.GridColor = Border;
+        grid.GridColor = Bg; // pitch black lines
         grid.EnableHeadersVisualStyles = false;
         grid.ColumnHeadersDefaultCellStyle.BackColor = Card;
         grid.ColumnHeadersDefaultCellStyle.ForeColor = Text;
         grid.ColumnHeadersDefaultCellStyle.SelectionBackColor = Card;
-        grid.ColumnHeadersBorderStyle = DataGridViewHeaderBorderStyle.Single;
+        grid.ColumnHeadersBorderStyle = DataGridViewHeaderBorderStyle.None;
+        grid.RowHeadersBorderStyle = DataGridViewHeaderBorderStyle.None;
+        grid.CellBorderStyle = DataGridViewCellBorderStyle.SingleHorizontal;
         grid.RowHeadersDefaultCellStyle.BackColor = Card;
         grid.RowHeadersDefaultCellStyle.ForeColor = Text;
         grid.RowHeadersDefaultCellStyle.SelectionBackColor = CardSelected;
@@ -349,7 +358,7 @@ public class PillButton : Button
         {
             case PillStyle.Primary:
                 fill = _down ? Theme.Darken(Theme.Accent, 0.15f) : _hover ? Theme.Lighten(Theme.Accent, 0.12f) : Theme.Accent;
-                text = Color.Black;
+                text = Theme.OnAccent;
                 if (_hover && !_down) r.Inflate(0.8f, 0.8f); // Spotify's little grow on hover
                 break;
             case PillStyle.Outline:
@@ -487,7 +496,7 @@ public sealed class Toggle : CheckBox
         Theme.FillRounded(g, fill, track, 11);
         float knob = 16;
         float x = Checked ? track.Right - knob - 3 : track.X + 3;
-        using (var brush = new SolidBrush(Checked ? Color.Black : Theme.Text))
+        using (var brush = new SolidBrush(Checked ? Theme.OnAccent : Theme.Text))
             g.FillEllipse(brush, x, track.Y + 3, knob, knob);
 
         var textRect = new Rectangle(52, 0, Width - 52, Height);
