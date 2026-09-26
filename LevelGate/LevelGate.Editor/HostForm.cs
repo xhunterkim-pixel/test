@@ -20,7 +20,7 @@ public sealed class HostForm : Form
     private const string FilesHost = "files.local";
 
     public const string Version = "1.0.0";
-    public const string AppTitle = "LevelGate Editor";
+    public const string AppTitle = "Level & Item Editor";
 
     private readonly WebView2 _web = new() { Dock = DockStyle.Fill, DefaultBackgroundColor = Color.Black };
     private readonly EditorSettings _settings = EditorSettings.Load();

@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <!--
-    LevelGate.Editor.exe — Windows editor for LevelGate's level limits
+    LevelAndItemEditor.exe — Windows editor for LevelGate's level limits
     (BepInEx\plugins\LevelGate\config\level_requirements.json). The window
     hosts a web page (ui\) drawn by the Edge engine (WebView2, part of
     Windows 10/11); the item list is read from the SPT install's database.
@@ -14,7 +14,7 @@
     <UseWindowsForms>true</UseWindowsForms>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <AssemblyName>LevelGate.Editor</AssemblyName>
+    <AssemblyName>LevelAndItemEditor</AssemblyName>
     <RootNamespace>LevelGate.Editor</RootNamespace>
     <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
     <NoWarn>$(NoWarn);WFO5001;WFO1000</NoWarn>

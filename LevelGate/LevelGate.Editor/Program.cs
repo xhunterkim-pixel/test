@@ -2,7 +2,7 @@ namespace LevelGate.Editor;
 
 internal static class Program
 {
-    private static readonly string CrashLog = Path.Combine(AppContext.BaseDirectory, "LevelGate.Editor.crash.txt");
+    private static readonly string CrashLog = Path.Combine(AppContext.BaseDirectory, "LevelAndItemEditor.crash.txt");
 
     [STAThread]
     private static void Main()
@@ -54,12 +54,12 @@ internal static class Program
         {
             // couldn't reach it: the open editor stays as it is
         }
-        MessageBox.Show("LevelGate Editor is already open.", HostForm.AppTitle, MessageBoxButtons.OK, MessageBoxIcon.Information);
+        MessageBox.Show("Level & Item Editor is already open.", HostForm.AppTitle, MessageBoxButtons.OK, MessageBoxIcon.Information);
     }
 
     private static void Report(Exception? e, bool fatal)
     {
-        string text = $"{DateTime.Now:yyyy-MM-dd HH:mm:ss}  LevelGate Editor {(fatal ? "crashed" : "error")}\n{e}\n\n";
+        string text = $"{DateTime.Now:yyyy-MM-dd HH:mm:ss}  Level & Item Editor {(fatal ? "crashed" : "error")}\n{e}\n\n";
         try { File.AppendAllText(CrashLog, text); }
         catch { /* read-only folder: the message box still shows it */ }
         MessageBox.Show(

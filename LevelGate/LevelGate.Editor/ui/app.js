@@ -188,7 +188,8 @@ function afterChange(ids) {
   for (const id of ids) updateRow(id);
   if (['level', 'changed'].includes(S.sort.key) || S.filter !== 'all' || S.band) markStale();
   renderNav(); renderHeader(); renderBottom();
-  if (ids.includes(S.sel) || S.picked.size > 1) renderDetails();
+  // (not while typing a level in the details — that box would be redrawn under the cursor)
+  if ((ids.includes(S.sel) || S.picked.size > 1) && !document.activeElement?.closest?.('#details .lvl')) renderDetails();
 }
 
 // =====================================================================
@@ -330,7 +331,7 @@ function rowHtml(it, n) {
     <div class="cell">${icon(it)}<div class="text"><div class="line1"><span class="title">${esc(it.n)}</span><span class="dirty" title="Changed — not saved yet">•</span><div class="badges">${badges}</div></div>
       <div class="line2">${esc(it.s || '')}${it.s ? ' · ' : ''}<span class="mono">${id}</span></div></div></div>
     <div class="col"><i class="dot" style="--c:${g?.color || '#888'}"></i>${esc(g?.name || 'Other')}</div>
-    <div class="col stats" title="${esc(statsShort(it))}">${esc(statsShort(it)) || '<span class="muted">—</span>'}</div>
+    <div class="col stats chips-col" title="${esc(statsShort(it))}">${statChips(it)}</div>
     <div class="col num">${price ? fmt(price) + ' ₽' : '—'}</div>
     ${levelCell(id)}
   </div>`;
@@ -393,7 +394,7 @@ function renderDetails() {
   if (S.tab === 'stats') { statsDetails(); return; }
   if (picked.length > 1) { $('#detailsTitle').textContent = `${picked.length} Items Picked`; d.innerHTML = overall() + multiDetails(picked) + tagCard(picked); return; }
   if (!S.sel) {
-    $('#detailsTitle').textContent = 'LevelGate Editor';
+    $('#detailsTitle').textContent = 'Level Limits';
     d.innerHTML = overall(true) + welcome();
     return;
   }

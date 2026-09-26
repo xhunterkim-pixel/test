@@ -1,6 +1,6 @@
 @echo off
 rem ---------------------------------------------------------------------
-rem  Builds LevelGate.Editor.exe (the level limits editor) as ONE file into
+rem  Builds LevelAndItemEditor.exe (level limits + item stats editor) as ONE file into
 rem  the "Editor" folder next to this script. Needs the .NET 10 SDK.
 rem  Put the finished Editor folder anywhere EXCEPT inside BepInEx (BepInEx
 rem  would try to load its dlls), e.g. C:\SPT\LevelGate Editor.
@@ -14,6 +14,6 @@ if errorlevel 1 (
   exit /b 1
 )
 echo.
-echo Done: %~dp0Editor\LevelGate.Editor.exe
+echo Done: %~dp0Editor\LevelAndItemEditor.exe
 start "" "%~dp0Editor"
 pause

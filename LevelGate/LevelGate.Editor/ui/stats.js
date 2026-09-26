@@ -94,6 +94,58 @@ function healthText(m) {
 }
 
 /** One line for the lists. */
+// ---- small icons for the lists
+const ICON = {
+  energy: '<path d="M13 2 4 14h7l-1 8 9-12h-7l1-8z"/>',
+  water: '<path d="M12 2s7 8 7 13a7 7 0 0 1-14 0c0-5 7-13 7-13z"/>',
+  time: '<path d="M12 2a10 10 0 1 1 0 20 10 10 0 0 1 0-20Zm1 5h-2v6l5 3 1-1.7-4-2.3V7Z"/>',
+  uses: '<path d="M4 5h16v3H4zM4 10.5h16v3H4zM4 16h16v3H4z"/>',
+  hp: '<path d="M10 3h4v7h7v4h-7v7h-4v-7H3v-4h7z"/>',
+  cure: '<path d="M12 2 4 5v6c0 5 3.4 9.6 8 11 4.6-1.4 8-6 8-11V5l-8-3Zm-1 5h2v3h3v2h-3v3h-2v-3H8v-2h3V7Z"/>',
+  fx: '<path d="m12 2 2.4 7.2L22 12l-7.6 2.8L12 22l-2.4-7.2L2 12l7.6-2.8z"/>',
+};
+/** One icon per treatment (drawn for this editor, in the spirit of the game's health icons). */
+const CURE_ICON = {
+  LightBleeding: ['<path d="M12 5s5 6 5 9.5a5 5 0 0 1-10 0C7 11 12 5 12 5z"/>', '#ff6b6b'],
+  HeavyBleeding: ['<path d="M8 3s4 5 4 8a4 4 0 0 1-8 0c0-3 4-8 4-8zm8 6s4 5 4 8a4 4 0 0 1-8 0c0-3 4-8 4-8z"/>', '#ff3b3b'],
+  Fracture: ['<path d="M7 3a3 3 0 0 0-2.8 4.1A3 3 0 1 0 7.9 11L13 16.1a3 3 0 1 0 3.9 3.7A3 3 0 1 0 20.9 16 3 3 0 0 0 17 12.1L11.9 7A3 3 0 0 0 7 3z"/>', '#e8e8e8'],
+  Pain: ['<path d="M4.9 13.4 13.4 4.9a4.5 4.5 0 0 1 6.4 6.4l-8.5 8.5a4.5 4.5 0 0 1-6.4-6.4zm1.4 1.4a2.5 2.5 0 0 0 3.5 3.5l3.5-3.5-3.5-3.5z"/>', '#ffa42b'],
+  Contusion: ['<path d="m12 2 2 5 5-2-2 5 5 2-5 2 2 5-5-2-2 5-2-5-5 2 2-5-5-2 5-2-2-5 5 2z"/>', '#f5cd46'],
+  Intoxication: ['<path d="M9 2h6v2h-1v5l5 9a2 2 0 0 1-1.8 3H6.8A2 2 0 0 1 5 18l5-9V4H9V2z"/>', '#8bd66b'],
+  LethalIntoxication: ['<path d="M12 2a8 8 0 0 0-5 14.2V20h3v-2h1v2h2v-2h1v2h3v-3.8A8 8 0 0 0 12 2zm-3 8a2 2 0 1 1 0 4 2 2 0 0 1 0-4zm6 0a2 2 0 1 1 0 4 2 2 0 0 1 0-4z"/>', '#5fd35f'],
+  RadExposure: ['<path d="M12 10a2 2 0 1 1 0 4 2 2 0 0 1 0-4zM10.3 9.1L7.0 3.3A10 10 0 0 1 17.0 3.3L13.7 9.1A3.4 3.4 0 0 0 10.3 9.1zM15.4 12.0L22.0 12.0A10 10 0 0 1 17.0 20.7L13.7 14.9A3.4 3.4 0 0 0 15.4 12.0zM10.3 14.9L7.0 20.7A10 10 0 0 1 2.0 12.0L8.6 12.0A3.4 3.4 0 0 0 10.3 14.9z"/>', '#ffd54f'],
+  DestroyedPart: ['<path d="M5 3 21 19l-2 2L3 5zm14 0 2 2L5 21l-2-2z"/>', '#ff8a80'],
+};
+const cureIcon = t => (CURE_ICON[t] ? `<svg class="cure-ico" viewBox="0 0 24 24" style="fill:${CURE_ICON[t][1]}">${CURE_ICON[t][0]}</svg>` : '');
+const chip = (icon, text, color, title) => `<span class="schip ${text === '' ? 'ico' : ''}" style="--c:${color}" title="${esc(title)}"><svg viewBox="0 0 24 24">${ICON[icon] || CURE_ICON[icon]?.[0] || ''}</svg>${esc(text)}</span>`;
+/** Uses of a med: 0 means single use (splints, antibiotics...). */
+const usesOf = m => Math.max(1, Number(m.MaxHpResource) || 0);
+
+/** Meds / food as icon chips (lists); other items as text. */
+function statChips(it) {
+  const kind = medKind(it), m = kind && effMed(it.i);
+  if (!m) return esc(statsShort(it)) || '<span class="muted">—</span>';
+  const out = [];
+  const use = m.medUseTime ?? m.foodUseTime;
+  const eh = m.effects_health || {};
+  if (eh.Energy?.value) out.push(chip('energy', sgn(Number(eh.Energy.value)), '#f5cd46', 'Energy (whole item)'));
+  if (eh.Hydration?.value) out.push(chip('water', sgn(Number(eh.Hydration.value)), '#5cc8ff', 'Hydration (whole item)'));
+  if (kind === 'medkit') out.push(chip('hp', `${m.MaxHpResource ?? 0}`, '#f15e6c', 'HP resource'));
+  else if (kind === 'food') { if (m.MaxResource > 1) out.push(chip('uses', `${m.MaxResource}`, '#b3b3b3', 'Units')); }
+  else out.push(chip('uses', `${usesOf(m)}`, '#b3b3b3', usesOf(m) === 1 ? 'Single use' : 'Uses'));
+  if (use !== undefined) out.push(chip('time', `${r2(use)}s`, '#9a9a9a', 'Use time'));
+  // one icon per treatment; painkillers / stims show for how long
+  for (const [k, e] of Object.entries(m.effects_damage || {})) {
+    const timed = kind !== 'medkit' && Number(e?.duration) > 0;
+    const cost = Number(e?.cost) > 0 ? ` (${e.cost} ${kind === 'medkit' ? 'HP' : 'uses'})` : '';
+    out.push(chip(k, timed ? `${e.duration}s` : '', CURE_ICON[k]?.[1] || '#7ee0c3', `${kind === 'medkit' || kind === 'medical' ? 'Treats' : 'Removes'} ${DAMAGE_NAME[k] || k}${timed ? ` for ${e.duration} s` : ''}${cost}`));
+  }
+  const fx = m.effects_buffs || [];
+  if (fx.length) out.push(chip('fx', `${fx.length} · ${Math.max(0, ...fx.map(b => Number(b.Duration) || 0))}s`, '#a082ff', fx.map(buffText).join('\n')));
+  if (S.statEdits[it.i]) out.push('<span class="schip ed" title="Edited by you">✎</span>');
+  return out.join('');
+}
+
 function statsShort(it) {
   const st = it.st || {};
   const parts = [];
@@ -106,7 +158,7 @@ function statsShort(it) {
     if (kind === 'medkit') parts.push(`${m.MaxHpResource ?? 0} HP`, ...curesText(m, kind).slice(0, 2));
     else if (kind === 'food') parts.push(...healthText(m), ...((m.effects_buffs || []).length ? [`${m.effects_buffs.length} effect(s)`] : []));
     else if (kind === 'stim') parts.push(`${(m.effects_buffs || []).length} effects`, `${Math.max(0, ...(m.effects_buffs || []).map(b => Number(b.Duration) || 0))} s`);
-    else parts.push(...curesText(m, kind).slice(0, 3), ...(m.MaxHpResource > 1 ? [`${m.MaxHpResource} uses`] : []));
+    else parts.push(...curesText(m, kind).slice(0, 3), usesOf(m) === 1 ? 'single use' : `${usesOf(m)} uses`);
     if (S.statEdits[it.i]) parts.push('✎');
   }
   return parts.join(' · ');
@@ -132,7 +184,7 @@ function statsCard(it) {
     if (use !== undefined) row('Use Time', `${use} s`);
     if (kind === 'medkit') row('HP Resource', `${m.MaxHpResource ?? 0}${m.hpResourceRate ? ` · heals up to ${m.hpResourceRate} HP per use` : ''}`);
     else if (kind === 'food') { if (m.MaxResource > 1) row('Uses', m.MaxResource); }
-    else if (m.MaxHpResource > 1) row('Uses', m.MaxHpResource);
+    else row('Uses', usesOf(m) === 1 ? '1 (single use)' : usesOf(m));
     const health = healthText(m);
     if (health.length) row(kind === 'food' ? 'Gives' : 'Also', esc(health.join(', ')) + (kind === 'food' && m.MaxResource > 1 ? ` <span class="muted small">(whole item, ${m.MaxResource} units — drinking / eating part gives that share)</span>` : ''));
     const cures = curesText(m, kind);
@@ -216,8 +268,8 @@ function statsPage() {
         <div class="badges">${S.statEdits[id] ? '<span class="badge" style="--c:var(--violet)">EDITED</span>' : ''}${it.m ? `<span class="badge" style="--c:var(--pink)">${esc(it.m)}</span>` : ''}${tagBadges(id)}</div></div>
         <div class="line2">${esc(it.s || '')}</div></div></div>
       <div class="col"><i class="dot" style="--c:${k.color}"></i>${esc(k.name)}</div>
-      <div class="col stats" title="${esc(statsShort(it))}">${esc(statsShort(it).replace(/ · ✎$/, ''))}</div>
-      <div class="col num">${levelOf(id) !== undefined ? 'Lvl ' + levelOf(id) : '<span class="muted">—</span>'}</div>
+      <div class="col stats chips-col">${statChips(it)}</div>
+      ${levelCell(id)}
     </div>`;
   }).join('');
   return `<div class="toolbar sticky">${warn}
@@ -253,14 +305,14 @@ function statsDetails() {
   $('#detailsTitle').textContent = it.n;
   const num = (label, key, field, step = 1, hint = '') => `<div class="field"><label>${esc(label)} ${defNote(m[field], def[field])}</label><div class="numrow"><input type="number" step="${step}" data-key="${key}" data-sf="${field}" value="${m[field] ?? ''}">${hint ? `<span class="muted small">${hint}</span>` : ''}</div></div>`;
   const resource = kind === 'medkit' ? num('HP Resource', 'hp', 'MaxHpResource', 1, 'total HP it can heal') + num('HP per Use', 'rate', 'hpResourceRate', 1, 'most it heals in one use')
-    : kind === 'food' ? num('Uses', 'res', 'MaxResource', 1) : num('Uses', 'hp', 'MaxHpResource', 1);
+    : kind === 'food' ? num('Units', 'res', 'MaxResource', 1, 'how much there is to eat / drink') : num('Uses', 'hp', 'MaxHpResource', 1, '0 or 1 = single use');
   const useField = kind === 'food' ? 'foodUseTime' : 'medUseTime';
   const health = HEALTH.map(([f, n]) => `<div class="field"><label>${n} ${defNote(m.effects_health?.[f]?.value, def.effects_health?.[f]?.value)}</label><div class="numrow"><input type="number" step="1" data-key="eh-${f}" data-eh="${f}" value="${m.effects_health?.[f]?.value ?? ''}" placeholder="none"><span class="muted small">${kind === 'food' ? wholeItemHint(m, f) : 'when used'}</span></div></div>`).join('');
   const dmg = DAMAGE.map(([t, n]) => {
     const e = m.effects_damage?.[t], de = def.effects_damage?.[t];
     const on = !!e;
     const f = (field, label) => `<label class="mini-f">${label} ${on && de ? defNote(e?.[field], de?.[field], true) : ''}<input type="number" step="1" data-key="ed-${t}-${field}" data-ed="${t}" data-edf="${field}" value="${e?.[field] ?? ''}" ${on ? '' : 'disabled'}></label>`;
-    return `<div class="dmg-row ${on ? 'on' : ''}"><label class="switch"><input type="checkbox" data-key="ed-${t}" data-edon="${t}" ${on ? 'checked' : ''}><span class="track"></span><span>${n} ${!!de !== on ? `<span class="def">(${de ? 'on' : 'off'} Default)</span>` : ''}</span></label>
+    return `<div class="dmg-row ${on ? 'on' : ''}"><label class="switch"><input type="checkbox" data-key="ed-${t}" data-edon="${t}" ${on ? 'checked' : ''}><span class="track"></span><span>${cureIcon(t)}${n} ${!!de !== on ? `<span class="def">(${de ? 'on' : 'off'} Default)</span>` : ''}</span></label>
       <div class="dmg-fields" ${on ? '' : 'hidden'}>${kind === 'medkit' || kind === 'medical' ? f('cost', 'Cost') : ''}${f('duration', 'For (s)')}${f('delay', 'Delay')}${f('fadeOut', 'Fade')}${t === 'DestroyedPart' ? f('healthPenaltyMin', 'Min %') + f('healthPenaltyMax', 'Max %') : ''}</div></div>`;
   }).join('');
   const buffs = (m.effects_buffs || []).map((b, i) => `<div class="buff-row">
@@ -276,11 +328,13 @@ function statsDetails() {
   d.innerHTML = `<div class="card hero">${icon(it, true)}<div class="hero-text"><div class="kind" style="color:${k.color}">${esc(k.name.toUpperCase())}</div>
       <div class="hero-name">${esc(it.s || it.n)}</div><div class="muted small">${esc(statsShort(it).replace(/ · ✎$/, ''))}</div></div></div>
     ${S.statEdits[id] || !sameAsDefault(id) ? `<div class="edited-bar"><span>${S.statEdits[id] ? '✎ Edited here' : 'Changed by another mod'}</span><span>${S.statEdits[id] ? '<button class="outline small-btn" data-act="statReset" title="Remove your edit (other mods\' values come back)">Undo My Edit</button>' : ''}${!sameAsDefault(id) ? `<button class="outline small-btn" data-act="statResetDefault" data-arg="${id}" title="Escape From Tarkov's own values">Reset to EFT Default</button>` : ''}</span></div>` : ''}
+    <div class="card lvl-card"><h3>Unlocks At (LevelGate)</h3><div class="numrow">${levelCell(id)}<div class="quick">${[1, 5, 10, 15, 20, 25, 30, 40, 50].map(n => `<button class="chip ${levelOf(id) === n ? 'on' : ''}" data-act="quick" data-arg="${n}">${n}</button>`).join('')}</div></div>
+      <div class="hint">${levelOf(id) === undefined ? 'No level limit — anyone can use it.' : `Players below level ${levelOf(id)} can't use it.`} Saved to LevelGate's level_requirements.json.</div></div>
     <div class="card"><h3>Use</h3>${num('Use Time', 'use', useField, 0.5, 'seconds')}${resource}</div>
     <div class="card"><h3>${kind === 'food' ? 'Energy & Hydration' : 'Energy & Hydration'}</h3>${health}</div>
     ${kind === 'food' ? '' : `<div class="card"><h3>${kind === 'medkit' || kind === 'medical' ? 'Treats' : 'Removes'}</h3><div class="hint">${kind === 'medkit' || kind === 'medical' ? '"Cost" = HP / uses spent to treat it.' : 'Switched on = the effect is suppressed for that long (painkillers, stims).'}</div>${dmg}</div>`}
     <div class="card"><h3>Effects Over Time<span class="grow"></span><button class="outline small-btn" data-act="buffAdd">+ Add Effect</button></h3>
-      ${m.buffName ? `<div class="hint">Buff list "${esc(m.buffName)}"${sharing.length ? ` — also used by ${esc(sharing.join(', '))}, which change with it` : ''}.</div>` : '<div class="hint">No effects over time yet (stims, some food). Adding one creates a list just for this item.</div>'}
+      ${sharing.length && (m.effects_buffs || []).length ? `<div class="hint">These effects are shared with ${esc(sharing.join(', '))} — changing them changes those too.</div>` : (m.effects_buffs || []).length ? '' : '<div class="hint">No effects over time (stims and some food have them). + Add Effect to give it some.</div>'}
       ${buffs || ''}
       ${JSON.stringify(m.effects_buffs || []) !== JSON.stringify(def.effects_buffs || []) ? `<div class="def-list"><div class="def">Escape From Tarkov default:</div>${(def.effects_buffs || []).map(b => `<div>${esc(buffText(b))}</div>`).join('') || '<div>no effects</div>'}</div>` : ''}</div>
     ${tagCard([id])}`;
@@ -292,6 +346,7 @@ function editStat(id, mutate) {
   const before = S.statEdits[id] ? JSON.stringify(S.statEdits[id]) : null;
   const m = JSON.parse(JSON.stringify(effMed(id)));
   mutate(m);
+  if (!(m.effects_buffs || []).length && String(m.buffName || '').startsWith('ItemStatEditor_')) m.buffName = S.meds[id].buffName ?? '';
   const edit = {};
   for (const k of KEEP) if (m[k] !== undefined) edit[k] = m[k];
   const base = {};
