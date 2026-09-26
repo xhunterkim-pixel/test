@@ -166,8 +166,40 @@ is ever touched.
   equip/throw/eat/heal, the ammo-loading patch, and an in-game editor
   window (default key **F9**).
 - `LevelGate.csproj` — project file to build it.
-- `config/level_requirements.json` — example config. Edit by hand or
-  through the F9 menu once it's running.
+- `config/level_requirements.json` — example config. Edit by hand, through
+  the F9 menu once it's running, or with the LevelGate Editor.
+- `LevelGate.Editor/` + `Build-Editor.bat` — the level limits editor (below).
+
+## LevelGate Editor (the level limits editor)
+
+`LevelGate.Editor\` is a Windows app with the same look as the Custom
+Trader Creator, for editing `level_requirements.json` without hunting ids:
+
+- every game item (and modded items) by category tab — Weapons, Ammo,
+  Medical, Backpacks, Rigs, Armor, Keys… — with its picture, short name,
+  id and price; items that aren't limited are listed too
+- type a level straight into the Level column (empty = no limit), or use
+  the slider / quick buttons on the right; pick several (Ctrl / Shift-click,
+  Ctrl+A) to set or remove them all at once, or +1 / −1 them
+- filters (All / Limited / Not Limited), search, sort by name, level,
+  category, price or "changed first"
+- Mods page: **Scan My Mods Folder** finds server mods that add items
+  (same scanner as the trader editor); switch each mod on/off
+- Save shows every change first, then writes only those changes into the
+  file as it is on disk right now (entries added in the game's F9 window
+  meanwhile are kept); undo / redo; changes made in game show up live
+
+While the game runs, LevelGate (1.6.0+) notices the saved file within ~2 s
+and reloads it (F9 → Reload from disk does the same). Reopen the inventory
+to refresh item names.
+
+The prebuilt editor is in `Editor\` of the release zip. Put that folder
+anywhere **outside BepInEx** (e.g. `C:\SPT\LevelGate Editor\`) — BepInEx
+would try to load its dlls as plugins. It finds
+`C:\SPT\BepInEx\plugins\LevelGate\config\level_requirements.json` by
+itself (or use Browse…). To build it yourself: `Build-Editor.bat` (.NET 10
+SDK; it uses a few source files of `..\CustomTraders`, keep that folder
+next to this one).
 
 ## How to find an item's TplId (verified way)
 

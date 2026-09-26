@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>LevelGate Editor</title>
+  <link rel="stylesheet" href="base.css">
+  <link rel="stylesheet" href="app.css">
+</head>
+<body>
+  <div id="bg"></div>
+
+  <header id="top">
+    <div class="logo"><div>LevelGate Editor</div><div class="credit"><span id="appVersion">v1.0.0</span> · discord : k_kyangg</div></div>
+    <div class="search-pill">
+      <span class="ico">📁</span>
+      <span id="folder" class="folder">Pick BepInEx\plugins\LevelGate\config\level_requirements.json</span>
+      <button class="ghost" data-act="reload" title="Read the file again">Reload</button>
+      <button class="ghost" data-act="browse">Browse…</button>
+    </div>
+    <div class="top-right">
+      <span id="itemsStatus" class="muted small"></span>
+      <button class="ghost" data-act="openFolder" title="Open the config folder">📂 Folder</button>
+      <button class="ghost" data-act="shortcuts" title="Keyboard shortcuts (F1)">⌨ Shortcuts</button>
+    </div>
+  </header>
+
+  <main id="main">
+    <aside id="left" class="panel">
+      <div class="nav-title">Categories</div>
+      <nav id="nav" class="scroll"></nav>
+      <div class="nav-sep"></div>
+      <button class="nav" data-act="page" data-arg="mods" id="navModsBtn"><svg viewBox="0 0 24 24"><path d="M10 2a2.5 2.5 0 0 1 2.5 2.5V5H17a2 2 0 0 1 2 2v4.5h.5a2.5 2.5 0 0 1 0 5H19V21a1 1 0 0 1-1 1h-4.5v-1a2 2 0 1 0-4 0v1H5a1 1 0 0 1-1-1v-4.5h1a2 2 0 1 0 0-4H4V7a2 2 0 0 1 2-2h1.5v-.5A2.5 2.5 0 0 1 10 2Z"/></svg><span>Mods</span><em id="navMods"></em></button>
+    </aside>
+
+    <div class="splitter" id="splitLeft" title="Drag to resize · double-click to reset"></div>
+
+    <section id="center" class="panel">
+      <div id="header">
+        <div id="headerArt"></div>
+        <div class="header-text">
+          <div id="headerKind" class="kind">LEVEL LIMITS</div>
+          <h1 id="headerTitle">All Items</h1>
+          <div id="headerSub" class="muted"></div>
+        </div>
+      </div>
+      <nav id="chips">
+        <div id="searchBox" class="search" title="Search (Ctrl+F)"><svg viewBox="0 0 24 24"><path d="M10.5 3a7.5 7.5 0 0 1 6 12l4.7 4.7-1.4 1.4-4.7-4.7A7.5 7.5 0 1 1 10.5 3Zm0 2a5.5 5.5 0 1 0 0 11 5.5 5.5 0 0 0 0-11Z"/></svg>
+          <input type="text" id="search" placeholder="Search names, short names, ids" spellcheck="false"><button class="icon-btn" id="searchClear" data-act="clearSearch" title="Clear">✕</button></div>
+        <button class="view-btn" data-act="sortMenu" title="Sort and what's shown"><span id="viewLabel">Name</span><svg viewBox="0 0 24 24"><path d="M3 5h2v2H3V5Zm4 0h14v2H7V5ZM3 11h2v2H3v-2Zm4 0h14v2H7v-2Zm-4 6h2v2H3v-2Zm4 0h14v2H7v-2Z"/></svg></button>
+      </nav>
+      <div id="page" class="scroll"></div>
+    </section>
+
+    <div class="splitter" id="splitter" title="Drag to resize · double-click to reset"></div>
+
+    <aside id="right" class="panel">
+      <h2 id="detailsTitle"></h2>
+      <div id="details" class="scroll"></div>
+    </aside>
+  </main>
+
+  <footer id="bottom">
+    <div id="status" class="muted"></div>
+    <div id="diskNote" class="muted small"></div>
+    <div id="unsaved"></div>
+    <div class="undo-group">
+      <button class="icon-btn big-icon" id="undoBtn" data-act="undo" title="Undo (Ctrl+Z)">↶</button>
+      <button class="icon-btn big-icon" id="redoBtn" data-act="redo" title="Redo (Ctrl+Y)">↷</button>
+    </div>
+    <button class="primary big" data-act="save">Save</button>
+  </footer>
+
+  <div id="modal" hidden></div>
+  <div id="toast"></div>
+
+  <script>
+    // Outside the editor (plain browser) a test double of the host is used.
+    if (!(window.chrome && window.chrome.webview)) document.write('<script src="dev-mock.js"><\/script>');
+  </script>
+  <script src="app.js"></script>
+</body>
+</html>

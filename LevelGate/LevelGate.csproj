@@ -10,6 +10,14 @@
     <SptDir>C:\SPT</SptDir>
   </PropertyGroup>
 
+  <!-- The editor (LevelGate.Editor\) is its own Windows project: keep its files out of the plugin. -->
+  <ItemGroup>
+    <Compile Remove="LevelGate.Editor\**" />
+    <None Remove="LevelGate.Editor\**" />
+    <Content Remove="LevelGate.Editor\**" />
+    <EmbeddedResource Remove="LevelGate.Editor\**" />
+  </ItemGroup>
+
   <ItemGroup>
     <!--
       All of these DLLs must be copied in from YOUR game install — they are

@@ -27,7 +27,7 @@ namespace LevelGate
     {
         public const string PluginGuid = "com.yourname.levelgate";
         public const string PluginName = "LevelGate";
-        public const string PluginVersion = "1.5.1";
+        public const string PluginVersion = "1.6.0";
 
         internal static ManualLogSource Log;
         internal static ConfigEntry<KeyboardShortcut> ToggleMenuKey;
@@ -161,6 +161,43 @@ namespace LevelGate
             }
 
             StripeOverlay.WatchLevel();
+            WatchConfigFile();
+        }
+
+        // The LevelGate Editor (or a text editor) saving level_requirements.json while the
+        // game runs: picked up within ~2 s — one file-time check, no reading unless it changed.
+        private static DateTime _configWritten;
+        private static float _nextConfigCheck;
+
+        private static void WatchConfigFile()
+        {
+            float now = Time.realtimeSinceStartup;
+            if (now < _nextConfigCheck) return;
+            _nextConfigCheck = now + 2f;
+            try
+            {
+                if (!File.Exists(ConfigFile)) return;
+                var written = File.GetLastWriteTimeUtc(ConfigFile);
+                if (written == _configWritten) return;
+                bool first = _configWritten == default;
+                _configWritten = written;
+                if (first) return; // the load at startup
+                ReloadConfig("the file changed on disk");
+            }
+            catch (Exception e)
+            {
+                Log?.LogWarning("LevelGate: couldn't check the config file. " + e.Message);
+            }
+        }
+
+        /// <summary>Reads the file again and redraws the stripes / names already on screen.</summary>
+        internal static void ReloadConfig(string why)
+        {
+            LoadConfig();
+            try { _configWritten = File.GetLastWriteTimeUtc(ConfigFile); } catch { /* keep the old time */ }
+            ItemRenameShared.ShownNames.Clear();
+            StripeOverlay.RefreshAll();
+            Log?.LogInfo($"LevelGate: reloaded {Data.Items.Count} level requirement(s) ({why}). Reopen the inventory to refresh item names.");
         }
 
         private void OnGUI()
@@ -291,7 +328,7 @@ namespace LevelGate
             GUILayout.Space(6);
             if (GUILayout.Button("Reload from disk"))
             {
-                LoadConfig();
+                ReloadConfig("Reload from disk");
             }
             if (GUILayout.Button("Close"))
             {
@@ -361,6 +398,7 @@ namespace LevelGate
                 Directory.CreateDirectory(ConfigFolder);
                 var wrapper = new ConfigFileShape { items = Data.Items };
                 File.WriteAllText(ConfigFile, JsonConvert.SerializeObject(wrapper, Formatting.Indented));
+                _configWritten = File.GetLastWriteTimeUtc(ConfigFile); // our own save isn't a change to reload
             }
             catch (Exception e)
             {
