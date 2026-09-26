@@ -27,7 +27,7 @@ namespace LevelGate
     {
         public const string PluginGuid = "com.yourname.levelgate";
         public const string PluginName = "LevelGate";
-        public const string PluginVersion = "1.1.0";
+        public const string PluginVersion = "1.2.0";
 
         internal static ManualLogSource Log;
         internal static ConfigEntry<KeyboardShortcut> ToggleMenuKey;
@@ -41,6 +41,12 @@ namespace LevelGate
         internal static ConfigEntry<string> UnlockedColor;
         internal static ConfigEntry<string> SemiLockedColor;
         internal static ConfigEntry<float> LockIconRefreshSeconds;
+        internal static ConfigEntry<bool> StripesEnabled;
+        internal static ConfigEntry<string> StripeStrength;
+        internal static ConfigEntry<bool> StripesGameStyle;
+
+        // Diagonal-stripe look on LOCKED / UNLOCKED / SEMI LOCKED item backgrounds.
+        internal static readonly string[] StripeStrengthChoices = { "Subtle", "Medium", "Strong" };
 
         // Only these refresh rates are offered: 0 (every frame) made the
         // loading screen hang, since each refresh searches all item views.
@@ -84,6 +90,15 @@ namespace LevelGate
                 new ConfigDescription(
                     "How often the lock icons are refreshed. Lower = appears faster, costs a little more CPU.",
                     new AcceptableValueList<float>(LockIconRefreshChoices)));
+
+            // Diagonal stripes over the colored background of LOCKED /
+            // UNLOCKED / SEMI LOCKED items (behind the item picture).
+            StripesEnabled = Config.Bind("Stripes", "Enabled", true,
+                "Draw diagonal stripes on the background of LOCKED, UNLOCKED and SEMI LOCKED items.");
+            StripeStrength = Config.Bind("Stripes", "Strength", "Medium",
+                new ConfigDescription("How dark the stripes are.", new AcceptableValueList<string>(StripeStrengthChoices)));
+            StripesGameStyle = Config.Bind("Stripes", "UseGameStripes", true,
+                "Use the game's own striped background (the one on items you lock in the stash). Off = LevelGate's drawn stripes.");
 
             // Label text and background colors for the three states. Also
             // editable live from the F9 window. Colors are the game's own
@@ -199,6 +214,29 @@ namespace LevelGate
                 if (GUILayout.Button(selected ? "> " + label + " <" : label, GUILayout.Width(75)))
                 {
                     LockIconRefreshSeconds.Value = choice;
+                }
+            }
+            GUILayout.EndHorizontal();
+
+            GUILayout.BeginHorizontal();
+            GUILayout.Label("Stripes:", GUILayout.Width(90));
+            if (GUILayout.Button(StripesEnabled.Value ? "ON" : "OFF", GUILayout.Width(60)))
+            {
+                StripesEnabled.Value = !StripesEnabled.Value;
+            }
+            if (GUILayout.Button(StripesGameStyle.Value ? "Game style" : "LevelGate style", GUILayout.Width(110)))
+            {
+                StripesGameStyle.Value = !StripesGameStyle.Value;
+            }
+            GUILayout.EndHorizontal();
+            GUILayout.BeginHorizontal();
+            GUILayout.Label("", GUILayout.Width(90));
+            foreach (var choice in StripeStrengthChoices)
+            {
+                bool selected = StripeStrength.Value == choice;
+                if (GUILayout.Button(selected ? "> " + choice + " <" : choice, GUILayout.Width(85)))
+                {
+                    StripeStrength.Value = choice;
                 }
             }
             GUILayout.EndHorizontal();
@@ -970,7 +1008,9 @@ namespace LevelGate
             float now = Time.realtimeSinceStartup;
             if (now < _nextScan) return;
 
-            bool enabled = LevelGatePlugin.LockIconsEnabled?.Value ?? true;
+            bool icons = LevelGatePlugin.LockIconsEnabled?.Value ?? true;
+            bool stripes = LevelGatePlugin.StripesEnabled?.Value ?? true;
+            bool enabled = icons || stripes;
             float interval = LevelGatePlugin.LockIconRefreshSeconds?.Value ?? 0.5f;
             if (interval < 0.1f) interval = 0.1f; // never every frame
             _nextScan = now + interval;
@@ -1005,8 +1045,9 @@ namespace LevelGate
                     views++;
                     var item = ReflectionUtil.GetMember(view, "Item") as EFT.InventoryLogic.Item;
                     if (item != null) withItem++;
-                    bool locked = item != null && LevelGateCheck.IsBlocked(player, item.TemplateId, out _);
-                    SetIcon(view, locked);
+                    var state = StateOf(player, item);
+                    SetIcon(view, icons && state == ItemState.Locked);
+                    StripeOverlay.Set(view, stripes ? state : ItemState.None);
                 }
                 _iconsShown = true;
 
@@ -1034,13 +1075,27 @@ namespace LevelGate
                 if (_itemViewType == null) return;
                 foreach (var obj in Resources.FindObjectsOfTypeAll(_itemViewType))
                 {
-                    if (obj is Component view) SetIcon(view, false);
+                    if (obj is Component view)
+                    {
+                        SetIcon(view, false);
+                        StripeOverlay.Set(view, ItemState.None);
+                    }
                 }
             }
             catch (Exception e)
             {
                 LevelGatePlugin.Log.LogError("LevelGate LockIconOverlay.HideAll error: " + e);
             }
+        }
+
+        /// <summary>Same rule as the background colors (Patch_RedBackgroundLockedItem).</summary>
+        private static ItemState StateOf(EFT.Player player, EFT.InventoryLogic.Item item)
+        {
+            if (item == null) return ItemState.None;
+            bool inConfig = LevelGatePlugin.Data.Items.ContainsKey(item.TemplateId);
+            if (inConfig && LevelGateCheck.IsBlocked(player, item.TemplateId, out _)) return ItemState.Locked;
+            if (MagazineSemiLock.GatedAmmoLevel(item) > 0) return ItemState.SemiLocked;
+            return inConfig ? ItemState.Unlocked : ItemState.None;
         }
 
         private static void SetIcon(Component view, bool show)
@@ -1159,6 +1214,253 @@ namespace LevelGate
             texture.SetPixels32(pixels);
             texture.Apply();
             return texture;
+        }
+    }
+
+    internal enum ItemState { None, Locked, Unlocked, SemiLocked }
+
+    // -----------------------------------------------------------------
+    // Diagonal stripes over the colored background of LOCKED / UNLOCKED /
+    // SEMI LOCKED items (the "striped cell" look). By default the stripes are
+    // the GAME'S OWN striped background — the one it shows on items you lock
+    // in the stash (so sorting leaves them alone): every item cell carries
+    // that layer, hidden; its picture is borrowed here. The item itself is
+    // NOT locked/pinned, sorting works as normal. If the game's layer can't
+    // be found, LevelGate's own drawn stripes are used. Drawn BEHIND the item
+    // picture: the stripes are a tiled, see-through image added as a child
+    // of the cell's background image, so they paint right after the
+    // background and before the item art, name and counters.
+    //
+    // The background image is found by the ItemView's field name first
+    // (ColorPanel / Background...), else as the first image in the cell that
+    // covers the whole cell. If neither is found the cell simply gets no
+    // stripes (logged once) — nothing else changes.
+    // -----------------------------------------------------------------
+    internal static class StripeOverlay
+    {
+        private const string ChildName = "LevelGateStripes";
+        private const int Tile = 32;       // texture size (px); the pattern repeats every Tile/2
+        private const int LineWidth = 5;
+
+        private static readonly string[] BackgroundFields = { "ColorPanel", "_colorPanel", "Background", "_background", "BackgroundImage", "_backgroundImage" };
+        private static readonly Dictionary<int, GameObject> _byView = new Dictionary<int, GameObject>();
+        private static readonly Dictionary<string, Sprite> _sprites = new Dictionary<string, Sprite>();
+        private static bool _noBackgroundLogged, _foundLogged;
+        private static int _cleanup;
+
+        public static void Set(Component view, ItemState state)
+        {
+            int key = view.GetInstanceID();
+            _byView.TryGetValue(key, out var stripes);
+            if (stripes == null && _byView.ContainsKey(key)) _byView.Remove(key); // destroyed with its view
+
+            if (state == ItemState.None)
+            {
+                if (stripes != null && stripes.activeSelf) stripes.SetActive(false);
+                return;
+            }
+
+            if (stripes == null)
+            {
+                var background = FindBackground(view);
+                if (background == null) return;
+
+                stripes = new GameObject(ChildName, typeof(RectTransform));
+                stripes.transform.SetParent(background.transform, false);
+                var rect = (RectTransform)stripes.transform;
+                rect.anchorMin = Vector2.zero;
+                rect.anchorMax = Vector2.one;
+                rect.offsetMin = rect.offsetMax = Vector2.zero;
+
+                var image = stripes.AddComponent<UnityEngine.UI.Image>();
+                image.type = UnityEngine.UI.Image.Type.Tiled;
+                image.raycastTarget = false; // never steal clicks/drags from the item
+                _byView[key] = stripes;
+
+                if (++_cleanup % 200 == 0)
+                    foreach (var dead in _byView.Where(kv => kv.Value == null).Select(kv => kv.Key).ToList()) _byView.Remove(dead);
+            }
+
+            var img = stripes.GetComponent<UnityEngine.UI.Image>();
+            string strength = LevelGatePlugin.StripeStrength?.Value ?? "Medium";
+            var game = (LevelGatePlugin.StripesGameStyle?.Value ?? true) ? GameStripes(view) : null;
+            if (game != null)
+            {
+                // the game's locked-item stripes, with its own tiling / tint (strength scales how visible)
+                if (img.sprite != game.sprite) img.sprite = game.sprite;
+                img.type = game.type;
+                img.material = game.material;
+                img.pixelsPerUnitMultiplier = game.pixelsPerUnitMultiplier;
+                var c = game.color;
+                float k = strength == "Subtle" ? 0.6f : strength == "Strong" ? 1.6f : 1f;
+                img.color = new Color(c.r, c.g, c.b, Mathf.Clamp01((c.a <= 0f ? 1f : c.a) * k));
+            }
+            else
+            {
+                var sprite = GetSprite(strength);
+                if (img.sprite != sprite) img.sprite = sprite;
+                img.type = UnityEngine.UI.Image.Type.Tiled;
+                img.material = null;
+                img.color = Color.white;
+            }
+            if (!stripes.activeSelf) stripes.SetActive(true);
+            // Background is a separate image: last among ITS children (still below the item art).
+            // Background is the cell itself: first child, so everything else draws over the stripes.
+            if (stripes.transform.parent == view.transform) stripes.transform.SetAsFirstSibling();
+            else stripes.transform.SetAsLastSibling();
+        }
+
+        // ---- the game's own striped "locked item" background
+        private static readonly string[] StripeWords = { "stripe", "hatch", "lock", "pin", "block" };
+        private static bool _gameSearchLogged;
+        private static readonly Dictionary<Type, GameLook> _gameByViewType = new Dictionary<Type, GameLook>();
+
+        /// <summary>What the game's stripe layer looks like (kept by value: item cells get recycled).</summary>
+        private sealed class GameLook
+        {
+            public Sprite sprite;
+            public UnityEngine.UI.Image.Type type;
+            public Material material;
+            public float pixelsPerUnitMultiplier;
+            public Color color;
+        }
+
+        /// <summary>
+        /// The image the game uses for the striped background of stash-locked items, found in the
+        /// item cell (fields and child objects, hidden ones included) by name. Logged once.
+        /// </summary>
+        private static GameLook GameStripes(Component view)
+        {
+            var type = view.GetType();
+            if (_gameByViewType.TryGetValue(type, out var known)) return known != null && known.sprite != null ? known : null; // looked already
+
+            var candidates = new List<(UnityEngine.UI.Image Image, string Where, int Score)>();
+            void Consider(UnityEngine.UI.Image image, string where)
+            {
+                if (image == null || image.sprite == null) return;
+                var name = (where + " " + image.gameObject.name + " " + image.sprite.name).ToLowerInvariant();
+                if (name.Contains("levelgate")) return;
+                if (!StripeWords.Any(w => name.Contains(w))) return;
+                // only a background pattern, never an icon: a repeating image, or named like a stripe / background
+                bool looksLikePattern = image.type == UnityEngine.UI.Image.Type.Tiled || name.Contains("stripe") || name.Contains("hatch") || name.Contains("back") || name.Contains("bg");
+                if (!looksLikePattern || name.Contains("icon")) return;
+                int score = (name.Contains("stripe") || name.Contains("hatch") ? 100 : 0)
+                          + (name.Contains("lock") ? 40 : 0) + (name.Contains("back") || name.Contains("bg") ? 20 : 0)
+                          - (name.Contains("icon") ? 60 : 0) - (name.Contains("unlock") ? 30 : 0);
+                if (image.type == UnityEngine.UI.Image.Type.Tiled) score += 30; // a repeating pattern
+                candidates.Add((image, where, score));
+            }
+
+            const BindingFlags flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly;
+            for (var t = type; t != null && t != typeof(MonoBehaviour); t = t.BaseType)
+            {
+                foreach (var f in t.GetFields(flags))
+                {
+                    object v;
+                    try { v = f.GetValue(view); } catch { continue; }
+                    if (v is UnityEngine.UI.Image fi) Consider(fi, "field " + f.Name);
+                    else if (v is GameObject go && go != null) foreach (var gi in go.GetComponentsInChildren<UnityEngine.UI.Image>(true)) Consider(gi, "field " + f.Name);
+                    else if (v is Component comp && comp != null && !(v is UnityEngine.UI.Graphic)) foreach (var ci in comp.GetComponentsInChildren<UnityEngine.UI.Image>(true)) Consider(ci, "field " + f.Name);
+                }
+            }
+            foreach (var ci in view.GetComponentsInChildren<UnityEngine.UI.Image>(true)) Consider(ci, "child");
+
+            var best = candidates.OrderByDescending(c => c.Score).FirstOrDefault();
+            _gameByViewType[type] = best.Image == null ? null : new GameLook
+            {
+                sprite = best.Image.sprite, type = best.Image.type, material = best.Image.material,
+                pixelsPerUnitMultiplier = best.Image.pixelsPerUnitMultiplier, color = best.Image.color,
+            };
+            if (!_gameSearchLogged)
+            {
+                _gameSearchLogged = true;
+                var list = string.Join("; ", candidates.OrderByDescending(c => c.Score).Take(8)
+                    .Select(c => $"{c.Where} / '{c.Image.gameObject.name}' / sprite '{c.Image.sprite.name}' ({c.Image.type}, score {c.Score})"));
+                if (best.Image != null)
+                    LevelGatePlugin.Log.LogInfo($"LevelGate: using the game's striped background from {best.Where} '{best.Image.gameObject.name}' (sprite '{best.Image.sprite.name}') on {type.Name}. Candidates: {list}");
+                else
+                    LevelGatePlugin.Log.LogWarning($"LevelGate: the game's striped 'locked item' background wasn't found on {type.Name} — using LevelGate's own stripes. (Send this line to fix it.)");
+            }
+            return _gameByViewType[type];
+        }
+
+        /// <summary>The image that paints the cell's colored background.</summary>
+        private static UnityEngine.UI.Graphic FindBackground(Component view)
+        {
+            foreach (var name in BackgroundFields)
+            {
+                if (ReflectionUtil.GetMember(view, name) is UnityEngine.UI.Graphic g && g != null && g.transform.IsChildOf(view.transform))
+                {
+                    LogFound("field " + name);
+                    return g;
+                }
+            }
+
+            // Fallback: the first image (in drawing order) that covers the whole cell.
+            if (view.transform is RectTransform viewRect)
+            {
+                var size = viewRect.rect.size;
+                foreach (var g in view.GetComponentsInChildren<UnityEngine.UI.Image>(true))
+                {
+                    if (g.gameObject.name == ChildName || g.transform == view.transform) continue;
+                    var r = ((RectTransform)g.transform).rect.size;
+                    if (size.x > 1 && size.y > 1 && r.x >= size.x * 0.9f && r.y >= size.y * 0.9f)
+                    {
+                        LogFound("first full-size image '" + g.gameObject.name + "'");
+                        return g;
+                    }
+                }
+            }
+
+            // Last resort: the cell paints its own background.
+            if (view.GetComponent<UnityEngine.UI.Graphic>() is UnityEngine.UI.Graphic own && own != null)
+            {
+                LogFound("the cell's own image");
+                return own;
+            }
+
+            if (!_noBackgroundLogged)
+            {
+                _noBackgroundLogged = true;
+                LevelGatePlugin.Log.LogWarning("LevelGate: couldn't find the item cell background — stripes are skipped on this game version.");
+            }
+            return null;
+        }
+
+        private static void LogFound(string how)
+        {
+            if (_foundLogged) return;
+            _foundLogged = true;
+            LevelGatePlugin.Log.LogInfo("LevelGate: stripes drawn on the item background (" + how + ").");
+        }
+
+        /// <summary>A see-through tile with dark "/" stripes; strength = how dark.</summary>
+        private static Sprite GetSprite(string strength)
+        {
+            if (_sprites.TryGetValue(strength, out var cached) && cached != null) return cached;
+            float alpha = strength == "Subtle" ? 0.14f : strength == "Strong" ? 0.38f : 0.24f;
+
+            var pixels = new Color32[Tile * Tile];
+            int period = Tile / 2;
+            for (int y = 0; y < Tile; y++)
+            {
+                for (int x = 0; x < Tile; x++)
+                {
+                    // distance along the "/" diagonal; soft 1px edges so it doesn't shimmer
+                    int d = ((x - y) % period + period) % period;
+                    float a = d < LineWidth ? alpha : (d == LineWidth ? alpha * 0.45f : (d == period - 1 ? alpha * 0.45f : 0f));
+                    pixels[y * Tile + x] = new Color32(0, 0, 0, (byte)Mathf.RoundToInt(a * 255f));
+                }
+            }
+            var texture = new Texture2D(Tile, Tile, TextureFormat.RGBA32, false);
+            texture.SetPixels32(pixels);
+            texture.wrapMode = TextureWrapMode.Repeat;
+            texture.filterMode = FilterMode.Bilinear;
+            texture.Apply();
+
+            var sprite = Sprite.Create(texture, new Rect(0, 0, Tile, Tile), new Vector2(0.5f, 0.5f), 100f, 0, SpriteMeshType.FullRect);
+            _sprites[strength] = sprite;
+            return sprite;
         }
     }
 

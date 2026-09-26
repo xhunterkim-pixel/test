@@ -77,6 +77,17 @@ icons and a refresh-rate choice (0.5s / 0.2s / 0.1s), applied instantly and
 saved in the BepInEx config (section "Lock Icons"). Startup log: `LevelGate: lock icons
 enabled on EFT.UI.DragAndDrop.ItemView`.
 
+**Striped backgrounds:** LOCKED, UNLOCKED and SEMI LOCKED items get diagonal
+stripes over their colored background (behind the item picture). By default
+these are the game's own stripes, the ones it draws on items you lock in the
+stash. LevelGate only borrows the picture: your items are NOT locked or
+pinned, and sorting moves them as usual. F9: Stripes ON/OFF, "Game style" /
+"LevelGate style" (LevelGate's own drawn stripes) and Subtle / Medium /
+Strong (BepInEx config section "Stripes"). The log says which layer it
+used: `LevelGate: using the game's striped background from ...`, or a
+warning when it falls back to LevelGate's stripes. Send that line if the
+game style doesn't show.
+
 **Loose loot with an empty gear slot:** picking up a gated weapon, helmet,
 headset, armor, face cover or eyewear no longer says "No space" — your own
 empty gear slots answer "can't accept" for gated items, so the game puts the
