@@ -67,26 +67,18 @@ background from the game's item colors (click the color button to cycle).
 Changes apply live; item names already on screen update when the inventory
 is reopened. An empty label keeps the game's own short name.
 
-**Lock icon:** every item that is `[LOCKED]` for you also gets a small lock
-image in the middle of its icon (stash, raid inventory, loot,
-traders), refreshed twice a second and removed once you reach the level.
-The image is `config/lock.png` next to the DLL — replace it with your own
-(`lock.png`, or `lock.jpg`; PNG keeps a transparent background). Builds
-never overwrite an existing one. The F9 window has an ON/OFF toggle for the
-icons and a refresh-rate choice (0.5s / 0.2s / 0.1s), applied instantly and
-saved in the BepInEx config (section "Lock Icons"). Startup log: `LevelGate: lock icons
-enabled on EFT.UI.DragAndDrop.ItemView`.
-
-**Striped backgrounds:** LOCKED, UNLOCKED and SEMI LOCKED items get diagonal
-stripes over their colored background (behind the item picture). By default
-these are the game's own stripes, the ones it draws on items you lock in the
-stash. LevelGate only borrows the picture: your items are NOT locked or
-pinned, and sorting moves them as usual. F9: Stripes ON/OFF, "Game style" /
-"LevelGate style" (LevelGate's own drawn stripes) and Subtle / Medium /
-Strong (BepInEx config section "Stripes"). The log says which layer it
-used: `LevelGate: using the game's striped background from ...`, or a
-warning when it falls back to LevelGate's stripes. Send that line if the
-game style doesn't show.
+**Striped backgrounds:** LOCKED, UNLOCKED and SEMI LOCKED items get the
+game's own striped background, the built-in layer the game shows on items
+you pin / lock in the stash (`GridItemView._pinBackground`). LevelGate just
+switches that layer on for them. Your items are NOT pinned or locked, and
+sorting moves them as usual. No scanning: it's applied when the game
+repaints an item cell (postfix on the cell's own `UpdateColor` & co), plus
+once when you change a Stripes setting or level up. F9: Stripes ON/OFF and
+"Game style" / "LevelGate style" (LevelGate's own drawn stripes, with LG
+strength Subtle / Medium / Strong). BepInEx config section "Stripes". The
+startup log names the hooked methods: `LevelGate: stripes hooked: ...`.
+(The old lock icon is gone: it searched the screen every 0.1–0.5 s and
+cost FPS.)
 
 **Loose loot with an empty gear slot:** picking up a gated weapon, helmet,
 headset, armor, face cover or eyewear no longer says "No space" — your own
