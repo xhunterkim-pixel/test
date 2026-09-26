@@ -73,7 +73,8 @@ public static class QuestOptions
     /// <summary>Sets the quest to completed (Success) in the profile; null if it already was.</summary>
     private static QuestStatus? MarkDone(PmcData pmc, string questId, double now)
     {
-        var status = pmc.Quests!.FirstOrDefault(q => q.QId.ToString() == questId);
+        var quests = pmc.Quests ??= new List<QuestStatus>(); // a brand-new profile may have none yet
+        var status = quests.FirstOrDefault(q => q.QId.ToString() == questId);
         if (status == null)
         {
             status = new QuestStatus
@@ -83,7 +84,7 @@ public static class QuestOptions
                 Status = QuestStatusEnum.Success,
                 StatusTimers = new Dictionary<QuestStatusEnum, double> { [QuestStatusEnum.Success] = now },
             };
-            pmc.Quests.Add(status);
+            quests.Add(status);
             return status;
         }
         if (status.Status == QuestStatusEnum.Success) return null;
