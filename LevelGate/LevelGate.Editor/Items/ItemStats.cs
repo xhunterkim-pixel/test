@@ -218,13 +218,12 @@ public sealed class ItemStats
     private static void Merge(JsonObject med, string key, JsonNode? changes)
     {
         if (changes is not JsonObject c) return;
-        var target = med[key] as JsonObject ?? new JsonObject();
+        if (med[key] is not JsonObject target) { target = new JsonObject(); med[key] = target; }
         foreach (var (k, v) in c)
         {
             if (v == null) target.Remove(k);
             else target[k] = v.DeepClone();
         }
-        med[key] = target;
     }
 
     /// <summary>BalancedMeds: user\mods\BalancedMeds\config\{drugs,medicals,medkits,stimulators}.json, same shape as ours.</summary>

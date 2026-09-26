@@ -455,10 +455,15 @@ public sealed class HostForm : Form
                     ["h"] = it.Handbook > 0 ? Math.Round(it.Handbook) : null,
                     ["m"] = mod.Name,
                 };
+                // stats of the modded item (meds / food / ammo / armor) — never allowed to break the item list
+                try
+                {
+                    _stats.AddModItems(new[] { it });
+                    if (_stats.Show.TryGetValue(it.Id, out var mst)) node["st"] = mst.DeepClone();
+                    if (_stats.Meds.TryGetValue(it.Id, out var mmed)) node["mk"] = (string?)mmed["kind"];
+                }
+                catch { /* shown without stats */ }
                 if (mod.Enabled) { items.Add(node); count++; }
-                _stats.AddModItems(new[] { it });
-                if (_stats.Show.TryGetValue(it.Id, out var mst)) node["st"] = mst.DeepClone();
-                if (_stats.Meds.TryGetValue(it.Id, out var mmed)) node["mk"] = (string?)mmed["kind"];
                 else off.Add(node);
             }
         }
