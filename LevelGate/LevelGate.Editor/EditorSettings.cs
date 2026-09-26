@@ -1,8 +1,15 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
-using CustomTraders.Editor;
 
 namespace LevelGate.Editor;
+
+/// <summary>A mod folder whose items the editor lists.</summary>
+public sealed class ModImport
+{
+    public string Name { get; set; } = "";
+    public string Folder { get; set; } = "";
+    public bool Enabled { get; set; } = true;
+}
 
 /// <summary>Editor preferences, kept in %AppData%\LevelGateEditor\settings.json.</summary>
 public sealed class EditorSettings

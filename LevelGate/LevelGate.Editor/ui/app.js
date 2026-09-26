@@ -83,7 +83,10 @@ function apply(snap) {
   applyItems(snap);
   $('#folder').textContent = S.configFile || 'Pick BepInEx\\plugins\\LevelGate\\config\\level_requirements.json (Browse…)';
   $('#appVersion').textContent = 'v' + (S.version || '1.0.0');
-  status(S.configFile ? `Loaded ${S.saved.size} level limit(s).` : 'LevelGate\'s config wasn\'t found — click Browse… and pick level_requirements.json.');
+  status(!S.configFile ? 'LevelGate\'s config wasn\'t found — click Browse… and pick SPT\\BepInEx\\plugins\\LevelGate\\config\\level_requirements.json.'
+    : snap.notInGame ? '⚠ This file isn\'t inside an SPT folder, so the game never reads it — Browse… to SPT\\BepInEx\\plugins\\LevelGate\\config\\level_requirements.json.'
+    : `Loaded ${S.saved.size} level limit(s).`);
+  $('#top .search-pill').classList.toggle('warn', !!snap.notInGame);
   renderAll();
 }
 

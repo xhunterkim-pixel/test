@@ -172,8 +172,7 @@ is ever touched.
 
 ## LevelGate Editor (the level limits editor)
 
-`LevelGate.Editor\` is a Windows app with the same look as the Custom
-Trader Creator, for editing `level_requirements.json` without hunting ids:
+`LevelGate.Editor\` is a Windows app for editing `level_requirements.json` without hunting ids:
 
 - every game item (and modded items) by category tab — Weapons, Ammo,
   Medical, Backpacks, Rigs, Armor, Keys… — with its picture, short name,
@@ -184,7 +183,7 @@ Trader Creator, for editing `level_requirements.json` without hunting ids:
 - filters (All / Limited / Not Limited), search, sort by name, level,
   category, price or "changed first"
 - Mods page: **Scan My Mods Folder** finds server mods that add items
-  (same scanner as the trader editor); switch each mod on/off
+  (reads their item json files); switch each mod on/off
 - Save shows every change first, then writes only those changes into the
   file as it is on disk right now (entries added in the game's F9 window
   meanwhile are kept); undo / redo; changes made in game show up live
@@ -198,8 +197,7 @@ anywhere **outside BepInEx** (e.g. `C:\SPT\LevelGate Editor\`) — BepInEx
 would try to load its dlls as plugins. It finds
 `C:\SPT\BepInEx\plugins\LevelGate\config\level_requirements.json` by
 itself (or use Browse…). To build it yourself: `Build-Editor.bat` (.NET 10
-SDK; it uses a few source files of `..\CustomTraders`, keep that folder
-next to this one).
+SDK).
 
 ## How to find an item's TplId (verified way)
 

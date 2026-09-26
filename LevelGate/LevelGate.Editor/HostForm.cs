@@ -1,7 +1,6 @@
 using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Text.Json.Nodes;
-using CustomTraders.Editor;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.WinForms;
 
@@ -104,7 +103,7 @@ public sealed class HostForm : Form
 
     private JsonNode? Call(string method, JsonObject a) => method switch
     {
-        "init" => Snapshot(_settings.ConfigFile ?? FindConfigFile()),
+        "init" => Snapshot(StartFile()),
         "reload" => Snapshot(_configFile),
         "browse" => Browse(),
         "save" => Save(a["set"] as JsonObject, a["remove"] as JsonArray),
@@ -121,32 +120,48 @@ public sealed class HostForm : Form
 
     // ------------------------------------------------------------------ the config file
 
-    /// <summary>Where LevelGate's config usually is: next to this exe, above it, or C:\SPT, D:\SPT...</summary>
+    private static readonly string ConfigTail = Path.Combine("BepInEx", "plugins", "LevelGate", "config", "level_requirements.json");
+
+    /// <summary>
+    /// The file the game reads: ...\BepInEx\plugins\LevelGate\config\level_requirements.json of an SPT install
+    /// (above this exe, or C:\SPT, D:\SPT...). A copy elsewhere (e.g. the example in a downloaded zip) is never picked.
+    /// </summary>
     private static string? FindConfigFile()
     {
-        var tail = Path.Combine("BepInEx", "plugins", "LevelGate", "config", "level_requirements.json");
         var tries = new List<string>();
         var dir = new DirectoryInfo(AppContext.BaseDirectory);
-        for (int i = 0; i < 6 && dir != null; i++, dir = dir.Parent)
-        {
-            tries.Add(Path.Combine(dir.FullName, "config", "level_requirements.json")); // exe inside the plugin folder
-            tries.Add(Path.Combine(dir.FullName, tail));
-        }
-        foreach (var drive in new[] { "C", "D", "E", "F" })
-            foreach (var root in new[] { "SPT", "SPTarkov", "Games\\SPT" })
-                tries.Add(Path.Combine($"{drive}:\\", root, tail));
+        for (int i = 0; i < 8 && dir != null; i++, dir = dir.Parent) tries.Add(Path.Combine(dir.FullName, ConfigTail));
+        foreach (var root in SptRootGuesses()) tries.Add(Path.Combine(root, ConfigTail));
         return tries.FirstOrDefault(File.Exists);
     }
 
-    /// <summary>The SPT folder (the one holding BepInEx) above the config file.</summary>
-    private string? SptRoot()
+    private static IEnumerable<string> SptRootGuesses()
     {
-        if (_configFile == null) return null;
-        var dir = new FileInfo(_configFile).Directory;
+        foreach (var drive in new[] { "C", "D", "E", "F", "G" })
+            foreach (var root in new[] { "SPT", "SPTarkov", "SPT-AKI", "Games\\SPT", "Games\\SPTarkov" })
+                yield return Path.Combine($"{drive}:\\", root);
+    }
+
+    /// <summary>The SPT folder (the one holding BepInEx) above a file, or null.</summary>
+    private static string? SptRootOf(string? file)
+    {
+        if (string.IsNullOrEmpty(file)) return null;
+        var dir = new FileInfo(file).Directory;
         for (int i = 0; i < 8 && dir != null; i++, dir = dir.Parent)
             if (Directory.Exists(Path.Combine(dir.FullName, "BepInEx"))) return dir.FullName;
         return null;
     }
+
+    /// <summary>The remembered file, unless it isn't one the game reads and the real one can be found.</summary>
+    private string? StartFile()
+    {
+        var saved = _settings.ConfigFile;
+        if (saved != null && File.Exists(saved) && SptRootOf(saved) != null) return saved;
+        return FindConfigFile() ?? (saved != null && File.Exists(saved) ? saved : null);
+    }
+
+    /// <summary>The SPT folder above the config file (where the game and its item database are).</summary>
+    private string? SptRoot() => SptRootOf(_configFile);
 
     private static readonly JsonDocumentOptions Lenient = new() { CommentHandling = JsonCommentHandling.Skip, AllowTrailingCommas = true };
 
@@ -189,6 +204,7 @@ public sealed class HostForm : Form
         Watch();
         result["configFile"] = configFile;
         result["sptRoot"] = SptRoot();
+        result["notInGame"] = SptRoot() == null; // a copy the game never reads
         result["levels"] = Levels();
         result["modified"] = Modified();
         LoadItems(result);
@@ -288,11 +304,14 @@ public sealed class HostForm : Form
     {
         try
         {
-            var root = SptRoot();
-            var dbFolder = root == null ? null : ItemDatabase.FindDatabaseFolder(root) ?? ItemDatabase.FindDatabaseFolder(Path.Combine(root, "SPT_Runtime"));
+            // the item list comes from the SPT install: the one the config is in, else a usual install folder
+            var roots = new List<string>();
+            if (SptRoot() is { } root) roots.Add(root);
+            roots.AddRange(SptRootGuesses().Where(Directory.Exists));
+            var dbFolder = roots.Select(r => ItemDatabase.FindDatabaseFolder(r)).FirstOrDefault(d => d != null);
             if (dbFolder == null)
             {
-                result["itemsStatus"] = "Item database not found (SPT_Data\\database in the SPT folder) — only ids can be shown.";
+                result["itemsStatus"] = "Item database not found — pick the level_requirements.json inside your SPT folder (Browse…); the item list is read from SPT_Data\\database there.";
                 return;
             }
             if (_db.SourceFolder != dbFolder || !_db.IsLoaded) _db.Load(dbFolder);

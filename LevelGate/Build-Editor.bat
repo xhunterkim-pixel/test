@@ -2,8 +2,6 @@
 rem ---------------------------------------------------------------------
 rem  Builds LevelGate.Editor.exe (the level limits editor) as ONE file into
 rem  the "Editor" folder next to this script. Needs the .NET 10 SDK.
-rem  Uses a few source files of the Custom Trader Creator (item list, mod
-rem  scanner, item pictures): keep the CustomTraders folder next to LevelGate.
 rem  Put the finished Editor folder anywhere EXCEPT inside BepInEx (BepInEx
 rem  would try to load its dlls), e.g. C:\SPT\LevelGate Editor.
 rem ---------------------------------------------------------------------

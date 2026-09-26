@@ -2,10 +2,9 @@
 
   <!--
     LevelGate.Editor.exe — Windows editor for LevelGate's level limits
-    (BepInEx\plugins\LevelGate\config\level_requirements.json). Same look and
-    parts as the Custom Trader Creator: the window hosts a web page (ui\) drawn
-    by the Edge engine (WebView2, part of Windows 10/11); the item list, mod
-    scanning and item pictures are shared with that editor's source files.
+    (BepInEx\plugins\LevelGate\config\level_requirements.json). The window
+    hosts a web page (ui\) drawn by the Edge engine (WebView2, part of
+    Windows 10/11); the item list is read from the SPT install's database.
     Needs the .NET 10 SDK to build (Windows).
   -->
   <PropertyGroup>
@@ -26,17 +25,11 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- Shared with the Custom Trader Creator: game item list, mod item scanner, item pictures. -->
-    <Compile Include="..\..\CustomTraders\Shared\TraderModels.cs" Link="Shared\TraderModels.cs" />
-    <Compile Include="..\..\CustomTraders\CustomTraders.Editor\ItemDatabase.cs" Link="Shared\ItemDatabase.cs" />
-    <Compile Include="..\..\CustomTraders\CustomTraders.Editor\ModScanner.cs" Link="Shared\ModScanner.cs" />
-    <Compile Include="..\..\CustomTraders\CustomTraders.Editor\ItemIcons.cs" Link="Shared\ItemIcons.cs" />
-    <Compile Include="..\..\CustomTraders\CustomTraders.Editor\Settings.cs" Link="Shared\Settings.cs" />
     <!-- The interface: copied next to the exe (not packed into it). -->
     <None Include="ui\**\*" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" ExcludeFromSingleFile="true" />
   </ItemGroup>
 
-  <!-- Same as the trader editor: WinForms only, so the WebView2 WPF reference (MSB3277 warning) is dropped. -->
+  <!-- WinForms only, so the WebView2 WPF reference (MSB3277 warning) is dropped. -->
   <Target Name="DropWebView2Wpf" BeforeTargets="ResolveAssemblyReferences">
     <ItemGroup>
       <Reference Remove="@(Reference)" Condition="'%(Filename)' == 'Microsoft.Web.WebView2.Wpf'" />

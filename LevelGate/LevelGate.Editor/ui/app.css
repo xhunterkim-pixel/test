@@ -73,3 +73,7 @@
 
 #diskNote { max-width: 420px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 #bottom { grid-template-columns: 1fr auto auto auto auto; }
+
+/* the picked file isn't one the game reads */
+.search-pill.warn { box-shadow: inset 0 0 0 2px var(--orange); }
+.search-pill.warn .folder { color: var(--orange); }
