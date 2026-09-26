@@ -31,4 +31,15 @@
     <None Include="ui\**\*" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" ExcludeFromSingleFile="true" />
   </ItemGroup>
 
+  <!--
+    The WebView2 package also brings its WPF control (Microsoft.Web.WebView2.Wpf), which wants a
+    newer WindowsBase and makes the build warn (MSB3277). The editor is WinForms only, so that
+    reference is dropped before references are resolved.
+  -->
+  <Target Name="DropWebView2Wpf" BeforeTargets="ResolveAssemblyReferences">
+    <ItemGroup>
+      <Reference Remove="@(Reference)" Condition="'%(Filename)' == 'Microsoft.Web.WebView2.Wpf'" />
+    </ItemGroup>
+  </Target>
+
 </Project>
