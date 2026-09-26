@@ -56,8 +56,8 @@ button { cursor: pointer; border: 0; background: none; }
 body.has-bg { --panel-alpha: .86; }
 
 /* ------------------------------------------------------------------ top bar */
-#top { display: grid; grid-template-columns: 240px 1fr auto; align-items: center; gap: 12px; padding: 8px 16px 4px; }
-.logo { font-weight: 900; font-size: 20px; letter-spacing: -.02em; }
+#top { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 12px; padding: 8px 16px 4px; }
+.logo { font-weight: 900; font-size: 20px; letter-spacing: -.02em; white-space: nowrap; min-width: 240px; }
 .search-pill {
   justify-self: center; width: min(640px, 100%);
   display: flex; align-items: center; gap: 8px;

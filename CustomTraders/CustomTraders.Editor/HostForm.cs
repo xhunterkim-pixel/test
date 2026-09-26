@@ -32,7 +32,7 @@ public sealed class HostForm : Form
 
     public HostForm()
     {
-        Text = "Trader Editor";
+        Text = "Trader Editor DC:k_kyangg";
         Width = 1640;
         Height = 1000;
         MinimumSize = new Size(1200, 760);
@@ -818,7 +818,7 @@ public sealed class HostForm : Form
     private JsonNode SetUnsaved(int count)
     {
         _unsaved = count;
-        Text = count > 0 ? $"Trader Editor  •  {count} unsaved" : "Trader Editor";
+        Text = count > 0 ? $"Trader Editor DC:k_kyangg  •  {count} unsaved" : "Trader Editor DC:k_kyangg";
         return true;
     }
 
