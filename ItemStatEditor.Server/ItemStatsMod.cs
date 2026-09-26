@@ -11,10 +11,10 @@ using SPTarkov.Server.Core.Models.Enums;
 using SPTarkov.Server.Core.Models.Spt.Tables;
 using SPTarkov.Server.Core.Utils;
 
-namespace LevelGate.Server;
+namespace ItemStatEditor.Server;
 
-// Item stat edits made in the LevelGate Editor ("Item Stats"), kept in
-// user\mods\LevelGate\item_stats.json:
+// Item stat edits made in the LevelGate Editor's Item Stats tab, kept in
+// user\mods\ItemStatEditor\item_stats.json (next to this DLL):
 //   { "<tpl>": { "medUseTime": 2, "MaxHpResource": 400, "hpResourceRate": 150,
 //                "foodUseTime": 3, "MaxResource": 1,
 //                "effects_health": { "Energy": { "value": 10 } },
@@ -43,7 +43,7 @@ public class ItemStatsMod(
         }
         catch (Exception e)
         {
-            logger.Error($"[LevelGate] item_stats.json couldn't be read, no item stats changed: {e.Message}");
+            logger.Error($"[ItemStatEditor] item_stats.json couldn't be read, no item stats changed: {e.Message}");
             return Task.CompletedTask;
         }
         if (all == null) return Task.CompletedTask;
@@ -54,7 +54,7 @@ public class ItemStatsMod(
             if (node is not JsonObject edit) continue;
             if (!templateTable.Items.TryGetValue(tpl, out var item) || item.Properties == null)
             {
-                logger.Warning($"[LevelGate] item_stats.json: no item {tpl} in the database, skipped.");
+                logger.Warning($"[ItemStatEditor] item_stats.json: no item {tpl} in the database, skipped.");
                 continue;
             }
             try
@@ -64,10 +64,10 @@ public class ItemStatsMod(
             }
             catch (Exception e)
             {
-                logger.Error($"[LevelGate] item_stats.json: {tpl} not changed — {e.Message}");
+                logger.Error($"[ItemStatEditor] item_stats.json: {tpl} not changed — {e.Message}");
             }
         }
-        logger.Info($"[LevelGate] Item stats: {done} item(s) changed from item_stats.json.");
+        logger.Info($"[ItemStatEditor] Item stats: {done} item(s) changed from item_stats.json.");
         return Task.CompletedTask;
     }
 
@@ -87,7 +87,7 @@ public class ItemStatsMod(
         if (e["effects_buffs"] is JsonArray list)
         {
             // buff lists live in globals by name (several items can share one)
-            string name = (string?)e["buffName"] is { Length: > 0 } n ? n : p.StimulatorBuffs is { Length: > 0 } s ? s : $"LevelGate_{tpl}";
+            string name = (string?)e["buffName"] is { Length: > 0 } n ? n : p.StimulatorBuffs is { Length: > 0 } s ? s : $"ItemStatEditor_{tpl}";
             var buffs = jsonUtil.Deserialize<List<Buff>>(list.ToJsonString()) ?? new List<Buff>();
             globalTable.Configuration.Health.Effects.Stimulator.Buffs[name] = buffs;
             p.StimulatorBuffs = buffs.Count > 0 ? name : p.StimulatorBuffs;

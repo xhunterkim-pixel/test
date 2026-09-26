@@ -43,7 +43,7 @@ const host = (() => {
 
 /** Categories = the item groups of the Custom Trader Creator (key, name, color). */
 const GROUPS = [
-  ['Weapons', 'Weapons', '#f15e6c'], ['Melee', 'Melee', '#ff8a65'], ['Grenades', 'Grenades', '#ffa42b'], ['Ammo', 'Ammo', '#f5cd46'],
+  ['Weapons', 'Weapons', '#f15e6c'], ['Melee', 'Melee', '#ff8a65'], ['Grenades', 'Grenades', '#ffa42b'], ['Ammo', 'Ammo', '#f5cd46'], ['AmmoPacks', 'Ammo Packs', '#d9b44a'],
   ['WeaponParts', 'Weapon Parts', '#c7a36b'], ['Armor', 'Armor', '#509bf5'], ['Headwear', 'Headwear', '#6fb3ff'], ['Rigs', 'Rigs', '#7d9cf0'],
   ['Backpacks', 'Backpacks', '#a082ff'], ['Gear', 'Other Gear', '#b39ddb'], ['Medical', 'Medical', '#1ed760'], ['Food', 'Food & Drink', '#8bd66b'],
   ['Electronics', 'Electronics', '#4dd0e1'], ['Barter', 'Barter Items', '#bdbdbd'], ['Keys', 'Keys', '#e0c068'], ['Containers', 'Containers', '#90a4ae'],
@@ -65,7 +65,7 @@ const S = {
   ui: {},
   // Item Stats tab (meds, stims, food): base = game + other mods, edits = LevelGate's item_stats.json
   tab: 'levels', statCat: 'all', band: null,
-  meds: {}, statEdits: {}, statSaved: {}, statsFile: null, serverMod: false, statSources: [],
+  meds: {}, medsDefault: {}, sortStale: false, statEdits: {}, statSaved: {}, statsFile: null, serverMod: false, statSources: [],
 };
 
 // =====================================================================
@@ -99,6 +99,7 @@ function applyItems(snap) {
   if (snap.modItemsOff) S.modItemsOff = snap.modItemsOff;
   if (snap.itemsStatus !== undefined) $('#itemsStatus').textContent = snap.itemsStatus;
   if (snap.meds) S.meds = snap.meds;
+  if (snap.medsDefault) S.medsDefault = snap.medsDefault;
   if (snap.statSources) S.statSources = snap.statSources;
   if (snap.statsFile !== undefined) S.statsFile = snap.statsFile;
   if (snap.serverMod !== undefined) S.serverMod = !!snap.serverMod;
@@ -129,7 +130,8 @@ function saveUi() {
 
 const levelOf = id => S.levels.get(id);
 const isLimited = id => S.levels.has(id);
-const groupOf = it => GROUP[it.g] ? it.g : 'Other';
+/** Category, or the one you moved the item to (kept in the editor's own settings only). */
+const groupOf = it => { const moved = S.ui.catMove?.[it.i]; return moved && GROUP[moved] ? moved : GROUP[it.g] ? it.g : 'Other'; };
 const priceOf = it => it.f || it.h || 0;
 
 /** An item id from the config that isn't in the game's list or an imported mod. */
@@ -183,6 +185,7 @@ function undo(redo = false) {
 /** Redraws what a level change touches without rebuilding the list (keeps focus while typing). */
 function afterChange(ids) {
   for (const id of ids) updateRow(id);
+  if (['level', 'changed'].includes(S.sort.key) || S.filter !== 'all' || S.band) markStale();
   renderNav(); renderHeader(); renderBottom();
   if (ids.includes(S.sel) || S.picked.size > 1) renderDetails();
 }
@@ -277,7 +280,7 @@ function renderHeader() {
   const mods = S.page === 'mods';
   if (S.tab === 'stats') {
     const ids = statIds('all');
-    $('#headerSub').textContent = `${fmt(ids.length)} meds, stims & food · ${Object.keys(S.statEdits).length} edited by LevelGate` +
+    $('#headerSub').textContent = `${fmt(ids.length)} meds, stims & food · ${Object.keys(S.statEdits).length} edited by you` +
       (S.statSources.length ? ` · also changed by: ${S.statSources.join(', ')}` : '');
   } else if (mods) {
     $('#headerSub').textContent = `${S.mods.length} mod${S.mods.length === 1 ? '' : 's'} imported · their items show in the categories (switch a mod off to hide its items)`;
@@ -330,6 +333,13 @@ function rowHtml(it, n) {
   </div>`;
 }
 
+/** The list is in an old order (a level changed while sorted by level): the Re-sort button lights up. */
+function markStale() {
+  S.sortStale = true;
+  const b = $('#resortBtn');
+  if (b) { b.disabled = false; b.classList.add('stale'); }
+}
+
 function updateRow(id) {
   const row = document.querySelector(`#page .row[data-row="${id}"]`);
   if (!row) return;
@@ -353,6 +363,7 @@ function renderPage(keepScroll = true) {
   if (S.page === 'mods') { page.innerHTML = modsPage(); if (!keepScroll) page.scrollTop = 0; return; }
   if (S.tab === 'stats') { page.innerHTML = statsPage(); page.scrollTop = keepScroll ? top : 0; return; }
   const list = S.shown = shownItems();
+  S.sortStale = false;
   const rows = list.slice(0, S.limit).map((it, i) => rowHtml(it, i + 1)).join('');
   const n = S.picked.size;
   const chip = (v, t) => `<button class="chip ${S.filter === v ? 'on' : ''}" data-act="filter" data-arg="${v}">${t}</button>`;
@@ -363,6 +374,7 @@ function renderPage(keepScroll = true) {
       <button class="outline" data-act="bulkSet" ${n ? '' : 'disabled'} title="Set one level for every picked item">${n > 1 ? `Set Level (${n})…` : 'Set Level…'}</button>
       <button class="danger" data-act="bulkRemove" ${n ? '' : 'disabled'} title="Del">${n > 1 ? `Remove Limit (${n})` : 'Remove Limit'}</button>
       <button class="outline" data-act="addId" title="Add a limit by item id (for items not in the list)">+ Add by ID</button>
+      <button class="outline resort ${S.sortStale ? 'stale' : ''}" id="resortBtn" data-act="resort" ${S.sortStale ? '' : 'disabled'} title="Sort the list again (levels you changed stay where they are until then)">⟳ Re-sort</button>
       <span class="muted small">${fmt(list.length)} shown${n ? ` · ${n} picked` : ''}</span>
     </div>
     <div class="list lg" data-list="items">${listHead()}${rows || `<div class="empty">${S.items.size || S.levels.size ? 'Nothing matches.' : 'No items loaded — pick the config file with Browse… (the item list comes from the SPT folder above it).'}</div>`}
@@ -407,7 +419,7 @@ function renderDetails() {
       <h3>Item</h3>
       <div class="field"><label>Name</label><div>${esc(it.n)}</div></div>
       <div class="field"><label>Short Name</label><div>${esc(it.s || '—')}</div></div>
-      <div class="field"><label>Category</label><div>${esc(g?.name || 'Other')}${it.k ? ` · ${esc(it.k.replace(/^Caliber/, ''))}` : ''}</div></div>
+      <div class="field"><label>Category</label><div class="cat-pick"><select data-catmove="${it.i}" title="Move it to another category (only in this editor — nothing in the game or other mods changes)">${GROUPS.map(([k, n]) => `<option value="${k}" ${groupOf(it) === k ? 'selected' : ''}>${esc(n)}</option>`).join('')}</select>${S.ui.catMove?.[it.i] ? `<span class="muted small">moved · <a href="#" data-act="catMoveBack" data-arg="${it.i}">back to ${esc(GROUP[GROUP[it.g] ? it.g : 'Other'].name)}</a></span>` : ''}${it.k ? `<span class="muted small">${esc(it.k.replace(/^Caliber/, ''))}</span>` : ''}</div></div>
       ${it.h ? `<div class="field"><label>Handbook Price</label><div>${fmt(it.h)} ₽</div></div>` : ''}
       ${it.f ? `<div class="field"><label>Flea Price</label><div>${fmt(it.f)} ₽</div></div>` : ''}
       ${it.m ? `<div class="field"><label>Mod</label><div style="color:var(--pink)">${esc(it.m)}${it.off ? ' (switched off)' : ''}</div></div>` : ''}
@@ -502,6 +514,8 @@ const ACT = {
     if (S.band) S.filter = 'all';
     S.limit = 300; renderPage(false); renderDetails();
   },
+  resort() { renderPage(); },
+  catMoveBack(id) { moveCategory([id], null); },
   foldOverall() { S.ui.overallFolded = !S.ui.overallFolded; saveUi(); renderDetails(); },
   cat(key) { S.page = 'items'; S.cat = key; S.limit = 300; S.picked = new Set(); saveUi(); renderAll(); $('#page').scrollTop = 0; },
   page(p) { S.page = p; renderAll(); },
@@ -627,6 +641,62 @@ async function modCall(method, args = {}) {
     renderAll();
   } catch (e) { status(''); errorBox(e); }
 }
+
+/** Moves items to another category — only in this editor's lists (saved in its own settings). */
+function moveCategory(ids, key) {
+  const moves = { ...(S.ui.catMove || {}) };
+  for (const id of ids) {
+    const own = GROUP[itemOf(id).g] ? itemOf(id).g : 'Other';
+    if (!key || key === own) delete moves[id]; else moves[id] = key;
+  }
+  S.ui.catMove = moves;
+  saveUi();
+  renderAll();
+  toast(key ? `${ids.length} item(s) moved to ${GROUP[key].name}` : 'Back to its own category');
+}
+
+/** Right-click menu at the pointer. items: [{ text, act, arg }] or { title } headers. */
+function contextMenu(x, y, items) {
+  closePopover();
+  const pop = document.createElement('div');
+  pop.className = 'popover menu2 ctx';
+  pop.innerHTML = items.map(it => it.title ? `<div class="menu-title">${esc(it.title)}</div>` : it.sep ? '<hr>'
+    : `<button data-ctx="${esc(it.act)}" data-arg="${esc(it.arg ?? '')}" class="${it.on ? 'on' : ''}">${esc(it.text)}${it.on ? '<span class="check">✓</span>' : ''}</button>`).join('');
+  document.body.appendChild(pop);
+  const w = pop.offsetWidth, h = pop.offsetHeight;
+  pop.style.left = Math.min(x, innerWidth - w - 8) + 'px';
+  pop.style.top = Math.max(8, Math.min(y, innerHeight - h - 8)) + 'px';
+  pop.addEventListener('click', e => {
+    const b = e.target.closest('[data-ctx]');
+    if (!b) return;
+    closePopover();
+    CTX[b.dataset.ctx]?.(b.dataset.arg);
+  });
+  closePopover.fn = e => { if (!pop.contains(e.target)) closePopover(); };
+  setTimeout(() => document.addEventListener('mousedown', closePopover.fn), 0);
+}
+const CTX = {
+  move(key) { moveCategory(ctxIds(), key); },
+  moveBack() { moveCategory(ctxIds(), null); },
+};
+let ctxTargets = [];
+const ctxIds = () => ctxTargets;
+
+document.addEventListener('contextmenu', e => {
+  const row = e.target.closest('#page .row[data-row]');
+  if (!row || e.target.closest('input, select')) return;
+  e.preventDefault();
+  const id = row.dataset.row;
+  if (S.tab === 'stats') { statsContextMenu(id, e.clientX, e.clientY); return; }
+  ctxTargets = S.picked.has(id) ? [...S.picked] : [id];
+  if (!S.picked.has(id)) ACT.select(id);
+  const cur = ctxTargets.length === 1 ? groupOf(itemOf(id)) : null;
+  contextMenu(e.clientX, e.clientY, [
+    { title: `Move ${ctxTargets.length > 1 ? ctxTargets.length + ' items' : 'to Category'} (this editor only)` },
+    ...GROUPS.map(([k, n]) => ({ text: n, act: 'move', arg: k, on: cur === k })),
+    ...(ctxTargets.some(x => S.ui.catMove?.[x]) ? [{ sep: true }, { text: 'Back to Its Own Category', act: 'moveBack' }] : []),
+  ]);
+});
 
 function markSelection() {
   document.querySelectorAll('#page .row[data-row]').forEach(r => {
@@ -808,6 +878,7 @@ document.addEventListener('focusin', e => {
 });
 document.addEventListener('change', e => {
   const el = e.target;
+  if (el.dataset?.catmove) { moveCategory([el.dataset.catmove], el.value); return; }
   if (el.dataset?.mod) { host.call('modSet', { name: el.dataset.mod, enabled: el.checked }).then(r => { applyItems(r); renderAll(); }).catch(errorBox); return; }
   if (!el.dataset?.lvl) return;
   const id = el.dataset.lvl;

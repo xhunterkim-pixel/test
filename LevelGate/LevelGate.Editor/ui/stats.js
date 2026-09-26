@@ -2,7 +2,8 @@
    effects) and the Item Stats tab that edits meds, stims and food.
    S.meds[id]      = the item as the game has it (SPT database + other mods like BalancedMeds)
    S.statEdits[id] = LevelGate's edit (the whole item, same shape) → user\mods\LevelGate\item_stats.json,
-                     applied by the LevelGate server mod when the server starts. */
+                     applied by the ItemStatEditor server mod when the server starts.
+   S.medsDefault[id] = Escape From Tarkov's own values (the SPT database before any mod). */
 'use strict';
 
 const MED_KINDS = [['medkit', 'Medkits', '#1ed760'], ['medical', 'Medical', '#4dd0e1'], ['drug', 'Painkillers', '#ffa42b'], ['stim', 'Stimulators', '#a082ff'], ['food', 'Food & Drink', '#8bd66b']];
@@ -27,6 +28,32 @@ const KEEP = ['medUseTime', 'MaxHpResource', 'hpResourceRate', 'foodUseTime', 'M
 const r2 = n => Math.round(n * 100) / 100;
 const sgn = n => (n > 0 ? '+' : n < 0 ? '−' : '') + r2(Math.abs(n));
 const skillName = s => (s || '').replace(/([a-z])([A-Z])/g, '$1 $2');
+
+/** "(1.5 Default)" next to a value that isn't Escape From Tarkov's. */
+function defNote(cur, def, short = false) {
+  const norm = v => v === undefined || v === null || v === '' ? undefined : Number(v);
+  if (norm(cur) === norm(def)) return '';
+  const d = norm(def) === undefined ? 'none' : r2(Number(def));
+  return `<span class="def" title="Escape From Tarkov's value">(${d}${short ? '' : ' Default'})</span>`;
+}
+/** True when the item (with edits) has Escape From Tarkov's own values. */
+function sameAsDefault(id) {
+  const m = effMed(id), d = S.medsDefault[id];
+  if (!d) return true;
+  return KEEP.every(k => JSON.stringify(m[k] ?? null) === JSON.stringify(d[k] ?? null));
+}
+function statsContextMenu(id, x, y) {
+  if (S.sel !== id) { S.sel = id; S.picked = new Set(); markSelection(); renderDetails(); }
+  contextMenu(x, y, [
+    { title: S.items.get(id)?.n || id },
+    { text: 'Reset to Escape From Tarkov Default', act: 'statDefault', arg: id },
+    ...(S.statEdits[id] ? [{ text: 'Undo My Edit (Other Mods\' Values)', act: 'statUndoEdit', arg: id }] : []),
+  ]);
+}
+Object.assign(CTX, {
+  statDefault(id) { ACT.statResetDefault(id); },
+  statUndoEdit(id) { S.sel = id; ACT.statReset(); },
+});
 
 /** The item as the game will have it: base, or LevelGate's edit. */
 function effMed(id) {
@@ -70,6 +97,7 @@ function statsShort(it) {
   const st = it.st || {};
   const parts = [];
   if (st.pen !== undefined) parts.push(`Pen ${st.pen} · Dmg ${st.dmg}${st.pc > 1 ? `×${st.pc}` : ''}`);
+  if (st.of) { const a = S.items.get(st.of); parts.push(`${st.pack ? st.pack + ' × ' : ''}${a?.s || a?.n || 'rounds'}${a?.st?.pen !== undefined ? ` · Pen ${a.st.pen} · Dmg ${a.st.dmg}` : ''}`); }
   if (st.ac) parts.push(`Class ${st.ac}`);
   if (st.slots && !st.pen) parts.push(`${st.slots} slots`);
   const kind = medKind(it), m = kind && effMed(it.i);
@@ -94,6 +122,7 @@ function statsCard(it) {
     if (st.v) row('Speed', `${fmt(st.v)} m/s`);
     if (st.frag) row('Fragmentation', `${Math.round(st.frag * 100)}%`);
   }
+  if (st.of) { const a = S.items.get(st.of); row('Contains', `${st.pack ? `<b>${st.pack}</b> × ` : ''}${esc(a?.n || st.of)}`); if (a?.st?.pen !== undefined) row('Rounds', `Pen <b>${a.st.pen}</b> · Dmg <b>${a.st.dmg}</b>${a.st.ad !== undefined ? ` · Armor dmg ${a.st.ad}%` : ''}`); }
   if (st.ac) row('Armor Class', `<b>${st.ac}</b>${st.dur ? ` · ${fmt(st.dur)} durability` : ''}`);
   if (st.slots) row('Storage', `${st.slots} slots`);
   const kind = medKind(it), m = kind && effMed(it.i);
@@ -152,7 +181,7 @@ function statsNav() {
     if (!n && key !== 'all' && key !== 'edited') return '';
     return `<button class="nav cat ${S.statCat === key ? 'on' : ''}" data-act="statCat" data-arg="${key}"><i class="dot" style="--c:${color}"></i><span>${esc(name)}</span><em>${fmt(n)}</em></button>`;
   };
-  $('#nav').innerHTML = entry('all', 'All Meds & Food', '#ffffff') + MED_KINDS.map(([k, n, c]) => entry(k, n, c)).join('') + entry('edited', 'Edited by LevelGate', 'var(--violet)');
+  $('#nav').innerHTML = entry('all', 'All Meds & Food', '#ffffff') + MED_KINDS.map(([k, n, c]) => entry(k, n, c)).join('') + entry('edited', 'Edited by You', 'var(--violet)');
   $('#navModsBtn').hidden = true;
 }
 
@@ -160,7 +189,7 @@ function statsPage() {
   const ids = statIds(S.statCat).sort((a, b) => (S.items.get(a).n || '').localeCompare(S.items.get(b).n || ''));
   S.shown = ids.map(id => S.items.get(id));
   const warn = !S.serverMod
-    ? `<div class="warn-line">⚠ The LevelGate server mod wasn't found in ${esc(S.statsFile ? S.statsFile.replace(/[\\/]item_stats\.json$/, '') : 'SPT\\user\\mods\\LevelGate')} — item stat edits are saved but only take effect with it installed (LevelGate.Server.dll from the download).</div>` : '';
+    ? `<div class="warn-line">⚠ The ItemStatEditor server mod wasn't found in ${esc(S.statsFile ? S.statsFile.replace(/[\\/]item_stats\.json$/, '') : 'SPT\\user\\mods\\ItemStatEditor')} — item stat edits are saved but only take effect with it installed (ItemStatEditor.Server.dll from the download).</div>` : '';
   const rows = ids.map((id, i) => {
     const it = S.items.get(id), m = effMed(id), k = MED_KIND[m.kind];
     const changed = JSON.stringify(S.statEdits[id] ?? null) !== JSON.stringify(S.statSaved[id] ?? null);
@@ -175,7 +204,7 @@ function statsPage() {
     </div>`;
   }).join('');
   return `<div class="toolbar sticky">${warn}
-      <span class="muted small">${fmt(ids.length)} shown · edits apply after restarting the SPT server${S.statSources.length ? ` · LevelGate's edits win over ${esc(S.statSources.map(x => x.replace(/ \(.*/, '')).join(' and '))}` : ''}</span></div>
+      <span class="muted small">${fmt(ids.length)} shown · edits apply after restarting the SPT server${S.statSources.length ? ` · your edits win over ${esc(S.statSources.map(x => x.replace(/ \(.*/, '')).join(' and '))}` : ''}</span></div>
     <div class="list st">${`<div class="list-head"><div>#</div><div>Item</div><div>Type</div><div>Effects</div><div>Level</div></div>`}${rows || `<div class="empty">${Object.keys(S.meds).length ? 'Nothing matches.' : 'No meds loaded — the stats come from the SPT database (pick the config inside your SPT folder).'}</div>`}</div>`;
 }
 
@@ -186,22 +215,24 @@ function statsDetails() {
   if (!id) {
     $('#detailsTitle').textContent = 'Item Stats';
     d.innerHTML = `<div class="card"><h3>Meds, Stims & Food</h3><div class="hint">Pick an item to change how long it takes to use, how many uses / HP it has, what it treats, energy and hydration, and a stim's effects.
-      <br><br>Edits are saved to <span class="mono">${esc(S.statsFile || 'SPT\\user\\mods\\LevelGate\\item_stats.json')}</span> and applied by the LevelGate server mod when the server starts (after other mods, so they win). The Level Limits tab shows the edited stats too.</div></div>`;
+      <br><br>Edits are saved to <span class="mono">${esc(S.statsFile || 'SPT\\user\\mods\\ItemStatEditor\\item_stats.json')}</span> and applied by the ItemStatEditor server mod when the server starts (after other mods, so they win). The Level Limits tab shows the edited stats too.
+      <br><br>Values that differ from Escape From Tarkov's show the original next to them, like <span class="def">(1.5 Default)</span>. Right-click an item to reset it.</div></div>`;
     return;
   }
   const keep = document.activeElement?.dataset?.key;
   const it = S.items.get(id), m = effMed(id), kind = m.kind, k = MED_KIND[kind];
+  const def = S.medsDefault[id] || {};
   $('#detailsTitle').textContent = it.n;
-  const num = (label, key, field, step = 1, hint = '') => `<div class="field"><label>${esc(label)}</label><div class="numrow"><input type="number" step="${step}" data-key="${key}" data-sf="${field}" value="${m[field] ?? ''}">${hint ? `<span class="muted small">${hint}</span>` : ''}</div></div>`;
+  const num = (label, key, field, step = 1, hint = '') => `<div class="field"><label>${esc(label)} ${defNote(m[field], def[field])}</label><div class="numrow"><input type="number" step="${step}" data-key="${key}" data-sf="${field}" value="${m[field] ?? ''}">${hint ? `<span class="muted small">${hint}</span>` : ''}</div></div>`;
   const resource = kind === 'medkit' ? num('HP Resource', 'hp', 'MaxHpResource', 1, 'total HP it can heal') + num('HP per Use', 'rate', 'hpResourceRate', 1, 'most it heals in one use')
     : kind === 'food' ? num('Uses', 'res', 'MaxResource', 1) : num('Uses', 'hp', 'MaxHpResource', 1);
   const useField = kind === 'food' ? 'foodUseTime' : 'medUseTime';
-  const health = HEALTH.map(([f, n]) => `<div class="field"><label>${n}</label><div class="numrow"><input type="number" step="1" data-key="eh-${f}" data-eh="${f}" value="${m.effects_health?.[f]?.value ?? ''}" placeholder="none"><span class="muted small">${kind === 'food' ? 'per use' : 'when used'}</span></div></div>`).join('');
+  const health = HEALTH.map(([f, n]) => `<div class="field"><label>${n} ${defNote(m.effects_health?.[f]?.value, def.effects_health?.[f]?.value)}</label><div class="numrow"><input type="number" step="1" data-key="eh-${f}" data-eh="${f}" value="${m.effects_health?.[f]?.value ?? ''}" placeholder="none"><span class="muted small">${kind === 'food' ? 'per use' : 'when used'}</span></div></div>`).join('');
   const dmg = DAMAGE.map(([t, n]) => {
-    const e = m.effects_damage?.[t];
+    const e = m.effects_damage?.[t], de = def.effects_damage?.[t];
     const on = !!e;
-    const f = (field, label) => `<label class="mini-f">${label}<input type="number" step="1" data-key="ed-${t}-${field}" data-ed="${t}" data-edf="${field}" value="${e?.[field] ?? ''}" ${on ? '' : 'disabled'}></label>`;
-    return `<div class="dmg-row ${on ? 'on' : ''}"><label class="switch"><input type="checkbox" data-key="ed-${t}" data-edon="${t}" ${on ? 'checked' : ''}><span class="track"></span><span>${n}</span></label>
+    const f = (field, label) => `<label class="mini-f">${label} ${on && de ? defNote(e?.[field], de?.[field], true) : ''}<input type="number" step="1" data-key="ed-${t}-${field}" data-ed="${t}" data-edf="${field}" value="${e?.[field] ?? ''}" ${on ? '' : 'disabled'}></label>`;
+    return `<div class="dmg-row ${on ? 'on' : ''}"><label class="switch"><input type="checkbox" data-key="ed-${t}" data-edon="${t}" ${on ? 'checked' : ''}><span class="track"></span><span>${n} ${!!de !== on ? `<span class="def">(${de ? 'on' : 'off'} Default)</span>` : ''}</span></label>
       <div class="dmg-fields" ${on ? '' : 'hidden'}>${kind === 'medkit' || kind === 'medical' ? f('cost', 'Cost') : ''}${f('duration', 'For (s)')}${f('delay', 'Delay')}${f('fadeOut', 'Fade')}${t === 'DestroyedPart' ? f('healthPenaltyMin', 'Min %') + f('healthPenaltyMax', 'Max %') : ''}</div></div>`;
   }).join('');
   const buffs = (m.effects_buffs || []).map((b, i) => `<div class="buff-row">
@@ -216,13 +247,14 @@ function statsDetails() {
   const sharing = m.buffName ? Object.keys(S.meds).filter(x => x !== id && effMed(x).buffName === m.buffName).map(x => S.items.get(x)?.n).filter(Boolean) : [];
   d.innerHTML = `<div class="card hero">${icon(it, true)}<div class="hero-text"><div class="kind" style="color:${k.color}">${esc(k.name.toUpperCase())}</div>
       <div class="hero-name">${esc(it.s || it.n)}</div><div class="muted small">${esc(statsShort(it).replace(/ · ✎$/, ''))}</div></div></div>
-    ${S.statEdits[id] ? `<div class="edited-bar">✎ Edited by LevelGate <button class="outline" data-act="statReset">Reset to Game Values</button></div>` : ''}
+    ${S.statEdits[id] || !sameAsDefault(id) ? `<div class="edited-bar"><span>${S.statEdits[id] ? '✎ Edited here' : 'Changed by another mod'}</span><span>${S.statEdits[id] ? '<button class="outline small-btn" data-act="statReset" title="Remove your edit (other mods\' values come back)">Undo My Edit</button>' : ''}${!sameAsDefault(id) ? `<button class="outline small-btn" data-act="statResetDefault" data-arg="${id}" title="Escape From Tarkov's own values">Reset to EFT Default</button>` : ''}</span></div>` : ''}
     <div class="card"><h3>Use</h3>${num('Use Time', 'use', useField, 0.5, 'seconds')}${resource}</div>
     <div class="card"><h3>${kind === 'food' ? 'Energy & Hydration' : 'Energy & Hydration'}</h3>${health}</div>
     ${kind === 'food' ? '' : `<div class="card"><h3>${kind === 'medkit' || kind === 'medical' ? 'Treats' : 'Removes'}</h3><div class="hint">${kind === 'medkit' || kind === 'medical' ? '"Cost" = HP / uses spent to treat it.' : 'Switched on = the effect is suppressed for that long (painkillers, stims).'}</div>${dmg}</div>`}
     <div class="card"><h3>Effects Over Time<span class="grow"></span><button class="outline small-btn" data-act="buffAdd">+ Add Effect</button></h3>
       ${m.buffName ? `<div class="hint">Buff list "${esc(m.buffName)}"${sharing.length ? ` — also used by ${esc(sharing.join(', '))}, which change with it` : ''}.</div>` : '<div class="hint">No effects over time yet (stims, some food). Adding one creates a list just for this item.</div>'}
-      ${buffs || ''}</div>`;
+      ${buffs || ''}
+      ${JSON.stringify(m.effects_buffs || []) !== JSON.stringify(def.effects_buffs || []) ? `<div class="def-list"><div class="def">Escape From Tarkov default:</div>${(def.effects_buffs || []).map(b => `<div>${esc(buffText(b))}</div>`).join('') || '<div>no effects</div>'}</div>` : ''}</div>`;
   if (keep) d.querySelector(`[data-key="${keep}"]`)?.focus();
 }
 
@@ -255,11 +287,18 @@ function afterStat(id) {
 Object.assign(ACT, {
   statCat(key) { S.statCat = key; S.page = 'items'; saveUi(); renderAll(); $('#page').scrollTop = 0; },
   editStats(id) { S.tab = 'stats'; S.statCat = 'all'; S.sel = id; S.picked = new Set(); saveUi(); renderAll(); document.querySelector(`#page .row[data-row="${id}"]`)?.scrollIntoView({ block: 'center' }); },
+  statResetDefault(id) {
+    id = id || S.sel;
+    const d = S.medsDefault[id];
+    if (!d) return;
+    editStat(id, m => { for (const k of KEEP) { if (d[k] === undefined) delete m[k]; else m[k] = JSON.parse(JSON.stringify(d[k])); } });
+    toast('Reset to Escape From Tarkov\'s values');
+  },
   statReset() { const id = S.sel; editStat(id, m => { for (const k of KEEP) { if (S.meds[id][k] === undefined) delete m[k]; else m[k] = JSON.parse(JSON.stringify(S.meds[id][k])); } }); },
   buffAdd() {
     const id = S.sel;
     editStat(id, m => {
-      if (!m.buffName) m.buffName = `LevelGate_${id}`;
+      if (!m.buffName) m.buffName = `ItemStatEditor_${id}`;
       m.effects_buffs = [...(m.effects_buffs || []), { BuffType: 'HealthRate', Chance: 1, Delay: 1, Duration: 60, Value: 1, AbsoluteValue: true, SkillName: '' }];
     });
   },

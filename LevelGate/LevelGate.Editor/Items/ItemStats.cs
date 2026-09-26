@@ -16,12 +16,14 @@ namespace LevelGate.Editor;
 public sealed class ItemStats
 {
     // base classes
-    private const string Ammo = "5485a8684bdc2da71d8b4567";
+    private const string Ammo = "5485a8684bdc2da71d8b4567", AmmoBox = "543be5cb4bdc2deb348b4568";
     private const string Medkit = "5448f39d4bdc2d0a728b4568", Medical = "5448f3ac4bdc2dce718b4569", Drugs = "5448f3a14bdc2d27728b4569", Stimulator = "5448f3a64bdc2d60728b456a";
     private const string Food = "5448e8d04bdc2ddf718b4569", Drink = "5448e8d64bdc2dce718b4568";
 
     public Dictionary<string, JsonObject> Show { get; } = new();
     public Dictionary<string, JsonObject> Meds { get; } = new();
+    /// <summary>Meds / food exactly as the SPT database has them (Escape From Tarkov's values, before any mod).</summary>
+    public Dictionary<string, JsonObject> Defaults { get; } = new();
     /// <summary>Which other mods' changes were found (shown in the editor).</summary>
     public List<string> Sources { get; } = new();
 
@@ -33,7 +35,7 @@ public sealed class ItemStats
 
     public void Load(string databaseFolder, ItemDatabase db, string? modsRoot)
     {
-        Show.Clear(); Meds.Clear(); Sources.Clear();
+        Show.Clear(); Meds.Clear(); Defaults.Clear(); Sources.Clear();
         var buffs = LoadBuffs(Path.Combine(databaseFolder, "globals.json"));
         var root = JsonNode.Parse(File.ReadAllText(Path.Combine(databaseFolder, "templates", "items.json")), documentOptions: Lenient) as JsonObject;
         if (root == null) return;
@@ -66,8 +68,16 @@ public sealed class ItemStats
                 foreach (var g in grids) cells += I(g?["_props"]?["cellsH"]) * I(g?["_props"]?["cellsV"]);
                 if (cells > 0) show["slots"] = cells;
             }
+            // ammo packs: what's inside ("20 × M855")
+            if (db.HasAncestor(id, AmmoBox) && p["StackSlots"] is JsonArray stack && stack.Count > 0)
+            {
+                var slot = stack[0];
+                string? inside = (string?)slot?["_props"]?["filters"]?[0]?["Filter"]?[0];
+                int count = I(slot?["_max_count"]);
+                if (inside != null) { show["of"] = inside; if (count > 0) show["pack"] = count; }
+            }
             var kind = MedKind(db, id);
-            if (kind != null) Meds[id] = MedBase(p, kind, buffs);
+            if (kind != null) { Meds[id] = MedBase(p, kind, buffs); Defaults[id] = (JsonObject)Meds[id].DeepClone(); }
             if (show.Count > 0) Show[id] = show;
         }
         if (modsRoot != null && Directory.Exists(modsRoot))

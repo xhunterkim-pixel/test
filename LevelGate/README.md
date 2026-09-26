@@ -198,11 +198,16 @@ is ever touched.
 - **Item Stats** tab: edit meds, painkillers, stims and food — use time,
   uses / HP resource, HP per use, energy and hydration, what they treat or
   suppress (and for how long), and effects over time (skills, regen,
-  stamina, carry weight, side effects…). Saved to
-  `user\mods\LevelGate\item_stats.json`; the **LevelGate server mod**
-  applies it when the SPT server starts (after other mods, so these edits
-  win). Restart the server after saving. The Level Limits tab shows the
-  edited stats too.
+  stamina, carry weight, side effects…). Values that differ from Escape
+  From Tarkov's show the original next to them ("(1.5 Default)");
+  right-click an item to reset it to EFT's values. Saved to
+  `user\mods\ItemStatEditor\item_stats.json` and applied by the separate
+  **ItemStatEditor** server mod (`../ItemStatEditor.Server`, not part of
+  LevelGate) when the SPT server starts, after other mods, so these edits
+  win. Restart the server after saving.
+- ammo packs have their own category and show what's inside; right-click
+  items (or use the Category box in the details) to move them to another
+  category — only in the editor's own lists, nothing else changes
 
 While the game runs, LevelGate (1.6.0+) notices the saved file within ~2 s
 and reloads it (F9 → Reload from disk does the same). Reopen the inventory
@@ -230,17 +235,15 @@ Search that file for the item's name — you'll find lines like:
 The ID is the part before ` Name` — copy that exactly into the F9 menu or
 `level_requirements.json`.
 
-## Server mod (needed for Item Stats edits)
+## Server mod (optional)
 
-`../LevelGate.Server` is a small SPT 4.1.x server mod. It applies the item
-stat edits made in the editor's Item Stats tab
-(`user\mods\LevelGate\item_stats.json`: meds, stims, food) when the server
-starts, after other mods. It also makes the server list LevelGate at startup
-(`Mod: LevelGate version: 1.6.0 (GUID: com.yourname.levelgate | targets SPT:
+`../LevelGate.Server` is a tiny SPT 4.1.x server mod. It changes nothing in
+gameplay; it only makes the server list LevelGate at startup
+(`Mod: LevelGate version: 1.1.0 (GUID: com.yourname.levelgate | targets SPT:
 ~4.1.0) ... loaded`) and log how many item limits the client config holds.
 Open `LevelGate.Server/LevelGate.Server.csproj`, check `<SptServerDir>` (the
 folder containing `user\mods`, e.g. `C:\SPT\SPT_Runtime`), and build; the
-DLL is copied to `user\mods\LevelGate\` (a prebuilt `LevelGate.Server.dll` is in the release zip under `Install\SPT_Runtime\user\mods\LevelGate\`). Needs the .NET 10 SDK (SPT 4.1.x server packages target net10.0).
+DLL is copied to `user\mods\LevelGate\`. Needs the .NET 10 SDK (SPT 4.1.x server packages target net10.0).
 
 ## Build steps
 

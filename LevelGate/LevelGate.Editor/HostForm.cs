@@ -345,6 +345,9 @@ public sealed class HostForm : Form
             var meds = new JsonObject();
             foreach (var (id, m) in _stats.Meds) meds[id] = m.DeepClone();
             result["meds"] = meds;
+            var defaults = new JsonObject();
+            foreach (var (id, m) in _stats.Defaults) defaults[id] = m.DeepClone();
+            result["medsDefault"] = defaults;
             result["statSources"] = new JsonArray(_stats.Sources.Select(x => (JsonNode?)JsonValue.Create(x)).ToArray());
             StatsPayload(result);
             result["items"] = items;
@@ -356,19 +359,23 @@ public sealed class HostForm : Form
         }
     }
 
-    // ------------------------------------------------------------------ item stat edits (applied by the LevelGate server mod)
+    // ------------------------------------------------------------------ item stat edits (applied by the ItemStatEditor server mod)
 
     private readonly ItemStats _stats = new();
     private string? _statsLoaded;
 
-    /// <summary>SPT\...\user\mods\LevelGate\item_stats.json — the LevelGate server mod applies it when the server starts.</summary>
-    private string? StatsFile() => ModsRoot() is { } mods ? Path.Combine(mods, "LevelGate", "item_stats.json") : null;
+    /// <summary>SPT\...\user\mods\ItemStatEditor\item_stats.json — the ItemStatEditor server mod applies it when the server starts.</summary>
+    private string? StatsFile() => ModsRoot() is { } mods ? Path.Combine(mods, "ItemStatEditor", "item_stats.json") : null;
+
+    /// <summary>Where the previous editor version kept the edits (read once, removed after the next save).</summary>
+    private string? OldStatsFile() => ModsRoot() is { } mods ? Path.Combine(mods, "LevelGate", "item_stats.json") : null;
 
     private void StatsPayload(JsonObject result)
     {
         var file = StatsFile();
         result["statsFile"] = file;
-        result["serverMod"] = file != null && File.Exists(Path.Combine(Path.GetDirectoryName(file)!, "LevelGate.Server.dll"));
+        result["serverMod"] = file != null && File.Exists(Path.Combine(Path.GetDirectoryName(file)!, "ItemStatEditor.Server.dll"));
+        if (file != null && !File.Exists(file) && OldStatsFile() is { } old && File.Exists(old)) file = old; // edits from the previous version
         var edits = new JsonObject();
         try
         {
@@ -390,6 +397,7 @@ public sealed class HostForm : Form
         var temp = file + ".tmp";
         File.WriteAllText(temp, clean.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
         File.Move(temp, file, overwrite: true);
+        if (OldStatsFile() is { } old && File.Exists(old)) File.Delete(old); // moved to ItemStatEditor (the editor made that file)
         var result = new JsonObject();
         StatsPayload(result);
         return result;
