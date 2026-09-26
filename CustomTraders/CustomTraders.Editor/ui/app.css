@@ -591,3 +591,17 @@ body.has-bg #home { backdrop-filter: blur(18px); }
 .chg { display: flex; gap: 10px; padding: 3px 0; font-size: 13px; }
 .chg-i { width: 12px; font-weight: 900; flex: none; text-align: center; }
 .chg-sub { color: var(--muted); font-size: 12px; margin: 2px 0 2px 2px; }
+
+/* left panel snapped to icons only (drag its edge past the smallest width; drag back out to undo) */
+body.left-mini #main { grid-template-columns: 72px 8px minmax(420px, 1fr) 8px var(--right); }
+body.left-mini #left { padding: 10px 6px 8px; }
+body.left-mini .nav { justify-content: center; padding: 0; gap: 0; position: relative; }
+body.left-mini .nav span { display: none; }
+body.left-mini .nav em { position: absolute; top: 3px; right: 3px; font-size: 9px; }
+body.left-mini #me { grid-template-columns: 44px; justify-content: center; padding: 6px 4px; background: transparent; }
+body.left-mini #me > div:not(.ph) { display: none; }
+body.left-mini #traderMenu { left: 4px; right: 4px; padding: 4px; }
+body.left-mini .menu-title, body.left-mini .menu-add span { display: none; }
+body.left-mini .menu-add { text-align: center; padding: 8px 0; }
+body.left-mini .trader { grid-template-columns: 44px; justify-content: center; padding: 4px 0; }
+body.left-mini .trader > div:not(.ph) { display: none; }

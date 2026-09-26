@@ -595,12 +595,20 @@ function animateIn(el) {
 
 // ---------------------------------------------------------------- traders (left)
 
+/** Left panel: normal (220–460px) or icons only (like Spotify's collapsed library). */
+const LEFT_MIN = 220, LEFT_MINI = 72;
+function setLeftMini(on) {
+  if (!!S.ui.leftMini === on) return;
+  S.ui.leftMini = on;
+  document.body.classList.toggle('left-mini', on);
+}
+
 function renderTraders() {
   const html = S.traders.map((t, i) => {
     const f = t.file;
     const errors = S.checks.filter(c => c.trader === t && c.level === 'error').length;
     const img = t.images[f.avatar];
-    return `<div class="trader ${t === S.t ? 'sel' : ''} ${f.enabled ? '' : 'off'}" data-act="selTrader" data-arg="${i}" data-trader="${i}">
+    return `<div class="trader ${t === S.t ? 'sel' : ''} ${f.enabled ? '' : 'off'}" data-act="selTrader" data-arg="${i}" data-trader="${i}" title="${esc(f.name)}">
       ${img ? `<img src="${esc(img)}" alt="">` : '<div class="ph"></div>'}
       <div style="min-width:0"><div class="line1"><span class="name">${esc(f.name)}</span>
         ${f.enabled ? '' : ui.badge('OFF', '#b3b3b3')}${t.dirty ? ui.badge('•', 'var(--pink)') : ''}${errors ? ui.badge(errors + ' ✖', 'var(--red)') : ''}${traderModBadge(t)}</div>
@@ -608,7 +616,7 @@ function renderTraders() {
   }).join('');
   $('#traders').innerHTML = html || '<div class="empty">No Traders Yet</div>';
   $('#traderMenu').hidden = !S.tradersOpen;
-  $('#trashBtn').textContent = `🗑  Deleted Traders${S.deletedCount ? ` (${S.deletedCount})` : ''}`;
+  $('#trashBtn').innerHTML = `<b>🗑</b><span>  Deleted Traders${S.deletedCount ? ` (${S.deletedCount})` : ''}</span>`;
 
   // the trader you're working on, bottom left (click = all traders)
   const t = S.t, f = t?.file;
@@ -2835,9 +2843,17 @@ document.addEventListener('mousemove', e => {
     drag.guide.style.left = (drag.x + dx) + 'px';
     applyColumns();
   } else if (drag.kind === 'left') {
-    const w = clamp(drag.w + (e.clientX - drag.x), 220, 460);
-    S.ui.left = w;
-    document.documentElement.style.setProperty('--left', w + 'px');
+    // Spotify style: it stops at its smallest width, then — dragged a bit further — snaps to icons only.
+    // Coming back out of icons takes a longer pull, so it doesn't flicker between the two.
+    const raw = drag.w + (e.clientX - drag.x);
+    const mini = !!S.ui.leftMini;
+    if (!mini && raw < LEFT_MIN - 70) setLeftMini(true);
+    else if (mini && raw > LEFT_MINI + 150) setLeftMini(false);
+    if (!S.ui.leftMini) {
+      const w = clamp(raw, LEFT_MIN, 460);
+      S.ui.left = w;
+      document.documentElement.style.setProperty('--left', w + 'px');
+    }
   } else {
     const w = clamp(drag.w + (drag.x - e.clientX), 360, Math.max(400, window.innerWidth - 700));
     S.ui.right = w;
@@ -2868,7 +2884,7 @@ document.addEventListener('dblclick', e => {
   const grip = e.target.closest('[data-grip]');
   if (grip) { delete S.ui.colf?.[grip.dataset.grip.split('|')[0]]; applyColumns(); saveUi(); toast('Column widths reset'); return; }
   if (!e.target.classList.contains('splitter')) return;
-  if (e.target.id === 'splitLeft') { delete S.ui.left; document.documentElement.style.setProperty('--left', '250px'); }
+  if (e.target.id === 'splitLeft') { delete S.ui.left; setLeftMini(false); document.documentElement.style.setProperty('--left', '250px'); }
   else { delete S.ui.right; document.documentElement.style.setProperty('--right', '560px'); }
   saveUi();
 });
@@ -3386,7 +3402,8 @@ function applyUi() {
   root.setProperty('--on-accent', light > 150 ? '#000' : '#fff');
   root.setProperty('--dim', String((u.dim ?? 55) / 100));
   if (u.right) root.setProperty('--right', clamp(u.right, 360, 1400) + 'px');
-  if (u.left) root.setProperty('--left', clamp(u.left, 220, 460) + 'px');
+  if (u.left) root.setProperty('--left', clamp(u.left, LEFT_MIN, 460) + 'px');
+  document.body.classList.toggle('left-mini', !!u.leftMini);
   document.body.classList.toggle('grey', !!u.grey);
   if (u.page && !S.pageRestored) { S.page = u.page; S.pageRestored = true; }
 }
