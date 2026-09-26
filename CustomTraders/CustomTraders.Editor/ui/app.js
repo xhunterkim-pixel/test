@@ -54,9 +54,13 @@ const REWARD_TYPES = [
   ['Skill', 'Skill XP', '#f5cd46'], ['StashRows', 'Stash Rows', '#ff7ab6'],
 ];
 const CATEGORY_FILTERS = [
-  ['all', 'All'], ['weapons+', 'Weapons + Grenades'], ['Weapon', 'Weapons'], ['Grenade', 'Grenades'], ['Ammo', 'Ammo'],
-  ['Gear', 'Gear'], ['Food', 'Food & Drink'], ['Meds', 'Medical'], ['Money', 'Money'],
+  ['all', 'All'], ['weapons+', 'Weapons + Grenades'], ['Weapon', 'Weapons'], ['Melee', 'Melee'], ['Grenade', 'Grenades'], ['Ammo', 'Ammo'],
+  ['AmmoBox', 'Ammo Packs'], ['WeaponPart', 'Weapon Parts'], ['Gear', 'Gear'], ['Container', 'Containers'], ['Key', 'Keys'],
+  ['Barter', 'Barter Items'], ['Food', 'Food & Drink'], ['Meds', 'Medical'], ['QuestItem', 'Quest Items'], ['Special', 'Special'],
+  ['Money', 'Money'], ['Other', 'Other'],
 ];
+const CAT_NAME = Object.fromEntries(CATEGORY_FILTERS);
+const catName = c => ({ Weapon: 'Weapon', Grenade: 'Grenade', Food: 'Food & Drink', Meds: 'Medical', AmmoBox: 'Ammo Pack', WeaponPart: 'Weapon Part', Key: 'Key', Barter: 'Barter Item', Container: 'Container', QuestItem: 'Quest Item' }[c] || CAT_NAME[c] || c || '');
 
 const mapName = id => (MAPS.find(m => m[0].toLowerCase() === String(id).toLowerCase()) || [id, id])[1];
 const bossName = id => (BOSSES.find(b => b[0] === id) || [id, id])[1];
@@ -106,7 +110,8 @@ const S = {
   gameQuestImages: [], deletedCount: 0,
   open: new WeakMap(),  // objective -> Set of opened "must ..." sections
   picked: new Set(),    // offers / quests selected together (Ctrl/Shift-click or drag in empty space)
-  search: { offers: '', quests: '', checks: '' },
+  search: { offers: '', quests: '', checks: '', mods: '' },
+  mods: [], modOff: new Map(), modMemory: {}, modSel: null,
   tradersOpen: false,
   traderRate: 60,       // best % of the handbook value a game trader pays
 };
@@ -127,7 +132,71 @@ const validId = id => typeof id === 'string' && /^[0-9a-f]{24}$/i.test(id);
 
 // ---- items
 const item = id => S.items.get(id);
-const itemName = id => !id ? '(Nothing Picked Yet)' : MONEY_NAME[id] && !item(id) ? MONEY_NAME[id] : (item(id)?.n ?? (S.items.size ? `(unknown ${id})` : id));
+const itemName = id => {
+  if (!id) return '(Nothing Picked Yet)';
+  if (MONEY_NAME[id] && !item(id)) return MONEY_NAME[id];
+  if (item(id)) return item(id).n;
+  const m = modOf(id);
+  if (m) return `${m.name} [${m.mod}]`;
+  return S.items.size ? `(unknown ${id})` : id;
+};
+
+// ---- items from other mods (Mods page)
+/** Which mod an item id comes from, and whether that mod is usable right now:
+ *  on = imported + switched on, off = switched off, gone = imported but the id isn't in it anymore,
+ *  missing = the mod folder is gone, removed = the import was deleted (id remembered). */
+function modOf(id) {
+  if (!id) return null;
+  const it = S.items.get(id);
+  if (it) return it.m ? { mod: it.m, state: 'on', name: it.n } : null;
+  const off = S.modOff?.get(id);
+  if (off) return { mod: off.m, state: 'off', name: off.n };
+  const mem = S.modMemory?.[id];
+  if (!mem) return null;
+  const imp = S.mods.find(m => m.name === mem[0]);
+  return { mod: mem[0], state: !imp ? 'removed' : imp.error ? 'missing' : 'gone', name: mem[1] };
+}
+const MOD_STATE = {
+  on: ['ON', 'var(--green)'], off: ['SWITCHED OFF', 'var(--orange)'], gone: ['ID NOT IN MOD', 'var(--red)'],
+  missing: ['FOLDER MISSING', 'var(--red)'], removed: ['NOT IMPORTED', 'var(--red)'],
+};
+/** Every item id a trader uses, with where (for "used by" lists and the checks). */
+function itemUses(t) {
+  const out = [];
+  const f = t.file;
+  for (const o of f.offers) {
+    out.push({ id: o.itemTpl, where: `Offer: ${itemName(o.itemTpl)}`, target: o });
+    for (const c of o.cost) out.push({ id: c.itemTpl, where: `Price of ${itemName(o.itemTpl)}`, target: o });
+  }
+  for (const q of f.quests) {
+    for (const c of q.conditions)
+      for (const k of ['itemTpls', 'weaponTpls', 'wearingTpls'])
+        for (const id of c[k] || []) out.push({ id, where: `${q.name} · Way ${wayLetter(c.option || 1)} objective`, target: q });
+    for (const r of q.rewards) if (r.type === 'Item') out.push({ id: r.itemTpl, where: `${q.name} · reward`, target: q });
+  }
+  return out.filter(u => u.id && !isMoney(u.id));
+}
+/** mod name -> { state, uses[] } for one trader. */
+function traderMods(t) {
+  const map = new Map();
+  for (const u of itemUses(t)) {
+    const m = modOf(u.id);
+    if (!m) continue;
+    const e = map.get(m.mod) || { mod: m.mod, state: 'on', uses: [] };
+    if (m.state !== 'on') e.state = m.state;
+    e.uses.push({ ...u, trader: t, state: m.state });
+    map.set(m.mod, e);
+  }
+  return map;
+}
+/** Mods used by one offer / quest. */
+function objMods(t, obj) {
+  const names = new Set(), bad = new Set();
+  for (const u of itemUses(t)) if (u.target === obj) { const m = modOf(u.id); if (m) { names.add(m.mod); if (m.state !== 'on') bad.add(m.mod); } }
+  return { names: [...names], bad: [...bad] };
+}
+const modCell = mods => mods.names.length ? (mods.bad.length ? '✖ MODDED' : 'MODDED') : 'ORIGINAL';
+const modColor = mods => mods.names.length ? (mods.bad.length ? 'var(--red)' : 'var(--accent)') : 'var(--muted)';
 function shortName(id) {
   const it = item(id);
   if (!it) return itemName(id);
@@ -240,14 +309,22 @@ function normalize(entry) {
   return entry;
 }
 
+/** Item list, game quests and imported mods (also sent alone by the Mods page, without touching the traders). */
+function applyItems(snap) {
+  S.items = new Map((snap.items || []).map(i => [i.i, i]));
+  if (snap.gameQuests) S.gameQuests = new Map(snap.gameQuests.map(q => [q.i, q]));
+  S.itemsStatus = snap.itemsStatus || '';
+  S.traderRate = snap.traderRate || S.traderRate || 60;
+  if (snap.gameQuestImages) S.gameQuestImages = snap.gameQuestImages;
+  S.mods = snap.mods || [];
+  S.modOff = new Map((snap.modItemsOff || []).map(i => [i.i, i]));
+  S.modMemory = snap.modMemory || {};
+}
+
 function applySnapshot(snap) {
   S.modFolder = snap.modFolder;
   S.ui = snap.ui || S.ui || {};
-  S.items = new Map((snap.items || []).map(i => [i.i, i]));
-  S.gameQuests = new Map((snap.gameQuests || []).map(q => [q.i, q]));
-  S.itemsStatus = snap.itemsStatus || '';
-  S.traderRate = snap.traderRate || 60;
-  S.gameQuestImages = snap.gameQuestImages || [];
+  applyItems(snap);
   S.deletedCount = snap.deletedCount || 0;
   S.traders = (snap.traders || []).map(t => {
     const e = normalize({ ...t, dirty: false });
@@ -368,10 +445,14 @@ const chainOn = c => c.game || c.t.file.enabled;
 /** Picture of a game item (tarkov.dev keeps one for every item id); kind: icon | grid-image | 512. */
 function itemPic(id, kind = 'icon') {
   if (!id || isMoney(id) && !item(id) || view().noItemPics) return null;
-  return `https://assets.tarkov.dev/${id}-${kind}.webp`;
+  const url = `https://assets.tarkov.dev/${id}-${kind}.webp`;
+  return badPics.has(url) ? null : url;
 }
 /** When a picture can't load (modded item, offline…), the initials under it show instead. */
-const picFail = `onerror="this.remove()"`;
+const picFail = `onerror="picFailed(this)"`;
+const badPics = new Set();
+/** A picture that can't load is remembered, so redraws don't try (and flicker) again. */
+function picFailed(img) { badPics.add(img.getAttribute('src')); img.remove(); }
 function thumb(t) {
   if (t.img) return `<img class="thumb${t.wide ? ' wide' : ''}" src="${esc(t.img)}" alt="" loading="lazy">`;
   const dark = t.dark ? ' dark' : '';
@@ -433,7 +514,7 @@ function renderTraders() {
     return `<div class="trader ${t === S.t ? 'sel' : ''} ${f.enabled ? '' : 'off'}" data-act="selTrader" data-arg="${i}" data-trader="${i}">
       ${img ? `<img src="${esc(img)}" alt="">` : '<div class="ph"></div>'}
       <div style="min-width:0"><div class="line1"><span class="name">${esc(f.name)}</span>
-        ${f.enabled ? '' : ui.badge('OFF', '#b3b3b3')}${t.dirty ? ui.badge('•', 'var(--pink)') : ''}${errors ? ui.badge(errors + ' ✖', 'var(--red)') : ''}</div>
+        ${f.enabled ? '' : ui.badge('OFF', '#b3b3b3')}${t.dirty ? ui.badge('•', 'var(--pink)') : ''}${errors ? ui.badge(errors + ' ✖', 'var(--red)') : ''}${traderModBadge(t)}</div>
       <div class="sub">${f.offers.length} Offers · ${f.quests.length} Quests</div></div></div>`;
   }).join('');
   $('#traders').innerHTML = html || '<div class="empty">No Traders Yet</div>';
@@ -456,8 +537,18 @@ function renderTraders() {
   $('#navOffers').textContent = f ? f.offers.length : '';
   $('#navQuests').textContent = f ? f.quests.length : '';
   $('#navChecks').textContent = errors ? `✖ ${errors}` : warnings ? `⚠ ${warnings}` : '✔';
+  const modBad = modList().some(e => modStatus(e) !== 'on' && e.uses.length);
+  $('#navMods').textContent = S.mods.length || modBad ? (modBad ? '⚠ ' : '') + `${S.mods.filter(m => m.enabled).length}/${S.mods.length}` : '';
+  $('#navMods').className = modBad ? 'bad' : '';
   $('#navChecks').className = errors ? 'bad' : '';
   document.querySelectorAll('#nav .nav').forEach(n => n.classList.toggle('on', n.dataset.arg === S.page));
+}
+
+function traderModBadge(t) {
+  const mods = [...traderMods(t).values()];
+  if (!mods.length) return '';
+  const bad = mods.some(m => m.state !== 'on');
+  return `<span class="badge ${bad ? 'keep' : ''}" style="--c:${bad ? 'var(--red)' : 'var(--accent)'}" title="Uses items from: ${esc(mods.map(m => m.mod).join(', '))}">${bad ? '✖ ' : ''}MODDED</span>`;
 }
 
 // ---------------------------------------------------------------- header
@@ -468,16 +559,17 @@ function renderHeader() {
   const img = t && t.images[f.avatar];
   const avatar = $('#headerAvatar');
   if (img) { if (avatar.getAttribute('src') !== img) avatar.src = img; avatar.hidden = false; } else avatar.hidden = true;
-  $('#headerKind').textContent = (f && !f.enabled ? 'TRADER · SWITCHED OFF' : 'TRADER') + ' · ' + { trader: 'PROFILE', offers: 'OFFERS & BARTERS', quests: 'QUESTS', checks: 'CHECKS & LOG' }[S.page];
+  $('#headerKind').textContent = (f && !f.enabled ? 'TRADER · SWITCHED OFF' : 'TRADER') + ' · ' + { trader: 'PROFILE', offers: 'OFFERS & BARTERS', quests: 'QUESTS', checks: 'CHECKS & LOG', mods: 'MODS' }[S.page];
   $('#headerKind').style.color = f && !f.enabled ? 'var(--orange)' : '';
   $('#headerTitle').textContent = f?.name || 'No trader';
+  const needs = t ? [...traderMods(t).keys()] : [];
   $('#headerSub').textContent = !f ? 'Click the trader box at the bottom left to add one.' :
-    `${f.offers.length} Offer${f.offers.length === 1 ? '' : 's'} · ${f.quests.length} Quest${f.quests.length === 1 ? '' : 's'} · Restocks Every ${f.refreshMinutesMin}–${f.refreshMinutesMax} Min · ${f.unlockedByDefault ? 'Unlocked From the Start' : 'Locked at Start'}`;
+    `${f.offers.length} Offer${f.offers.length === 1 ? '' : 's'} · ${f.quests.length} Quest${f.quests.length === 1 ? '' : 's'} · Restocks Every ${f.refreshMinutesMin}–${f.refreshMinutesMax} Min · ${f.unlockedByDefault ? 'Unlocked From the Start' : 'Locked at Start'}${needs.length ? ` · Needs Mods: ${needs.join(', ')}` : ''}`;
   $('#header').style.setProperty('--hc', headerColor(t?.avatarColor));
   document.querySelectorAll('#nav .nav').forEach(n => n.classList.toggle('on', n.dataset.arg === S.page));
   const box = $('#searchBox'), input = $('#search');
   box.hidden = S.page === 'trader';
-  input.placeholder = { offers: 'Search Offers & Barters (Ctrl+F)', quests: 'Search Quests, Tags, Notes (Ctrl+F)', checks: 'Search the Log (Ctrl+F)' }[S.page] || '';
+  input.placeholder = { offers: 'Search Offers & Barters, “Modded” (Ctrl+F)', quests: 'Search Quests, Tags, Notes (Ctrl+F)', checks: 'Search the Log (Ctrl+F)', mods: 'Search Mods & Their Items (Ctrl+F)' }[S.page] || '';
   if (document.activeElement !== input) input.value = S.search[S.page] || '';
   box.classList.toggle('has', !!input.value);
 }
@@ -494,19 +586,45 @@ function headerColor(hex) {
 
 // ---------------------------------------------------------------- page (center)
 
+/** Replace only what changed (rows whose text / pictures are the same stay untouched — no flicker while typing). */
+function patchChildren(parent, html) {
+  const tpl = document.createElement('template');
+  tpl.innerHTML = html;
+  patchNodes(parent, tpl.content);
+}
+function patchNodes(parent, next) {
+  const olds = [...parent.childNodes], news = [...next.childNodes];
+  for (let i = 0; i < news.length; i++) {
+    const o = olds[i], n = news[i];
+    if (!o) { parent.appendChild(n); continue; }
+    if (o.isEqualNode(n)) continue;
+    // same kind of container (list, row…): keep it and patch inside, so unchanged pictures stay loaded
+    if (o.nodeType === 1 && n.nodeType === 1 && o.tagName === n.tagName && o.className === n.className && o.tagName === 'DIV' && n.childNodes.length && !o.querySelector('input,textarea,select')) {
+      for (const a of [...o.attributes]) if (!n.hasAttribute(a.name)) o.removeAttribute(a.name);
+      for (const a of [...n.attributes]) if (o.getAttribute(a.name) !== a.value) o.setAttribute(a.name, a.value);
+      patchNodes(o, n);
+      continue;
+    }
+    parent.replaceChild(n, o);
+  }
+  for (let i = olds.length - 1; i >= news.length; i--) olds[i].remove();
+}
+
 function renderPage(animate) {
   const page = $('#page');
   const scroll = page.scrollTop;
   B = new Map([...B].filter(([k, v]) => v.zone !== 'page'));
   const zoneStart = bindSeq;
   let html = '';
-  if (!S.t && S.page !== 'checks') html = '<div class="empty">No trader selected.</div>';
+  if (!S.t && S.page !== 'checks' && S.page !== 'mods') html = '<div class="empty">No trader selected.</div>';
+  else if (S.page === 'mods') html = pageMods();
   else if (S.page === 'trader') html = pageTrader();
   else if (S.page === 'offers') html = pageOffers();
   else if (S.page === 'quests') html = pageQuests();
   else html = pageChecks();
   for (const [k, v] of B) if (Number(k.slice(1)) > zoneStart) v.zone = 'page';
-  page.innerHTML = html;
+  if (animate) page.innerHTML = html;
+  else patchChildren(page, html);
   applyColumns();
   if (animate) { page.scrollTop = 0; animateIn(page); } else page.scrollTop = scroll;
 }
@@ -549,8 +667,9 @@ function pageTrader() {
 }
 
 const COLUMNS = {
-  offers: [['title', 'Title'], ['unlock', 'Unlock', 190], ['ll', 'LL', 56], ['stock', 'Stock', 110], ['notes', 'Notes', 150]],
-  quests: [['title', 'Title'], ['level', 'Level', 80], ['ways', 'Ways', 70], ['notes', 'Notes', 150]],
+  offers: [['title', 'Title'], ['unlock', 'Unlock', 190], ['ll', 'LL', 56], ['stock', 'Stock', 110], ['mod', 'Modded', 100], ['notes', 'Notes', 150]],
+  quests: [['title', 'Title'], ['level', 'Level', 80], ['ways', 'Ways', 70], ['mod', 'Modded', 100], ['notes', 'Notes', 150]],
+  mods: [['title', 'Mod'], ['items', 'Items', 90], ['used', 'Used By', 170]],
   checks: [['title', 'Title'], ['when', 'When', 90]],
 };
 const view = () => (S.ui.view ||= {});
@@ -585,7 +704,7 @@ function boxes(list) {
   }).join('')}</div>`;
 }
 
-function row({ list, act, arg, sel, three, thumb: th, title, titleColor, badges = [], line2, line3, line3Color, boxes2, boxes3, cols = {}, colColors = {} }) {
+function row({ list, act, arg, sel, three, thumb: th, title, titleColor, badges = [], line2, line3, line3Color, boxes2, boxes3, cols = {}, colColors = {}, colTitles = {} }) {
   const shown = list ? shownColumns(list).slice(1) : [];
   return `<div class="row ${sel ? 'sel' : ''} ${three ? 'three' : ''}" data-act="${act}" data-arg="${arg}" data-row="${arg}">
     <div class="idx">${Number(arg) + 1}</div>
@@ -594,7 +713,7 @@ function row({ list, act, arg, sel, three, thumb: th, title, titleColor, badges 
       ${boxes2 ? boxes(boxes2) : line2 ? `<div class="line2">${esc(line2)}</div>` : ''}
       ${boxes3 ? boxes(boxes3) : line3 ? `<div class="line3" ${line3Color ? `style="color:${line3Color}"` : ''}>${esc(line3)}</div>` : ''}
     </div></div>
-    ${shown.map(([k]) => `<div class="col ${k}" ${colColors[k] ? `style="color:${colColors[k]}"` : ''} ${k === 'notes' && cols[k] ? `title="${esc(cols[k])}"` : ''}>${esc(cols[k] ?? '')}</div>`).join('')}
+    ${shown.map(([k]) => `<div class="col ${k}" ${colColors[k] ? `style="color:${colColors[k]}"` : ''} ${k === 'notes' && cols[k] ? `title="${esc(cols[k])}"` : colTitles[k] ? `title="${esc(colTitles[k])}"` : ''}>${cols[k] && typeof cols[k] === 'object' ? cols[k].html : esc(cols[k] ?? '')}</div>`).join('')}
   </div>`;
 }
 
@@ -637,20 +756,23 @@ function pageOffers() {
     const u = offerUnlock(t, o);
     const price = priceKind(o);
     if (S.tagFilters.offers && !o.tags.includes(S.tagFilters.offers)) return '';
-    if (!matches('offers', itemName(o.itemTpl), item(o.itemTpl)?.s || '', costText(o), u.text, o.notes, o.tags, price?.[0] || '', `LL${o.loyaltyLevel}`)) return '';
+    if (!matches('offers', itemName(o.itemTpl), item(o.itemTpl)?.s || '', costText(o), u.text, o.notes, o.tags, price?.[0] || '', `LL${o.loyaltyLevel}`, objMods(t, o).names.length ? ['modded', ...objMods(t, o).names] : 'original')) return '';
     shown.push(o);
     const badges = [];
     if (u.badge) badges.push(u.badge);
     if (price) badges.push(price);
     if (o.loyaltyLevel > 1) badges.push([`LL${o.loyaltyLevel}`, 'var(--violet)']);
     if (!view().hideTags) for (const tag of o.tags) badges.push([tag.toUpperCase(), tagColor(tag)]);
+    const mods = objMods(t, o);
+    if (mods.bad.length) badges.push(['✖ MOD MISSING', 'var(--red)', 'keep']);
     return row({
       list: 'offers', act: 'selOffer', arg: i, sel: isPicked(o, S.offer),
       thumb: { text: initials(item(o.itemTpl)?.s || itemName(o.itemTpl)), color: u.kind !== 'start' ? 'var(--orange)' : '#3a3a3a', dark: u.kind !== 'start', item: o.itemTpl, wide: true },
       title: itemName(o.itemTpl), badges,
       line2: costText(o),
-      cols: { unlock: u.text, ll: `LL${o.loyaltyLevel}`, stock: (o.unlimited ? 'Unlimited' : `${o.stock} / Restock`) + (o.buyLimit > 0 ? ` · Max ${o.buyLimit}` : ''), notes: o.notes },
-      colColors: { unlock: u.kind !== 'start' ? 'var(--orange)' : 'var(--green)' },
+      cols: { unlock: u.text, ll: `LL${o.loyaltyLevel}`, stock: (o.unlimited ? 'Unlimited' : `${o.stock} / Restock`) + (o.buyLimit > 0 ? ` · Max ${o.buyLimit}` : ''), notes: o.notes, mod: modCell(mods) },
+      colColors: { unlock: u.kind !== 'start' ? 'var(--orange)' : 'var(--green)', mod: modColor(mods) },
+      colTitles: { mod: mods.names.join(', ') },
     });
   }).join('');
   S.shownRows = shown;
@@ -683,6 +805,8 @@ function pageQuests() {
     if (q.prerequisiteQuestIds.length) badges.push([`AFTER ${q.prerequisiteQuestIds.length} QUEST${q.prerequisiteQuestIds.length > 1 ? 'S' : ''}`, 'var(--blue)']);
     if (!v.hideTags) for (const tag of q.tags) badges.push([tag.toUpperCase(), tagColor(tag)]);
     if (S.checks.some(c => c.target === q && c.level === 'error')) badges.push(['✖ PROBLEM', 'var(--red)', 'keep']);
+    const mods = objMods(t, q);
+    if (mods.bad.length) badges.push(['✖ MOD MISSING', 'var(--red)', 'keep']);
     const pic = questPic(t, q);
     return row({
       list: 'quests', act: 'selQuest', arg: i, sel: isPicked(q, S.quest), three: true,
@@ -695,7 +819,9 @@ function pageQuests() {
         })
         : [{ text: 'No Objectives Yet' }],
       boxes3: v.hideRewards ? null : q.rewards.length ? rewardBoxes(t, q) : [{ text: 'No Rewards Yet' }],
-      cols: { level: `Lvl ${q.minLevel}`, ways: String(w.length), notes: q.notes },
+      cols: { level: `Lvl ${q.minLevel}`, ways: String(w.length), notes: q.notes, mod: modCell(mods) },
+      colColors: { mod: modColor(mods) },
+      colTitles: { mod: mods.names.join(', ') },
     });
   }).join('');
   S.shownRows = shown;
@@ -730,6 +856,80 @@ function pageChecks() {
     <div class="list" data-list="checks">${listHead('checks')}${rows || '<div class="empty">Nothing to Show</div>'}</div>`;
 }
 
+// ---------------------------------------------------------------- mods page
+
+/** Imported mods + mods your traders use that aren't imported (anymore). */
+function modList() {
+  const usage = new Map();
+  for (const t of S.traders) for (const [name, e] of traderMods(t)) usage.set(name, [...(usage.get(name) || []), ...e.uses]);
+  const list = S.mods.map(m => ({ name: m.name, imp: m, uses: usage.get(m.name) || [] }));
+  for (const [name, uses] of usage) if (!S.mods.some(m => m.name === name)) list.push({ name, imp: null, uses });
+  return list;
+}
+function modStatus(e) { return !e.imp ? 'removed' : e.imp.error ? 'missing' : e.imp.enabled ? 'on' : 'off'; }
+function modItems(name) {
+  const on = [...S.items.values()].filter(i => i.m === name);
+  return on.length ? on : [...S.modOff.values()].filter(i => i.m === name);
+}
+const modRemembered = name => Object.values(S.modMemory).filter(v => v[0] === name).length;
+
+function pageMods() {
+  const list = modList().filter(e => matches('mods', e.name, e.imp?.folder || '', modItems(e.name).slice(0, 3000).map(i => i.n)));
+  if (!S.modSel || !modList().some(e => e.name === S.modSel)) S.modSel = list[0]?.name || null;
+  S.shownMods = list;
+  const rows = list.map((e, i) => {
+    const st = modStatus(e);
+    const traders = new Set(e.uses.map(u => u.trader));
+    const first = modItems(e.name)[0];
+    const toggle = e.imp ? `<button class="modcheck ${e.imp.enabled ? 'on' : ''}" data-act="modToggle" data-arg="${esc(e.name)}" title="${e.imp.enabled ? 'On — click to switch off' : 'Off — click to switch on'}">${e.imp.enabled ? '✓' : ''}</button>` : '';
+    return row({
+      list: 'mods', act: 'selMod', arg: i, sel: e.name === S.modSel,
+      thumb: { text: initials(e.name), color: st === 'on' ? 'var(--accent)' : '#3a3a3a', dark: st === 'on', item: first?.i, wide: true },
+      title: e.name, badges: [MOD_STATE[st]].concat(e.uses.length && st !== 'on' ? [['USED — CHECK IT', 'var(--red)', 'keep']] : []),
+      line2: e.imp ? (e.imp.error || e.imp.folder) : `Not imported · ${modRemembered(e.name)} remembered id(s)`,
+      cols: { items: { html: `${toggle}<span>${e.imp ? fmt(e.imp.count) : '—'}</span>` }, used: e.uses.length ? `${traders.size} Trader${traders.size === 1 ? '' : 's'} · ${e.uses.length} Use${e.uses.length === 1 ? '' : 's'}` : 'Not Used' },
+      colColors: { used: e.uses.length ? (st === 'on' ? 'var(--accent)' : 'var(--red)') : 'var(--muted)' },
+    });
+  }).join('');
+  return `<div class="toolbar sticky">
+      <button class="primary" data-act="modsScanAll" title="Looks through every folder in ...\\user\\mods for item files and en.json">Scan My Mods Folder</button>
+      <button class="outline" data-act="modAddFolder">Import a Mod Folder…</button>
+      <button class="outline" data-act="modRescan" ${S.mods.length ? '' : 'disabled'}>Rescan All</button>
+    </div>
+    ${ui.hint('Mods that add their own items (e.g. WTT-ContentBackport, ISB-Aishi). Imported items show up in every item picker (Modded filter) so they can be sold, bartered, used in objectives and given as rewards. ✓ = switched on. Traders that use a mod get a <b>MODDED</b> tag, and the checks warn when a mod they use is switched off, removed or missing.')}
+    <div class="list" data-list="mods">${listHead('mods')}${rows || '<div class="empty">No mods imported yet — click Scan My Mods Folder</div>'}</div>`;
+}
+
+function detailsMod() {
+  const e = modList().find(x => x.name === S.modSel);
+  if (!e) return ['Mods', '<div class="empty">Import mods with the buttons on the left.</div>'];
+  const st = modStatus(e);
+  const items = modItems(e.name);
+  const [stText, stColor] = MOD_STATE[st];
+  const explain = {
+    on: e.uses.length ? 'Switched on. Your traders use its items, so players need this mod installed.' : 'Switched on. Its items can be picked everywhere.',
+    off: e.uses.length ? 'Switched OFF, but your traders still use its items (below). The editor can’t check them while it’s off — switch it back on, or replace those items.' : 'Switched off: its items are hidden from the pickers. Nothing uses it.',
+    missing: 'The mod folder is gone (moved or uninstalled). Items from it can’t be checked — if the mod isn’t installed, the game skips these offers / objectives.',
+    removed: 'This mod isn’t imported anymore, but its item ids are still used below. Without the mod installed, the game skips them. Import it again, or replace the items.',
+  }[st];
+  S.modUses = e.uses;
+  const uses = e.uses.map((u, i) => `<div class="row" data-act="goUse" data-arg="${i}"><div class="cell">${thumb({ text: initials(itemName(u.id)), item: u.id, color: '#3a3a3a' })}
+    <div class="text"><div class="title">${esc(itemName(u.id))}</div><div class="line2">${esc(u.trader.file.name)} › ${esc(u.where)}</div></div>
+    <span class="side" style="color:${MOD_STATE[u.state][1]}">${esc(MOD_STATE[u.state][0])}</span></div></div>`).join('');
+  const itemRows = items.slice(0, 150).map(it => `<div class="row"><div class="cell">${thumb({ text: initials(it.s || it.n), item: it.i, color: '#3a3a3a', wide: true })}
+    <div class="text"><div class="title">${esc(it.n)}</div><div class="line2">${esc(it.s || '')} · ${esc(it.i)}</div></div><span class="side">${esc(catName(it.c))}</span></div></div>`).join('');
+  return [e.name, `
+    <div class="status" style="--c:${stColor}"><h3>${esc(stText)}<span class="grow"></span>${e.imp ? ui.toggle('Use Its Items', () => e.imp.enabled, () => { }, {}).replace('data-b=', 'data-mod-toggle="' + esc(e.name) + '" data-x=') : ''}</h3><div class="hint" style="margin:0">${explain}</div></div>
+    ${card('m-info', 'Import', `
+      <div class="req">${e.imp ? `Folder: ${esc(e.imp.folder)}\n${fmt(e.imp.count)} item(s) found` : `Not imported · ${modRemembered(e.name)} id(s) remembered from an earlier import`}</div>
+      <div class="toolbar" style="margin-top:10px">
+        ${e.imp ? `<button class="outline" data-act="modRescan">Rescan</button><button class="danger" data-act="modRemove" data-arg="${esc(e.name)}">Remove Import</button>`
+          : `<button class="primary" data-act="modAddFolder">Import It Again…</button><button class="danger" data-act="modForget" data-arg="${esc(e.name)}" title="The checks won’t be able to name this mod anymore">Forget Its IDs</button>`}
+      </div>`)}
+    ${card('m-used', `Used By ${e.uses.length ? `(${e.uses.length})` : ''}`, uses ? `<div class="mini">${uses}</div>${ui.hint('Click one to jump to it.')}` : ui.hint('None of your traders use this mod’s items.'))}
+    ${card('m-items', `Items (${fmt(items.length)})`, itemRows ? `<div class="mini" style="max-height:420px">${itemRows}</div>${items.length > 150 ? ui.hint(`… and ${fmt(items.length - 150)} more — find them in any item picker (Modded filter).`) : ''}` : ui.hint('No items.'))}`];
+}
+
 // ---------------------------------------------------------------- details (right)
 
 function renderDetails(animate, toTop) {
@@ -739,6 +939,7 @@ function renderDetails(animate, toTop) {
   L = new Map();
   let title = '', html = '';
   if (S.page === 'checks') [title, html] = detailsCheck();
+  else if (S.page === 'mods') [title, html] = detailsMod();
   else if (!S.t) [title, html] = ['', '<div class="empty">Pick or create a trader on the left.</div>'];
   else if (S.page === 'trader') [title, html] = detailsTrader();
   else if (S.picked.size > 1) [title, html] = detailsMulti();
@@ -1337,7 +1538,7 @@ function runChecks() {
   const out = [];
   const add = (...a) => out.push(entry(...a));
   const hasItems = S.items.size > 0;
-  const known = id => validId(id) && (!hasItems || S.items.has(id));
+  const known = id => validId(id) && (!hasItems || S.items.has(id) || !!modOf(id));
 
   const byTraderId = new Map();
   for (const t of S.traders) byTraderId.set(t.file.id, [...(byTraderId.get(t.file.id) || []), t]);
@@ -1366,6 +1567,15 @@ function runChecks() {
     if (!f.unlockedByDefault && !f.unlockQuestId) add('warning', f.name, 'Locked at start and no quest unlocks it — players can never use this trader. Pick a quest under "Unlocked by".', t);
     if (!f.unlockedByDefault && f.unlockQuestId && !allQuests().some(x => x.q.id === f.unlockQuestId) && S.gameQuests.size && !S.gameQuests.has(f.unlockQuestId))
       add('error', f.name, `Unlocked by quest ${f.unlockQuestId}, which doesn't exist — the trader stays locked.`, t);
+    for (const m of traderMods(t).values()) {
+      const n = m.uses.length, list = [...new Set(m.uses.map(u => u.where))].slice(0, 4).join('; ') + (m.uses.length > 4 ? '…' : '');
+      const target = { modPage: m.mod };
+      if (m.state === 'on') add('info', f.name, `Uses ${n} item(s) from the mod ${m.mod} — players need ${m.mod} installed, or those offers / objectives are skipped.`, t, target);
+      else if (m.state === 'off') add('warning', f.name, `Uses ${n} item(s) from ${m.mod}, which is switched OFF on the Mods page (${list}).`, t, target);
+      else if (m.state === 'removed') add('warning', f.name, `Uses ${n} item(s) from ${m.mod}, which is no longer imported (${list}). Import it again on the Mods page, or replace them.`, t, target);
+      else if (m.state === 'missing') add('warning', f.name, `Uses ${n} item(s) from ${m.mod}, but that mod's folder is gone (${list}). If the mod isn't installed, the game skips them.`, t, target);
+      else add('warning', f.name, `${n} item id(s) used from ${m.mod} aren't in that mod anymore — it was updated or changed (${list}).`, t, target);
+    }
     if (out.length === before) add('ok', f.name, `Trader OK — ${f.offers.length} offer(s), ${f.quests.length} quest(s).`, t);
 
     for (const o of f.offers) {
@@ -1419,7 +1629,7 @@ function checkQuest(t, q, add, known) {
       for (const id of c.weaponTpls) {
         const it = item(id);
         if (!known(id)) A('error', `${what}: weapon '${id}' doesn't exist.`);
-        else if (it && !['Weapon', 'Grenade'].includes(it.c)) A('warning', `${what}: ${it.n} is not a weapon or grenade — kills can never count with it.`);
+        else if (it && !['Weapon', 'Grenade', 'Melee'].includes(it.c)) A('warning', `${what}: ${it.n} is not a weapon or grenade — kills can never count with it.`);
       }
       if (c.weaponTpls.length && c.calibers.length) {
         const guns = c.weaponTpls.map(item).filter(i => i?.c === 'Weapon');
@@ -1917,6 +2127,7 @@ document.addEventListener('input', e => {
 
 document.addEventListener('change', e => {
   const el = e.target;
+  if (el.dataset.modToggle) { ACT.modToggle(el.dataset.modToggle); return; }
   const b = B.get(el.dataset.b);
   if (!b) return;
   if (el.type === 'checkbox') b.set(el.checked);
@@ -2118,6 +2329,19 @@ const move = (list, obj, d) => {
 };
 const clone = o => JSON.parse(JSON.stringify(o));
 
+/** Mods page: ask the host, then refresh items + checks (traders and unsaved edits stay). */
+async function modCall(method, args, message) {
+  try {
+    const r = await host.call(method, args);
+    if (!r) return; // dialog cancelled
+    applyItems(r);
+    if (r.added?.length) S.modSel = r.added[0];
+    runChecks();
+    renderAll(false);
+    toast(message(r));
+  } catch (err) { errorBox(err); }
+}
+
 const ACT = {
   page: arg => showPage(arg),
   selTrader: arg => {
@@ -2158,6 +2382,28 @@ const ACT = {
   },
   clearSearch() { S.search[S.page] = ''; $('#search').value = ''; renderHeader(); renderPage(false); },
   viewMenu: (arg, el) => viewMenu(el),
+  selMod: arg => { S.modSel = S.shownMods?.[Number(arg)]?.name || null; renderPage(false); renderDetails(true, true); },
+  goUse(arg) {
+    const u = S.modUses?.[Number(arg)]; if (!u) return;
+    if (u.trader !== S.t) selectTrader(u.trader, false);
+    if (S.t.file.offers.includes(u.target)) { S.offer = u.target; S.page = 'offers'; }
+    else { selectQuest(u.target); S.page = 'quests'; }
+    S.picked = new Set();
+    renderAll(true);
+  },
+  modsScanAll: () => modCall('modsScanAll', {}, r => r.added?.length ? `Imported ${r.added.length} mod(s): ${r.added.join(', ')}` : 'No new mods with items found'),
+  modAddFolder: () => modCall('modAddFolder', {}, r => `Imported ${r.added?.[0] || 'the mod'}`),
+  modRescan: () => modCall('modRescan', {}, () => 'Rescanned'),
+  modToggle(name) {
+    const m = S.mods.find(x => x.name === name); if (!m) return;
+    modCall('modSet', { name, enabled: !m.enabled }, () => `${name} switched ${m.enabled ? 'OFF' : 'ON'}`);
+  },
+  async modRemove(name) {
+    const e = modList().find(x => x.name === name);
+    if (e?.uses.length && !await confirmBox('Remove Import', `Your traders use ${e.uses.length} item(s) from ${name}. Remove the import anyway? (The checks will list them as “not imported”.)`, 'Remove')) return;
+    modCall('modRemove', { name }, () => `Removed ${name}`);
+  },
+  modForget: name => modCall('modForget', { name }, () => `Forgot ${name}'s ids`),
   selCond: arg => { S.cond = S.quest.conditions[Number(arg)]; renderDetails(false); },
   selReward: arg => { S.reward = S.quest.rewards[Number(arg)]; renderDetails(false); },
   selCheck: arg => { S.check = S.shownChecks?.[Number(arg)] || null; renderPage(false); renderDetails(false, true); },
@@ -2224,7 +2470,7 @@ const ACT = {
 
   // ---- offers
   async addOffer() {
-    const tpl = await pickItem('Weapon');
+    const tpl = await pickItem('all');
     if (!tpl) return;
     const o = fillOffer({ itemTpl: tpl });
     o.cost = defaultCost(o);
@@ -2468,6 +2714,7 @@ const ACT = {
     }
     let saved = 0;
     for (const t of dirty) {
+      t.file.requiredMods = [...traderMods(t).keys()].sort(); // the server names them if an item is missing
       try {
         await host.call('saveTrader', { folder: t.folder, text: JSON.stringify(t.file, (k, v) => v === null ? undefined : v, 2) });
         t.dirty = false; t.migrated = false; t.savedJson = JSON.stringify(t.file); saved++;
@@ -2481,6 +2728,7 @@ const ACT = {
   },
   goCheck() {
     const e = S.check; if (!e?.trader) return;
+    if (e.target?.modPage) { S.modSel = e.target.modPage; S.page = 'mods'; renderAll(true); return; }
     if (e.trader !== S.t) selectTrader(e.trader, false);
     if (e.target && S.t.file.offers.includes(e.target)) { S.offer = e.target; S.page = 'offers'; }
     else if (e.target && S.t.file.quests.includes(e.target)) { selectQuest(e.target); S.page = 'quests'; }
@@ -2614,36 +2862,53 @@ async function discardOk() {
   return confirmBox('Unsaved changes', 'You have unsaved changes. Discard them?', 'Discard');
 }
 
-/** Item search. filter: all | weapons+ | Weapon | Grenade | Ammo | Gear | Food | Meds | Money */
+/** Item search. filter: all | weapons+ | a category (Weapon, Ammo, Gear, Meds…) | mods | mod:<name>.
+ *  The last items you picked are listed first; dev / template items ("DO NOT USE"…) are hidden unless asked for. */
 function pickItem(filter = 'all') {
-  let cat = filter, query = '';
+  let cat = filter, query = '', showHidden = false;
   const all = [...S.items.values()].sort((a, b) => a.n.localeCompare(b.n));
-  const match = it => (cat === 'all' || (cat === 'weapons+' ? it.c === 'Weapon' || it.c === 'Grenade' : it.c === cat)) &&
-    (!query || it.n.toLowerCase().includes(query) || (it.s || '').toLowerCase().includes(query) || it.i.startsWith(query));
+  const inCat = it => cat === 'all' || (cat === 'weapons+' ? ['Weapon', 'Grenade', 'Melee'].includes(it.c)
+    : cat === 'mods' ? !!it.m : cat.startsWith('mod:') ? it.m === cat.slice(4) : it.c === cat);
+  const match = it => inCat(it) && (showHidden || !it.x || query === it.i) &&
+    (!query || it.n.toLowerCase().includes(query) || (it.s || '').toLowerCase().includes(query) || it.i.startsWith(query) || (it.m || '').toLowerCase().includes(query));
+  const hiddenCount = all.filter(it => it.x).length;
+  const mods = [...new Set(all.filter(it => it.m).map(it => it.m))].sort();
+  const rowHtml = it => `<div class="row" data-pick="${it.i}"><div class="cell">
+      ${thumb({ text: initials(it.s || it.n), color: '#3a3a3a', item: it.c === 'Money' ? null : it.i, wide: true })}<div class="text"><div class="title">${esc(it.n)}</div><div class="line2">${esc(it.s)}${it.m ? ` · <span style="color:var(--accent)">${esc(it.m)}</span>` : ''}</div></div></div>
+      <div class="col" ${it.m ? 'style="color:var(--accent)"' : ''}>${esc(it.m ? 'MODDED' : it.c === 'Ammo' && it.k ? caliberName(it.k) : catName(it.c))}</div></div>`;
   const draw = m => {
-    const found = all.filter(match).slice(0, 400);
-    m.querySelector('.picker-list').innerHTML = found.map(it => `<div class="row" data-pick="${it.i}"><div class="cell">
-      ${thumb({ text: initials(it.s), color: '#3a3a3a', item: it.c === 'Money' ? null : it.i, wide: true })}<div class="text"><div class="title">${esc(it.n)}</div><div class="line2">${esc(it.s)}</div></div></div>
-      <div class="col">${esc(it.c === 'Ammo' && it.k ? caliberName(it.k) : it.c)}</div></div>`).join('') ||
-      `<div class="empty">${S.items.size ? 'Nothing found' : 'Item database not loaded — paste an item id below'}</div>`;
+    const found = all.filter(match);
+    const recent = !query ? (S.ui.recentItems || []).map(id => S.items.get(id)).filter(it => it && inCat(it)).slice(0, 5) : [];
+    m.querySelector('.picker-list').innerHTML =
+      (recent.length ? `<div class="pick-group">Recently Used</div>${recent.map(rowHtml).join('')}<div class="pick-group">${esc(cat === 'all' ? 'All Items' : 'All ' + (CAT_NAME[cat] || (cat === 'mods' ? 'Modded' : cat.startsWith('mod:') ? cat.slice(4) : '')))} (${fmt(found.length)})</div>` : '') +
+      (found.slice(0, 400).map(rowHtml).join('') + (found.length > 400 ? `<div class="empty" style="padding:14px">Showing 400 of ${fmt(found.length)} — type to narrow it down</div>` : '') ||
+      `<div class="empty">${S.items.size ? 'Nothing found' : 'Item database not loaded — paste an item id below'}</div>`);
     m.querySelectorAll('[data-cat]').forEach(c => c.classList.toggle('on', c.dataset.cat === cat));
+    m.querySelector('[data-hidden]').classList.toggle('on', showHidden);
   };
-  return openModal(`<div class="dialog"><h2>Pick an item</h2>
-    <div class="picker-search">🔍<input type="text" id="pickQuery" placeholder="What are you looking for? (name, short name or id)"></div>
-    <div class="chips" style="margin-top:10px">${CATEGORY_FILTERS.map(([v, t]) => `<button class="chip" data-cat="${v}">${t}</button>`).join('')}</div>
+  const done = id => {
+    if (id) { const r = (S.ui.recentItems || []).filter(x => x !== id); r.unshift(id); S.ui.recentItems = r.slice(0, 12); saveUi(); }
+    closeModal(id);
+  };
+  return openModal(`<div class="dialog"><h2>Pick an Item</h2>
+    <div class="picker-search">🔍<input type="text" id="pickQuery" placeholder="What are you looking for? (name, short name, id or mod)"></div>
+    <div class="chips" style="margin-top:10px">${CATEGORY_FILTERS.map(([v, t]) => `<button class="chip" data-cat="${v}">${t}</button>`).join('')}
+      ${mods.length ? `<button class="chip" data-cat="mods" style="--c:var(--accent)">Modded</button>${mods.map(n => `<button class="chip" data-cat="mod:${esc(n)}" style="--c:var(--accent)">${esc(n)}</button>`).join('')}` : ''}
+      <button class="chip" data-hidden title="Dev / template items that players can't really hold">Show Hidden (${fmt(hiddenCount)})</button></div>
     <div class="picker-list"></div>
     <div class="buttons"><input type="text" id="pickId" placeholder="or paste an item id" style="max-width:260px;margin-right:auto">
-      <button class="outline" data-m="0">Cancel</button><button class="primary" data-m="1">Use pasted id</button></div></div>`, m => {
+      <button class="outline" data-m="0">Cancel</button><button class="primary" data-m="1">Use Pasted Id</button></div></div>`, m => {
     const q = m.querySelector('#pickQuery');
     q.focus();
     let timer = 0;
     q.oninput = () => { clearTimeout(timer); timer = setTimeout(() => { query = q.value.trim().toLowerCase(); draw(m); }, 80); };
     m.querySelectorAll('[data-cat]').forEach(c => c.onclick = () => { cat = c.dataset.cat; draw(m); });
-    m.querySelector('.picker-list').onclick = e => { const r = e.target.closest('[data-pick]'); if (r) closeModal(r.dataset.pick); };
+    m.querySelector('[data-hidden]').onclick = () => { showHidden = !showHidden; draw(m); };
+    m.querySelector('.picker-list').onclick = e => { const r = e.target.closest('[data-pick]'); if (r) done(r.dataset.pick); };
     m.querySelector('[data-m="0"]').onclick = () => closeModal(null);
     m.querySelector('[data-m="1"]').onclick = () => {
       const id = m.querySelector('#pickId').value.trim().toLowerCase();
-      if (validId(id)) closeModal(id); else toast('An item id is 24 characters of 0-9 / a-f');
+      if (validId(id)) done(id); else toast('An item id is 24 characters of 0-9 / a-f');
     };
     draw(m);
   });

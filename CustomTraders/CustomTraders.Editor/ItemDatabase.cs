@@ -3,11 +3,14 @@ using System.Text.Json;
 namespace CustomTraders.Editor;
 
 /// <summary>What kind of item it is, for the item picker filters and the checks.</summary>
-public enum ItemCategory { Other, Weapon, Grenade, Ammo, Gear, Food, Meds, Money }
+public enum ItemCategory { Other, Weapon, Grenade, Ammo, Gear, Food, Meds, Money, Melee, WeaponPart, AmmoBox, Key, Barter, Container, Special, QuestItem }
 
 /// <summary>One game item, as shown in the item picker.</summary>
 public sealed record GameItem(string Id, string Name, string ShortName, string ParentId, ItemCategory Category, string Caliber)
 {
+    /// <summary>Not something a player really holds (dev/AI-only "DO NOT USE" items, pockets, stash templates...).</summary>
+    public bool Hidden { get; init; }
+
     public bool IsWeapon => Category == ItemCategory.Weapon;
     public override string ToString() => $"{Name}  [{ShortName}]";
 }
@@ -31,6 +34,17 @@ public sealed class ItemDatabase
         ("5448e8d64bdc2dce718b4568", ItemCategory.Food),      // Drink
         ("543be5664bdc2dd4348b4569", ItemCategory.Meds),
         ("543be5dd4bdc2deb348b4569", ItemCategory.Money),
+        ("5447e1d04bdc2dff2f8b4567", ItemCategory.Melee),     // Knife
+        ("543be5cb4bdc2deb348b4568", ItemCategory.AmmoBox),
+        ("5448fe124bdc2da5018b4567", ItemCategory.WeaponPart), // Mod: magazines, scopes, barrels, plates...
+        ("543be5e94bdc2df1348b4568", ItemCategory.Key),
+        ("5448eb774bdc2d0a728b4567", ItemCategory.Barter),
+        ("5448ecbe4bdc2d60728b4568", ItemCategory.Barter),    // Info (intelligence, diaries...)
+        ("616eb7aea207f41933308f46", ItemCategory.Barter),    // repair kits
+        ("5795f317245977243854e041", ItemCategory.Container),  // SimpleContainer
+        ("5671435f4bdc2d96058b4569", ItemCategory.Container),  // LockableContainer
+        ("5447e0e74bdc2d3c308b4567", ItemCategory.Special),    // SpecItem (markers, jammers...)
+        ("567849dd4bdc2d150f8b456e", ItemCategory.Special),    // Map
     };
 
     public Dictionary<string, GameItem> Items { get; } = new();
@@ -58,6 +72,18 @@ public sealed class ItemDatabase
     public string? SourceFolder { get; private set; }
 
     public bool IsLoaded => Items.Count > 0;
+
+    private readonly Dictionary<string, string> _parents = new();
+
+    /// <summary>Category of a modded item: the item it was cloned from, else its parent class.</summary>
+    public ItemCategory CategoryFor(string? clonedFrom, string? parent)
+    {
+        if (clonedFrom != null && Items.TryGetValue(clonedFrom, out var source)) return source.Category;
+        if (string.IsNullOrEmpty(parent)) return ItemCategory.Other;
+        foreach (var (rootId, category) in Roots)
+            if (parent == rootId) return category;
+        return CategoryOf(parent, _parents);
+    }
 
     public bool Exists(string? tpl) => tpl != null && Items.ContainsKey(tpl);
 
@@ -129,8 +155,9 @@ public sealed class ItemDatabase
         }
 
         using var doc = JsonDocument.Parse(File.ReadAllBytes(Path.Combine(databaseFolder, "templates", "items.json")));
-        var parents = new Dictionary<string, string>();
-        var raw = new List<(string Id, string Parent, string Name, string Caliber)>();
+        var parents = _parents;
+        parents.Clear();
+        var raw = new List<(string Id, string Parent, string Name, string Caliber, bool Quest)>();
         foreach (var p in doc.RootElement.EnumerateObject())
         {
             var item = p.Value;
@@ -140,21 +167,27 @@ public sealed class ItemDatabase
             string internalName = item.TryGetProperty("_name", out var n) ? n.GetString() ?? p.Name : p.Name;
             // Ammo: "Caliber"; weapons: "ammoCaliber" (what they shoot).
             string caliber = "";
+            bool quest = false;
             if (item.TryGetProperty("_props", out var props) && props.ValueKind == JsonValueKind.Object)
             {
+                quest = props.TryGetProperty("QuestItem", out var q) && q.ValueKind == JsonValueKind.True;
                 foreach (var key in new[] { "Caliber", "ammoCaliber" })
                     if (props.TryGetProperty(key, out var cal) && cal.ValueKind == JsonValueKind.String) { caliber = cal.GetString() ?? ""; break; }
             }
-            raw.Add((p.Name, parent, internalName, caliber));
+            raw.Add((p.Name, parent, internalName, caliber, quest));
         }
 
-        foreach (var (id, parent, internalName, caliber) in raw)
+        LoadPrices(databaseFolder);
+        foreach (var (id, parent, internalName, caliber, quest) in raw)
         {
             string name = names.TryGetValue($"{id} Name", out var nm) && !string.IsNullOrWhiteSpace(nm) ? nm : internalName;
             string shortName = names.TryGetValue($"{id} ShortName", out var sn) ? sn : "";
-            Items[id] = new GameItem(id, name, shortName, parent, CategoryOf(id, parents), caliber);
+            var category = quest ? ItemCategory.QuestItem : CategoryOf(id, parents);
+            // What players can hold is what the handbook lists (plus quest items); the rest are templates and dev items.
+            bool hidden = name.Contains("DO_NOT_USE", StringComparison.OrdinalIgnoreCase) || name.Contains("DO NOT USE", StringComparison.OrdinalIgnoreCase) ||
+                          (Handbook.Count > 0 && !quest && !Handbook.ContainsKey(id));
+            Items[id] = new GameItem(id, name, shortName, parent, category, caliber) { Hidden = hidden };
         }
-        LoadPrices(databaseFolder);
     }
 
     private void LoadPrices(string databaseFolder)

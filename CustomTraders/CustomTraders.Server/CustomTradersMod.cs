@@ -138,6 +138,9 @@ public class CustomTradersMod(
 
     private bool AddTrader(TraderFile file, string folder)
     {
+        _requiredMods = file.RequiredMods ?? new List<string>();
+        if (_requiredMods.Count > 0)
+            LogBlue($"[CustomTraders] {file.Name} uses items from other mods: {string.Join(", ", _requiredMods)} (those offers / quests need the mods installed).");
         MongoId traderId = file.Id;
         if (tradersTable.ContainsKey(traderId))
         {
@@ -1091,10 +1094,14 @@ public class CustomTradersMod(
         return Convert.ToHexString(hash, 0, 4).ToLowerInvariant();
     }
 
+    /// <summary>Mods the trader being loaded needs (from trader.json), to explain unknown item ids.</summary>
+    private List<string> _requiredMods = new();
+
     private bool IsKnownItem(string? tpl, string context)
     {
         if (Ids.IsValid(tpl) && templateTable.Items.ContainsKey(tpl!)) return true;
-        logger.Warning($"[CustomTraders] Unknown item id '{tpl}' in {context} — skipped.");
+        var hint = _requiredMods.Count > 0 ? $" It probably comes from a mod this trader needs ({string.Join(", ", _requiredMods)}) — is it installed and loading?" : "";
+        logger.Warning($"[CustomTraders] Unknown item id '{tpl}' in {context} — skipped.{hint}");
         return false;
     }
 

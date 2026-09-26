@@ -112,6 +112,12 @@ public sealed class HostForm : Form
         "deleteTrader" => DeleteTrader(Str(a, "folder")),
         "duplicateTrader" => DuplicateTrader(Str(a, "folder"), Str(a, "name"), Str(a, "text")),
         "listDeleted" => ListDeleted(),
+        "modsScanAll" => ModsScanAll(),
+        "modAddFolder" => ModAddFolder(),
+        "modSet" => ModSet(Str(a, "name"), (bool?)a["enabled"] ?? true),
+        "modRemove" => ModRemove(Str(a, "name")),
+        "modRescan" => ItemsPayload(rescan: true),
+        "modForget" => ModForget(Str(a, "name")),
         "restoreDeleted" => RestoreDeleted(Str(a, "name")),
         "purgeDeleted" => PurgeDeleted(Str(a, "name")),
         "chooseAvatar" => ChooseAvatar(Str(a, "folder")),
@@ -231,10 +237,12 @@ public sealed class HostForm : Form
                     ["f"] = _db.Flea.TryGetValue(item.Id, out var f) ? Math.Round(f) : null,
                     ["ph"] = _db.Presets.TryGetValue(item.Id, out var preset) ? Math.Round(preset.Handbook) : null,
                     ["pf"] = _db.Presets.TryGetValue(item.Id, out var preset2) ? Math.Round(preset2.Flea) : null,
+                    ["x"] = item.Hidden ? 1 : null,
                 });
             }
+            int modded = AddModItems(items, result);
             result["items"] = items;
-            result["itemsStatus"] = $"{_db.Items.Count:N0} items";
+            result["itemsStatus"] = $"{_db.Items.Count:N0} items" + (modded > 0 ? $" + {modded:N0} modded" : "");
             var quests = new JsonArray();
             foreach (var (id, name, trader) in _db.LoadQuests())
                 quests.Add(new JsonObject { ["i"] = id, ["n"] = name, ["t"] = trader });
@@ -246,6 +254,166 @@ public sealed class HostForm : Form
         {
             result["itemsStatus"] = "Item database failed to load: " + e.Message;
         }
+    }
+
+    // ------------------------------------------------------------------ items from other mods (Mods page)
+
+    private readonly Dictionary<string, List<ModItem>> _modScan = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, string> _modErrors = new(StringComparer.OrdinalIgnoreCase);
+
+    private void ScanMods(bool rescan)
+    {
+        foreach (var mod in _settings.Mods)
+        {
+            if (!rescan && _modScan.ContainsKey(mod.Name)) continue;
+            _modErrors.Remove(mod.Name);
+            if (!Directory.Exists(mod.Folder))
+            {
+                _modScan[mod.Name] = new List<ModItem>();
+                _modErrors[mod.Name] = "Folder not found — the mod was moved or uninstalled.";
+                continue;
+            }
+            try
+            {
+                var found = ModScanner.Scan(mod.Folder, _db);
+                _modScan[mod.Name] = found;
+                foreach (var it in found) _settings.ModIdMemory[it.Id] = new[] { mod.Name, it.Name };
+            }
+            catch (Exception e)
+            {
+                _modScan[mod.Name] = new List<ModItem>();
+                _modErrors[mod.Name] = e.Message;
+            }
+        }
+        _settings.Save();
+    }
+
+    /// <summary>Adds the items of switched-on imports to the item list; returns how many.</summary>
+    private int AddModItems(JsonArray items, JsonObject result, bool rescan = false)
+    {
+        ScanMods(rescan);
+        int count = 0;
+        var mods = new JsonArray();
+        var off = new JsonArray();
+        var seen = new HashSet<string>(_db.Items.Keys);
+        foreach (var mod in _settings.Mods)
+        {
+            var list = _modScan.GetValueOrDefault(mod.Name) ?? new List<ModItem>();
+            mods.Add(new JsonObject
+            {
+                ["name"] = mod.Name, ["folder"] = mod.Folder, ["enabled"] = mod.Enabled, ["count"] = list.Count,
+                ["error"] = _modErrors.GetValueOrDefault(mod.Name),
+            });
+            foreach (var it in list)
+            {
+                if (!seen.Add(it.Id)) continue; // two mods / vanilla with the same id: first wins
+                double sell = Math.Round(it.Handbook * _db.BestTraderRate);
+                var node = new JsonObject
+                {
+                    ["i"] = it.Id, ["n"] = it.Name, ["s"] = it.ShortName, ["c"] = it.Category.ToString(),
+                    ["k"] = it.Caliber.Length > 0 ? it.Caliber : null,
+                    ["h"] = it.Handbook > 0 ? Math.Round(it.Handbook) : null, ["p"] = sell > 0 ? sell : null,
+                    ["m"] = mod.Name,
+                };
+                if (mod.Enabled) { items.Add(node); count++; }
+                else off.Add(node);
+            }
+        }
+        result["mods"] = mods;
+        result["modItemsOff"] = off;
+        var memory = new JsonObject();
+        foreach (var (id, v) in _settings.ModIdMemory) memory[id] = new JsonArray(v.Select(x => (JsonNode?)JsonValue.Create(x)).ToArray());
+        result["modMemory"] = memory;
+        return count;
+    }
+
+    /// <summary>Items + mods only (the traders on the page stay as they are).</summary>
+    private JsonObject ItemsPayload(bool rescan = false)
+    {
+        var result = new JsonObject();
+        if (_modFolder == null) return result;
+        if (rescan) _modScan.Clear();
+        LoadItems(_modFolder, result);
+        return result;
+    }
+
+    /// <summary>...\user\mods (the folder that holds CustomTraders and the other server mods).</summary>
+    private string? ModsRoot() => _modFolder == null ? null : Directory.GetParent(_modFolder)?.FullName;
+
+    /// <summary>Name of a mod from any folder inside it: the folder right under user\mods.</summary>
+    private string ModNameOf(string folder)
+    {
+        var root = ModsRoot();
+        var full = Path.GetFullPath(folder).TrimEnd(Path.DirectorySeparatorChar);
+        if (root != null && full.StartsWith(root + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+            return full[(root.Length + 1)..].Split(Path.DirectorySeparatorChar)[0];
+        return Path.GetFileName(full);
+    }
+
+    private JsonNode ModsScanAll()
+    {
+        var root = ModsRoot() ?? throw new InvalidOperationException("Pick the mod folder first (Browse...).");
+        var added = new JsonArray();
+        foreach (var dir in Directory.GetDirectories(root).OrderBy(d => d))
+        {
+            var name = Path.GetFileName(dir);
+            if (string.Equals(Path.GetFullPath(dir).TrimEnd(Path.DirectorySeparatorChar), Path.GetFullPath(_modFolder!).TrimEnd(Path.DirectorySeparatorChar), StringComparison.OrdinalIgnoreCase)) continue;
+            if (_settings.Mods.Any(m => m.Name.Equals(name, StringComparison.OrdinalIgnoreCase))) continue;
+            List<ModItem> found;
+            try { found = ModScanner.Scan(dir, _db); } catch { continue; }
+            if (found.Count == 0) continue;
+            _settings.Mods.Add(new ModImport { Name = name, Folder = dir, Enabled = true });
+            _modScan[name] = found;
+            added.Add(name);
+        }
+        var result = ItemsPayload();
+        result["added"] = added;
+        return result;
+    }
+
+    private JsonNode? ModAddFolder()
+    {
+        using var dialog = new FolderBrowserDialog
+        {
+            Description = "Pick a mod folder (e.g. ...\\user\\mods\\WTT-ContentBackport) — its item files and en.json are scanned",
+            UseDescriptionForTitle = true,
+        };
+        if (ModsRoot() is { } root && Directory.Exists(root)) dialog.InitialDirectory = root;
+        if (dialog.ShowDialog(this) != DialogResult.OK) return null;
+        var name = ModNameOf(dialog.SelectedPath);
+        var existing = _settings.Mods.FirstOrDefault(m => m.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
+        if (existing != null) { existing.Folder = dialog.SelectedPath; existing.Enabled = true; }
+        else _settings.Mods.Add(new ModImport { Name = name, Folder = dialog.SelectedPath, Enabled = true });
+        _modScan.Remove(name);
+        var result = ItemsPayload();
+        result["added"] = new JsonArray(name);
+        return result;
+    }
+
+    private JsonNode ModSet(string name, bool enabled)
+    {
+        var mod = _settings.Mods.FirstOrDefault(m => m.Name == name) ?? throw new InvalidOperationException($"No imported mod '{name}'.");
+        mod.Enabled = enabled;
+        _settings.Save();
+        return ItemsPayload();
+    }
+
+    /// <summary>Removes an import. The ids stay remembered, so the checks can still name the mod.</summary>
+    private JsonNode ModRemove(string name)
+    {
+        _settings.Mods.RemoveAll(m => m.Name == name);
+        _modScan.Remove(name);
+        _settings.Save();
+        return ItemsPayload();
+    }
+
+    /// <summary>Forgets every remembered id of a mod that's no longer imported.</summary>
+    private JsonNode ModForget(string name)
+    {
+        foreach (var id in _settings.ModIdMemory.Where(kv => kv.Value.Length > 0 && kv.Value[0] == name).Select(kv => kv.Key).ToList())
+            _settings.ModIdMemory.Remove(id);
+        _settings.Save();
+        return ItemsPayload();
     }
 
     private JsonNode? BrowseModFolder()

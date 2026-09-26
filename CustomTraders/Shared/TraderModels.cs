@@ -39,6 +39,9 @@ public class TraderFile
     /// <summary>Off = the server skips this trader completely (its offers and quests aren't loaded). Nothing is deleted.</summary>
     public bool Enabled { get; set; } = true;
 
+    /// <summary>Mods whose items this trader uses (written by the editor; the server names them when an item is missing).</summary>
+    public List<string> RequiredMods { get; set; } = new();
+
     /// <summary>Show this trader's offers on the flea market.</summary>
     public bool ListOnFlea { get; set; } = true;
 

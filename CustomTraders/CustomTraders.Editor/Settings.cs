@@ -3,6 +3,14 @@ using System.Text.Json.Nodes;
 
 namespace CustomTraders.Editor;
 
+/// <summary>A mod folder whose items the editor knows about.</summary>
+public sealed class ModImport
+{
+    public string Name { get; set; } = "";
+    public string Folder { get; set; } = "";
+    public bool Enabled { get; set; } = true;
+}
+
 /// <summary>Editor preferences, kept in %AppData%\CustomTradersEditor\settings.json.</summary>
 public sealed class Settings
 {
@@ -19,6 +27,12 @@ public sealed class Settings
     /// column widths, panel width...). The page owns this; C# only stores it.
     /// </summary>
     public JsonObject? Ui { get; set; }
+
+    /// <summary>Mods whose items were imported (Mods page). Enabled = their items can be picked.</summary>
+    public List<ModImport> Mods { get; set; } = new();
+
+    /// <summary>Every mod item id ever seen: id -> [mod name, item name]. Kept when an import is removed, so the checks can still say which mod an id came from.</summary>
+    public Dictionary<string, string[]> ModIdMemory { get; set; } = new();
 
     public static Settings Load()
     {
