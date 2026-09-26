@@ -105,6 +105,9 @@ public class OfferDef
     /// <summary>Your own notes (editor only; the game never sees them).</summary>
     public string Notes { get; set; } = "";
 
+    /// <summary>Your own labels for grouping offers (editor only).</summary>
+    public List<string> Tags { get; set; } = new();
+
     /// <summary>Weapons: sell the game's default fully-assembled preset instead of a bare receiver.</summary>
     public bool UseDefaultPreset { get; set; } = true;
 
@@ -173,6 +176,9 @@ public class QuestDef
 
     /// <summary>Optional image in the trader's folder shown for the quest (jpg/png).</summary>
     public string? Image { get; set; }
+
+    /// <summary>One of the game's own quest pictures (file name without extension in SPT_Data/images/quests), used when Image is empty.</summary>
+    public string? GameImage { get; set; }
 
     public List<ConditionDef> Conditions { get; set; } = new();
 

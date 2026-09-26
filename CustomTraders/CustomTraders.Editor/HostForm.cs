@@ -111,6 +111,9 @@ public sealed class HostForm : Form
         "newTrader" => NewTrader(Str(a, "name")),
         "deleteTrader" => DeleteTrader(Str(a, "folder")),
         "duplicateTrader" => DuplicateTrader(Str(a, "folder"), Str(a, "name"), Str(a, "text")),
+        "listDeleted" => ListDeleted(),
+        "restoreDeleted" => RestoreDeleted(Str(a, "name")),
+        "purgeDeleted" => PurgeDeleted(Str(a, "name")),
         "chooseAvatar" => ChooseAvatar(Str(a, "folder")),
         "chooseQuestImage" => ChooseQuestImage(Str(a, "folder"), Str(a, "questId")),
         "chooseBackground" => ChooseBackground(),
@@ -137,6 +140,7 @@ public sealed class HostForm : Form
             ["items"] = null,
             ["itemsStatus"] = "",
             ["problems"] = new JsonArray(),
+            ["deletedCount"] = 0,
         };
         if (string.IsNullOrWhiteSpace(folder) || !Directory.Exists(folder)) return result;
 
@@ -168,6 +172,7 @@ public sealed class HostForm : Form
         }
 
         LoadItems(folder, result);
+        result["deletedCount"] = DeletedDirs().Length;
         return result;
     }
 
@@ -235,6 +240,7 @@ public sealed class HostForm : Form
                 quests.Add(new JsonObject { ["i"] = id, ["n"] = name, ["t"] = trader });
             result["gameQuests"] = quests;
             result["traderRate"] = Math.Round(_db.BestTraderRate * 100);
+            result["gameQuestImages"] = GameQuestImages(dbFolder);
         }
         catch (Exception e)
         {
@@ -306,6 +312,88 @@ public sealed class HostForm : Form
         }
         File.WriteAllText(Path.Combine(dir, "trader.json"), text);
         return TraderPayload(dir, JsonNode.Parse(text)!);
+    }
+
+    // ------------------------------------------------------------------ the game's quest pictures
+
+    private string? _gameQuestImages;
+
+    /// <summary>The game's quest pictures (SPT_Data/images/quests), usable as quest images without copying.</summary>
+    private JsonArray GameQuestImages(string databaseFolder)
+    {
+        var list = new JsonArray();
+        var parent = Directory.GetParent(databaseFolder)?.FullName;
+        _gameQuestImages = null;
+        if (parent == null) return list;
+        foreach (var candidate in new[] { Path.Combine(parent, "images", "quests"), Path.Combine(parent, "Server", "images", "quests") })
+        {
+            if (!Directory.Exists(candidate)) continue;
+            _gameQuestImages = candidate;
+            foreach (var path in Directory.EnumerateFiles(candidate).Where(IsImage).OrderBy(p => p))
+            {
+                var file = Path.GetFileName(path);
+                list.Add(new JsonObject
+                {
+                    ["n"] = Path.GetFileNameWithoutExtension(file),
+                    ["u"] = $"https://{FilesHost}/game/quests/{Uri.EscapeDataString(file)}",
+                });
+            }
+            break;
+        }
+        return list;
+    }
+
+    // ------------------------------------------------------------------ deleted traders (trash)
+
+    private string[] DeletedDirs()
+    {
+        if (_modFolder == null) return Array.Empty<string>();
+        var trash = Path.Combine(_modFolder, "deleted_traders");
+        return Directory.Exists(trash) ? Directory.GetDirectories(trash).OrderByDescending(Directory.GetLastWriteTimeUtc).ToArray() : Array.Empty<string>();
+    }
+
+    private string TrashDir(string name)
+    {
+        if (string.IsNullOrWhiteSpace(name) || name.Contains("..") || name.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0)
+            throw new InvalidOperationException("Invalid folder.");
+        return Path.Combine(_modFolder!, "deleted_traders", name);
+    }
+
+    private JsonNode ListDeleted()
+    {
+        var list = new JsonArray();
+        foreach (var dir in DeletedDirs())
+        {
+            string name = Path.GetFileName(dir), trader = name;
+            try
+            {
+                var file = Path.Combine(dir, "trader.json");
+                if (File.Exists(file)) trader = (string?)JsonNode.Parse(File.ReadAllText(file))?["name"] ?? name;
+            }
+            catch { /* show the folder name */ }
+            long size = Directory.EnumerateFiles(dir, "*", SearchOption.AllDirectories).Sum(f => new FileInfo(f).Length);
+            list.Add(new JsonObject { ["folder"] = name, ["name"] = trader, ["when"] = Directory.GetLastWriteTime(dir).ToString("yyyy-MM-dd HH:mm"), ["kb"] = size / 1024 });
+        }
+        return list;
+    }
+
+    /// <summary>Moves a deleted trader back into traders/ (with a new folder name if taken).</summary>
+    private JsonNode RestoreDeleted(string name)
+    {
+        var source = TrashDir(name);
+        string baseName = System.Text.RegularExpressions.Regex.Replace(name, @"_\d{8}_\d{6}$", "");
+        string target = Path.Combine(_modFolder!, "traders", baseName);
+        for (int n = 2; Directory.Exists(target); n++) target = Path.Combine(_modFolder!, "traders", $"{baseName} {n}");
+        Directory.Move(source, target);
+        return Snapshot(_modFolder);
+    }
+
+    /// <summary>Erases one deleted trader for good, or all of them (name = "*").</summary>
+    private JsonNode PurgeDeleted(string name)
+    {
+        var dirs = name == "*" ? DeletedDirs() : new[] { TrashDir(name) };
+        foreach (var dir in dirs) if (Directory.Exists(dir)) Directory.Delete(dir, recursive: true);
+        return ListDeleted();
     }
 
     private JsonNode DeleteTrader(string folder)
@@ -396,6 +484,9 @@ public sealed class HostForm : Form
             var parts = uri.AbsolutePath.Trim('/').Split('/').Select(Uri.UnescapeDataString).ToArray();
             string? path = null;
             if (parts is ["background"]) path = _settings.BackgroundImage;
+            else if (parts is ["game", "quests", var gameFile] && _gameQuestImages != null &&
+                     !gameFile.Contains("..") && gameFile.IndexOfAny(Path.GetInvalidFileNameChars()) < 0)
+                path = Path.Combine(_gameQuestImages, gameFile);
             else if (parts is ["traders", var folder, var file] && _modFolder != null &&
                      !folder.Contains("..") && !file.Contains("..") &&
                      folder.IndexOfAny(Path.GetInvalidFileNameChars()) < 0 && file.IndexOfAny(Path.GetInvalidFileNameChars()) < 0)
@@ -416,8 +507,10 @@ public sealed class HostForm : Form
                 _ => "application/octet-stream",
             };
             var stream = new MemoryStream(File.ReadAllBytes(path));
+            // the game's own pictures never change: let the browser keep them (the gallery shows hundreds)
+            var cache = parts[0] == "game" ? "Cache-Control: max-age=86400" : "Cache-Control: no-store";
             e.Response = env.CreateWebResourceResponse(stream, 200, "OK",
-                $"Content-Type: {type}\r\nCache-Control: no-store\r\nAccess-Control-Allow-Origin: *");
+                $"Content-Type: {type}\r\n{cache}\r\nAccess-Control-Allow-Origin: *");
         }
         catch
         {

@@ -102,7 +102,8 @@ const S = {
   t: null, offer: null, quest: null, cond: null, reward: null, check: null,
   checks: [], history: [], checkFilter: null,
   gameQuests: new Map(), // id -> { i, n, t } (the game's own quests)
-  way: 1, tagFilter: null,
+  way: 1, tagFilters: { offers: null, quests: null },
+  gameQuestImages: [], deletedCount: 0,
   open: new WeakMap(),  // objective -> Set of opened "must ..." sections
   picked: new Set(),    // offers / quests selected together (Ctrl/Shift-click or drag in empty space)
   search: { offers: '', quests: '', checks: '' },
@@ -211,7 +212,7 @@ function fillQuest(q) {
 }
 function fillOffer(o) {
   def(o, 'id', newId()); def(o, 'itemTpl', ''); def(o, 'useDefaultPreset', true); def(o, 'loyaltyLevel', 1);
-  def(o, 'unlimited', true); def(o, 'stock', 1); def(o, 'buyLimit', 0); def(o, 'cost', []); def(o, 'notes', '');
+  def(o, 'unlimited', true); def(o, 'stock', 1); def(o, 'buyLimit', 0); def(o, 'cost', []); def(o, 'notes', ''); def(o, 'tags', []);
   return o;
 }
 
@@ -246,6 +247,8 @@ function applySnapshot(snap) {
   S.gameQuests = new Map((snap.gameQuests || []).map(q => [q.i, q]));
   S.itemsStatus = snap.itemsStatus || '';
   S.traderRate = snap.traderRate || 60;
+  S.gameQuestImages = snap.gameQuestImages || [];
+  S.deletedCount = snap.deletedCount || 0;
   S.traders = (snap.traders || []).map(t => {
     const e = normalize({ ...t, dirty: false });
     e.migrated = e.dirty;                 // changed on load (old format) — stays unsaved until saved
@@ -342,6 +345,8 @@ function card(key, title, body, opts = {}) {
 
 const TAG_COLORS = ['#ff7ab6', '#5cc8ff', '#f5cd46', '#a082ff', '#1ed760', '#ffa42b', '#ff6b6b', '#7ee0c3'];
 function tagColor(tag) {
+  const custom = S.ui.tagColors?.[tag];
+  if (custom) return custom;
   let h = 0;
   for (const ch of tag.toLowerCase()) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
   return TAG_COLORS[h % TAG_COLORS.length];
@@ -360,10 +365,31 @@ function questLabel(id) {
 const chainLabel = c => c.game ? `${c.game.n}${c.game.t ? ` (${c.game.t}, game quest)` : ' (game quest)'}` : `${c.t.file.name}: ${c.q.name}`;
 const chainOn = c => c.game || c.t.file.enabled;
 
+/** Picture of a game item (tarkov.dev keeps one for every item id); kind: icon | grid-image | 512. */
+function itemPic(id, kind = 'icon') {
+  if (!id || isMoney(id) && !item(id) || view().noItemPics) return null;
+  return `https://assets.tarkov.dev/${id}-${kind}.webp`;
+}
+/** When a picture can't load (modded item, offline…), the initials under it show instead. */
+const picFail = `onerror="this.remove()"`;
 function thumb(t) {
-  if (t.img) return `<img class="thumb" src="${esc(t.img)}" alt="">`;
+  if (t.img) return `<img class="thumb${t.wide ? ' wide' : ''}" src="${esc(t.img)}" alt="" loading="lazy">`;
   const dark = t.dark ? ' dark' : '';
-  return `<div class="thumb${dark}" style="--tc:${t.color || '#3a3a3a'}">${esc(t.text || '')}</div>`;
+  const pic = t.item ? itemPic(t.item) : null;
+  return `<div class="thumb${dark}${t.wide ? ' wide' : ''}${pic ? ' pic' : ''}" style="--tc:${t.color || '#3a3a3a'}">${esc(t.text || '')}${pic ? `<img src="${pic}" alt="" loading="lazy" ${picFail}>` : ''}</div>`;
+}
+/** The quest's picture: your own file, else the game picture you picked, else the game's default. */
+const DEFAULT_QUEST_IMAGE = '65899d03adeac0191c51e880';
+function gameImageUrl(name) { return S.gameQuestImages.find(g => g.n === name)?.u || null; }
+function questPic(t, q) {
+  if (q.image && t.images[q.image]) return { url: t.images[q.image], kind: 'mine' };
+  if (q.gameImage && gameImageUrl(q.gameImage)) return { url: gameImageUrl(q.gameImage), kind: 'game' };
+  const d = gameImageUrl(DEFAULT_QUEST_IMAGE);
+  return d ? { url: d, kind: 'default' } : null;
+}
+function randomGameImage(except) {
+  const list = S.gameQuestImages.filter(g => g.n !== except);
+  return list.length ? list[Math.floor(Math.random() * list.length)].n : null;
 }
 
 // =====================================================================
@@ -412,6 +438,7 @@ function renderTraders() {
   }).join('');
   $('#traders').innerHTML = html || '<div class="empty">No Traders Yet</div>';
   $('#traderMenu').hidden = !S.tradersOpen;
+  $('#trashBtn').textContent = `🗑  Deleted Traders${S.deletedCount ? ` (${S.deletedCount})` : ''}`;
 
   // the trader you're working on, bottom left (click = all traders)
   const t = S.t, f = t?.file;
@@ -547,12 +574,15 @@ function applyColumns() {
   });
 }
 function listHead(list) {
-  return `<div class="list-head"><div>#</div>${shownColumns(list).map((c, i) => `<div>${i > 0 ? `<span class="grip" data-grip="${list}|${c[0]}" title="Drag to Resize"></span>` : ''}<span class="head-text">${esc(c[1])}</span></div>`).join('')}</div>`;
+  return `<div class="list-head"><div>#</div>${shownColumns(list).map((c, i) => `<div>${i > 0 ? `<span class="grip" data-grip="${list}|${c[0]}" title="Drag to Resize · Double-Click to Reset"></span>` : ''}<span class="head-text">${esc(c[1])}</span></div>`).join('')}</div>`;
 }
 
 /** A line of small dark boxes: [{ label, text, color }] — label is drawn in the color (e.g. the way letter). */
 function boxes(list) {
-  return `<div class="boxes">${list.map(b => `<span class="box" style="--c:${b.color || 'var(--muted)'}">${b.label ? `<b>${esc(b.label)}</b>` : ''}${esc(b.text)}</span>`).join('')}</div>`;
+  return `<div class="boxes">${list.map(b => {
+    const pics = (b.icons || []).map(itemPic).filter(Boolean).slice(0, 3).map(u => `<img class="bi" src="${u}" alt="" loading="lazy" ${picFail}>`).join('');
+    return `<span class="box" style="--c:${b.color || 'var(--muted)'}">${b.label ? `<b>${esc(b.label)}</b>` : ''}${pics}${esc(b.text)}</span>`;
+  }).join('')}</div>`;
 }
 
 function row({ list, act, arg, sel, three, thumb: th, title, titleColor, badges = [], line2, line3, line3Color, boxes2, boxes3, cols = {}, colColors = {} }) {
@@ -587,22 +617,36 @@ const picked = primary => S.picked.size > 1 ? [...S.picked] : primary ? [primary
 const isPicked = (o, primary) => S.picked.size > 1 ? S.picked.has(o) : o === primary;
 const countLabel = (text, n) => n > 1 ? `${text} (${n})` : text;
 
+/** Your tags of one list (offers or quests) as filter chips; right-click a tag to rename / recolor / remove it. */
+function tagBar(page, list) {
+  const all = [...new Set(list.flatMap(x => x.tags))].sort((a, b) => a.localeCompare(b));
+  if (S.tagFilters[page] && !all.includes(S.tagFilters[page])) S.tagFilters[page] = null;
+  if (!all.length) return '';
+  const cur = S.tagFilters[page];
+  return `<div class="toolbar"><span class="muted small">Tags:</span>
+    <button class="chip ${!cur ? 'on' : ''}" data-act="tagFilter" data-arg="">All</button>
+    ${all.map(tag => `<button class="chip tagchip ${cur === tag ? 'on' : ''}" style="--c:${tagColor(tag)}" data-act="tagFilter" data-arg="${esc(tag)}" data-tag="${esc(tag)}" title="Right-click: Rename, Color, Remove">${esc(tag)} <small>${list.filter(x => x.tags.includes(tag)).length}</small></button>`).join('')}</div>`;
+}
+
 function pageOffers() {
   const t = S.t;
   const shown = [];
   (S.hasNotes ||= {}).offers = t.file.offers.some(o => o.notes);
+  const tags = tagBar('offers', t.file.offers);
   const rows = t.file.offers.map((o, i) => {
     const u = offerUnlock(t, o);
     const price = priceKind(o);
-    if (!matches('offers', itemName(o.itemTpl), item(o.itemTpl)?.s || '', costText(o), u.text, o.notes, price?.[0] || '', `LL${o.loyaltyLevel}`)) return '';
+    if (S.tagFilters.offers && !o.tags.includes(S.tagFilters.offers)) return '';
+    if (!matches('offers', itemName(o.itemTpl), item(o.itemTpl)?.s || '', costText(o), u.text, o.notes, o.tags, price?.[0] || '', `LL${o.loyaltyLevel}`)) return '';
     shown.push(o);
     const badges = [];
     if (u.badge) badges.push(u.badge);
     if (price) badges.push(price);
     if (o.loyaltyLevel > 1) badges.push([`LL${o.loyaltyLevel}`, 'var(--violet)']);
+    if (!view().hideTags) for (const tag of o.tags) badges.push([tag.toUpperCase(), tagColor(tag)]);
     return row({
       list: 'offers', act: 'selOffer', arg: i, sel: isPicked(o, S.offer),
-      thumb: { text: initials(item(o.itemTpl)?.s || itemName(o.itemTpl)), color: u.kind !== 'start' ? 'var(--orange)' : '#3a3a3a', dark: u.kind !== 'start' },
+      thumb: { text: initials(item(o.itemTpl)?.s || itemName(o.itemTpl)), color: u.kind !== 'start' ? 'var(--orange)' : '#3a3a3a', dark: u.kind !== 'start', item: o.itemTpl, wide: true },
       title: itemName(o.itemTpl), badges,
       line2: costText(o),
       cols: { unlock: u.text, ll: `LL${o.loyaltyLevel}`, stock: (o.unlimited ? 'Unlimited' : `${o.stock} / Restock`) + (o.buyLimit > 0 ? ` · Max ${o.buyLimit}` : ''), notes: o.notes },
@@ -617,20 +661,19 @@ function pageOffers() {
       <button class="danger" data-act="removeOffer" ${n ? '' : 'disabled'} title="Del">${countLabel('Remove', n)}</button>
       <button class="icon-btn" data-act="moveOffer" data-arg="-1" title="Move Up">▲</button>
       <button class="icon-btn" data-act="moveOffer" data-arg="1" title="Move Down">▼</button>
-      ${S.search.offers ? `<span class="muted small">${shown.length} of ${t.file.offers.length} shown</span>` : ''}
-    </div>
-    <div class="list" data-list="offers">${listHead('offers')}${rows || `<div class="empty">${t.file.offers.length ? 'Nothing matches the search' : 'No offers yet — click + Add Offer'}</div>`}</div>`;
+      ${S.search.offers || S.tagFilters.offers ? `<span class="muted small">${shown.length} of ${t.file.offers.length} shown</span>` : ''}
+    </div>${tags}
+    <div class="list" data-list="offers">${listHead('offers')}${rows || `<div class="empty">${t.file.offers.length ? 'Nothing matches the search / tag' : 'No offers yet — click + Add Offer'}</div>`}</div>`;
 }
 
 function pageQuests() {
   const t = S.t;
   const v = view();
-  const allTags = [...new Set(t.file.quests.flatMap(q => q.tags))].sort((a, b) => a.localeCompare(b));
-  if (S.tagFilter && !allTags.includes(S.tagFilter)) S.tagFilter = null;
+  const tagsHtml = tagBar('quests', t.file.quests);
   const shown = [];
   (S.hasNotes ||= {}).quests = t.file.quests.some(q => q.notes);
   const rows = t.file.quests.map((q, i) => {
-    if (S.tagFilter && !q.tags.includes(S.tagFilter)) return '';
+    if (S.tagFilters.quests && !q.tags.includes(S.tagFilters.quests)) return '';
     if (!matches('quests', q.name, q.tags, q.notes, q.description, q.conditions.map(shortCondition), rewardBoxes(t, q).map(b => `${b.label || ''} ${b.text}`), `level ${q.minLevel}`, q.failOnDeath ? 'hardcore' : '')) return '';
     shown.push(q);
     const w = ways(q);
@@ -640,13 +683,16 @@ function pageQuests() {
     if (q.prerequisiteQuestIds.length) badges.push([`AFTER ${q.prerequisiteQuestIds.length} QUEST${q.prerequisiteQuestIds.length > 1 ? 'S' : ''}`, 'var(--blue)']);
     if (!v.hideTags) for (const tag of q.tags) badges.push([tag.toUpperCase(), tagColor(tag)]);
     if (S.checks.some(c => c.target === q && c.level === 'error')) badges.push(['✖ PROBLEM', 'var(--red)', 'keep']);
-    const img = q.image && t.images[q.image];
+    const pic = questPic(t, q);
     return row({
       list: 'quests', act: 'selQuest', arg: i, sel: isPicked(q, S.quest), three: true,
-      thumb: img ? { img } : { text: String(q.minLevel), color: 'var(--violet)' },
+      thumb: pic ? { img: pic.url } : { text: String(q.minLevel), color: 'var(--violet)' },
       title: q.name, badges,
       boxes2: q.conditions.length
-        ? w.map(o => ({ label: w.length > 1 ? wayLetter(o) : '', color: WAY_COLOR[o], text: q.conditions.filter(c => (c.option || 1) === o).map(shortCondition).join(' + ') }))
+        ? w.map(o => {
+          const conds = q.conditions.filter(c => (c.option || 1) === o);
+          return { label: w.length > 1 ? wayLetter(o) : '', color: WAY_COLOR[o], text: conds.map(shortCondition).join(' + '), icons: conds.flatMap(condIcons) };
+        })
         : [{ text: 'No Objectives Yet' }],
       boxes3: v.hideRewards ? null : q.rewards.length ? rewardBoxes(t, q) : [{ text: 'No Rewards Yet' }],
       cols: { level: `Lvl ${q.minLevel}`, ways: String(w.length), notes: q.notes },
@@ -654,17 +700,14 @@ function pageQuests() {
   }).join('');
   S.shownRows = shown;
   const n = picked(S.quest).length;
-  const tagBar = allTags.length ? `<div class="toolbar"><span class="muted small">Tags:</span>
-      <button class="chip ${!S.tagFilter ? 'on' : ''}" data-act="tagFilter" data-arg="">All</button>
-      ${allTags.map(tag => `<button class="chip tagchip ${S.tagFilter === tag ? 'on' : ''}" style="--c:${tagColor(tag)}" data-act="tagFilter" data-arg="${esc(tag)}">${esc(tag)}</button>`).join('')}</div>` : '';
   return `<div class="toolbar sticky">
       <button class="primary" data-act="addQuest">+ Add Quest</button>
       <button class="outline" data-act="dupQuest" ${n ? '' : 'disabled'}>${countLabel('Duplicate', n)}</button>
       <button class="danger" data-act="removeQuest" ${n ? '' : 'disabled'} title="Del">${countLabel('Remove', n)}</button>
       <button class="icon-btn" data-act="moveQuest" data-arg="-1" title="Move Up">▲</button>
       <button class="icon-btn" data-act="moveQuest" data-arg="1" title="Move Down">▼</button>
-      ${S.search.quests || S.tagFilter ? `<span class="muted small">${shown.length} of ${t.file.quests.length} shown</span>` : ''}
-    </div>${tagBar}
+      ${S.search.quests || S.tagFilters.quests ? `<span class="muted small">${shown.length} of ${t.file.quests.length} shown</span>` : ''}
+    </div>${tagsHtml}
     <div class="list" data-list="quests">${listHead('quests')}${rows || `<div class="empty">${t.file.quests.length ? 'Nothing matches the search / tag' : 'No quests yet — click + Add Quest'}</div>`}</div>`;
 }
 
@@ -745,7 +788,7 @@ function detailsOffer() {
   const costs = o.cost.map((c, i) => {
     const k = bind(() => c.count, v => { c.count = Math.max(1, v); }, 'light');
     const lk = listRef(o.cost);
-    return `<div class="row"><div class="cell">${thumb({ text: isMoney(c.itemTpl) ? MONEY_SYMBOL[c.itemTpl] : initials(item(c.itemTpl)?.s), color: isMoney(c.itemTpl) ? 'var(--yellow)' : '#3a3a3a', dark: isMoney(c.itemTpl) })}
+    return `<div class="row"><div class="cell">${thumb({ text: isMoney(c.itemTpl) ? MONEY_SYMBOL[c.itemTpl] : initials(item(c.itemTpl)?.s), color: isMoney(c.itemTpl) ? 'var(--yellow)' : '#3a3a3a', dark: isMoney(c.itemTpl), item: isMoney(c.itemTpl) ? null : c.itemTpl })}
       <div class="text"><div class="title">${esc(isMoney(c.itemTpl) ? MONEY_NAME[c.itemTpl] : itemName(c.itemTpl))}</div></div>
       <input type="number" data-b="${k}" value="${c.count}" min="1" style="width:140px"><button class="icon-btn" data-act="removeAt" data-arg="${lk}|${i}" title="Remove">✕</button></div></div>`;
   }).join('');
@@ -760,7 +803,14 @@ function detailsOffer() {
     ? ui.hint(`The price is worth about <b>${money(barterValue, cur)}</b> to a trader — ${barterValue >= worth * 1.1 ? 'more than' : barterValue <= worth * .9 ? '<b>less</b> than' : 'about the same as'} the item itself (${money(worth, cur)}).`) : '';
   const values = S.items.size && (worth || offerValue(o, 'h')) ? `<div class="value-grid">${cells}</div>${o.useDefaultPreset && item(o.itemTpl)?.ph ? ui.hint('Values are for the whole assembled gun (default preset).') : ''}${compare}` : '';
 
-  return [itemName(o.itemTpl), `${status}
+  const it = item(o.itemTpl);
+  const big = itemPic(o.itemTpl, '512');
+  const hero = `<div class="hero">
+      <div class="hero-pic">${esc(initials(it?.s || itemName(o.itemTpl)))}${big ? `<img src="${big}" alt="" ${picFail}>` : ''}</div>
+      <div class="hero-text"><div class="kind">${esc((it?.c || 'Item').toUpperCase())}${it?.k ? ' · ' + esc(caliberName(it.k)) : ''}</div>
+        <div class="hero-name">${esc(it?.s || itemName(o.itemTpl))}</div>
+        <div class="muted small">${esc(costText(o))}${o.tags.length ? ' · ' + esc(o.tags.join(', ')) : ''}</div></div></div>`;
+  return [itemName(o.itemTpl), `${hero}${status}
     ${card('o-unlock', 'How It Unlocks', unlockBody)}
     ${card('o-item', 'Item', `
       ${ui.item('Item', () => o.itemTpl, v => { o.itemTpl = v; }, 'all')}
@@ -780,7 +830,9 @@ function detailsOffer() {
         <button class="chip" data-act="addCost" data-arg="${CUR.EUR}">+ € Euros</button>
         <button class="outline" data-act="addCost" data-arg="">+ Barter Item…</button>
       </div>`)}
-    ${card('o-notes', 'Notes', ui.area('Notes', () => o.notes, v => { o.notes = v; }, { rows: 3, placeholder: 'Only you see these (shown in the Notes column).' }))}`];
+    ${card('o-notes', 'Tags & Notes', `
+      ${tagField(o, S.t.file.offers, 'Group offers your way (e.g. "ARs", "Snipers", "Pistols", "Ammo") — filter by them above the list. Right-click a tag to rename, recolor or remove it.')}
+      ${ui.area('Notes', () => o.notes, v => { o.notes = v; }, { rows: 3, placeholder: 'Only you see these (shown in the Notes column).' })}`)}`];
 }
 
 /** An offer's worth in roubles: the whole default preset for guns sold assembled. */
@@ -797,6 +849,23 @@ function defaultCost(o) {
   return v ? [{ itemTpl: cur, count: toCurrency(v, cur) }] : [{ itemTpl: CUR.RUB, count: 50000 }];
 }
 
+/** Tags of one offer / quest: chips (right-click = rename, color…), a box to add one, and tags used elsewhere. */
+function tagField(obj, pool, hint) {
+  const known = [...new Set(pool.flatMap(x => x.tags))].filter(tag => !obj.tags.includes(tag)).sort((a, b) => a.localeCompare(b));
+  return `<div class="field top"><label>Tags</label><div>
+    <div class="chips">${obj.tags.map(tag => `<span class="tag" style="--c:${tagColor(tag)}" data-tag="${esc(tag)}">${esc(tag)}<button data-act="removeTag" data-arg="${esc(tag)}" title="Remove">✕</button></span>`).join('')}
+      <input type="text" id="tagInput" placeholder="+ Add Tag (Enter)" style="width:150px"></div>
+    ${known.length ? `<div class="chips" style="margin-top:6px">${known.map(tag => `<button class="chip tagchip" style="--c:${tagColor(tag)}" data-act="addTag" data-arg="${esc(tag)}" data-tag="${esc(tag)}">+ ${esc(tag)}</button>`).join('')}</div>` : ''}
+    ${ui.hint(hint)}</div></div>`;
+}
+function multiTagField(list) {
+  const tags = [...new Set(list.flatMap(x => x.tags))].sort((a, b) => a.localeCompare(b));
+  return `<div class="field top"><label>Tags</label><div>
+    <div class="chips">${tags.map(tag => `<span class="tag" style="--c:${tagColor(tag)}" data-tag="${esc(tag)}">${esc(tag)} <small>${list.filter(x => x.tags.includes(tag)).length}/${list.length}</small><button data-act="multiTag" data-arg="-${esc(tag)}" title="Remove From All">✕</button></span>`).join('')}
+      <input type="text" id="multiTagInput" placeholder="+ Tag All (Enter)" style="width:150px"></div>
+    ${ui.hint('Tags group things: questlines ("Main 1", "Kappa Path") or offers ("ARs", "Snipers", "Pistols").')}</div></div>`;
+}
+
 // ---- multi-select panel
 function detailsMulti() {
   const offers = S.page === 'offers';
@@ -808,16 +877,13 @@ function detailsMulti() {
     const same = list.every(o => o.loyaltyLevel === list[0].loyaltyLevel) ? list[0].loyaltyLevel : 0;
     edit = card('m-edit', 'Change All at Once', `
       ${ui.chips('Loyalty Level', [1, 2, 3, 4].map(n => [n, 'LL' + n]), () => same, v => { list.forEach(o => { o.loyaltyLevel = Number(v); }); }, { refresh: 'page' })}
-      ${ui.chips('Stock', [['u', 'Unlimited'], ['l', 'Limited']], () => list.every(o => o.unlimited) ? 'u' : list.every(o => !o.unlimited) ? 'l' : '', v => { list.forEach(o => { o.unlimited = v === 'u'; }); }, { refresh: 'page' })}`);
+      ${ui.chips('Stock', [['u', 'Unlimited'], ['l', 'Limited']], () => list.every(o => o.unlimited) ? 'u' : list.every(o => !o.unlimited) ? 'l' : '', v => { list.forEach(o => { o.unlimited = v === 'u'; }); }, { refresh: 'page' })}
+      ${multiTagField(list)}`);
   } else {
-    const tags = [...new Set(list.flatMap(q => q.tags))].sort();
     const sameLvl = list.every(q => q.minLevel === list[0].minLevel) ? list[0].minLevel : '';
     edit = card('m-edit', 'Change All at Once', `
       ${ui.num('Unlocks at Level', () => sameLvl, v => { list.forEach(q => { q.minLevel = v; }); }, { min: 1, max: 79, refresh: 'page' })}
-      <div class="field top"><label>Tags</label><div>
-        <div class="chips">${tags.map(tag => `<span class="tag" style="--c:${tagColor(tag)}">${esc(tag)} <small>${list.filter(q => q.tags.includes(tag)).length}/${list.length}</small><button data-act="multiTag" data-arg="-${esc(tag)}" title="Remove From All">✕</button></span>`).join('')}
-          <input type="text" id="multiTagInput" placeholder="+ Tag All (Enter)" style="width:150px"></div>
-        ${ui.hint('Tags help group questlines (e.g. "Main 1", "Kappa Path").')}</div></div>`);
+      ${multiTagField(list)}`);
   }
   return [`${list.length} ${offers ? 'Offers' : 'Quests'} Selected`, `
     <div class="status" style="--c:var(--accent)"><h3>${list.length} Picked</h3><div class="req">${esc(shownNames)}</div></div>
@@ -865,7 +931,7 @@ function detailsQuest() {
   if (req.cycle) reqLines.push('✖ The required quests go in a circle — this quest can never unlock.');
   const reqBad = req.missing.length || req.cycle || req.chain.some(c => !chainOn(c));
 
-  const img = q.image && t.images[q.image];
+  const pic = questPic(t, q);
   const mineSwitches = allQuests().filter(x => x.q !== q).map(({ t: ot, q: oq }) => {
     const n = ways(oq).length;
     const text = `${oq.name} · ${ot.file.name} · lvl ${oq.minLevel}${n > 1 ? ` · any of ${n} ways` : ''}${ot.file.enabled ? '' : ' · trader OFF'}`;
@@ -888,7 +954,7 @@ function detailsQuest() {
     ? 'Every objective below must be done. Want the player to choose (e.g. hand in <i>or</i> kill <i>or</i> pay)? Click <b>＋ Way</b>.'
     : `<b>${w.length} ways</b> — the player finishes ANY ONE way (all objectives inside it). In game each way is its own quest; when one is turned in, the others are closed and disappear.`;
   const objectives = q.conditions.map((c, i) => (c.option || 1) !== S.way ? '' : `<div class="row ${c === S.cond ? 'sel' : ''}" data-act="selCond" data-arg="${i}"><div class="cell">
-      ${thumb({ text: TYPE_SHORT[c.type]?.[0] || '?', color: TYPE_COLOR[c.type] || '#999', dark: true })}
+      ${thumb({ text: TYPE_SHORT[c.type]?.[0] || '?', color: TYPE_COLOR[c.type] || '#999', dark: true, item: condIcons(c)[0] })}
       <div class="text"><div class="line1"><span class="title">${esc(conditionTitle(c))}</span></div></div>
       <span class="side">${esc(conditionDetail(c))}</span></div></div>`).join('');
   const rewards = q.rewards.map((r, i) => {
@@ -896,7 +962,6 @@ function detailsQuest() {
     return `<div class="row ${r === S.reward ? 'sel' : ''}" data-act="selReward" data-arg="${i}"><div class="cell">${thumb(d.thumb)}
       <div class="text"><div class="title">${esc(d.title)}</div></div><span class="side">${esc(d.side || '')}</span></div></div>`;
   }).join('');
-  const knownTags = [...new Set(allQuests().flatMap(x => x.q.tags))].filter(tag => !q.tags.includes(tag));
 
   return [q.name, `
     ${card('q-req', `<span style="color:${reqBad ? 'var(--red)' : 'var(--violet)'}">Unlock Requirements</span>`, `<div class="req">${esc(reqLines.join('\n'))}</div>`)}
@@ -906,15 +971,14 @@ function detailsQuest() {
       ${ui.area('Description', () => q.description, v => { q.description = v; }, { extra: '<br><button class="outline gen" data-act="genText" data-arg="description" title="Write it from the objectives">✨ Generate</button>', placeholder: 'Empty = a description is made from the objectives. Or click ✨ Generate.' })}
       ${ui.area('When Completed', () => q.successMessage, v => { q.successMessage = v; }, { rows: 2, extra: '<br><button class="outline gen" data-act="genText" data-arg="successMessage">✨ Generate</button>' })}
       ${ui.toggle('Fails If the Player Dies, Goes Missing or Leaves a Raid (Can Be Restarted)', () => q.failOnDeath, v => { q.failOnDeath = v; }, { label: 'Hardcore', refresh: 'light' })}
-      <div class="field top"><label>Tags</label><div>
-        <div class="chips">${q.tags.map(tag => `<span class="tag" style="--c:${tagColor(tag)}">${esc(tag)}<button data-act="removeTag" data-arg="${esc(tag)}" title="Remove">✕</button></span>`).join('')}
-          <input type="text" id="tagInput" placeholder="+ Add Tag (Enter)" style="width:150px"></div>
-        ${knownTags.length ? `<div class="chips" style="margin-top:6px">${knownTags.map(tag => `<button class="chip" data-act="addTag" data-arg="${esc(tag)}">+ ${esc(tag)}</button>`).join('')}</div>` : ''}
-        ${ui.hint('Your own labels (e.g. "Kappa path", "Main 1") — shown on the quest list and usable as a filter. The game never sees them.')}</div></div>
-      <div class="field"><label>Image</label><div class="toolbar" style="padding:0">
-        <button class="outline" data-act="chooseQuestImage">Choose Quest Image…</button>
-        ${img ? '<button class="danger" data-act="removeQuestImage">Remove Image</button>' : ''}</div></div>
-      ${img ? `<img class="preview" src="${esc(img)}" alt="">` : ''}
+      ${tagField(q, allQuests().map(x => x.q), 'Your own labels (e.g. "Kappa Path", "Main 1") — shown on the list and usable as a filter. Right-click a tag to rename, recolor or remove it. The game never sees them.')}
+      <div class="field top"><label>Picture</label><div>
+        ${pic ? `<img class="preview" src="${esc(pic.url)}" alt="">` : ''}
+        ${ui.hint(pic?.kind === 'mine' ? 'Your own picture.' : pic?.kind === 'game' ? "One of the game's quest pictures." : pic ? "No picture picked — the game's default picture is used." : 'No picture — the game shows its default one.')}
+        <div class="toolbar" style="padding:0">
+          ${S.gameQuestImages.length ? '<button class="primary" data-act="pickGameImage">Pick a Game Picture…</button><button class="outline" data-act="randomGameImage" title="Another random game picture">🎲 Random</button>' : ''}
+          <button class="outline" data-act="chooseQuestImage">From PC…</button>
+          ${q.image || q.gameImage ? '<button class="danger" data-act="removeQuestImage">Remove</button>' : ''}</div></div></div>
       ${ui.area('Notes', () => q.notes, v => { q.notes = v; }, { rows: 2, placeholder: 'Only you see these (shown in the Notes column).' })}`)}
     ${card('q-prereq', 'Required Quests', `
       ${ui.hint('Switch on every quest that must be finished first. For a quest with several ways, <b>any one finished way counts</b>. Game quests (Prapor, Therapist…) can be required too.')}
@@ -1053,7 +1117,7 @@ function itemList(label, list, filter, moneyButtons) {
   const lk = listRef(list);
   const rows = list.map((id, i) => {
     const it = item(id);
-    return `<div class="row"><div class="cell">${thumb({ text: isMoney(id) ? MONEY_SYMBOL[id] : initials(it?.s), color: isMoney(id) ? 'var(--yellow)' : !it && S.items.size ? 'var(--red)' : '#3a3a3a', dark: isMoney(id) })}
+    return `<div class="row"><div class="cell">${thumb({ text: isMoney(id) ? MONEY_SYMBOL[id] : initials(it?.s), color: isMoney(id) ? 'var(--yellow)' : !it && S.items.size ? 'var(--red)' : '#3a3a3a', dark: isMoney(id), item: isMoney(id) ? null : id })}
       <div class="text"><div class="title">${esc(isMoney(id) && !it ? MONEY_NAME[id] : itemName(id))}</div></div>
       <span class="side">${esc(it ? (it.c === 'Other' ? it.s : `${it.c} · ${it.s}`) : '')}</span>
       <button class="icon-btn" data-act="removeAt" data-arg="${lk}|${i}" title="Remove">✕</button></div></div>`;
@@ -1171,6 +1235,13 @@ function shortCondition(c) {
   }
   return [base, ...conditionExtras(c)].join(', ');
 }
+/** Items shown as small pictures next to an objective. */
+function condIcons(c) {
+  if (c.type === 'Kill') return c.weaponTpls.slice(0, 2);
+  if (['HandoverItem', 'FindItem', 'UseItem'].includes(c.type)) return c.itemTpls.filter(id => !isMoney(id)).slice(0, 2);
+  if (c.type === 'Extract') return c.wearingTpls.slice(0, 1);
+  return [];
+}
 function conditionTitle(c) {
   switch (c.type) {
     case 'Kill': return `Kill ${c.count} ${killWho(c)}`;
@@ -1192,12 +1263,12 @@ function rewardBoxes(t, q) {
     switch (r.type) {
       case 'Experience': return { text: `${fmt(r.value)} XP`, color: '#a082ff' };
       case 'TraderStanding': return { text: `${r.value >= 0 ? '+' : ''}${r.value} Standing`, color: '#509bf5' };
-      case 'Item': return { text: `${r.count}× ${shortName(r.itemTpl)}${r.onStart ? ' (On Accept)' : ''}`, color: '#ffa42b' };
+      case 'Item': return { text: `${r.count}× ${shortName(r.itemTpl)}${r.onStart ? ' (On Accept)' : ''}`, color: '#ffa42b', icons: [r.itemTpl] };
       case 'Skill': return { text: `+${fmt(r.value)} ${skillName(r.skill)}`, color: '#f5cd46' };
       case 'StashRows': return { text: `+${fmt(r.value)} Stash Rows`, color: '#ff7ab6' };
       case 'UnlockOffer': {
         const o = t.file.offers.find(x => x.id === r.offerId);
-        return o ? { label: isBarter(o) ? 'BARTER' : 'BUY', text: shortName(o.itemTpl), color: isBarter(o) ? 'var(--pink)' : 'var(--blue)' } : { label: 'UNLOCK', text: '?', color: 'var(--red)' };
+        return o ? { label: isBarter(o) ? 'BARTER' : 'BUY', text: shortName(o.itemTpl), color: isBarter(o) ? 'var(--pink)' : 'var(--blue)', icons: [o.itemTpl] } : { label: 'UNLOCK', text: '?', color: 'var(--red)' };
       }
       default: return { text: r.type };
     }
@@ -1208,12 +1279,12 @@ function rewardRow(t, r) {
   switch (r.type) {
     case 'Experience': return { thumb: { text: 'XP', color: '#a082ff' }, title: `${fmt(r.value)} XP` };
     case 'TraderStanding': return { thumb: { text: '+', color: '#509bf5' }, title: `${r.value >= 0 ? '+' : ''}${r.value} Standing With ${t.file.name}` };
-    case 'Item': return { thumb: { text: initials(item(r.itemTpl)?.s), color: '#ffa42b', dark: true }, title: `${r.count} × ${itemName(r.itemTpl)}`, side: [r.onStart ? 'On Accept' : '', r.foundInRaid ? 'Found in Raid' : ''].filter(Boolean).join(' · ') };
+    case 'Item': return { thumb: { text: initials(item(r.itemTpl)?.s), color: '#ffa42b', dark: true, item: r.itemTpl }, title: `${r.count} × ${itemName(r.itemTpl)}`, side: [r.onStart ? 'On Accept' : '', r.foundInRaid ? 'Found in Raid' : ''].filter(Boolean).join(' · ') };
     case 'Skill': return { thumb: { text: 'SK', color: '#f5cd46', dark: true }, title: `+${fmt(r.value)} ${skillName(r.skill)} Skill Points` };
     case 'StashRows': return { thumb: { text: '▦', color: '#ff7ab6', dark: true }, title: `+${fmt(r.value)} Stash Rows` };
     case 'UnlockOffer': {
       const o = t.file.offers.find(x => x.id === r.offerId);
-      return { thumb: { text: o && isBarter(o) ? 'BAR' : 'BUY', color: '#1ed760', dark: true }, title: o ? `${isBarter(o) ? 'BARTER' : 'BUY'}: ${itemName(o.itemTpl)}` : 'Unlock: (Pick an Offer)', side: o ? (o.unlimited ? 'Unlimited' : `${o.stock} per Restock`) : '' };
+      return { thumb: { text: o && isBarter(o) ? 'BAR' : 'BUY', color: '#1ed760', dark: true, item: o?.itemTpl }, title: o ? `${isBarter(o) ? 'BARTER' : 'BUY'}: ${itemName(o.itemTpl)}` : 'Unlock: (Pick an Offer)', side: o ? (o.unlimited ? 'Unlimited' : `${o.stock} per Restock`) : '' };
     }
     default: return { thumb: { text: '?' }, title: r.type };
   }
@@ -1621,7 +1692,7 @@ function viewMenu(anchor) {
     pop.innerHTML = `<div class="menu-title">${S.page === 'offers' ? 'Offers & Barters' : S.page === 'checks' ? 'Checks & Log' : 'Quests'} List</div>
       ${opt('hideIdx', '# Column', !v.hideIdx)}${cols}
       ${list === 'quests' ? `<hr>${opt('hideWaysTag', '"1 Way / 2 Ways" Tag', !v.hideWaysTag)}${opt('hideTags', 'Your Tags on Rows', !v.hideTags)}${opt('hideRewards', 'Rewards Line', !v.hideRewards)}` : ''}
-      <hr>${opt('grey', 'Calm Grey Colors (Boxes & Tags)', !!S.ui.grey)}`;
+      <hr>${opt('noItemPics', 'Item Pictures (From tarkov.dev)', !v.noItemPics)}${opt('grey', 'Calm Grey Colors (Boxes & Tags)', !!S.ui.grey)}`;
   };
   draw();
   pop.addEventListener('click', e => {
@@ -1632,7 +1703,7 @@ function viewMenu(anchor) {
     if (key === 'grey') S.ui.grey = !S.ui.grey;
     else if (col) view()[key] = colShown(list, col); // hide what's shown, show what's hidden
     else view()[key] = !view()[key];
-    applyUi(); saveUi(); renderPage(false); draw();
+    applyUi(); saveUi(); renderPage(false); renderDetails(false); draw();
   });
   const r = anchor.getBoundingClientRect();
   popoverAt(pop, r.right - 280, r.bottom + 6);
@@ -1652,9 +1723,130 @@ function contextMenu(x, y, items) {
   popoverAt(pop, x, y);
 }
 
+/** The offer or quest whose tags the details panel edits. */
+const tagTarget = () => (S.page === 'offers' ? S.offer : S.page === 'quests' ? S.quest : null);
+/** Every offer or quest of the current trader that can carry the tag (per page). */
+const tagPool = () => (S.page === 'offers' ? S.t?.file.offers : S.t?.file.quests) || [];
+
+const TAG_PALETTE = ['#ff7ab6', '#5cc8ff', '#f5cd46', '#a082ff', '#1ed760', '#ffa42b', '#ff6b6b', '#7ee0c3', '#b3b3b3', '#ffffff'];
+function tagMenu(x, y, tag) {
+  const pool = tagPool();
+  const n = pool.filter(o => o.tags.includes(tag)).length;
+  const kind = S.page === 'offers' ? 'Offer' : 'Quest';
+  closePopover();
+  const pop = document.createElement('div');
+  pop.className = 'popover ctx';
+  pop.innerHTML = `<div class="menu-title">Tag “${esc(tag)}” · ${n} ${kind}${n === 1 ? '' : 's'}</div>
+    <button data-t="only">Show Only This</button>
+    <button data-t="rename">Rename…</button>
+    <div class="menu-title">Color</div>
+    <div class="swatches">${TAG_PALETTE.map(c => `<button class="swatch ${tagColor(tag) === c ? 'on' : ''}" style="--c:${c}" data-t="color" data-c="${c}"></button>`).join('')}
+      <button class="swatch auto" data-t="color" data-c="" title="Automatic">A</button></div>
+    <hr><button data-t="remove" class="danger-item">Remove From All ${kind}s</button>`;
+  pop.addEventListener('click', async e => {
+    const b = e.target.closest('[data-t]');
+    if (!b) return;
+    const what = b.dataset.t;
+    closePopover();
+    if (what === 'only') ACT.tagFilter(tag);
+    if (what === 'color') {
+      const colors = (S.ui.tagColors ||= {});
+      if (b.dataset.c) colors[tag] = b.dataset.c; else delete colors[tag];
+      saveUi(); renderPage(false); renderDetails(false);
+    }
+    if (what === 'rename') {
+      const name = (await promptBox('Rename Tag', `New name for “${tag}” (changes it on all ${n} ${kind.toLowerCase()}${n === 1 ? '' : 's'} of ${S.t.file.name})`, tag) || '').trim();
+      if (!name || name === tag) return;
+      for (const o of pool) if (o.tags.includes(tag)) o.tags = [...new Set(o.tags.map(x => x === tag ? name : x))];
+      const colors = S.ui.tagColors || {};
+      if (colors[tag]) { colors[name] = colors[tag]; delete colors[tag]; saveUi(); }
+      const page = S.page === 'offers' ? 'offers' : 'quests';
+      if (S.tagFilters[page] === tag) S.tagFilters[page] = name;
+      changed(false);
+      toast(`Renamed to “${name}”`);
+    }
+    if (what === 'remove') {
+      for (const o of pool) o.tags = o.tags.filter(x => x !== tag);
+      changed(false);
+      toast(`Removed “${tag}” — Ctrl+Z to undo`);
+    }
+  });
+  popoverAt(pop, x, y);
+}
+
+/** Gallery of the game's own quest pictures. */
+function pickGameImage(current) {
+  let shown = 120;
+  const draw = m => {
+    const list = S.gameQuestImages;
+    m.querySelector('.gallery').innerHTML = list.slice(0, shown).map(g =>
+      `<button class="gpic ${g.n === current ? 'on' : ''}" data-pick="${esc(g.n)}" title="${esc(g.n)}"><img src="${esc(g.u)}" alt="" loading="lazy"></button>`).join('') +
+      (list.length > shown ? '<button class="outline more" data-more>Show More…</button>' : '');
+  };
+  return openModal(`<div class="dialog wide"><h2>Pick a Game Picture <span class="muted small">${S.gameQuestImages.length} pictures from SPT_Data\\images\\quests</span></h2>
+    <div class="gallery scroll"></div>
+    <div class="buttons"><button class="outline" data-m="0">Cancel</button><button class="primary" data-m="r">🎲 Random</button></div></div>`, m => {
+    draw(m);
+    m.querySelector('.gallery').onclick = e => {
+      if (e.target.closest('[data-more]')) { shown += 240; draw(m); return; }
+      const b = e.target.closest('[data-pick]');
+      if (b) closeModal(b.dataset.pick);
+    };
+    m.querySelector('[data-m="0"]').onclick = () => closeModal(null);
+    m.querySelector('[data-m="r"]').onclick = () => closeModal(randomGameImage(current));
+  });
+}
+
+/** Deleted traders (the deleted_traders folder): put back or erase for good. */
+async function deletedTradersBox() {
+  let list = [];
+  try { list = await host.call('listDeleted'); } catch (err) { return errorBox(err); }
+  const rows = () => list.length ? list.map(d => `<div class="row"><div class="cell">${thumb({ text: '🗑', color: '#3a3a3a' })}
+      <div class="text"><div class="title">${esc(d.name)}</div><div class="line2">Deleted ${esc(d.when)} · ${fmt(d.kb)} KB · ${esc(d.folder)}</div></div>
+      <button class="outline" data-restore="${esc(d.folder)}">Restore</button><button class="danger" data-purge="${esc(d.folder)}">Delete Forever</button></div></div>`).join('')
+    : '<div class="empty">The trash is empty.</div>';
+  await openModal(`<div class="dialog"><h2>Deleted Traders</h2>
+    ${ui.hint('Removed traders are moved here first (…\\CustomTraders\\deleted_traders). <b>Restore</b> puts one back; <b>Delete Forever</b> erases the folder and can’t be undone.')}
+    <div class="picker-list deleted">${rows()}</div>
+    <div class="buttons"><button class="danger" data-m="all" ${list.length ? '' : 'disabled'} style="margin-right:auto">Empty Trash</button><button class="primary" data-m="0">Close</button></div></div>`, m => {
+    const redraw = () => {
+      m.querySelector('.deleted').innerHTML = rows();
+      m.querySelector('[data-m="all"]').disabled = !list.length;
+      S.deletedCount = list.length; renderTraders();
+    };
+    m.querySelector('[data-m="0"]').onclick = () => closeModal(null);
+    m.querySelector('[data-m="all"]').onclick = async () => {
+      const b = m.querySelector('[data-m="all"]');
+      if (b.dataset.sure !== '1') { b.dataset.sure = '1'; b.textContent = `Really Erase All ${list.length}?`; return; }
+      list = await host.call('purgeDeleted', { name: '*' }).catch(errorBox) || [];
+      redraw();
+      toast('Trash emptied');
+    };
+    m.querySelector('.deleted').onclick = async e => {
+      const purge = e.target.closest('[data-purge]'), restore = e.target.closest('[data-restore]');
+      if (purge) {
+        if (purge.dataset.sure !== '1') { purge.dataset.sure = '1'; purge.textContent = 'Click Again to Erase'; return; }
+        list = await host.call('purgeDeleted', { name: purge.dataset.purge }).catch(errorBox) || list;
+        redraw();
+      }
+      if (restore) {
+        if (S.traders.some(t => t.dirty) && !confirm('Restoring reloads the traders — unsaved changes are lost. Continue?')) return;
+        try {
+          const snap = await host.call('restoreDeleted', { name: restore.dataset.restore });
+          closeModal(null);
+          applySnapshot(snap);
+          toast('Trader restored');
+        } catch (err) { errorBox(err); }
+      }
+    };
+  });
+}
+
 document.addEventListener('contextmenu', e => {
   if (/INPUT|TEXTAREA/.test(e.target.tagName)) return; // keep copy / paste
   e.preventDefault();
+  const tagEl = e.target.closest('[data-tag]');
+  if (tagEl && S.t) return tagMenu(e.clientX, e.clientY, tagEl.dataset.tag);
   const tr = e.target.closest('[data-trader]');
   if (tr && tr.dataset.trader !== '') {
     const i = tr.dataset.trader, t = S.traders[Number(i)];
@@ -1824,7 +2016,9 @@ document.addEventListener('mousedown', e => {
   if (grip) {
     const [list, key] = grip.dataset.grip.split('|');
     const i = shownColumns(list).slice(1).findIndex(c => c[0] === key);
-    drag = { kind: 'col', list, key, x: e.clientX, w: colWidths(list)[i] };
+    drag = { kind: 'col', list, key, x: e.clientX, w: colWidths(list)[i], el: grip };
+    grip.classList.add('drag');
+    document.body.classList.add('col-drag');
     e.preventDefault();
     return;
   }
@@ -1877,7 +2071,7 @@ document.addEventListener('mousemove', e => {
     (S.ui.colw ||= {})[`${drag.list}.${drag.key}`] = w;
     applyColumns();
   } else if (drag.kind === 'left') {
-    const w = clamp(drag.w + (e.clientX - drag.x), 190, 460);
+    const w = clamp(drag.w + (e.clientX - drag.x), 220, 460);
     S.ui.left = w;
     document.documentElement.style.setProperty('--left', w + 'px');
   } else {
@@ -1900,9 +2094,12 @@ document.addEventListener('mouseup', () => {
     return;
   }
   d.el?.classList.remove('drag');
+  document.body.classList.remove('col-drag');
   saveUi();
 });
 document.addEventListener('dblclick', e => {
+  const grip = e.target.closest('[data-grip]');
+  if (grip) { delete S.ui.colw?.[grip.dataset.grip.replace('|', '.')]; applyColumns(); saveUi(); return; }
   if (!e.target.classList.contains('splitter')) return;
   if (e.target.id === 'splitLeft') { delete S.ui.left; document.documentElement.style.setProperty('--left', '250px'); }
   else { delete S.ui.right; document.documentElement.style.setProperty('--right', '560px'); }
@@ -1965,7 +2162,7 @@ const ACT = {
   selReward: arg => { S.reward = S.quest.rewards[Number(arg)]; renderDetails(false); },
   selCheck: arg => { S.check = S.shownChecks?.[Number(arg)] || null; renderPage(false); renderDetails(false, true); },
   checkFilter: arg => { S.checkFilter = arg || null; renderPage(false); },
-  tagFilter: arg => { S.tagFilter = arg || null; renderPage(false); },
+  tagFilter: arg => { S.tagFilters[S.page === 'offers' ? 'offers' : 'quests'] = arg || null; renderPage(false); },
   fold(key) {
     const folded = (S.ui.folded ||= {});
     folded[key] = !folded[key];
@@ -1998,11 +2195,19 @@ const ACT = {
   useTarkovText() { if (!S.cond) return; S.cond.text = S.cond.text ? '' : tarkovText(S.cond); changed(false); },
   addTag(tag) {
     tag = (tag || '').trim();
-    if (!tag || !S.quest || S.quest.tags.includes(tag)) return;
-    S.quest.tags.push(tag);
+    const o = tagTarget();
+    if (!tag || !o || o.tags.includes(tag)) return;
+    o.tags.push(tag);
     changed(false);
+    setTimeout(() => $('#tagInput')?.focus(), 0);
   },
-  removeTag(tag) { S.quest.tags = S.quest.tags.filter(x => x !== tag); changed(false); },
+  removeTag(tag) { const o = tagTarget(); if (!o) return; o.tags = o.tags.filter(x => x !== tag); changed(false); },
+  async pickGameImage() {
+    const name = await pickGameImage(S.quest.gameImage);
+    if (name) { S.quest.gameImage = name; delete S.quest.image; changed(false); }
+  },
+  randomGameImage() { const n = randomGameImage(S.quest.gameImage); if (n) { S.quest.gameImage = n; delete S.quest.image; changed(false); } },
+  async deletedTraders() { S.tradersOpen = false; renderTraders(); await deletedTradersBox(); },
   async addGamePrereq() {
     const id = await pickQuest('Pick a quest that must be finished first', true);
     if (id && id !== S.quest.id && !S.quest.prerequisiteQuestIds.includes(id)) { S.quest.prerequisiteQuestIds.push(id); changed(false); }
@@ -2069,7 +2274,9 @@ const ACT = {
 
   // ---- quests
   addQuest() {
-    const q = fillQuest({ name: 'New quest' });
+    const q = fillQuest({ name: 'New Quest' });
+    const pic = randomGameImage();
+    if (pic) q.gameImage = pic;
     const list = S.t.file.quests;
     list.splice(S.quest ? list.indexOf(S.quest) + 1 : list.length, 0, q);
     selectQuest(q);
@@ -2129,11 +2336,11 @@ const ACT = {
     try {
       const r = await host.call('chooseQuestImage', { folder: S.t.folder, questId: S.quest.id });
       if (!r) return;
-      S.t.images[r.file] = r.url; S.quest.image = r.file;
+      S.t.images[r.file] = r.url; S.quest.image = r.file; delete S.quest.gameImage;
       changed(false); toast('Quest image saved');
     } catch (err) { errorBox(err); }
   },
-  removeQuestImage() { delete S.quest.image; changed(false); },
+  removeQuestImage() { delete S.quest.image; delete S.quest.gameImage; changed(false); },
 
   // ---- generic list helpers (inline ✕, pickers, chips)
   removeAt(arg) { const [k, i] = arg.split('|'); const l = L.get(k); if (!l) return; l.splice(Number(i), 1); changed(false); },
@@ -2195,6 +2402,7 @@ const ACT = {
     if (!await confirmBox('Remove Trader', `Remove "${t.file.name}"?\n\nIts folder is moved to "deleted_traders" (nothing is erased), so you can put it back later.`, 'Remove')) return;
     try {
       const target = await host.call('deleteTrader', { folder: t.folder });
+      S.deletedCount++;
       S.traders.splice(S.traders.indexOf(t), 1);
       resetHistory();
       if (t === S.t) selectTrader(S.traders[0] || null, false);
@@ -2313,7 +2521,7 @@ function applyUi() {
   root.setProperty('--on-accent', light > 150 ? '#000' : '#fff');
   root.setProperty('--dim', String((u.dim ?? 55) / 100));
   if (u.right) root.setProperty('--right', clamp(u.right, 360, 1400) + 'px');
-  if (u.left) root.setProperty('--left', clamp(u.left, 190, 460) + 'px');
+  if (u.left) root.setProperty('--left', clamp(u.left, 220, 460) + 'px');
   document.body.classList.toggle('grey', !!u.grey);
   if (u.page && !S.pageRestored) { S.page = u.page; S.pageRestored = true; }
 }
@@ -2415,7 +2623,7 @@ function pickItem(filter = 'all') {
   const draw = m => {
     const found = all.filter(match).slice(0, 400);
     m.querySelector('.picker-list').innerHTML = found.map(it => `<div class="row" data-pick="${it.i}"><div class="cell">
-      ${thumb({ text: initials(it.s), color: '#3a3a3a' })}<div class="text"><div class="title">${esc(it.n)}</div><div class="line2">${esc(it.s)}</div></div></div>
+      ${thumb({ text: initials(it.s), color: '#3a3a3a', item: it.c === 'Money' ? null : it.i, wide: true })}<div class="text"><div class="title">${esc(it.n)}</div><div class="line2">${esc(it.s)}</div></div></div>
       <div class="col">${esc(it.c === 'Ammo' && it.k ? caliberName(it.k) : it.c)}</div></div>`).join('') ||
       `<div class="empty">${S.items.size ? 'Nothing found' : 'Item database not loaded — paste an item id below'}</div>`;
     m.querySelectorAll('[data-cat]').forEach(c => c.classList.toggle('on', c.dataset.cat === cat));

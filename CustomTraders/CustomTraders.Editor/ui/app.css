@@ -389,11 +389,14 @@ table.loyalty input { max-width: none; }
 .tag button { color: inherit; opacity: .7; width: 20px; height: 20px; border-radius: 50%; }
 .tag button:hover { opacity: 1; background: rgba(255, 255, 255, .1); }
 
-/* column resize handles must stick out of the header cells */
+/* column dividers (Spotify style): a visible line between header cells, easy to grab */
 .list-head > div { overflow: visible; }
 .list-head .head-text { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.list-head .grip { left: -12px; width: 14px; z-index: 2; }
-.list-head .grip::after { left: 6px; }
+.list-head .grip { left: -15px; width: 18px; top: 0; bottom: 0; z-index: 3; touch-action: none; }
+.list-head .grip::after { left: 8px; top: 8px; bottom: 8px; width: 1px; background: #4d4d4d; transition: background .12s, width .12s; }
+.list-head:hover .grip::after { background: #7a7a7a; }
+.list-head .grip:hover::after, .list-head .grip.drag::after { background: #fff; width: 2px; left: 7px; }
+body.col-drag, body.col-drag * { cursor: col-resize !important; }
 
 /* ------------------------------------------------------------------ boxed summary lines (quest list) */
 .boxes { display: flex; flex-wrap: wrap; gap: 5px 6px; margin-top: 5px; min-width: 0; }
@@ -438,3 +441,33 @@ body.dragging, body.dragging * { cursor: default !important; }
 .value button { align-self: flex-start; height: 26px; padding: 0 10px; font-size: 12px; }
 .gen { height: 28px; padding: 0 12px; font-size: 12px; }
 .label-row { display: flex; align-items: center; gap: 8px; }
+
+/* ------------------------------------------------------------------ pictures */
+.thumb { position: relative; overflow: hidden; }
+.thumb.pic > img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; padding: 3px; background: #262626; }
+.thumb.wide { width: 92px; }
+.row.three .thumb.wide { width: 92px; }
+img.thumb.wide { object-fit: cover; }
+.mini .thumb.wide { width: 60px; }
+.picker-list .thumb.wide { width: 84px; height: 42px; }
+.box .bi { height: 18px; max-width: 46px; object-fit: contain; vertical-align: -4px; margin-right: 6px; filter: drop-shadow(0 1px 1px #000); }
+.hero { display: flex; gap: 16px; align-items: center; background: linear-gradient(135deg, #2a2a2a, #181818); border-radius: 10px; padding: 14px; margin-bottom: 12px; }
+.hero-pic { position: relative; flex: none; width: 190px; height: 110px; border-radius: 8px; background: #111; display: grid; place-items: center; font-weight: 900; font-size: 22px; color: #555; overflow: hidden; }
+.hero-pic img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; padding: 6px; background: #111; }
+.hero-text { min-width: 0; }
+.hero-name { font-size: 24px; font-weight: 900; letter-spacing: -.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin: 2px 0 4px; }
+.dialog.wide { width: min(1100px, 94vw); }
+.gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; min-height: 300px; max-height: 64vh; padding: 2px; }
+.gpic { aspect-ratio: 16 / 10; border-radius: 8px; overflow: hidden; background: #111; padding: 0; transition: transform .12s, box-shadow .12s; }
+.gpic img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.gpic:hover { transform: scale(1.04); box-shadow: 0 0 0 2px #fff; }
+.gpic.on { box-shadow: 0 0 0 3px var(--accent); }
+.gallery .more { grid-column: 1 / -1; justify-self: center; }
+.swatches { display: flex; flex-wrap: wrap; gap: 6px; padding: 4px 10px 8px; }
+.popover .swatch { width: 22px; height: 22px; padding: 0; border-radius: 50%; background: var(--c, #333); box-shadow: inset 0 0 0 2px rgba(0, 0, 0, .35); justify-content: center; }
+.popover .swatch.on { box-shadow: 0 0 0 2px #fff; }
+.popover .swatch.auto { background: #333; color: #fff; font-size: 11px; font-weight: 900; }
+.tagchip small, .tag small { opacity: .7; font-size: 11px; margin-left: 2px; }
+.deleted .row { grid-template-columns: 1fr; }
+.deleted .cell button { flex: none; }
+.chip.tagchip:not(.on) { color: var(--c); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c) 45%, transparent); }

@@ -444,6 +444,10 @@ public class CustomTradersMod(
             imageRouter.AddRoute(key, imagePath);
             image = key + ".jpg";
         }
+        else if (!string.IsNullOrWhiteSpace(def.GameImage) && def.GameImage.All(ch => char.IsLetterOrDigit(ch) || ch is '_' or '-'))
+        {
+            image = $"/files/quest/icon/{def.GameImage}.jpg"; // the game's own picture (served by SPT)
+        }
 
         var options = def.UsedOptions();
         var gameIds = _questOptionIds.GetValueOrDefault(def.Id) ?? OptionQuestIds(def);
