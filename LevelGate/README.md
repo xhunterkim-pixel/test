@@ -205,6 +205,13 @@ is ever touched.
   **ItemStatEditor** server mod (`../ItemStatEditor.Server`, not part of
   LevelGate) when the SPT server starts, after other mods, so these edits
   win. Restart the server after saving.
+- tags on items (both tabs, filter bar, right-click a tag to rename /
+  recolor / remove), Custom Order (Ctrl+drag rows, Alt+↑/↓), sorting by
+  clicking the column headers, Ctrl / Shift-click and drag across rows to
+  pick several — tags, orders and category moves are kept in the editor's
+  own settings only
+- modded meds, stims and food (from imported mods) show up in Item Stats
+  with the mod's values and can be edited too
 - ammo packs have their own category and show what's inside; right-click
   items (or use the Category box in the details) to move them to another
   category — only in the editor's own lists, nothing else changes

@@ -50,7 +50,7 @@ const GROUPS = [
   ['Special', 'Special', '#ff7ab6'], ['Other', 'Other', '#8a8a8a'],
 ];
 const GROUP = Object.fromEntries(GROUPS.map(([k, n, c]) => [k, { key: k, name: n, color: c }]));
-const SORTS = [['name', 'Name'], ['level', 'Level'], ['cat', 'Category'], ['price', 'Price'], ['changed', 'Changed First']];
+const SORTS = [['custom', 'Custom Order'], ['name', 'Name'], ['level', 'Level'], ['cat', 'Category'], ['price', 'Price'], ['changed', 'Changed First']];
 
 const S = {
   configFile: null, sptRoot: null, version: '',
@@ -64,7 +64,7 @@ const S = {
   undo: [], redo: [],
   ui: {},
   // Item Stats tab (meds, stims, food): base = game + other mods, edits = LevelGate's item_stats.json
-  tab: 'levels', statCat: 'all', band: null,
+  tab: 'levels', statCat: 'all', band: null, statSort: { key: 'name', dir: 1 },
   meds: {}, medsDefault: {}, sortStale: false, statEdits: {}, statSaved: {}, statsFile: null, serverMod: false, statSources: [],
 };
 
@@ -113,13 +113,14 @@ function restoreUi() {
   if (u.sort) S.sort = u.sort;
   if (u.tab) S.tab = u.tab;
   if (u.statCat) S.statCat = u.statCat;
+  if (u.statSort) S.statSort = u.statSort;
   S.showHidden = !!u.showHidden;
   if (u.left) document.documentElement.style.setProperty('--left', clamp(u.left, 200, 420) + 'px');
   if (u.right) document.documentElement.style.setProperty('--right', clamp(u.right, 340, 900) + 'px');
 }
 let uiTimer = 0;
 function saveUi() {
-  Object.assign(S.ui, { cat: S.cat, filter: S.filter, sort: S.sort, showHidden: S.showHidden, tab: S.tab, statCat: S.statCat });
+  Object.assign(S.ui, { cat: S.cat, filter: S.filter, sort: S.sort, showHidden: S.showHidden, tab: S.tab, statCat: S.statCat, statSort: S.statSort });
   clearTimeout(uiTimer);
   uiTimer = setTimeout(() => host.call('saveUi', { ui: S.ui }).catch(() => { }), 400);
 }
@@ -216,7 +217,7 @@ function matches(it, q) {
 
 function shownItems() {
   const q = S.search.trim().toLowerCase();
-  let list = catItems(S.cat).filter(it => matches(it, q));
+  let list = catItems(S.cat).filter(it => matches(it, q) && tagPass(it.i));
   if (S.filter === 'limited') list = list.filter(it => isLimited(it.i));
   else if (S.filter === 'free') list = list.filter(it => !isLimited(it.i));
   if (S.band) list = list.filter(it => { const l = levelOf(it.i); return l !== undefined && l >= S.band[0] && l <= S.band[1]; });
@@ -233,6 +234,7 @@ function shownItems() {
     cat: (a, b) => d * (GROUPS.findIndex(g => g[0] === groupOf(a)) - GROUPS.findIndex(g => g[0] === groupOf(b))) || byName(a, b),
     price: (a, b) => d * (priceOf(a) - priceOf(b)) || byName(a, b),
     changed: (a, b) => Number(isChanged(b.i)) - Number(isChanged(a.i)) || byName(a, b),
+    custom: customCmp('levels'),
   }[S.sort.key] || ((a, b) => byName(a, b));
   return list.sort(cmp);
 }
@@ -291,8 +293,8 @@ function renderHeader() {
       (lv.length ? ` · Levels ${Math.min(...lv)}–${Math.max(...lv)}` : '');
   }
   $('#chips').hidden = mods;
-  document.querySelector('#chips .view-btn').hidden = S.tab === 'stats';
-  $('#viewLabel').textContent = S.tab === 'stats' ? 'Name' : (SORTS.find(s => s[0] === S.sort.key) || SORTS[0])[1];
+
+  $('#viewLabel').textContent = S.tab === 'stats' ? (STAT_SORTS.find(s => s[0] === S.statSort.key) || STAT_SORTS[1])[1] : (SORTS.find(s => s[0] === S.sort.key) || SORTS[1])[1];
   const box = $('#searchBox'), input = $('#search');
   if (document.activeElement !== input) input.value = S.search;
   box.classList.toggle('has', !!input.value);
@@ -320,6 +322,7 @@ function rowHtml(it, n) {
     it.off ? `<span class="badge" style="--c:var(--orange)" title="Its mod is switched off in Mods">MOD OFF</span>` : '',
     it.unknown ? `<span class="badge" style="--c:var(--red)" title="No loaded item has this id (a mod that isn't imported, or was removed)">UNKNOWN</span>` : '',
     it.x ? `<span class="badge" style="--c:#9a9a9a" title="A dev / template item players don't normally get">HIDDEN</span>` : '',
+    tagBadges(id),
   ].join('');
   const price = priceOf(it);
   return `<div class="row ${id === S.sel ? 'sel' : ''} ${S.picked.has(id) ? 'picked' : ''} ${isChanged(id) ? 'changed' : ''}" data-row="${id}">
@@ -351,7 +354,7 @@ function updateRow(id) {
 }
 
 function listHead() {
-  const cols = [['', '#'], ['name', 'Item'], ['cat', 'Category'], ['', 'Stats'], ['price', 'Price'], ['level', 'Level']];
+  const cols = [['custom', '#'], ['name', 'Item'], ['cat', 'Category'], ['', 'Stats'], ['price', 'Price'], ['level', 'Level']];
   return `<div class="list-head">${cols.map(([k, t]) => k && k !== ''
     ? `<div><span class="head-text sortable ${S.sort.key === k ? 'on' : ''}" data-act="sortBy" data-arg="${k}">${t}${S.sort.key === k ? `<span class="sort-arrow">${S.sort.dir > 0 ? '▲' : '▼'}</span>` : ''}</span></div>`
     : `<div>${t}</div>`).join('')}</div>`;
@@ -376,7 +379,7 @@ function renderPage(keepScroll = true) {
       <button class="outline" data-act="addId" title="Add a limit by item id (for items not in the list)">+ Add by ID</button>
       <button class="outline resort ${S.sortStale ? 'stale' : ''}" id="resortBtn" data-act="resort" ${S.sortStale ? '' : 'disabled'} title="Sort the list again (levels you changed stay where they are until then)">⟳ Re-sort</button>
       <span class="muted small">${fmt(list.length)} shown${n ? ` · ${n} picked` : ''}</span>
-    </div>
+    </div>${tagBar(catItems(S.cat).filter(it => matches(it, S.search.trim().toLowerCase())).map(it => it.i))}
     <div class="list lg" data-list="items">${listHead()}${rows || `<div class="empty">${S.items.size || S.levels.size ? 'Nothing matches.' : 'No items loaded — pick the config file with Browse… (the item list comes from the SPT folder above it).'}</div>`}
     ${list.length > S.limit ? `<button class="more" data-act="more">Show ${fmt(Math.min(300, list.length - S.limit))} more (${fmt(list.length - S.limit)} left)</button>` : ''}</div>`;
   page.scrollTop = keepScroll ? top : 0;
@@ -388,7 +391,7 @@ function renderDetails() {
   const picked = [...S.picked];
   if (S.page === 'mods') { $('#detailsTitle').textContent = 'Mods'; d.innerHTML = modsHelp(); return; }
   if (S.tab === 'stats') { statsDetails(); return; }
-  if (picked.length > 1) { $('#detailsTitle').textContent = `${picked.length} Items Picked`; d.innerHTML = overall() + multiDetails(picked); return; }
+  if (picked.length > 1) { $('#detailsTitle').textContent = `${picked.length} Items Picked`; d.innerHTML = overall() + multiDetails(picked) + tagCard(picked); return; }
   if (!S.sel) {
     $('#detailsTitle').textContent = 'LevelGate Editor';
     d.innerHTML = overall(true) + welcome();
@@ -415,6 +418,7 @@ function renderDetails() {
       <div class="hint">${lvl === undefined ? 'Anyone can use it.' : lvl === 1 ? 'Level 1 = usable from the start, but tracked (green stripes).' : `Players below level ${lvl} can't use, equip or load it (red stripes); from level ${lvl} on it's unlocked (green).`}</div>
     </div>
     ${statsCard(it)}
+    ${tagCard([it.i])}
     <div class="card">
       <h3>Item</h3>
       <div class="field"><label>Name</label><div>${esc(it.n)}</div></div>
@@ -738,7 +742,9 @@ function sortMenu(anchor) {
   pop.className = 'popover menu2';
   const draw = () => {
     pop.innerHTML = menuHtml([
-      { title: 'Sort By', items: SORTS.map(([k, n]) => ({ key: 'sort:' + k, text: n + (S.sort.key === k ? (S.sort.dir > 0 ? '  ▲' : '  ▼') : ''), on: S.sort.key === k })) },
+      S.tab === 'stats'
+        ? { title: 'Sort By', items: STAT_SORTS.map(([k, n]) => ({ key: 'ssort:' + k, text: n + (S.statSort.key === k && k !== 'custom' ? (S.statSort.dir > 0 ? '  ▲' : '  ▼') : ''), on: S.statSort.key === k })) }
+        : { title: 'Sort By', items: SORTS.map(([k, n]) => ({ key: 'sort:' + k, text: n + (S.sort.key === k && k !== 'custom' ? (S.sort.dir > 0 ? '  ▲' : '  ▼') : ''), on: S.sort.key === k })) },
       { title: 'Show', items: [{ key: 'hidden', text: 'Dev / Hidden Items', on: S.showHidden }] },
     ]);
   };
@@ -748,6 +754,7 @@ function sortMenu(anchor) {
     if (!b) return;
     const v = b.dataset.v;
     if (v.startsWith('sort:')) ACT.sortBy(v.slice(5));
+    else if (v.startsWith('ssort:')) ACT.statSortBy(v.slice(6));
     else if (v === 'hidden') { S.showHidden = !S.showHidden; saveUi(); renderAll(); }
     draw();
   });

@@ -456,6 +456,9 @@ public sealed class HostForm : Form
                     ["m"] = mod.Name,
                 };
                 if (mod.Enabled) { items.Add(node); count++; }
+                _stats.AddModItems(new[] { it });
+                if (_stats.Show.TryGetValue(it.Id, out var mst)) node["st"] = mst.DeepClone();
+                if (_stats.Meds.TryGetValue(it.Id, out var mmed)) node["mk"] = (string?)mmed["kind"];
                 else off.Add(node);
             }
         }

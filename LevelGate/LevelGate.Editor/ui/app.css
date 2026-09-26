@@ -139,3 +139,7 @@
 
 /* right-click menu */
 .popover.ctx { max-height: 70vh; overflow-y: auto; }
+
+/* tags */
+.badge.tagb { cursor: context-menu; }
+.toolbar.tagbar { position: static; padding: 0 0 8px; }

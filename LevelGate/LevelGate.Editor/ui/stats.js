@@ -23,6 +23,7 @@ const BUFF_NAME = Object.fromEntries(BUFFS);
 const SKILLS = ['Endurance', 'Strength', 'Vitality', 'Health', 'StressResistance', 'Metabolism', 'Immunity', 'Perception', 'Intellect', 'Attention',
   'Charisma', 'Memory', 'RecoilControl', 'Surgery', 'AimDrills', 'Throwing', 'CovertMovement', 'Search', 'Sniping', 'ProneMovement', 'LightVests', 'HeavyVests',
   'WeaponTreatment', 'TroubleShooting', 'MagDrills', 'FieldMedicine', 'FirstAid', 'Crafting', 'HideoutManagement'];
+const STAT_SORTS = [['custom', 'Custom Order'], ['name', 'Name'], ['type', 'Type'], ['level', 'Level'], ['edited', 'Edited First']];
 const KEEP = ['medUseTime', 'MaxHpResource', 'hpResourceRate', 'foodUseTime', 'MaxResource', 'effects_health', 'effects_damage', 'buffName', 'effects_buffs'];
 
 const r2 = n => Math.round(n * 100) / 100;
@@ -133,7 +134,7 @@ function statsCard(it) {
     else if (kind === 'food') { if (m.MaxResource > 1) row('Uses', m.MaxResource); }
     else if (m.MaxHpResource > 1) row('Uses', m.MaxHpResource);
     const health = healthText(m);
-    if (health.length) row(kind === 'food' ? 'Gives' : 'Also', esc(health.join(', ')));
+    if (health.length) row(kind === 'food' ? 'Gives' : 'Also', esc(health.join(', ')) + (kind === 'food' && m.MaxResource > 1 ? ` <span class="muted small">(whole item, ${m.MaxResource} units — drinking / eating part gives that share)</span>` : ''));
     const cures = curesText(m, kind);
     if (cures.length) row(kind === 'medkit' ? 'Treats' : 'Removes', esc(cures.join(', ')));
     const buffs = m.effects_buffs || [];
@@ -155,8 +156,14 @@ function statIds(cat) {
     if (!it || (it.x && !S.statEdits[id] && !S.showHidden)) return false;
     if (cat === 'edited') return !!S.statEdits[id];
     if (cat !== 'all' && S.meds[id].kind !== cat) return false;
-    return !q || matches(it, q);
+    return (!q || matches(it, q)) && tagPass(id);
   });
+}
+
+/** Food: the value is for the whole item; drinking part of it gives that share ("≈ 1 per unit"). */
+function wholeItemHint(m, f) {
+  const v = Number(m.effects_health?.[f]?.value), n = Number(m.MaxResource) || 1;
+  return n > 1 && v ? `whole item · ≈ ${r2(v / n)} per unit (${n} units)` : 'whole item';
 }
 
 function statChanges() {
@@ -186,17 +193,27 @@ function statsNav() {
 }
 
 function statsPage() {
-  const ids = statIds(S.statCat).sort((a, b) => (S.items.get(a).n || '').localeCompare(S.items.get(b).n || ''));
-  S.shown = ids.map(id => S.items.get(id));
+  const d = S.statSort.dir, byName = (a, b) => (a.n || '').localeCompare(b.n || '');
+  const kindIx = it => MED_KINDS.findIndex(k => k[0] === S.meds[it.i].kind);
+  const cmp = {
+    custom: customCmp('stats'),
+    name: (a, b) => d * byName(a, b),
+    type: (a, b) => d * (kindIx(a) - kindIx(b)) || byName(a, b),
+    level: (a, b) => { const la = levelOf(a.i), lb = levelOf(b.i); if (la === undefined && lb === undefined) return byName(a, b); if (la === undefined) return 1; if (lb === undefined) return -1; return d * (la - lb) || byName(a, b); },
+    edited: (a, b) => Number(!!S.statEdits[b.i]) - Number(!!S.statEdits[a.i]) || byName(a, b),
+  }[S.statSort.key] || ((a, b) => byName(a, b));
+  S.shown = statIds(S.statCat).map(id => S.items.get(id)).sort(cmp);
+  const ids = S.shown.map(it => it.i);
+  const head = ([k, t]) => `<div><span class="head-text sortable ${S.statSort.key === k ? 'on' : ''}" data-act="statSortBy" data-arg="${k}">${t}${S.statSort.key === k && k !== 'custom' ? `<span class="sort-arrow">${d > 0 ? '▲' : '▼'}</span>` : ''}</span></div>`;
   const warn = !S.serverMod
     ? `<div class="warn-line">⚠ The ItemStatEditor server mod wasn't found in ${esc(S.statsFile ? S.statsFile.replace(/[\\/]item_stats\.json$/, '') : 'SPT\\user\\mods\\ItemStatEditor')} — item stat edits are saved but only take effect with it installed (ItemStatEditor.Server.dll from the download).</div>` : '';
   const rows = ids.map((id, i) => {
     const it = S.items.get(id), m = effMed(id), k = MED_KIND[m.kind];
     const changed = JSON.stringify(S.statEdits[id] ?? null) !== JSON.stringify(S.statSaved[id] ?? null);
-    return `<div class="row ${id === S.sel ? 'sel' : ''} ${changed ? 'changed' : ''}" data-row="${id}">
+    return `<div class="row ${id === S.sel ? 'sel' : ''} ${S.picked.has(id) ? 'picked' : ''} ${changed ? 'changed' : ''}" data-row="${id}">
       <div class="idx">${i + 1}</div>
       <div class="cell">${icon(it)}<div class="text"><div class="line1"><span class="title">${esc(it.n)}</span><span class="dirty" title="Changed — not saved yet">•</span>
-        <div class="badges">${S.statEdits[id] ? '<span class="badge" style="--c:var(--violet)">EDITED</span>' : ''}${it.m ? `<span class="badge" style="--c:var(--pink)">${esc(it.m)}</span>` : ''}</div></div>
+        <div class="badges">${S.statEdits[id] ? '<span class="badge" style="--c:var(--violet)">EDITED</span>' : ''}${it.m ? `<span class="badge" style="--c:var(--pink)">${esc(it.m)}</span>` : ''}${tagBadges(id)}</div></div>
         <div class="line2">${esc(it.s || '')}</div></div></div>
       <div class="col"><i class="dot" style="--c:${k.color}"></i>${esc(k.name)}</div>
       <div class="col stats" title="${esc(statsShort(it))}">${esc(statsShort(it).replace(/ · ✎$/, ''))}</div>
@@ -204,13 +221,24 @@ function statsPage() {
     </div>`;
   }).join('');
   return `<div class="toolbar sticky">${warn}
-      <span class="muted small">${fmt(ids.length)} shown · edits apply after restarting the SPT server${S.statSources.length ? ` · your edits win over ${esc(S.statSources.map(x => x.replace(/ \(.*/, '')).join(' and '))}` : ''}</span></div>
-    <div class="list st">${`<div class="list-head"><div>#</div><div>Item</div><div>Type</div><div>Effects</div><div>Level</div></div>`}${rows || `<div class="empty">${Object.keys(S.meds).length ? 'Nothing matches.' : 'No meds loaded — the stats come from the SPT database (pick the config inside your SPT folder).'}</div>`}</div>`;
+      <span class="muted small">${fmt(ids.length)} shown${S.picked.size > 1 ? ` · ${S.picked.size} picked` : ''} · Ctrl+drag to reorder · edits apply after restarting the SPT server${S.statSources.length ? ` · your edits win over ${esc(S.statSources.map(x => x.replace(/ \(.*/, '')).join(' and '))}` : ''}</span></div>
+    ${tagBar(statIds(S.statCat))}
+    <div class="list st"><div class="list-head">${head(['custom', '#'])}${head(['name', 'Item'])}${head(['type', 'Type'])}<div>Effects</div>${head(['level', 'Level'])}</div>${rows || `<div class="empty">${Object.keys(S.meds).length ? 'Nothing matches.' : 'No meds loaded — the stats come from the SPT database (pick the config inside your SPT folder).'}</div>`}</div>`;
 }
 
 // ---- the editor (right panel)
 function statsDetails() {
   const d = $('#details');
+  const picked = [...S.picked].filter(x => S.meds[x]);
+  if (picked.length > 1) {
+    $('#detailsTitle').textContent = `${picked.length} Items Picked`;
+    const edited = picked.filter(x => S.statEdits[x]).length, notDefault = picked.filter(x => !sameAsDefault(x)).length;
+    d.innerHTML = `<div class="card"><h3>All Picked</h3><div class="hint">${edited} edited by you · ${notDefault} differ from Escape From Tarkov's values.</div>
+        <div class="toolbar" style="padding:4px 0 0"><button class="outline" data-act="statManyDefault" ${notDefault ? '' : 'disabled'}>Reset All to EFT Default</button><button class="outline" data-act="statManyUndo" ${edited ? '' : 'disabled'}>Undo My Edits</button></div></div>
+      <div class="card"><h3>Picked</h3><div class="mini">${picked.map(x => { const it = S.items.get(x); return `<div class="row" data-act="selOnly" data-arg="${x}"><div class="cell">${icon(it)}<div class="text"><div class="title">${esc(it.n)}</div></div><span class="side">${esc(statsShort(it).replace(/ · ✎$/, ''))}</span></div></div>`; }).join('')}</div></div>
+      ${tagCard(picked)}`;
+    return;
+  }
   const id = S.sel && S.meds[S.sel] ? S.sel : null;
   if (!id) {
     $('#detailsTitle').textContent = 'Item Stats';
@@ -227,7 +255,7 @@ function statsDetails() {
   const resource = kind === 'medkit' ? num('HP Resource', 'hp', 'MaxHpResource', 1, 'total HP it can heal') + num('HP per Use', 'rate', 'hpResourceRate', 1, 'most it heals in one use')
     : kind === 'food' ? num('Uses', 'res', 'MaxResource', 1) : num('Uses', 'hp', 'MaxHpResource', 1);
   const useField = kind === 'food' ? 'foodUseTime' : 'medUseTime';
-  const health = HEALTH.map(([f, n]) => `<div class="field"><label>${n} ${defNote(m.effects_health?.[f]?.value, def.effects_health?.[f]?.value)}</label><div class="numrow"><input type="number" step="1" data-key="eh-${f}" data-eh="${f}" value="${m.effects_health?.[f]?.value ?? ''}" placeholder="none"><span class="muted small">${kind === 'food' ? 'per use' : 'when used'}</span></div></div>`).join('');
+  const health = HEALTH.map(([f, n]) => `<div class="field"><label>${n} ${defNote(m.effects_health?.[f]?.value, def.effects_health?.[f]?.value)}</label><div class="numrow"><input type="number" step="1" data-key="eh-${f}" data-eh="${f}" value="${m.effects_health?.[f]?.value ?? ''}" placeholder="none"><span class="muted small">${kind === 'food' ? wholeItemHint(m, f) : 'when used'}</span></div></div>`).join('');
   const dmg = DAMAGE.map(([t, n]) => {
     const e = m.effects_damage?.[t], de = def.effects_damage?.[t];
     const on = !!e;
@@ -254,7 +282,8 @@ function statsDetails() {
     <div class="card"><h3>Effects Over Time<span class="grow"></span><button class="outline small-btn" data-act="buffAdd">+ Add Effect</button></h3>
       ${m.buffName ? `<div class="hint">Buff list "${esc(m.buffName)}"${sharing.length ? ` — also used by ${esc(sharing.join(', '))}, which change with it` : ''}.</div>` : '<div class="hint">No effects over time yet (stims, some food). Adding one creates a list just for this item.</div>'}
       ${buffs || ''}
-      ${JSON.stringify(m.effects_buffs || []) !== JSON.stringify(def.effects_buffs || []) ? `<div class="def-list"><div class="def">Escape From Tarkov default:</div>${(def.effects_buffs || []).map(b => `<div>${esc(buffText(b))}</div>`).join('') || '<div>no effects</div>'}</div>` : ''}</div>`;
+      ${JSON.stringify(m.effects_buffs || []) !== JSON.stringify(def.effects_buffs || []) ? `<div class="def-list"><div class="def">Escape From Tarkov default:</div>${(def.effects_buffs || []).map(b => `<div>${esc(buffText(b))}</div>`).join('') || '<div>no effects</div>'}</div>` : ''}</div>
+    ${tagCard([id])}`;
   if (keep) d.querySelector(`[data-key="${keep}"]`)?.focus();
 }
 
@@ -285,6 +314,12 @@ function afterStat(id) {
 }
 
 Object.assign(ACT, {
+  statSortBy(key) {
+    S.statSort = S.statSort.key === key && key !== 'custom' ? { key, dir: -S.statSort.dir } : { key, dir: key === 'edited' ? -1 : 1 };
+    saveUi(); renderPage(); renderHeader();
+  },
+  statManyDefault() { const ids = [...S.picked].filter(x => S.meds[x]); ids.forEach(x => ACT.statResetDefault(x)); toast(`${ids.length} reset to Escape From Tarkov's values`); },
+  statManyUndo() { const ids = [...S.picked].filter(x => S.statEdits[x]); ids.forEach(x => { S.sel = x; ACT.statReset(); }); toast(`${ids.length} edit(s) undone`); },
   statCat(key) { S.statCat = key; S.page = 'items'; saveUi(); renderAll(); $('#page').scrollTop = 0; },
   editStats(id) { S.tab = 'stats'; S.statCat = 'all'; S.sel = id; S.picked = new Set(); saveUi(); renderAll(); document.querySelector(`#page .row[data-row="${id}"]`)?.scrollIntoView({ block: 'center' }); },
   statResetDefault(id) {

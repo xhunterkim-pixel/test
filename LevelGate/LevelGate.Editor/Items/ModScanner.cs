@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 
 namespace LevelGate.Editor;
@@ -8,6 +9,10 @@ public sealed record ModItem(string Id, string Name, string ShortName, ItemCateg
 {
     public string Group { get; init; } = "Other";
     public string WeaponClass { get; init; } = "";
+    /// <summary>What the mod says about the item: its _props, or the cloned item + overrideProperties (for the stats).</summary>
+    public string? CloneOf { get; init; }
+    public string? Parent { get; init; }
+    public JsonObject? Props { get; init; }
 }
 
 /// <summary>
@@ -28,6 +33,7 @@ public static class ModScanner
     {
         public string? Name, ShortName, Internal, Parent, Clone, Caliber;
         public double? Handbook;
+        public JsonObject? Props;
     }
 
     public static List<ModItem> Scan(string folder, ItemDatabase db)
@@ -66,6 +72,7 @@ public static class ModScanner
             {
                 Group = db.GroupFor(r.Clone, r.Parent),
                 WeaponClass = category != ItemCategory.Weapon ? "" : clone?.WeaponClass ?? ItemGroups.WeaponClasses.FirstOrDefault(w => w.Class == r.Parent).Key ?? "",
+                CloneOf = r.Clone, Parent = r.Parent, Props = r.Props,
             });
         }
         return result.OrderBy(i => i.Name).ToList();
@@ -105,7 +112,11 @@ public static class ModScanner
         r.Clone ??= Str(def, "itemTplToClone");
         r.Parent ??= Str(def, "parentId");
         r.Handbook ??= Num(def, "handbookPriceRoubles");
-        if (Obj(def, "overrideProperties") is { } over) r.Caliber ??= Str(over, "Caliber", "ammoCaliber");
+        if (Obj(def, "overrideProperties") is { } over)
+        {
+            r.Caliber ??= Str(over, "Caliber", "ammoCaliber");
+            r.Props ??= JsonNode.Parse(over.GetRawText()) as JsonObject;
+        }
         if (Obj(def, "locales") is { } locales)
         {
             var en = Obj(locales, "en") ?? (locales.EnumerateObject().FirstOrDefault(p => p.Value.ValueKind == JsonValueKind.Object).Value is { ValueKind: JsonValueKind.Object } any ? any : null);
@@ -148,7 +159,11 @@ public static class ModScanner
                     var r = Get(raws, p.Name);
                     r.Parent ??= Str(v, "_parent");
                     r.Internal ??= Str(v, "_name");
-                    if (Obj(v, "_props") is { } pr) r.Caliber ??= Str(pr, "Caliber", "ammoCaliber");
+                    if (Obj(v, "_props") is { } pr)
+                    {
+                        r.Caliber ??= Str(pr, "Caliber", "ammoCaliber");
+                        r.Props ??= JsonNode.Parse(pr.GetRawText()) as JsonObject;
+                    }
                     continue;
                 }
                 if (Str(v, "itemTplToClone") != null || Obj(v, "overrideProperties") != null || Obj(v, "locales") != null)

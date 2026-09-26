@@ -46,40 +46,12 @@ public sealed class ItemStats
         foreach (var (id, p) in props)
         {
             if (!db.Items.ContainsKey(id)) continue;
-            var show = new JsonObject();
-            if (db.HasAncestor(id, Ammo))
-            {
-                Num(show, "pen", p["PenetrationPower"]); Num(show, "dmg", p["Damage"]); Num(show, "ad", p["ArmorDamage"]);
-                Num(show, "v", p["InitialSpeed"]); Num(show, "frag", p["FragmentationChance"]);
-                if (D(p["ProjectileCount"]) is > 1 and var pc) show["pc"] = pc;
-            }
-            // armor class: the item's own, or the best of its default plates / soft inserts
-            int ac = I(p["armorClass"]);
-            if (p["Slots"] is JsonArray slots)
-                foreach (var slot in slots)
-                    if (slot?["_props"]?["filters"] is JsonArray filters)
-                        foreach (var f in filters)
-                            if ((string?)f?["Plate"] is { Length: > 0 } plate && props.TryGetValue(plate, out var pp)) ac = Math.Max(ac, I(pp["armorClass"]));
-            if (ac > 0) show["ac"] = ac;
-            if (D(p["MaxDurability"]) is > 0 and var dur && ac > 0) show["dur"] = dur;
-            if (p["Grids"] is JsonArray grids && grids.Count > 0)
-            {
-                int cells = 0;
-                foreach (var g in grids) cells += I(g?["_props"]?["cellsH"]) * I(g?["_props"]?["cellsV"]);
-                if (cells > 0) show["slots"] = cells;
-            }
-            // ammo packs: what's inside ("20 × M855")
-            if (db.HasAncestor(id, AmmoBox) && p["StackSlots"] is JsonArray stack && stack.Count > 0)
-            {
-                var slot = stack[0];
-                string? inside = (string?)slot?["_props"]?["filters"]?[0]?["Filter"]?[0];
-                int count = I(slot?["_max_count"]);
-                if (inside != null) { show["of"] = inside; if (count > 0) show["pack"] = count; }
-            }
+            var show = ShowOf(p, db.HasAncestor(id, Ammo), db.HasAncestor(id, AmmoBox), props);
             var kind = MedKind(db, id);
             if (kind != null) { Meds[id] = MedBase(p, kind, buffs); Defaults[id] = (JsonObject)Meds[id].DeepClone(); }
             if (show.Count > 0) Show[id] = show;
         }
+        _props = props; _buffs = buffs; _db = db;
         if (modsRoot != null && Directory.Exists(modsRoot))
         {
             ApplyItemPropertyBackport(modsRoot, db);
@@ -88,6 +60,76 @@ public sealed class ItemStats
     }
 
     // ------------------------------------------------------------------ vanilla values
+
+    private Dictionary<string, JsonObject> _props = new();
+    private Dictionary<string, JsonArray> _buffs = new();
+    private ItemDatabase? _db;
+
+    /// <summary>List stats of one item from its _props.</summary>
+    private static JsonObject ShowOf(JsonObject p, bool ammo, bool ammoBox, Dictionary<string, JsonObject> props)
+    {
+        var show = new JsonObject();
+        if (ammo)
+        {
+            Num(show, "pen", p["PenetrationPower"]); Num(show, "dmg", p["Damage"]); Num(show, "ad", p["ArmorDamage"]);
+            Num(show, "v", p["InitialSpeed"]); Num(show, "frag", p["FragmentationChance"]);
+            if (D(p["ProjectileCount"]) is > 1 and var pc) show["pc"] = pc;
+        }
+        // armor class: the item's own, or the best of its default plates / soft inserts
+        int ac = I(p["armorClass"]);
+        if (p["Slots"] is JsonArray slots)
+            foreach (var slot in slots)
+                if (slot?["_props"]?["filters"] is JsonArray filters)
+                    foreach (var f in filters)
+                        if ((string?)f?["Plate"] is { Length: > 0 } plate && props.TryGetValue(plate, out var pp)) ac = Math.Max(ac, I(pp["armorClass"]));
+        if (ac > 0) show["ac"] = ac;
+        if (D(p["MaxDurability"]) is > 0 and var dur && ac > 0) show["dur"] = dur;
+        if (p["Grids"] is JsonArray grids && grids.Count > 0)
+        {
+            int cells = 0;
+            foreach (var g in grids) cells += I(g?["_props"]?["cellsH"]) * I(g?["_props"]?["cellsV"]);
+            if (cells > 0) show["slots"] = cells;
+        }
+        // ammo packs: what's inside ("20 × M855")
+        if (ammoBox && p["StackSlots"] is JsonArray stack && stack.Count > 0)
+        {
+            var slot = stack[0];
+            string? inside = (string?)slot?["_props"]?["filters"]?[0]?["Filter"]?[0];
+            int count = I(slot?["_max_count"]);
+            if (inside != null) { show["of"] = inside; if (count > 0) show["pack"] = count; }
+        }
+        return show;
+    }
+
+    /// <summary>
+    /// Items added by other mods: their stats from what the mod says (its _props, or the cloned
+    /// item with the mod's overrideProperties). The mod's values count as their "default".
+    /// </summary>
+    public void AddModItems(IEnumerable<ModItem> items)
+    {
+        if (_db == null) return;
+        foreach (var it in items)
+        {
+            if (_db.Items.ContainsKey(it.Id)) continue;
+            JsonObject p;
+            if (it.CloneOf != null && _props.TryGetValue(it.CloneOf, out var baseProps))
+            {
+                p = (JsonObject)baseProps.DeepClone();
+                if (it.Props != null) foreach (var (k, v) in it.Props) p[k] = v?.DeepClone();
+            }
+            else if (it.Props != null) p = (JsonObject)it.Props.DeepClone();
+            else continue;
+            // kind: from the cloned item, or the parent class
+            string anchor = it.CloneOf ?? it.Parent ?? "";
+            bool Is(string cls) => anchor == cls || _db.HasAncestor(anchor, cls) || it.Parent == cls || (it.Parent != null && _db.HasAncestor(it.Parent, cls));
+            var show = ShowOf(p, Is(Ammo), Is(AmmoBox), _props);
+            if (show.Count > 0) Show[it.Id] = show;
+            string? kind = Is(Medkit) ? "medkit" : Is(Stimulator) ? "stim" : Is(Drugs) ? "drug" : Is(Medical) ? "medical" : Is(Food) || Is(Drink) ? "food" : null;
+            if (kind == null) continue;
+            Meds[it.Id] = MedBase(p, kind, _buffs);
+            Defaults[it.Id] = (JsonObject)Meds[it.Id].DeepClone();
+        }
+    }
 
     private static Dictionary<string, JsonArray> LoadBuffs(string globalsPath)
     {
