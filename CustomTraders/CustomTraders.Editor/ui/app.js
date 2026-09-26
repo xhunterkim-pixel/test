@@ -50,7 +50,7 @@ const BOSSES = [
   ['bossPartisan', 'Partisan'], ['sectantPriest', 'Cultist Priest'], ['pmcBot', 'Raider'], ['exUsec', 'Rogue'],
 ];
 const REWARD_TYPES = [
-  ['Experience', 'XP', '#a082ff'], ['TraderStanding', 'Standing', '#509bf5'], ['Item', 'Item', '#ffa42b'], ['UnlockOffer', 'Unlock Offer', '#1ed760'],
+  ['Experience', 'XP', '#a082ff'], ['TraderStanding', 'Standing', '#509bf5'], ['Money', 'Money', '#f5cd46'], ['Item', 'Item', '#ffa42b'], ['UnlockOffer', 'Unlock Offer', '#1ed760'],
   ['Skill', 'Skill XP', '#f5cd46'], ['StashRows', 'Stash Rows', '#ff7ab6'],
 ];
 const CATEGORY_FILTERS = [
@@ -316,6 +316,7 @@ function applyItems(snap) {
   S.itemsStatus = snap.itemsStatus || '';
   S.traderRate = snap.traderRate || S.traderRate || 60;
   if (snap.gameQuestImages) S.gameQuestImages = snap.gameQuestImages;
+  if (snap.gameQuestImagesLooked !== undefined) S.gameQuestImagesLooked = snap.gameQuestImagesLooked;
   S.mods = snap.mods || [];
   S.modOff = new Map((snap.modItemsOff || []).map(i => [i.i, i]));
   S.modMemory = snap.modMemory || {};
@@ -598,11 +599,20 @@ function patchNodes(parent, next) {
     const o = olds[i], n = news[i];
     if (!o) { parent.appendChild(n); continue; }
     if (o.isEqualNode(n)) continue;
-    // same kind of container (list, row…): keep it and patch inside, so unchanged pictures stay loaded
-    if (o.nodeType === 1 && n.nodeType === 1 && o.tagName === n.tagName && o.className === n.className && o.tagName === 'DIV' && n.childNodes.length && !o.querySelector('input,textarea,select')) {
+    if (o.nodeType === 3 && n.nodeType === 3) { o.nodeValue = n.nodeValue; continue; }
+    if (o.nodeType === 1 && n.nodeType === 1 && o.tagName === n.tagName && (o.type || '') === (n.type || '')) {
+      // same element: keep it (and its focus, caret, loaded picture), bring over what changed
       for (const a of [...o.attributes]) if (!n.hasAttribute(a.name)) o.removeAttribute(a.name);
       for (const a of [...n.attributes]) if (o.getAttribute(a.name) !== a.value) o.setAttribute(a.name, a.value);
+      const focused = o === document.activeElement;
+      if (o.tagName === 'INPUT') {
+        if (o.type === 'checkbox') o.checked = n.hasAttribute('checked');
+        else if (!focused) o.value = n.getAttribute('value') ?? '';
+        continue;
+      }
+      if (o.tagName === 'TEXTAREA') { if (!focused) o.value = n.textContent; continue; }
       patchNodes(o, n);
+      if (o.tagName === 'SELECT') { const sel = [...n.children].findIndex(x => x.hasAttribute('selected')); if (sel >= 0) o.selectedIndex = sel; }
       continue;
     }
     parent.replaceChild(n, o);
@@ -946,7 +956,8 @@ function renderDetails(animate, toTop) {
   else if (S.page === 'offers') [title, html] = detailsOffer();
   else [title, html] = detailsQuest();
   $('#detailsTitle').textContent = title;
-  box.innerHTML = html;
+  if (animate || toTop) box.innerHTML = html;
+  else patchChildren(box, html);
   box.scrollTop = toTop ? 0 : scroll;
   if (animate) animateIn(box);
 }
@@ -1176,6 +1187,7 @@ function detailsQuest() {
       <div class="field top"><label>Picture</label><div>
         ${pic ? `<img class="preview" src="${esc(pic.url)}" alt="">` : ''}
         ${ui.hint(pic?.kind === 'mine' ? 'Your own picture.' : pic?.kind === 'game' ? "One of the game's quest pictures." : pic ? "No picture picked — the game's default picture is used." : 'No picture — the game shows its default one.')}
+        ${S.gameQuestImages.length ? '' : ui.hint(`The game's quest pictures weren't found${S.gameQuestImagesLooked ? ` (looked for an images\\quests folder in ${esc(S.gameQuestImagesLooked)})` : ''}. Point the editor at your SPT_Runtime\\user\\mods\\CustomTraders folder with Browse… if it isn't already.`)}
         <div class="toolbar" style="padding:0">
           ${S.gameQuestImages.length ? '<button class="primary" data-act="pickGameImage">Pick a Game Picture…</button><button class="outline" data-act="randomGameImage" title="Another random game picture">🎲 Random</button>' : ''}
           <button class="outline" data-act="chooseQuestImage">From PC…</button>
@@ -1338,18 +1350,26 @@ function caliberList(list) {
     <div class="toolbar" style="margin-top:6px"><button class="outline" data-act="pickCaliber" data-arg="${lk}">+ Add Ammo…</button></div></div>`;
 }
 
+/** Money rewards are Item rewards of a currency — shown as their own type. */
+const rewardKind = r => (r.type === 'Item' && isMoney(r.itemTpl) ? 'Money' : r.type);
+
 function rewardEditor(t, r) {
   const offers = t.file.offers.map(o => [o.id, `${itemName(o.itemTpl)} — ${costText(o)}`]);
   const offer = t.file.offers.find(o => o.id === r.offerId);
   return `<div style="margin-top:14px">
-    ${ui.chips('Type', REWARD_TYPES, () => r.type, v => {
-      if (v === r.type) return;
+    ${ui.chips('Type', REWARD_TYPES, () => rewardKind(r), v => {
+      if (v === rewardKind(r)) return;
+      if (v === 'Money') { r.type = 'Item'; r.itemTpl = traderMoney(); r.count = r.itemTpl === CUR.RUB ? 25000 : 200; r.foundInRaid = false; return; }
+      if (v === 'Item' && isMoney(r.itemTpl)) { r.itemTpl = ''; r.count = 1; r.foundInRaid = true; }
       r.type = v;
       r.value = { Experience: 1000, TraderStanding: 0.02, Skill: 100, StashRows: 1 }[v] ?? r.value; // sensible starting value
     })}
+    ${rewardKind(r) === 'Money' ? ui.chips('Currency', [[CUR.RUB, '₽ Roubles'], [CUR.USD, '$ Dollars'], [CUR.EUR, '€ Euros'], [CUR.GP, 'GP Coins'], [CUR.LEGA, 'Lega Medals']], () => r.itemTpl, v => { r.itemTpl = v; }) +
+      ui.num('Amount', () => r.count, v => { r.count = v; }, { min: 1, max: 1e9, step: r.itemTpl === CUR.RUB ? 1000 : 10 }) +
+      ui.toggle('Give It When the Quest Is Accepted (Not When Completed)', () => r.onStart, v => { r.onStart = v; }, { label: 'When', refresh: 'light' }) : ''}
     ${r.type === 'Experience' ? ui.num('XP', () => r.value, v => { r.value = v; }, { min: 0, max: 1e9, step: 100 }) : ''}
     ${r.type === 'TraderStanding' ? ui.num('Standing', () => r.value, v => { r.value = v; }, { min: -1, max: 1, step: .01 }) : ''}
-    ${r.type === 'Item' ? ui.item('Item', () => r.itemTpl, v => { r.itemTpl = v; }) + ui.num('How Many', () => r.count, v => { r.count = v; }, { min: 1, max: 100000 }) +
+    ${rewardKind(r) === 'Item' ? ui.item('Item', () => r.itemTpl, v => { r.itemTpl = v; }) + ui.num('How Many', () => r.count, v => { r.count = v; }, { min: 1, max: 100000 }) +
       ui.toggle('Found in Raid', () => r.foundInRaid, v => { r.foundInRaid = v; }, { label: 'Found in Raid', refresh: 'light' }) +
       ui.toggle('Give It When the Quest Is Accepted (Not When Completed)', () => r.onStart, v => { r.onStart = v; }, { label: 'When', refresh: 'light' }) : ''}
     ${r.type === 'Skill' ? ui.select('Skill', SKILLS, () => r.skill, v => { r.skill = v; }) + ui.num('Skill Points (100 = 1 Level)', () => r.value, v => { r.value = v; }, { min: 1, max: 5100, step: 10 }) : ''}
@@ -1464,7 +1484,8 @@ function rewardBoxes(t, q) {
     switch (r.type) {
       case 'Experience': return { text: `${fmt(r.value)} XP`, color: '#a082ff' };
       case 'TraderStanding': return { text: `${r.value >= 0 ? '+' : ''}${r.value} Standing`, color: '#509bf5' };
-      case 'Item': return { text: `${r.count}× ${shortName(r.itemTpl)}${r.onStart ? ' (On Accept)' : ''}`, color: '#ffa42b', icons: [r.itemTpl] };
+      case 'Item': return isMoney(r.itemTpl) ? { text: `${fmt(r.count)} ${moneyShort(r.itemTpl)}${r.onStart ? ' (On Accept)' : ''}`, color: '#f5cd46' }
+        : { text: `${r.count}× ${shortName(r.itemTpl)}${r.onStart ? ' (On Accept)' : ''}`, color: '#ffa42b', icons: [r.itemTpl] };
       case 'Skill': return { text: `+${fmt(r.value)} ${skillName(r.skill)}`, color: '#f5cd46' };
       case 'StashRows': return { text: `+${fmt(r.value)} Stash Rows`, color: '#ff7ab6' };
       case 'UnlockOffer': {
@@ -1480,7 +1501,8 @@ function rewardRow(t, r) {
   switch (r.type) {
     case 'Experience': return { thumb: { text: 'XP', color: '#a082ff' }, title: `${fmt(r.value)} XP` };
     case 'TraderStanding': return { thumb: { text: '+', color: '#509bf5' }, title: `${r.value >= 0 ? '+' : ''}${r.value} Standing With ${t.file.name}` };
-    case 'Item': return { thumb: { text: initials(item(r.itemTpl)?.s), color: '#ffa42b', dark: true, item: r.itemTpl }, title: `${r.count} × ${itemName(r.itemTpl)}`, side: [r.onStart ? 'On Accept' : '', r.foundInRaid ? 'Found in Raid' : ''].filter(Boolean).join(' · ') };
+    case 'Item': if (isMoney(r.itemTpl)) return { thumb: { text: MONEY_SYMBOL[r.itemTpl], color: '#f5cd46', dark: true }, title: `${fmt(r.count)} ${MONEY_NAME[r.itemTpl]}`, side: r.onStart ? 'On Accept' : '' };
+      return { thumb: { text: initials(item(r.itemTpl)?.s), color: '#ffa42b', dark: true, item: r.itemTpl }, title: `${r.count} × ${itemName(r.itemTpl)}`, side: [r.onStart ? 'On Accept' : '', r.foundInRaid ? 'Found in Raid' : ''].filter(Boolean).join(' · ') };
     case 'Skill': return { thumb: { text: 'SK', color: '#f5cd46', dark: true }, title: `+${fmt(r.value)} ${skillName(r.skill)} Skill Points` };
     case 'StashRows': return { thumb: { text: '▦', color: '#ff7ab6', dark: true }, title: `+${fmt(r.value)} Stash Rows` };
     case 'UnlockOffer': {
@@ -1608,7 +1630,7 @@ function checkQuest(t, q, add, known) {
   if (!validId(q.id)) A('error', `Quest id '${q.id}' is not valid — the quest is skipped.`);
   if (!q.name.trim()) A('warning', 'Quest has no name.');
   if (q.minLevel < 1 || q.minLevel > 79) A('warning', `Unlock level ${q.minLevel} — player levels go from 1 to 79.`);
-  if (!q.conditions.length) A('error', 'No objectives — the quest would complete the moment it\'s accepted.');
+  if (!q.conditions.length) A('info', 'No objectives — players can turn it in right after accepting it.');
 
   for (const c of q.conditions) {
     const what = `Way ${wayLetter(c.option || 1)} · ${TYPE_LONG[c.type] || c.type}`;
@@ -1850,6 +1872,7 @@ const GEN = {
   hello: ['Listen up, mercenary.', 'Got a minute? I have work for you.', 'You look like someone who gets things done.', 'Word is you can handle yourself out there.',
     'I need a favour, and I pay well for favours.', 'Business is business, and right now business needs you.'],
   outro: ["Don't keep me waiting.", "Get it done and you won't regret it.", "Come back when it's finished.", "Good luck out there — you'll need it.", 'I trust you know what to do.'],
+  paid: ["Here's your cut, as promised.", "Your payment is ready. Don't spend it all at once.", "I pay my debts — take this.", "We're square. Come back when you want more work."],
   done: ["Good work. I won't forget this.", 'Excellent — exactly what I needed.', "You actually did it. Here's what I promised.", 'Nice job, mercenary. Your payment is ready.',
     "That's how it's done. Pleasure doing business.", 'Well done. Come see me again soon — there will be more work.'],
 };
@@ -1863,18 +1886,42 @@ function genPick(list, q) {
   for (const ch of q.id) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
   return list[(h + S.genN) % list.length];
 }
+/** Tidies what you typed: capitals, apostrophes (dont → don't), a full stop at the end. */
+function tidy(text) {
+  const fixes = { im: "I'm", ive: "I've", ill: "I'll", id: "I'd", i: 'I', dont: "don't", cant: "can't", wont: "won't", isnt: "isn't", arent: "aren't",
+    didnt: "didn't", doesnt: "doesn't", youre: "you're", youll: "you'll", youve: "you've", thats: "that's", theres: "there's", lets: "let's", its: "it's",
+    whats: "what's", wasnt: "wasn't", werent: "weren't", couldnt: "couldn't", shouldnt: "shouldn't", wouldnt: "wouldn't", gonna: 'going to', wanna: 'want to', u: 'you', ur: 'your' };
+  let s = text.trim().replace(/\s+\n/g, '\n').replace(/[ \t]+/g, ' ');
+  s = s.replace(/\b([A-Za-z]+)\b/g, w => fixes[w.toLowerCase()] ? (w[0] === w[0].toUpperCase() && w.length > 1 ? capFirst(fixes[w.toLowerCase()]) : fixes[w.toLowerCase()]) : w);
+  s = s.replace(/(^|[.!?]\s+|\n)([a-z])/g, (m, a, b) => a + b.toUpperCase());
+  if (s && !/[.!?…"')]$/.test(s)) s += '.';
+  return s;
+}
+/** Takes away a greeting / closing line the generator added before, so pressing ✨ again doesn't stack them. */
+function stripGenerated(text) {
+  let parts = text.split(/\n\s*\n/).map(x => x.trim()).filter(Boolean);
+  if (parts.length && GEN.hello.includes(parts[0])) parts.shift();
+  if (parts.length && GEN.outro.includes(parts[parts.length - 1])) parts.pop();
+  parts = parts.filter(p => !/^(Here's the job:|There's more than one way to handle this)/.test(p) && !p.startsWith("And don't get yourself killed"));
+  return parts.join('\n\n');
+}
+
 function genDescription(t, q) {
+  const own = tidy(stripGenerated(q.description || ''));
   const w = ways(q);
   const line = o => q.conditions.filter(c => (c.option || 1) === o).map(c => lowerWords(shortCondition(c))).join(', and then ');
   let body;
-  if (!q.conditions.length) body = "I'll tell you the details when you're ready.";
+  if (!q.conditions.length) body = own ? '' : "I'll tell you the details when you're ready.";
   else if (w.length === 1) body = `Here's the job: ${line(w[0])}.`;
   else body = `There's more than one way to handle this — pick whichever suits you:\n${w.map(o => `${wayLetter(o)}) ${capFirst(line(o))}.`).join('\n')}`;
   const hardcore = q.failOnDeath ? "\n\nAnd don't get yourself killed — if you die, go missing or leave a raid early, the job's off and you start over." : '';
-  return `${genPick(GEN.hello, q)}\n\n${body}${hardcore}\n\n${genPick(GEN.outro, q)}`;
+  // your own words stay in the middle; the trader greets, gives the job and signs off around them
+  return [genPick(GEN.hello, q), own, body + hardcore, genPick(GEN.outro, q)].map(x => x.trim()).filter(Boolean).join('\n\n');
 }
 function genSuccess(t, q) {
-  return genPick(GEN.done, q);
+  const own = tidy((q.successMessage || '').split(/\n\s*\n/).filter(p => !GEN.done.includes(p.trim()) && !GEN.paid.includes(p.trim())).join('\n\n'));
+  if (!own) return genPick(GEN.done, q);
+  return `${own}\n\n${genPick(GEN.paid, q)}`;
 }
 
 // =====================================================================
@@ -2122,8 +2169,17 @@ document.addEventListener('input', e => {
   b.set(v);
   markDirty();
   if (b.refresh === 'details') renderDetails(false);
+  else detailsSoon();
   renderLight();
 });
+
+/** Redraw the right panel on the next frame (lists in it — rewards, objectives — follow what you type). */
+let detailsPending = false;
+function detailsSoon() {
+  if (detailsPending) return;
+  detailsPending = true;
+  requestAnimationFrame(() => { detailsPending = false; renderDetails(false); });
+}
 
 document.addEventListener('change', e => {
   const el = e.target;
@@ -2135,8 +2191,8 @@ document.addEventListener('change', e => {
   else if (el.type === 'number') { el.value = b.get(); return; } // snap back to the stored (clamped) value
   else return;
   markDirty();
-  if (b.refresh === 'details') renderDetails(false);
-  else if (b.refresh === 'page') { renderPage(false); renderDetails(false); }
+  if (b.refresh === 'page') renderPage(false);
+  renderDetails(false);
   renderLight();
 });
 

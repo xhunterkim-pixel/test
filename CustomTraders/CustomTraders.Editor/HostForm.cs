@@ -248,7 +248,7 @@ public sealed class HostForm : Form
                 quests.Add(new JsonObject { ["i"] = id, ["n"] = name, ["t"] = trader });
             result["gameQuests"] = quests;
             result["traderRate"] = Math.Round(_db.BestTraderRate * 100);
-            result["gameQuestImages"] = GameQuestImages(dbFolder);
+            result["gameQuestImages"] = GameQuestImages(dbFolder, result);
         }
         catch (Exception e)
         {
@@ -486,29 +486,61 @@ public sealed class HostForm : Form
 
     private string? _gameQuestImages;
 
-    /// <summary>The game's quest pictures (SPT_Data/images/quests), usable as quest images without copying.</summary>
-    private JsonArray GameQuestImages(string databaseFolder)
+    /// <summary>The game's quest pictures (…/images/quests near the database), usable as quest images without copying.</summary>
+    private JsonArray GameQuestImages(string databaseFolder, JsonObject result)
     {
         var list = new JsonArray();
-        var parent = Directory.GetParent(databaseFolder)?.FullName;
-        _gameQuestImages = null;
-        if (parent == null) return list;
-        foreach (var candidate in new[] { Path.Combine(parent, "images", "quests"), Path.Combine(parent, "Server", "images", "quests") })
+        _gameQuestImages = FindQuestImagesFolder(databaseFolder, out var looked);
+        result["gameQuestImagesFolder"] = _gameQuestImages;
+        result["gameQuestImagesLooked"] = looked;
+        if (_gameQuestImages == null) return list;
+        foreach (var path in Directory.EnumerateFiles(_gameQuestImages).Where(IsImage).OrderBy(p => p))
         {
-            if (!Directory.Exists(candidate)) continue;
-            _gameQuestImages = candidate;
-            foreach (var path in Directory.EnumerateFiles(candidate).Where(IsImage).OrderBy(p => p))
+            var file = Path.GetFileName(path);
+            list.Add(new JsonObject
             {
-                var file = Path.GetFileName(path);
-                list.Add(new JsonObject
-                {
-                    ["n"] = Path.GetFileNameWithoutExtension(file),
-                    ["u"] = $"https://{FilesHost}/game/quests/{Uri.EscapeDataString(file)}",
-                });
-            }
-            break;
+                ["n"] = Path.GetFileNameWithoutExtension(file),
+                ["u"] = $"https://{FilesHost}/game/quests/{Uri.EscapeDataString(file)}",
+            });
         }
         return list;
+    }
+
+    /// <summary>
+    /// Looks for an "images\quests" (or "images\quest") folder with pictures in and around
+    /// SPT_Data — installs differ (SPT_Data\images, SPT_Data\Server\images, SPT_Runtime\SPT_Data\images...).
+    /// </summary>
+    private static string? FindQuestImagesFolder(string databaseFolder, out string looked)
+    {
+        var roots = new List<string>();
+        var dir = Directory.GetParent(databaseFolder);
+        for (int i = 0; i < 3 && dir != null; i++, dir = dir.Parent) roots.Add(dir.FullName);
+        looked = string.Join("; ", roots);
+        string? best = null;
+        int bestCount = 0;
+        foreach (var root in roots)
+        {
+            foreach (var candidate in Search(root, 0))
+            {
+                int count = Directory.EnumerateFiles(candidate).Count(IsImage);
+                if (count > bestCount) { best = candidate; bestCount = count; }
+            }
+            if (best != null) break; // nearest match wins
+        }
+        return best;
+
+        static IEnumerable<string> Search(string folder, int depth)
+        {
+            IEnumerable<string> subs;
+            try { subs = Directory.GetDirectories(folder); } catch { yield break; }
+            foreach (var sub in subs)
+            {
+                var name = Path.GetFileName(sub).ToLowerInvariant();
+                if (name is "user" or "node_modules" or "bepinex" or "logs" or "cache" or "database") continue; // big and never it
+                if (name is "quests" or "quest" && Path.GetFileName(folder).Equals("images", StringComparison.OrdinalIgnoreCase)) yield return sub;
+                else if (depth < 3) foreach (var x in Search(sub, depth + 1)) yield return x;
+            }
+        }
     }
 
     // ------------------------------------------------------------------ deleted traders (trash)
