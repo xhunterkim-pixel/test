@@ -1979,7 +1979,7 @@ function viewMenu(anchor) {
     applyUi(); saveUi(); renderPage(false); renderDetails(false); draw();
   });
   const r = anchor.getBoundingClientRect();
-  popoverAt(pop, r.right - 280, r.bottom + 6);
+  popoverAt(pop, r.left, r.bottom + 6);
 }
 
 function contextMenu(x, y, items) {
@@ -2864,6 +2864,9 @@ function appearanceMenu(anchor) {
     <button data-pop="nobg" ${S.background ? '' : 'disabled'}>Remove picture</button>
     <hr>
     <label class="menu">Button color <input type="color" value="${u.accent || '#1ed760'}" data-pop="color" style="margin-left:auto"></label>
+    <hr>
+    <button data-pop="pics">Item Pictures (From tarkov.dev)${view().noItemPics ? '' : '<span class="check">✓</span>'}</button>
+    <button data-pop="grey">Calm Grey Colors${u.grey ? '<span class="check">✓</span>' : ''}</button>
     <button data-pop="green" ${u.accent ? '' : 'disabled'}>Button color: default green</button>`;
   document.body.appendChild(pop);
   const r = anchor.getBoundingClientRect();
@@ -2877,6 +2880,8 @@ function appearanceMenu(anchor) {
     if (what === 'nobg') { await host.call('clearBackground'); applyBackground(null); }
     if (what === 'dim') { u.dim = Number(b.dataset.v); applyUi(); saveUi(); }
     if (what === 'green') { delete u.accent; applyUi(); saveUi(); }
+    if (what === 'pics') { view().noItemPics = !view().noItemPics; badPics.clear(); saveUi(); renderPage(false); renderDetails(false); }
+    if (what === 'grey') { u.grey = !u.grey; applyUi(); saveUi(); }
     closePopover();
   });
   pop.querySelector('[data-pop=color]').addEventListener('input', e => { u.accent = e.target.value; applyUi(); saveUi(); });

@@ -479,3 +479,5 @@ img.thumb.wide { object-fit: cover; }
 .col.items { display: flex; align-items: center; }
 .pick-group { font-size: 12px; font-weight: 800; color: var(--muted); padding: 10px 12px 4px; text-transform: uppercase; letter-spacing: .04em; }
 .picker-list .chips { row-gap: 6px; }
+
+.view-btn { height: 40px; padding: 0 16px; border-radius: 20px; font-size: 14px; }
