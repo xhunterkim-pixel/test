@@ -176,7 +176,14 @@ body.has-bg .panel { backdrop-filter: blur(18px); }
 .header-text { min-width: 0; }
 .kind { font-size: 12px; font-weight: 800; }
 #headerTitle { font-size: clamp(32px, 4.2vw, 64px); font-weight: 900; margin: 2px 0 8px; letter-spacing: -.03em; line-height: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-#chips { display: flex; align-items: center; gap: 12px; padding: 6px 24px 14px; }
+/* search + sort sit on the same line as the page's toolbar (+ Add Offer…), laid over its right end;
+   they live outside #page so typing in the search never loses focus when the list redraws */
+#chips { position: relative; z-index: 3; height: 0; display: flex; justify-content: flex-end; align-items: flex-start; gap: 6px; padding: 0 34px 0 24px; }
+#chips > * { margin-top: 5px; }
+#chips > #searchBox { margin-top: 7px; }
+#chips[hidden] { display: none; }
+#page .toolbar.sticky { padding-right: 190px; }
+body.search-open #page .toolbar.sticky { padding-right: 480px; }
 .search {
   /* Spotify style: just a magnifier until clicked, then it opens into a box */
   display: flex; align-items: center; gap: 8px; height: 34px; width: 34px; padding: 0 8px; border-radius: 4px; overflow: hidden;
@@ -534,6 +541,7 @@ img.thumb.wide { object-fit: cover; }
 .req-head .fold-arrow { color: var(--muted); transition: transform .15s; width: 14px; }
 .req-group.folded .fold-arrow { transform: rotate(-90deg); }
 .req-group.folded { padding-bottom: 2px; }
+.req-letter { width: 26px; height: 26px; border-radius: 5px; background: #333; display: grid; place-items: center; font-size: 13px; }
 
 .keys-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 8px 26px; overflow-y: auto; }
 .keys-grid h3 { margin: 6px 0 8px; font-size: 13px; color: var(--muted); font-weight: 800; }
@@ -575,3 +583,11 @@ body.has-bg #home { backdrop-filter: blur(18px); }
 @media (max-width: 900px) { .hcard.big { grid-column: span 1; flex-direction: column; } .hcard.big .hpic { width: auto; } }
 
 .warn-line { margin: 4px 0 10px; padding: 8px 12px; border-radius: 6px; background: rgba(255, 164, 43, .12); color: var(--orange, #ffa42b); font-size: 13px; font-weight: 600; }
+
+/* changes shown before saving */
+.chg-list { max-height: min(60vh, 560px); overflow: auto; padding-right: 6px; }
+.chg-trader { background: #181818; border-radius: 8px; padding: 8px 14px 10px; margin-bottom: 8px; }
+.chg-trader h3 { margin: 4px 0 8px; font-size: 16px; }
+.chg { display: flex; gap: 10px; padding: 3px 0; font-size: 13px; }
+.chg-i { width: 12px; font-weight: 900; flex: none; text-align: center; }
+.chg-sub { color: var(--muted); font-size: 12px; margin: 2px 0 2px 2px; }

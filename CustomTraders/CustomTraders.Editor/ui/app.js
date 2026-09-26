@@ -121,6 +121,7 @@ const S = {
   gameQuests: new Map(), // id -> { i, n, t } (the game's own quests)
   way: 1, tagFilters: { offers: null, quests: null },
   gameQuestImages: [], deletedCount: 0,
+  gameTraders: new Map(), // id -> { i, n, u } (the game's own traders that give quests; u = picture)
   open: new WeakMap(),  // objective -> Set of opened "must ..." sections
   picked: new Set(),    // offers / quests selected together (Ctrl/Shift-click or drag in empty space)
   search: { offers: '', quests: '', checks: '', mods: '' },
@@ -333,6 +334,7 @@ function applyItems(snap) {
   S.itemsStatus = snap.itemsStatus || '';
   S.traderRate = snap.traderRate || S.traderRate || 60;
   if (snap.gameQuestImages) S.gameQuestImages = snap.gameQuestImages;
+  if (snap.gameTraders) S.gameTraders = new Map(snap.gameTraders.map(g => [g.i, g]));
   if (snap.gameQuestImagesLooked !== undefined) S.gameQuestImagesLooked = snap.gameQuestImagesLooked;
   S.mods = snap.mods || [];
   S.modOff = new Map((snap.modItemsOff || []).map(i => [i.i, i]));
@@ -486,6 +488,20 @@ function tagColor(tag) {
 }
 const isBarter = o => o.cost.some(c => !isMoney(c.itemTpl));
 const priceKind = o => o.cost.length === 0 ? null : isBarter(o) ? ['BARTER', 'var(--pink)'] : ['BUY', 'var(--blue)'];
+
+/** The game's quests grouped by trader, in the game's trader order (Prapor, Therapist, …). */
+const GAME_TRADER_ORDER = ['54cb50c76803fa8b248b4571', '54cb57776803fa99248b456e', '579dc571d53a0658a154fbec', '58330581ace78e27b8b10cee',
+  '5935c25fb3acc3127c3d8cd9', '5a7c2eca46aef81a7ca2145d', '5ac3b934156ae10c4430e83c', '5c0647fdd443bc2504c2d371', '6617beeaa9cfa777ca915b7c', '638f541a29ffd1183d187f57'];
+let gameQuestGroups = null, gameQuestGroupsFor = null;
+function gameQuestsByTrader() {
+  if (gameQuestGroupsFor === S.gameQuests) return gameQuestGroups;
+  const m = new Map();
+  for (const g of S.gameQuests.values()) { const k = g.ti || g.t || ''; if (!m.has(k)) m.set(k, []); m.get(k).push(g); }
+  const rank = k => { const i = GAME_TRADER_ORDER.indexOf(k); return i < 0 ? 99 : i; };
+  gameQuestGroups = new Map([...m].sort((a, b) => rank(a[0]) - rank(b[0]) || String(a[1][0]?.t).localeCompare(String(b[1][0]?.t))));
+  gameQuestGroupsFor = S.gameQuests;
+  return gameQuestGroups;
+}
 
 /** Name of any quest id: one of yours ("Trader: Quest") or a game quest ("Quest (Prapor)"). */
 function questLabel(id) {
@@ -641,12 +657,13 @@ function renderHeader() {
   $('#header').style.setProperty('--hc', headerColor(t?.avatarColor));
   document.querySelectorAll('#nav .nav').forEach(n => n.classList.toggle('on', n.dataset.arg === S.page));
   const box = $('#searchBox'), input = $('#search');
-  box.hidden = S.page === 'trader';
+  $('#chips').hidden = S.page === 'trader' || !S.t;
   $('#viewLabel').textContent = SORTS[S.page] ? sortLabel(S.page) : 'View';
   input.placeholder = { offers: 'Search Offers & Barters, “Modded” (Ctrl+F)', quests: 'Search Quests, Tags, Notes (Ctrl+F)', checks: 'Search the Log (Ctrl+F)', mods: 'Search Mods & Their Items (Ctrl+F)' }[S.page] || '';
   if (document.activeElement !== input) input.value = S.search[S.page] || '';
   box.classList.toggle('has', !!input.value);
   box.classList.toggle('open', !!input.value || document.activeElement === input);
+  document.body.classList.toggle('search-open', box.classList.contains('open'));
 }
 
 function headerColor(hex) {
@@ -1421,7 +1438,27 @@ function detailsQuest() {
         <span class="muted small">${qs.length} quest${qs.length === 1 ? '' : 's'}${picked ? ` · <span style="color:var(--accent)">${picked} picked</span>` : ''}${ot.file.enabled ? '' : ' · trader OFF'}</span></button>
       ${folded ? '' : `<div class="switches">${items}</div>`}</div>`;
   }).join('');
-  const others = q.prerequisiteQuestIds.filter(id => !allQuests().some(x => x.q.id === id)).map(id => {
+  // the game's own traders (Prapor, Therapist…) — folded until opened, opened while searching
+  const gameGroups = [...gameQuestsByTrader()].map(([ti, list]) => {
+    const gt = S.gameTraders.get(ti) || { i: ti, n: list[0]?.t || 'Other' };
+    const qs = list.filter(g => !reqQuery || g.n.toLowerCase().includes(reqQuery) || (gt.n || '').toLowerCase().includes(reqQuery))
+      .filter(g => !S.reqOnlyPicked || q.prerequisiteQuestIds.includes(g.i))
+      .sort((a, b) => Number(q.prerequisiteQuestIds.includes(b.i)) - Number(q.prerequisiteQuestIds.includes(a.i)));
+    return { gt, qs, picked: list.filter(g => q.prerequisiteQuestIds.includes(g.i)).length };
+  }).filter(g => g.qs.length);
+  const gameSwitches = gameGroups.map(({ gt, qs, picked }) => {
+    const key = 'reqg:' + gt.i;
+    const folded = (S.ui.folded?.[key] ?? true) && !reqQuery;
+    const items = folded ? '' : qs.map(g => ui.toggle(g.n, () => q.prerequisiteQuestIds.includes(g.i), v => {
+      q.prerequisiteQuestIds = q.prerequisiteQuestIds.filter(x => x !== g.i);
+      if (v) q.prerequisiteQuestIds.push(g.i);
+    })).join('');
+    return `<div class="req-group game ${folded ? 'folded' : ''}"><button class="req-head" data-act="fold" data-arg="${esc(key)}">
+        <span class="fold-arrow">▾</span>${gt.u ? `<img src="${esc(gt.u)}" alt="">` : `<span class="req-letter">${esc((gt.n || '?')[0])}</span>`}<b>${esc(gt.n)}</b>
+        <span class="muted small">${qs.length} quest${qs.length === 1 ? '' : 's'} · game trader${picked ? ` · <span style="color:var(--accent)">${picked} picked</span>` : ''}</span></button>
+      ${folded ? '' : `<div class="switches">${items}</div>`}</div>`;
+  }).join('');
+  const others = q.prerequisiteQuestIds.filter(id => !allQuests().some(x => x.q.id === id) && !S.gameQuests.has(id)).map(id => {
     const g = S.gameQuests.get(id);
     return `<div class="itemline"><span class="name ${g ? '' : 'missing'}">${g ? '🎮 ' + esc(questLabel(id)) : `✖ Missing quest ${esc(id)}`}</span><button class="icon-btn" data-act="dropPrereq" data-arg="${esc(id)}" title="Remove">✕</button></div>`;
   }).join('');
@@ -1466,9 +1503,9 @@ function detailsQuest() {
       ${ui.hint('Switch on every quest that must be finished first. For a quest with several ways, <b>any one finished way counts</b>. Game quests (Prapor, Therapist…) can be required too.')}
       <div class="req-tools"><input type="text" id="reqSearch" placeholder="Search quests or tags…" value="${esc(S.reqSearch || '')}" spellcheck="false">
         <button class="chip ${S.reqOnlyPicked ? 'on' : ''}" data-act="reqOnlyPicked" style="--c:var(--accent)">Selected Only</button></div>
-      ${mineSwitches || `<div class="hint">${reqQuery || S.reqOnlyPicked ? 'Nothing matches.' : 'No other quests of yours yet.'}</div>`}
+      ${mineSwitches || gameSwitches ? mineSwitches + gameSwitches : `<div class="hint">${reqQuery || S.reqOnlyPicked ? 'Nothing matches.' : 'No other quests yet.'}</div>`}
       ${others ? `<div class="switches" style="margin-top:8px">${others}</div>` : ''}
-      <div class="toolbar" style="margin-top:8px"><button class="outline" data-act="addGamePrereq">+ Game Quest…</button></div>`)}
+      ${S.gameQuests.size ? '' : '<div class="toolbar" style="margin-top:8px"><button class="outline" data-act="addGamePrereq">+ Game Quest by Id…</button></div>'}`)}
     ${card('q-obj', 'Objectives', `
       <div class="waytabs">${tabs}</div>
       ${ui.hint(waysHint)}
@@ -2523,11 +2560,13 @@ $('#search').addEventListener('input', e => {
 $('#searchBox').addEventListener('mousedown', e => {
   if (e.target.closest('button') || e.target === $('#search')) return;
   e.preventDefault();
-  $('#searchBox').classList.add('open');
-  $('#search').focus();
+  searchOpen(true);
+  document.activeElement?.blur?.(); // let an edited field finish (its redraw) first
+  setTimeout(() => $('#search').focus(), 0);
 });
-$('#search').addEventListener('focus', () => $('#searchBox').classList.add('open'));
-$('#search').addEventListener('blur', () => { if (!$('#search').value) $('#searchBox').classList.remove('open'); });
+const searchOpen = on => { $('#searchBox').classList.toggle('open', on); document.body.classList.toggle('search-open', on); };
+$('#search').addEventListener('focus', () => searchOpen(true));
+$('#search').addEventListener('blur', () => { if (!$('#search').value) searchOpen(false); });
 $('#search').addEventListener('keydown', e => {
   if (e.key === 'Escape') { e.stopPropagation(); ACT.clearSearch(); e.target.blur(); }
   if (e.key === 'Enter') e.target.blur();
@@ -2607,7 +2646,7 @@ document.addEventListener('dblclick', e => {
 document.addEventListener('keydown', e => {
   if (e.target.id === 'tagInput' && e.key === 'Enter') { ACT.addTag(e.target.value); return; }
   if (e.target.id === 'multiTagInput' && e.key === 'Enter') { ACT.multiTag(e.target.value); return; }
-  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f' && $('#modal').hidden && S.page !== 'trader') { e.preventDefault(); $('#searchBox').classList.add('open'); $('#search').focus(); $('#search').select(); return; }
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f' && $('#modal').hidden && S.page !== 'trader') { e.preventDefault(); $('#search').focus(); $('#search').select(); return; }
   if ($('#modal').hidden && handleShortcut(e)) { e.preventDefault(); return; }
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') { e.preventDefault(); ACT.save(); return; }
   if ((e.ctrlKey || e.metaKey) && $('#modal').hidden) {
@@ -2980,7 +3019,7 @@ const ACT = {
   tagFilter: arg => { S.tagFilters[S.page === 'offers' ? 'offers' : 'quests'] = arg || null; renderPage(false); },
   fold(key) {
     const folded = (S.ui.folded ||= {});
-    folded[key] = !folded[key];
+    folded[key] = !(folded[key] ?? key.startsWith('reqg:')); // game trader groups start folded
     saveUi();
     renderPage(false);
     renderDetails(false);
@@ -3281,6 +3320,7 @@ const ACT = {
       const ok = await confirmBox('Check before saving', `${errors.length} problem(s) will stop things from working:\n\n${list}`, 'Save anyway', 'Show me');
       if (!ok) { S.checkFilter = 'error'; S.page = 'checks'; renderAll(true); return; }
     }
+    if (!await reviewChanges(dirty)) return;
     let saved = 0;
     for (const t of dirty) {
       t.file.requiredMods = [...traderMods(t).keys()].sort(); // the server names them if an item is missing
@@ -3417,6 +3457,88 @@ function closeModal(value) {
 }
 $('#modal').addEventListener('mousedown', e => { if (e.target.id === 'modal') closeModal(null); });
 
+// ---- "what changed" list shown before saving
+const FIELD_NAMES = {
+  refreshMinutesMin: 'Restock Min', refreshMinutesMax: 'Restock Max', unlockedByDefault: 'Unlocked From the Start', listOnFlea: 'On the Flea Market',
+  unlockQuestId: 'Unlocked By', priority: 'Position in Trader List', buys: 'Buys', buyCategories: 'Buy Categories', loyaltyLevels: 'Loyalty Levels',
+  itemTpl: 'Item', loyaltyLevel: 'LL', unlimited: 'Unlimited Stock', buyLimit: 'Buy Limit', cost: 'Price', priceMin: 'Random Price Min', priceMax: 'Random Price Max',
+  enabled: 'On', minLevel: 'Level', conditions: 'Objectives', rewards: 'Rewards', prerequisiteQuestIds: 'Required Quests', successMessage: 'Completed Text',
+  failOnDeath: 'Hardcore', gameImage: 'Picture', image: 'Picture', unlockedByQuestId: 'Unlocked By', avatar: 'Icon', preset: 'Weapon Preset',
+};
+const fieldName = k => FIELD_NAMES[k] || k.replace(/([A-Z])/g, ' $1').replace(/^./, c => c.toUpperCase());
+function changeValue(k, v) {
+  if (v === undefined || v === null || v === '') return '(empty)';
+  if (typeof v === 'boolean') return v ? 'Yes' : 'No';
+  if (k === 'cost' && Array.isArray(v)) return v.length ? costText({ cost: v }) : '(free)';
+  if ((k === 'itemTpl') && typeof v === 'string') return itemName(v);
+  if ((k === 'unlockQuestId' || k === 'unlockedByQuestId') && v) return questLabel(v);
+  if (Array.isArray(v)) return `${v.length} ${v.length === 1 ? 'entry' : 'entries'}`;
+  if (typeof v === 'object') return '…';
+  const text = String(v);
+  return text.length > 48 ? text.slice(0, 45) + '…' : text;
+}
+/** Fields of a and b that differ, as "Name: old → new" lines. */
+function fieldChanges(a, b, skip = []) {
+  const out = [];
+  for (const k of new Set([...Object.keys(a || {}), ...Object.keys(b || {})])) {
+    if (skip.includes(k) || JSON.stringify(a?.[k]) === JSON.stringify(b?.[k])) continue;
+    if (k === 'prerequisiteQuestIds' || k === 'buyCategories' || k === 'tags') {
+      const name = x => k === 'prerequisiteQuestIds' ? questLabel(x) : k === 'buyCategories' ? groupName(x) : x;
+      const was = a?.[k] || [], now = b?.[k] || [];
+      const added = now.filter(x => !was.includes(x)).map(name), gone = was.filter(x => !now.includes(x)).map(name);
+      out.push(`${fieldName(k)}: ${[...added.map(x => '+ ' + x), ...gone.map(x => '− ' + x)].join(', ') || 'order changed'}`);
+      continue;
+    }
+    const ov = changeValue(k, a?.[k]), nv = changeValue(k, b?.[k]);
+    out.push(ov === nv ? `${fieldName(k)} changed` : `${fieldName(k)}: ${ov} → ${nv}`);
+  }
+  return out;
+}
+function listChanges(oldList = [], newList = [], name, kind) {
+  const out = [];
+  const oldById = new Map(oldList.map(x => [x.id, x]));
+  const newIds = new Set(newList.map(x => x.id));
+  for (const x of newList) {
+    const o = oldById.get(x.id);
+    if (!o) { out.push(['add', `New ${kind}: ${name(x)}`]); continue; }
+    const f = fieldChanges(o, x, ['id']);
+    if (f.length) out.push(['edit', `${kind} ${name(x)}`, f]);
+  }
+  for (const o of oldList) if (!newIds.has(o.id)) out.push(['del', `Removed ${kind}: ${name(o)}`]);
+  const kept = newList.filter(x => oldById.has(x.id)).map(x => x.id), keptOld = oldList.filter(x => newIds.has(x.id)).map(x => x.id);
+  if (JSON.stringify(kept) !== JSON.stringify(keptOld)) out.push(['edit', `${kind} order changed`]);
+  return out;
+}
+function traderChanges(t) {
+  let old = {};
+  try { old = JSON.parse(t.savedJson || '{}'); } catch { }
+  const f = t.file;
+  const out = fieldChanges(old, f, ['offers', 'quests', 'requiredMods']).map(x => ['edit', x]);
+  out.push(...listChanges(old.offers, f.offers, o => itemName(o.itemTpl), 'Offer'));
+  out.push(...listChanges(old.quests, f.quests, q => q.name || '(no name)', 'Quest'));
+  if (!out.length && t.migrated) out.push(['edit', 'Updated to the new file format']);
+  return out;
+}
+/** Shows every change about to be saved; resolves true when the user confirms. */
+function reviewChanges(traders) {
+  const icon = { add: ['+', 'var(--green)'], del: ['−', 'var(--red)'], edit: ['•', 'var(--orange)'] };
+  let total = 0;
+  const body = traders.map(t => {
+    const ch = traderChanges(t);
+    total += ch.length;
+    const lines = ch.map(([kind, text, sub]) => `<div class="chg"><span class="chg-i" style="color:${icon[kind][1]}">${icon[kind][0]}</span><div>${esc(text)}
+      ${sub ? `<div class="chg-sub">${sub.map(x => `<div>${esc(x)}</div>`).join('')}</div>` : ''}</div></div>`).join('');
+    return `<div class="chg-trader"><h3>${esc(t.file.name)} <span class="muted small">${ch.length} change${ch.length === 1 ? '' : 's'}</span></h3>${lines || '<div class="muted small">No visible changes</div>'}</div>`;
+  }).join('');
+  return openModal(`<div class="dialog"><h2>Save These Changes?</h2>
+      <div class="muted small" style="margin-bottom:10px">${total} change${total === 1 ? '' : 's'} in ${traders.length} trader${traders.length === 1 ? '' : 's'}. Restart the SPT server afterwards to apply them.</div>
+      <div class="chg-list">${body}</div>
+      <div class="buttons"><button class="outline" data-m="0">Cancel</button><button class="primary" data-m="1">Save ${traders.length === 1 ? '' : traders.length + ' Traders'}</button></div></div>`,
+    m => {
+      m.querySelectorAll('[data-m]').forEach(b => b.onclick = () => closeModal(b.dataset.m === '1'));
+      m.querySelector('[data-m="1"]').focus();
+    });
+}
 function confirmBox(title, message, ok = 'OK', cancel = 'Cancel') {
   return openModal(`<div class="dialog small"><h2>${esc(title)}</h2><div class="req">${esc(message)}</div>
     <div class="buttons"><button class="outline" data-m="0">${esc(cancel)}</button><button class="primary" data-m="1">${esc(ok)}</button></div></div>`,

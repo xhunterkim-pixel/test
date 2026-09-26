@@ -301,9 +301,9 @@ public sealed class ItemDatabase
     }
 
     /// <summary>The game's own quests (id, English name, trader nickname), for "unlocked by a game quest".</summary>
-    public List<(string Id, string Name, string Trader)> LoadQuests()
+    public List<(string Id, string Name, string Trader, string TraderId)> LoadQuests()
     {
-        var result = new List<(string, string, string)>();
+        var result = new List<(string, string, string, string)>();
         if (SourceFolder == null) return result;
         var path = Path.Combine(SourceFolder, "templates", "quests.json");
         if (!File.Exists(path)) return result;
@@ -313,7 +313,7 @@ public sealed class ItemDatabase
             string trader = q.Value.TryGetProperty("traderId", out var t) ? t.GetString() ?? "" : "";
             string name = Names.TryGetValue($"{q.Name} name", out var n) ? n : q.Value.TryGetProperty("QuestName", out var qn) ? qn.GetString() ?? q.Name : q.Name;
             string traderName = Names.TryGetValue($"{trader} Nickname", out var tn) ? tn : "";
-            result.Add((q.Name, name, traderName));
+            result.Add((q.Name, name, traderName, trader));
         }
         return result.OrderBy(x => x.Item3).ThenBy(x => x.Item2).ToList();
     }

@@ -253,11 +253,13 @@ public sealed class HostForm : Form
             result["items"] = items;
             result["itemsStatus"] = $"{_db.Items.Count:N0} items" + (modded > 0 ? $" + {modded:N0} modded" : "");
             var quests = new JsonArray();
-            foreach (var (id, name, trader) in _db.LoadQuests())
-                quests.Add(new JsonObject { ["i"] = id, ["n"] = name, ["t"] = trader });
+            var gameQuests = _db.LoadQuests();
+            foreach (var (id, name, trader, traderId) in gameQuests)
+                quests.Add(new JsonObject { ["i"] = id, ["n"] = name, ["t"] = trader, ["ti"] = traderId });
             result["gameQuests"] = quests;
             result["traderRate"] = Math.Round(_db.BestTraderRate * 100);
             result["gameQuestImages"] = GameQuestImages(dbFolder, result);
+            result["gameTraders"] = GameTraders(dbFolder, gameQuests.Select(q => (q.TraderId, q.Trader)));
         }
         catch (Exception e)
         {
@@ -517,6 +519,42 @@ public sealed class HostForm : Form
         return list;
     }
 
+    private string? _gameTraderImages;
+
+    /// <summary>The game's traders that give quests, with their picture (images\traders next to images\quests).</summary>
+    private JsonArray GameTraders(string databaseFolder, IEnumerable<(string Id, string Name)> traders)
+    {
+        var list = new JsonArray();
+        _gameTraderImages = null;
+        if (_gameQuestImages != null && Directory.GetParent(_gameQuestImages) is { } images)
+        {
+            var folder = Path.Combine(images.FullName, "traders");
+            if (Directory.Exists(folder)) _gameTraderImages = folder;
+        }
+        foreach (var (id, name) in traders.Where(x => x.Id.Length > 0).DistinctBy(x => x.Id))
+        {
+            // the picture's name is in the trader's base.json ("avatar": "/files/trader/avatar/<file>"), else <id>.png/jpg
+            var names = new List<string>();
+            try
+            {
+                var basePath = Path.Combine(databaseFolder, "traders", id, "base.json");
+                if (File.Exists(basePath) && JsonNode.Parse(File.ReadAllText(basePath))?["avatar"]?.GetValue<string>() is { Length: > 0 } avatar)
+                    names.Add(Path.GetFileName(avatar));
+            }
+            catch { /* unreadable base.json: fall back to the id */ }
+            names.AddRange(new[] { ".png", ".jpg", ".jpeg", ".webp" }.Select(ext => id + ext));
+            string? file = _gameTraderImages == null ? null :
+                names.FirstOrDefault(f => f.IndexOfAny(Path.GetInvalidFileNameChars()) < 0 && File.Exists(Path.Combine(_gameTraderImages, f)));
+            list.Add(new JsonObject
+            {
+                ["i"] = id,
+                ["n"] = name.Length > 0 ? name : id,
+                ["u"] = file == null ? null : $"https://{FilesHost}/game/traders/{Uri.EscapeDataString(file)}",
+            });
+        }
+        return list;
+    }
+
     /// <summary>
     /// Looks for an "images\quests" (or "images\quest") folder with pictures in and around
     /// SPT_Data — installs differ (SPT_Data\images, SPT_Data\Server\images, SPT_Runtime\SPT_Data\images...).
@@ -699,6 +737,9 @@ public sealed class HostForm : Form
             else if (parts is ["game", "quests", var gameFile] && _gameQuestImages != null &&
                      !gameFile.Contains("..") && gameFile.IndexOfAny(Path.GetInvalidFileNameChars()) < 0)
                 path = Path.Combine(_gameQuestImages, gameFile);
+            else if (parts is ["game", "traders", var traderFile] && _gameTraderImages != null &&
+                     !traderFile.Contains("..") && traderFile.IndexOfAny(Path.GetInvalidFileNameChars()) < 0)
+                path = Path.Combine(_gameTraderImages, traderFile);
             else if (parts is ["traders", var folder, var file] && _modFolder != null &&
                      !folder.Contains("..") && !file.Contains("..") &&
                      folder.IndexOfAny(Path.GetInvalidFileNameChars()) < 0 && file.IndexOfAny(Path.GetInvalidFileNameChars()) < 0)
