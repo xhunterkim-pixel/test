@@ -646,6 +646,7 @@ function renderHeader() {
   input.placeholder = { offers: 'Search Offers & Barters, “Modded” (Ctrl+F)', quests: 'Search Quests, Tags, Notes (Ctrl+F)', checks: 'Search the Log (Ctrl+F)', mods: 'Search Mods & Their Items (Ctrl+F)' }[S.page] || '';
   if (document.activeElement !== input) input.value = S.search[S.page] || '';
   box.classList.toggle('has', !!input.value);
+  box.classList.toggle('open', !!input.value || document.activeElement === input);
 }
 
 function headerColor(hex) {
@@ -712,6 +713,16 @@ function renderPage(animate) {
   if (animate) { page.scrollTop = 0; animateIn(page); } else page.scrollTop = scroll;
 }
 
+/** Other switched-on custom traders that use the same trader-list position. */
+const samePosition = t => t.file.priority > 0 ? S.traders.filter(x => x !== t && x.file.enabled && x.file.priority === t.file.priority) : [];
+/** "Restock Every [min] – [max] Minutes" on one line. */
+function restockField(f) {
+  const box = k => {
+    const b = bind(() => f[k], v => { f[k] = clamp(v, 1, 10080); }, 'light');
+    return `<input type="number" data-b="${b}" value="${esc(f[k])}" min="1" max="10080" step="1">`;
+  };
+  return `<div class="field"><label>Restock Every</label><div class="range-line"><span class="muted small">Min</span>${box('refreshMinutesMin')}<span class="muted small">Max</span>${box('refreshMinutesMax')}<span class="muted small">Minutes</span></div></div>`;
+}
 function pageTrader() {
   const f = S.t.file;
   const set = (k, after) => v => { f[k] = v; after?.(); };
@@ -743,11 +754,11 @@ function pageTrader() {
     ${ui.toggle('Available From the Start', () => f.unlockedByDefault, set('unlockedByDefault'), { label: 'Unlocked', refresh: 'page' })}
     ${unlock}
     ${ui.toggle("List This Trader's Offers on the Flea Market", () => f.listOnFlea, set('listOnFlea'), { label: 'Flea Market', refresh: 'light' })}
-    ${ui.num('Restock Every (Min)', () => f.refreshMinutesMin, set('refreshMinutesMin'), { min: 1, max: 10080 })}
-    ${ui.num('…Up To (Min)', () => f.refreshMinutesMax, set('refreshMinutesMax'), { min: 1, max: 10080 })}`)}
+    ${restockField(f)}`)}
   ${card('t-trade', 'Trading', `
-    ${ui.num('Position in Trader List', () => f.priority, set('priority'), { min: 0, max: 50 })}
+    ${ui.num('Position in Trader List', () => f.priority, set('priority'), { min: 0, max: 50, refresh: 'page' })}
     ${ui.hint(f.priority > 0 ? `Shown as trader #${f.priority} in the game (Prapor is #1). The game's own traders move down one.` : '0 = default: after the game\'s traders. Type 1 to show it first, 3 for third…')}
+    ${samePosition(S.t).length ? `<div class="warn-line">⚠ ${esc(samePosition(S.t).map(x => x.file.name).join(', '))} ${samePosition(S.t).length === 1 ? 'is' : 'are'} also at position #${f.priority}. Give each trader its own number so they don't clash.</div>` : ''}
     ${ui.num('Price Multiplier', () => f.priceMultiplier, set('priceMultiplier'), { min: 0.05, max: 100, step: 0.05 })}
     ${ui.hint(`Every money price of this trader's offers × ${fmt(f.priceMultiplier)} in game (1 = as set on the offers; 1.5 = a 1,000 ₽ offer costs 1,500 ₽). Barter items aren't changed.`)}
     ${ui.num('Buy Multiplier', () => f.buyMultiplier, set('buyMultiplier'), { min: 0, max: 10, step: 0.05 })}
@@ -778,14 +789,17 @@ function colShown(list, key) {
   return key !== 'notes' || !!S.hasNotes?.[list];
 }
 const shownColumns = list => COLUMNS[list].filter(c => colShown(list, c[0]));
-function colWidths(list) {
-  const saved = S.ui.colw || {};
-  return shownColumns(list).slice(1).map(c => clamp(saved[`${list}.${c[0]}`] || c[2], 50, 700));
+/** Column shares like Spotify: every shown column (Title too) has a weight, the list is split by them.
+ *  A divider only trades width between its two neighbours, so no other column ever moves. */
+const TITLE_WEIGHT = 380;
+function colWeights(list) {
+  const saved = (S.ui.colf ||= {})[list] || {};
+  return shownColumns(list).map(c => saved[c[0]] > 0 ? saved[c[0]] : c[0] === 'title' ? TITLE_WEIGHT : c[2]);
 }
 function applyColumns() {
   document.querySelectorAll('.list[data-list]').forEach(el => {
-    const w = colWidths(el.dataset.list);
-    el.style.setProperty('--cols', `minmax(160px,1fr) ${w.map(x => x + 'px').join(' ')}`);
+    const w = colWeights(el.dataset.list);
+    el.style.setProperty('--cols', w.map(x => `minmax(0,${Math.round(x * 100) / 100}fr)`).join(' '));
     el.classList.toggle('no-idx', !!view().hideIdx);
   });
 }
@@ -796,7 +810,7 @@ function listHead(list) {
   const head = (key, text) => sortable && key !== 'notes'
     ? `<span class="head-text sortable ${cur?.key === key ? 'on' : ''}" data-act="sortBy" data-arg="${list}|${key}" title="Sort by ${esc(text)} (click again to flip)">${esc(text)}${arrow(key)}</span>`
     : `<span class="head-text">${esc(text)}</span>`;
-  const idx = sortable ? `<span class="head-text sortable ${!cur ? 'on' : ''}" data-act="sortBy" data-arg="${list}|" title="Your own order (drag rows to change it)">#</span>` : '#';
+  const idx = sortable ? `<span class="head-text sortable ${!cur ? 'on' : ''}" data-act="sortBy" data-arg="${list}|" title="Your own order (Ctrl + drag rows to change it)">#</span>` : '#';
   return `<div class="list-head"><div>${idx}</div>${shownColumns(list).map((c, i) => `<div>${i > 0 ? `<span class="grip" data-grip="${list}|${c[0]}" title="Drag to Resize · Double-Click to Reset"></span>` : ''}${head(c[0], c[1])}</div>`).join('')}</div>`;
 }
 
@@ -1343,7 +1357,7 @@ function detailsMulti() {
       <button class="ghost" data-act="clearPicked">Pick Just One</button>
     </div>
     ${edit}
-    ${ui.hint('Ctrl-click or Shift-click rows, or hold the left mouse button in an empty space and drag, to pick several. <b>Del</b> removes them; <b>Ctrl+Z</b> brings them back.')}`];
+    ${ui.hint('Ctrl-click or Shift-click rows, or hold the left mouse button and drag across rows, to pick several. <b>Ctrl + drag</b> a row to move it. <b>Del</b> removes them; <b>Ctrl+Z</b> brings them back.')}`];
 }
 
 function setOfferUnlock(o, kind) {
@@ -1848,6 +1862,10 @@ function runChecks() {
   for (const t of S.traders) byTraderId.set(t.file.id, [...(byTraderId.get(t.file.id) || []), t]);
   for (const [id, list] of byTraderId) if (list.length > 1)
     for (const t of list) add('error', t.file.name, `Trader id ${id} is used by ${list.length} traders (${list.map(x => x.file.name).join(', ')}). Only the first one loads.`, t);
+  const byPos = new Map();
+  for (const t of S.traders) if (t.file.enabled && t.file.priority > 0) byPos.set(t.file.priority, [...(byPos.get(t.file.priority) || []), t]);
+  for (const [pos, list] of byPos) if (list.length > 1)
+    for (const t of list) add('warning', t.file.name, `Position #${pos} in the trader list is also used by ${list.filter(x => x !== t).map(x => x.file.name).join(', ')}. They'll sit next to each other in a random-looking order — give each trader its own number.`, t);
   const byQuestId = new Map();
   for (const x of allQuests()) byQuestId.set(x.q.id, [...(byQuestId.get(x.q.id) || []), x]);
   for (const [id, list] of byQuestId) if (list.length > 1)
@@ -1993,7 +2011,7 @@ const SHORTCUTS = [
   ['Pages', [['Ctrl+1', 'Trader'], ['Ctrl+2', 'Offers & Barters'], ['Ctrl+3', 'Quests'], ['Ctrl+4', 'Mods'], ['Ctrl+5', 'Checks & Log']]],
   ['Offers & Quests', [['Ctrl+N', 'New offer / quest (on the Trader page: new trader)'], ['Ctrl+D', 'Duplicate the selected'], ['Del', 'Remove the selected'],
     ['Ctrl+B', 'Bulk edit everything shown'], ['Ctrl+A', 'Select everything shown'], ['Ctrl+F', 'Search'], ['↑ / ↓', 'Previous / next row'],
-    ['Alt+↑ / Alt+↓', 'Move the selected row up / down'], ['Drag a row', 'Move it anywhere'], ['Drag in empty space', 'Select several'], ['Ctrl-click / Shift-click', 'Select several']]],
+    ['Alt+↑ / Alt+↓', 'Move the selected row up / down'], ['Ctrl + drag a row', 'Move it anywhere'], ['Drag across rows', 'Select several'], ['Ctrl-click / Shift-click', 'Select several']]],
 ];
 function shortcutsBox() {
   return openModal(`<div class="dialog"><h2>Keyboard Shortcuts</h2><div class="keys-grid">${SHORTCUTS.map(([title, rows]) => `<div><h3>${esc(title)}</h3>
@@ -2502,6 +2520,14 @@ $('#search').addEventListener('input', e => {
   clearTimeout(searchTimer);
   searchTimer = setTimeout(() => { S.search[S.page] = v; renderPage(false); }, 90);
 });
+$('#searchBox').addEventListener('mousedown', e => {
+  if (e.target.closest('button') || e.target === $('#search')) return;
+  e.preventDefault();
+  $('#searchBox').classList.add('open');
+  $('#search').focus();
+});
+$('#search').addEventListener('focus', () => $('#searchBox').classList.add('open'));
+$('#search').addEventListener('blur', () => { if (!$('#search').value) $('#searchBox').classList.remove('open'); });
 $('#search').addEventListener('keydown', e => {
   if (e.key === 'Escape') { e.stopPropagation(); ACT.clearSearch(); e.target.blur(); }
   if (e.key === 'Enter') e.target.blur();
@@ -2523,6 +2549,7 @@ document.addEventListener('input', e => {
   }
   b.set(v);
   markDirty();
+  if (b.refresh === 'page') renderPage(false); // the page is patched in place, so typing keeps its focus
   if (b.refresh === 'details') renderDetails(false);
   else detailsSoon();
   renderLight();
@@ -2580,7 +2607,7 @@ document.addEventListener('dblclick', e => {
 document.addEventListener('keydown', e => {
   if (e.target.id === 'tagInput' && e.key === 'Enter') { ACT.addTag(e.target.value); return; }
   if (e.target.id === 'multiTagInput' && e.key === 'Enter') { ACT.multiTag(e.target.value); return; }
-  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f' && $('#modal').hidden && S.page !== 'trader') { e.preventDefault(); $('#search').focus(); $('#search').select(); return; }
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f' && $('#modal').hidden && S.page !== 'trader') { e.preventDefault(); $('#searchBox').classList.add('open'); $('#search').focus(); $('#search').select(); return; }
   if ($('#modal').hidden && handleShortcut(e)) { e.preventDefault(); return; }
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') { e.preventDefault(); ACT.save(); return; }
   if ((e.ctrlKey || e.metaKey) && $('#modal').hidden) {
@@ -2688,11 +2715,15 @@ document.addEventListener('mousedown', e => {
   if (grip) {
     // Spotify style: a divider only moves the border between the two columns next to it.
     const [list, key] = grip.dataset.grip.split('|');
-    const cols = shownColumns(list).slice(1);
-    const widths = colWidths(list);
+    const cols = shownColumns(list);
     const i = cols.findIndex(c => c[0] === key);
-    const left = i > 0 ? cols[i - 1][0] : null; // null = the Title column (it just takes what's left)
-    drag = { kind: 'col', list, key, left, x: e.clientX, w: widths[i], lw: left ? widths[i - 1] : 0, el: grip };
+    // freeze every column at the width it has on screen right now, then only the two neighbours change
+    const cells = [...grip.closest('.list-head').children].slice(1);
+    const px = cols.map((c, n) => cells[n] ? cells[n].getBoundingClientRect().width : 50);
+    const saved = (S.ui.colf ||= {})[list] = {};
+    cols.forEach((c, n) => { saved[c[0]] = px[n]; });
+    drag = { kind: 'col', list, key, left: cols[i - 1][0], x: e.clientX, w: px[i], lw: px[i - 1], el: grip,
+      minL: cols[i - 1][0] === 'title' ? 140 : 44 };
     const listEl = grip.closest('.list').getBoundingClientRect();
     drag.guide = document.createElement('div');
     drag.guide.className = 'col-guide';
@@ -2703,11 +2734,13 @@ document.addEventListener('mousedown', e => {
     e.preventDefault();
     return;
   }
-  // press on a row and move = drag it to another place (your own order)
+  // Ctrl + press on a row and move = drag it to another place (your own order); Ctrl+click without moving still picks it
   const rowEl = e.target.closest('#page .row[data-row]');
-  if (rowEl && (S.page === 'offers' || S.page === 'quests') && !e.ctrlKey && !e.shiftKey && !e.metaKey && !e.target.closest('button, input, select, textarea, .grip')) {
+  const onRow = rowEl && (S.page === 'offers' || S.page === 'quests') && !e.target.closest('button, input, select, textarea, .grip');
+  if (onRow && (e.ctrlKey || e.metaKey) && !e.shiftKey) {
     drag = { kind: 'row', el: rowEl, index: Number(rowEl.dataset.row), y0: e.clientY, moving: false };
-    return; // no preventDefault: a plain click still selects
+    e.preventDefault();
+    return;
   }
   if (e.target.classList.contains('splitter')) {
     const left = e.target.id === 'splitLeft';
@@ -2719,10 +2752,11 @@ document.addEventListener('mousedown', e => {
   // drag in empty space of a list = pick every row the box touches
   const page = $('#page');
   if ((S.page === 'offers' || S.page === 'quests') && S.t && e.target.closest('#page') &&
-      !e.target.closest('.row, button, input, textarea, select, label, .list-head, .toolbar, .empty')) {
+      (onRow || !e.target.closest('.row, button, input, textarea, select, label, .list-head, .toolbar, .empty'))) {
+    // a plain drag (also one that starts on a row) = box select; it only kicks in after the mouse moves
     const r = page.getBoundingClientRect();
     const base = e.ctrlKey || e.shiftKey ? picked(S.page === 'offers' ? S.offer : S.quest) : [];
-    drag = { kind: 'marquee', x0: e.clientX, y0: e.clientY - r.top + page.scrollTop, base, moved: false, el: null, hits: [] };
+    drag = { kind: 'marquee', x0: e.clientX, y0: e.clientY - r.top + page.scrollTop, base, moved: false, el: null, hits: [], fromRow: !!onRow };
     e.preventDefault();
   }
 });
@@ -2755,16 +2789,11 @@ document.addEventListener('mousemove', e => {
   if (drag.kind === 'marquee') return marqueeMove(e);
   if (drag.kind === 'row') return rowDragMove(e);
   if (drag.kind === 'col') {
-    const colw = (S.ui.colw ||= {});
-    let dx = e.clientX - drag.x;
-    if (drag.left) {
-      dx = clamp(dx, 50 - drag.lw, drag.w - 50); // both neighbours keep at least 50px
-      colw[`${drag.list}.${drag.left}`] = drag.lw + dx;
-      colw[`${drag.list}.${drag.key}`] = drag.w - dx;
-    } else {
-      colw[`${drag.list}.${drag.key}`] = clamp(drag.w - dx, 50, 700); // Title on the left takes the rest
-    }
-    drag.guide.style.left = (drag.x + (drag.left ? dx : drag.w - colw[`${drag.list}.${drag.key}`])) + 'px';
+    const w = S.ui.colf[drag.list];
+    const dx = clamp(e.clientX - drag.x, drag.minL - drag.lw, drag.w - 44); // both neighbours keep a little room
+    w[drag.left] = drag.lw + dx;
+    w[drag.key] = drag.w - dx;
+    drag.guide.style.left = (drag.x + dx) + 'px';
     applyColumns();
   } else if (drag.kind === 'left') {
     const w = clamp(drag.w + (e.clientX - drag.x), 220, 460);
@@ -2785,7 +2814,8 @@ document.addEventListener('mouseup', () => {
   if (d.kind === 'marquee') {
     d.el?.remove();
     document.body.classList.remove('dragging');
-    if (!d.moved) { if (S.picked.size) ACT.clearPicked(); return; }
+    if (!d.moved) { if (!d.fromRow && S.picked.size) ACT.clearPicked(); return; }
+    if (d.fromRow) { suppressClick = true; setTimeout(() => { suppressClick = false; }, 0); }
     const list = S.page === 'offers' ? S.t.file.offers : S.t.file.quests;
     const all = list.filter(o => d.hits.includes(o) || d.base.includes(o));
     if (all.length) pickMany(all); else renderPage(false);
@@ -2797,7 +2827,7 @@ document.addEventListener('mouseup', () => {
 });
 document.addEventListener('dblclick', e => {
   const grip = e.target.closest('[data-grip]');
-  if (grip) { delete S.ui.colw?.[grip.dataset.grip.replace('|', '.')]; applyColumns(); saveUi(); return; }
+  if (grip) { delete S.ui.colf?.[grip.dataset.grip.split('|')[0]]; applyColumns(); saveUi(); toast('Column widths reset'); return; }
   if (!e.target.classList.contains('splitter')) return;
   if (e.target.id === 'splitLeft') { delete S.ui.left; document.documentElement.style.setProperty('--left', '250px'); }
   else { delete S.ui.right; document.documentElement.style.setProperty('--right', '560px'); }
