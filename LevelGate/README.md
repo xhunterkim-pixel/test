@@ -57,23 +57,31 @@ use ...`); if none is found, LevelGate draws its own bottom-right box.
 
 **SEMI LOCKED magazines:** a magazine you may use but that holds at least one
 gated round shows `[SEMI LOCKED]` (short name) / `[SEMI LOCKED - Lvl X] name`
-with an **orange** background, next to `[LOCKED]`/red and `[UNLOCKED]`/green.
+with an **orange** background, next to `[LOCKED]`/red. Unlocked items keep
+their own name (so the short name stays readable) with a **green** background.
 Magazines only — ammo boxes are excluded.
 
 **Labels & colors:** the F9 window (and BepInEx config sections "Labels"
-and "Colors") lets you change the LOCKED / UNLOCKED / SEMI LOCKED text, turn
+and "Colors") lets you change the LOCKED / SEMI LOCKED text, turn
 the `[ ]` brackets and the " - Lvl X" part on/off, and pick each state's
 background from the game's item colors (click the color button to cycle).
 Changes apply live; item names already on screen update when the inventory
 is reopened. An empty label keeps the game's own short name.
 
-**Hover tooltip:** instead of `[UNLOCKED - Lvl 1] Army crackers` the tooltip
-shows `UNLOCKED - Army Crackers` with `UNLOCKED At Level 1` underneath (the
-level in yellow; LOCKED items say `Unlocks At Level X`, SEMI LOCKED
-magazines `Rounds Unlock At Level X`). Other mods' tooltip lines, like Show
-Me The Money's trader / flea prices, stay below it. F9: "Tooltip 2 lines"
-ON/OFF (BepInEx config `Labels / TooltipTwoLines`). Startup log:
-`LevelGate: tooltip layout hooked: SimpleTooltip.Show + N item view(s).`
+**Hover tooltip:** the name line becomes two lines (level in yellow):
+
+| Item | Tooltip |
+| --- | --- |
+| locked | `LOCKED - Bandages` / `Unlocks At Level 2` |
+| semi locked magazine | `SEMI LOCKED - PMAG …` / `Rounds Unlock At Level 2` |
+| unlocked | `Bandages` / `Unlocked At Level 1` |
+
+It works everywhere an item can be hovered (stash, inventory, containers,
+trader screens, in raid): the item is recognised from its name, and like Show
+Me The Money from the grid cell under the pointer (`GridItemView`). Other
+mods' tooltip lines (Show Me The Money's prices) stay below. F9: "Tooltip 2
+lines" ON/OFF (BepInEx config `Labels / TooltipTwoLines`). Startup log:
+`LevelGate: tooltip layout hooked: SimpleTooltip.Show + GridItemView hover.`
 
 **Striped backgrounds:** LOCKED, UNLOCKED and SEMI LOCKED items get the
 game's own striped background, the built-in layer the game shows on items
