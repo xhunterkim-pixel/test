@@ -1,10 +1,15 @@
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using CustomTraders.Shared;
 
 namespace CustomTraders.Editor;
 
 /// <summary>An item added by another mod (found in its json files).</summary>
-public sealed record ModItem(string Id, string Name, string ShortName, ItemCategory Category, string Caliber, double Handbook);
+public sealed record ModItem(string Id, string Name, string ShortName, ItemCategory Category, string Caliber, double Handbook)
+{
+    public string Group { get; init; } = "Other";
+    public string WeaponClass { get; init; } = "";
+}
 
 /// <summary>
 /// Finds the items a mod adds by reading its json files: item definitions
@@ -57,7 +62,12 @@ public static class ModScanner
             var clone = r.Clone != null ? db.Get(r.Clone) : null;
             string name = r.Name ?? r.Internal ?? (clone != null ? clone.Name + " (modded)" : key);
             double hb = r.Handbook ?? (r.Clone != null && db.Handbook.TryGetValue(r.Clone, out var h) ? h : 0);
-            result.Add(new ModItem(key, name, r.ShortName ?? "", db.CategoryFor(r.Clone, r.Parent), r.Caliber ?? clone?.Caliber ?? "", hb));
+            var category = db.CategoryFor(r.Clone, r.Parent);
+            result.Add(new ModItem(key, name, r.ShortName ?? "", category, r.Caliber ?? clone?.Caliber ?? "", hb)
+            {
+                Group = db.GroupFor(r.Clone, r.Parent),
+                WeaponClass = category != ItemCategory.Weapon ? "" : clone?.WeaponClass ?? ItemGroups.WeaponClasses.FirstOrDefault(w => w.Class == r.Parent).Key ?? "",
+            });
         }
         return result.OrderBy(i => i.Name).ToList();
     }

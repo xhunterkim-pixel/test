@@ -8,6 +8,10 @@ public enum ItemCategory { Other, Weapon, Grenade, Ammo, Gear, Food, Meds, Money
 /// <summary>One game item, as shown in the item picker.</summary>
 public sealed record GameItem(string Id, string Name, string ShortName, string ParentId, ItemCategory Category, string Caliber)
 {
+    /// <summary>Offer category (ItemGroups key) and, for guns, the weapon class key.</summary>
+    public string Group { get; init; } = "Other";
+    public string WeaponClass { get; init; } = "";
+
     /// <summary>Not something a player really holds (dev/AI-only "DO NOT USE" items, pockets, stash templates...).</summary>
     public bool Hidden { get; init; }
 
@@ -74,6 +78,41 @@ public sealed class ItemDatabase
     public bool IsLoaded => Items.Count > 0;
 
     private readonly Dictionary<string, string> _parents = new();
+
+    /// <summary>Offer category (ItemGroups key: Weapons, Ammo, Armor, Headwear, Rigs...) — nearest matching base class.</summary>
+    public string GroupOf(string id, bool questItem = false)
+    {
+        if (questItem) return "QuestItems";
+        for (int i = 0; i < 20 && _parents.TryGetValue(id, out var parent) && !string.IsNullOrEmpty(parent); i++)
+        {
+            foreach (var g in Shared.ItemGroups.All)
+                if (g.Classes.Contains(parent)) return g.Key;
+            id = parent;
+        }
+        return "Other";
+    }
+
+    /// <summary>Weapon class key (ItemGroups.WeaponClasses: AssaultRifle, Smg, Pistol...) or "".</summary>
+    public string WeaponClassOf(string id)
+    {
+        for (int i = 0; i < 20 && _parents.TryGetValue(id, out var parent) && !string.IsNullOrEmpty(parent); i++)
+        {
+            foreach (var w in Shared.ItemGroups.WeaponClasses)
+                if (w.Class == parent) return w.Key;
+            id = parent;
+        }
+        return "";
+    }
+
+    /// <summary>Group of a modded item: the item it was cloned from, else its parent class.</summary>
+    public string GroupFor(string? clonedFrom, string? parent)
+    {
+        if (clonedFrom != null && Items.ContainsKey(clonedFrom)) return GroupOf(clonedFrom);
+        if (string.IsNullOrEmpty(parent)) return "Other";
+        foreach (var g in Shared.ItemGroups.All)
+            if (g.Classes.Contains(parent)) return g.Key;
+        return GroupOf(parent);
+    }
 
     /// <summary>Category of a modded item: the item it was cloned from, else its parent class.</summary>
     public ItemCategory CategoryFor(string? clonedFrom, string? parent)
@@ -186,7 +225,10 @@ public sealed class ItemDatabase
             // What players can hold is what the handbook lists (plus quest items); the rest are templates and dev items.
             bool hidden = name.Contains("DO_NOT_USE", StringComparison.OrdinalIgnoreCase) || name.Contains("DO NOT USE", StringComparison.OrdinalIgnoreCase) ||
                           (Handbook.Count > 0 && !quest && !Handbook.ContainsKey(id));
-            Items[id] = new GameItem(id, name, shortName, parent, category, caliber) { Hidden = hidden };
+            Items[id] = new GameItem(id, name, shortName, parent, category, caliber)
+            {
+                Hidden = hidden, Group = GroupOf(id, quest), WeaponClass = category == ItemCategory.Weapon ? WeaponClassOf(id) : "",
+            };
         }
     }
 
@@ -219,10 +261,13 @@ public sealed class ItemDatabase
                 foreach (var dir in Directory.GetDirectories(traders))
                 {
                     var file = Path.Combine(dir, "base.json");
-                    if (!File.Exists(file)) continue;
+                    if (!File.Exists(file) || Path.GetFileName(dir).Equals("ragfair", StringComparison.OrdinalIgnoreCase)) continue; // the flea market isn't a trader
                     using var doc = JsonDocument.Parse(File.ReadAllBytes(file));
                     if (!doc.RootElement.TryGetProperty("loyaltyLevels", out var levels) || levels.ValueKind != JsonValueKind.Array || levels.GetArrayLength() == 0) continue;
                     if (!levels[0].TryGetProperty("buy_price_coef", out var coef) || coef.ValueKind != JsonValueKind.Number) continue;
+                    // traders that buy nothing (empty items_buy) or "pay 100%" placeholders don't count
+                    bool buys = doc.RootElement.TryGetProperty("items_buy", out var ib) && ib.TryGetProperty("category", out var cats) && cats.ValueKind == JsonValueKind.Array && cats.GetArrayLength() > 0;
+                    if (!buys || coef.GetDouble() <= 0) continue;
                     best = Math.Max(best, (100 - coef.GetDouble()) / 100);
                 }
             if (best > 0) BestTraderRate = Math.Min(1, best);

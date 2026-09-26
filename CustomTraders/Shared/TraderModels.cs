@@ -39,6 +39,21 @@ public class TraderFile
     /// <summary>Off = the server skips this trader completely (its offers and quests aren't loaded). Nothing is deleted.</summary>
     public bool Enabled { get; set; } = true;
 
+    /// <summary>Place in the game's trader list (1 = first, 2 = second...). 0 = default (sorted by id, after the game's traders).</summary>
+    public int Priority { get; set; }
+
+    /// <summary>Multiplies every money price of this trader's offers (1 = as set on the offers, 1.5 = 50% more).</summary>
+    public double PriceMultiplier { get; set; } = 1;
+
+    /// <summary>Multiplies what the trader pays players for items (each loyalty level's "Pays %"). 0 = buys nothing.</summary>
+    public double BuyMultiplier { get; set; } = 1;
+
+    /// <summary>What players can sell to the trader: Default (guns, parts, gear, ammo), Everything, Nothing, Categories (BuyCategories).</summary>
+    public string Buys { get; set; } = "Default";
+
+    /// <summary>ItemGroups keys the trader buys when Buys = Categories.</summary>
+    public List<string> BuyCategories { get; set; } = new();
+
     /// <summary>Mods whose items this trader uses (written by the editor; the server names them when an item is missing).</summary>
     public List<string> RequiredMods { get; set; } = new();
 
@@ -111,6 +126,13 @@ public class OfferDef
     /// <summary>Your own labels for grouping offers (editor only).</summary>
     public List<string> Tags { get; set; } = new();
 
+    /// <summary>Off = the server skips this offer (nothing is deleted).</summary>
+    public bool Enabled { get; set; } = true;
+
+    /// <summary>Random price: the first money price is re-rolled between these on every restock (0 = off).</summary>
+    public int PriceMin { get; set; }
+    public int PriceMax { get; set; }
+
     /// <summary>Weapons: sell the game's default fully-assembled preset instead of a bare receiver.</summary>
     public bool UseDefaultPreset { get; set; } = true;
 
@@ -179,6 +201,9 @@ public class QuestDef
 
     /// <summary>Optional image in the trader's folder shown for the quest (jpg/png).</summary>
     public string? Image { get; set; }
+
+    /// <summary>Off = the server skips this quest (nothing is deleted).</summary>
+    public bool Enabled { get; set; } = true;
 
     /// <summary>One of the game's own quest pictures (file name without extension in SPT_Data/images/quests), used when Image is empty.</summary>
     public string? GameImage { get; set; }
@@ -258,6 +283,12 @@ public class ConditionDef
 
     /// <summary>Kill: the kill must be made with one of these weapons / grenades. Empty = any weapon.</summary>
     public List<string> WeaponTpls { get; set; } = new();
+
+    /// <summary>Kill: also any weapon of these classes (ItemGroups.WeaponClasses keys, e.g. "AssaultRifle"), expanded at server start (mod weapons too).</summary>
+    public List<string> WeaponClasses { get; set; } = new();
+
+    /// <summary>Kill: also any weapon chambered in these calibers ("Caliber762x39"), expanded at server start.</summary>
+    public List<string> WeaponCalibers { get; set; } = new();
 
     /// <summary>Kill: the kill must be made with ammo of one of these calibers (e.g. Caliber556x45NATO). Empty = any.</summary>
     public List<string> Calibers { get; set; } = new();
@@ -413,4 +444,59 @@ public static class Ids
 
     public static bool IsValid(string? id) =>
         id != null && id.Length == 24 && id.All(Uri.IsHexDigit);
+}
+
+
+/// <summary>Item groups (by the game's base classes) — for "what the trader buys", offer categories and kill weapon classes.</summary>
+public static class ItemGroups
+{
+    /// <summary>Group key, display name, base class ids (an item belongs to the first group whose class is one of its ancestors).</summary>
+    public static readonly (string Key, string Name, string[] Classes)[] All =
+    {
+        ("Weapons", "Weapons", new[] { "5422acb9af1c889c16000029" }),
+        ("Melee", "Melee", new[] { "5447e1d04bdc2dff2f8b4567" }),
+        ("Grenades", "Grenades", new[] { "543be6564bdc2df4348b4568" }),
+        ("Ammo", "Ammo", new[] { "5485a8684bdc2da71d8b4567", "543be5cb4bdc2deb348b4568" }),
+        ("WeaponParts", "Weapon Parts", new[] { "5448fe124bdc2da5018b4567" }),
+        ("Armor", "Armor", new[] { "5448e54d4bdc2dcc718b4568", "644120aa86ffbe10ee032b6f" }),
+        ("Headwear", "Headwear", new[] { "5a341c4086f77401f2541505" }),
+        ("Rigs", "Rigs", new[] { "5448e5284bdc2dcb718b4567" }),
+        ("Backpacks", "Backpacks", new[] { "5448e53e4bdc2d60728b4567" }),
+        ("Gear", "Other Gear", new[] { "543be5f84bdc2dd4348b456a", "57bef4c42459772e8d35a53b" }),
+        ("Medical", "Medical", new[] { "543be5664bdc2dd4348b4569" }),
+        ("Food", "Food & Drink", new[] { "5448e8d04bdc2ddf718b4569", "5448e8d64bdc2dce718b4568" }),
+        ("Electronics", "Electronics", new[] { "57864a66245977548f04a81f" }),
+        ("Barter", "Barter Items", new[] { "5448eb774bdc2d0a728b4567", "5448ecbe4bdc2d60728b4568", "616eb7aea207f41933308f46" }),
+        ("Keys", "Keys", new[] { "543be5e94bdc2df1348b4568" }),
+        ("Containers", "Containers", new[] { "5795f317245977243854e041", "5671435f4bdc2d96058b4569" }),
+        ("Special", "Special", new[] { "5447e0e74bdc2d3c308b4567", "567849dd4bdc2d150f8b456e" }),
+    };
+
+    /// <summary>What a trader bought before "Buys" existed (and still with Buys = Default).</summary>
+    public static readonly string[] DefaultBuyClasses =
+    {
+        "5422acb9af1c889c16000029", "5448fe124bdc2da5018b4567", "5448e53e4bdc2d60728b4567",
+        "5448e5284bdc2dcb718b4567", "5448e54d4bdc2dcc718b4568", "543be5cb4bdc2deb348b4568",
+        "5485a8684bdc2da71d8b4567", "5a341c4086f77401f2541505", "5448f39d4bdc2d0a728b4568",
+    };
+
+    /// <summary>The root of every item ("buys everything").</summary>
+    public const string AnyItem = "54009119af1c881c07000029";
+
+    /// <summary>Weapon classes for kill objectives: key = the class name the game uses.</summary>
+    public static readonly (string Key, string Name, string Class)[] WeaponClasses =
+    {
+        ("AssaultRifle", "Assault Rifles", "5447b5f14bdc2d61278b4567"),
+        ("AssaultCarbine", "Assault Carbines", "5447b5fc4bdc2d87278b4567"),
+        ("Smg", "SMGs", "5447b5e04bdc2d62278b4567"),
+        ("Shotgun", "Shotguns", "5447b6094bdc2dc3278b4567"),
+        ("MarksmanRifle", "Marksman Rifles", "5447b6194bdc2d67278b4567"),
+        ("SniperRifle", "Bolt-Action Rifles", "5447b6254bdc2dc3278b4568"),
+        ("MachineGun", "Machine Guns", "5447bed64bdc2d97278b4568"),
+        ("Pistol", "Pistols", "5447b5cf4bdc2d65278b4567"),
+        ("Revolver", "Revolvers", "617f1ef5e8b54b0998387733"),
+        ("GrenadeLauncher", "Grenade Launchers", "5447bedf4bdc2d87278b4568"),
+        ("Knife", "Melee", "5447e1d04bdc2dff2f8b4567"),
+        ("ThrowWeap", "Grenades", "543be6564bdc2df4348b4568"),
+    };
 }

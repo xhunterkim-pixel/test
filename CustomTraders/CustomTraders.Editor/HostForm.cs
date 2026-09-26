@@ -24,6 +24,10 @@ public sealed class HostForm : Form
     // window itself from disk, so a changed picture always shows right away.
     private const string FilesHost = "files.local";
 
+    /// <summary>Shown in the window title, the page's top-left corner and the start menu.</summary>
+    public const string Version = "1.0.0";
+    private const string AppTitle = "Custom Trader Creator";
+
     private readonly WebView2 _web = new() { Dock = DockStyle.Fill, DefaultBackgroundColor = Color.Black };
     private readonly Settings _settings = Settings.Load();
     private readonly ItemDatabase _db = new();
@@ -32,7 +36,8 @@ public sealed class HostForm : Form
 
     public HostForm()
     {
-        Text = "Trader Editor DC:k_kyangg";
+        Text = AppTitle;
+        try { Icon = Icon.ExtractAssociatedIcon(Environment.ProcessPath ?? Application.ExecutablePath); } catch { /* keep the default */ }
         Width = 1640;
         Height = 1000;
         MinimumSize = new Size(1200, 760);
@@ -57,7 +62,7 @@ public sealed class HostForm : Form
         {
             if (MessageBox.Show(this,
                     "The editor needs the Microsoft Edge WebView2 Runtime (normally already part of Windows 10/11).\n\n" +
-                    "Open the download page now?", "Trader Editor", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) == DialogResult.Yes)
+                    "Open the download page now?", "Custom Trader Creator", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) == DialogResult.Yes)
                 OpenUrl("https://go.microsoft.com/fwlink/p/?LinkId=2124703");
             Close();
             return;
@@ -147,6 +152,7 @@ public sealed class HostForm : Form
             ["itemsStatus"] = "",
             ["problems"] = new JsonArray(),
             ["deletedCount"] = 0,
+            ["version"] = Version,
         };
         if (string.IsNullOrWhiteSpace(folder) || !Directory.Exists(folder)) return result;
 
@@ -197,6 +203,7 @@ public sealed class HostForm : Form
             ["file"] = file,
             ["images"] = images,
             ["avatarColor"] = File.Exists(avatarPath) ? AverageColor(avatarPath) : null,
+            ["modified"] = File.Exists(Path.Combine(dir, "trader.json")) ? new DateTimeOffset(File.GetLastWriteTimeUtc(Path.Combine(dir, "trader.json"))).ToUnixTimeMilliseconds() : 0,
         };
     }
 
@@ -238,6 +245,8 @@ public sealed class HostForm : Form
                     ["ph"] = _db.Presets.TryGetValue(item.Id, out var preset) ? Math.Round(preset.Handbook) : null,
                     ["pf"] = _db.Presets.TryGetValue(item.Id, out var preset2) ? Math.Round(preset2.Flea) : null,
                     ["x"] = item.Hidden ? 1 : null,
+                    ["g"] = item.Group,
+                    ["wc"] = item.WeaponClass.Length > 0 ? item.WeaponClass : null,
                 });
             }
             int modded = AddModItems(items, result);
@@ -314,6 +323,8 @@ public sealed class HostForm : Form
                     ["k"] = it.Caliber.Length > 0 ? it.Caliber : null,
                     ["h"] = it.Handbook > 0 ? Math.Round(it.Handbook) : null, ["p"] = sell > 0 ? sell : null,
                     ["m"] = mod.Name,
+                    ["g"] = it.Group,
+                    ["wc"] = it.WeaponClass.Length > 0 ? it.WeaponClass : null,
                 };
                 if (mod.Enabled) { items.Add(node); count++; }
                 else off.Add(node);
@@ -818,7 +829,7 @@ public sealed class HostForm : Form
     private JsonNode SetUnsaved(int count)
     {
         _unsaved = count;
-        Text = count > 0 ? $"Trader Editor DC:k_kyangg  •  {count} unsaved" : "Trader Editor DC:k_kyangg";
+        Text = count > 0 ? $"{AppTitle}  •  {count} unsaved" : AppTitle;
         return true;
     }
 

@@ -1,4 +1,4 @@
-# CustomTraders — your own traders, barters and quests for SPT 4.1
+# Custom Trader Creator (CustomTraders) v1.0.0 — your own traders, barters and quests for SPT 4.1
 
 Two parts:
 
@@ -8,6 +8,15 @@ Two parts:
 | **CustomTraders.Editor** | Windows program (`CustomTraders.Editor.exe`) to create and edit those traders — no JSON editing needed. | Anywhere on your PC |
 
 Completely separate from LevelGate.
+
+## New in 1.0.0
+
+- **Start menu**: the editor opens on all your traders (last edited first) and a ＋ card for a new one. ⌂ Menu / Ctrl+M returns to it.
+- **Trader page → Trading**: position in the game's trader list, price multiplier (× every money price), buy multiplier (× what he pays, 0 = buys nothing), and what players can sell to him (Default / Everything / Nothing / pick categories). The loyalty table shows the true **Pays %** (SPT's buy_price_coef is what the trader keeps).
+- **Offers**: categories (Weapons, Ammo, Armor, Headwear, Rigs, Backpacks, Medical, Food, Electronics, Barter, Keys, Quest Items… plus your tags), click a column header to sort, drag rows to reorder, Spotify-style column dividers, Bulk Edit, random price between a min and max (re-rolled every restock), on/off switch per offer.
+- **Quests**: on/off switch per quest (asks about the quests that need it), kill objectives by weapon type or caliber (any assault rifle, any 7.62x39 gun — modded guns too), required quests grouped by trader with search.
+- **View menu** (Sort By / View As List or Compact / Columns / Show / Colors), keyboard shortcuts (⌨ or F1), one editor window at a time, app icon.
+- Quest money rewards: SPT adds the player's quest money bonus (at least +2%, plus hideout bonuses) to every money reward — that's why 100,000 € can arrive as ~102,000 €.
 
 ## First start
 

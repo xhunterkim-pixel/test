@@ -2,14 +2,14 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>Trader Editor DC:k_kyangg</title>
+  <title>Custom Trader Creator</title>
   <link rel="stylesheet" href="app.css">
 </head>
 <body>
   <div id="bg"></div>
 
   <header id="top">
-    <div class="logo">Trader Editor DC:k_kyangg</div>
+    <div class="logo" data-act="home" title="Start menu (Ctrl+M)"><div>Custom Trader Creator</div><div class="credit"><span id="appVersion">v1.0.0</span> · discord : k_kyangg</div></div>
     <div class="search-pill">
       <span class="ico">📁</span>
       <span id="folder" class="folder">Pick your SPT_Runtime\user\mods\CustomTraders folder</span>
@@ -18,6 +18,8 @@
     </div>
     <div class="top-right">
       <span id="itemsStatus" class="muted small"></span>
+      <button class="ghost" data-act="home" title="All traders (Ctrl+M)">⌂ Menu</button>
+      <button class="ghost" data-act="shortcuts" title="Keyboard shortcuts (F1)">⌨ Shortcuts</button>
       <button class="outline" data-act="appearance">Appearance</button>
       <button class="outline" id="checksButton" data-act="page" data-arg="checks">Checks</button>
     </div>
@@ -57,7 +59,8 @@
         <button class="play" data-act="save" title="Save All (Ctrl+S)">✓</button>
         <div id="searchBox" class="search"><svg viewBox="0 0 24 24"><path d="M10.5 3a7.5 7.5 0 0 1 6 12l4.7 4.7-1.4 1.4-4.7-4.7A7.5 7.5 0 1 1 10.5 3Zm0 2a5.5 5.5 0 1 0 0 11 5.5 5.5 0 0 0 0-11Z"/></svg>
           <input type="text" id="search" placeholder="Search" spellcheck="false"><button class="icon-btn" id="searchClear" data-act="clearSearch" title="Clear">✕</button></div>
-        <button class="outline view-btn" data-act="viewMenu" title="View Options: Columns, Tags, Item Pictures, Colors">⚙ View</button>
+        <span class="grow"></span>
+        <button class="view-btn" data-act="viewMenu" title="Sort, columns and what's shown"><span id="viewLabel">View</span><svg viewBox="0 0 24 24"><path d="M3 5h2v2H3V5Zm4 0h14v2H7V5ZM3 11h2v2H3v-2Zm4 0h14v2H7v-2Zm-4 6h2v2H3v-2Zm4 0h14v2H7v-2Z"/></svg></button>
       </nav>
       <div id="page" class="scroll"></div>
     </section>
@@ -69,6 +72,14 @@
       <div id="details" class="scroll"></div>
     </aside>
   </main>
+
+  <section id="home" hidden>
+    <div class="home-inner">
+      <div class="home-head"><h1>Your Traders</h1><span class="muted" id="homeSub"></span></div>
+      <div id="homeGrid"></div>
+      <div class="home-foot muted small">Custom Trader Creator <span id="homeVersion"></span> · made by discord : k_kyangg</div>
+    </div>
+  </section>
 
   <footer id="bottom">
     <div id="status" class="muted"></div>

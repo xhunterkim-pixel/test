@@ -107,7 +107,7 @@ public class CustomTradersMod(
         }
 
         foreach (var (trader, _) in traders)
-        foreach (var quest in trader.Quests.Where(q => Ids.IsValid(q.Id)))
+        foreach (var quest in trader.Quests.Where(q => Ids.IsValid(q.Id) && q.Enabled))
         {
             _questOptionIds[quest.Id] = OptionQuestIds(quest);
             _questDefs[quest.Id] = quest;
@@ -139,6 +139,7 @@ public class CustomTradersMod(
     private bool AddTrader(TraderFile file, string folder)
     {
         _requiredMods = file.RequiredMods ?? new List<string>();
+        if (file.Priority > 0) TraderPriorities[file.Id] = file.Priority;
         if (_requiredMods.Count > 0)
             LogBlue($"[CustomTraders] {file.Name} uses items from other mods: {string.Join(", ", _requiredMods)} (those offers / quests need the mods installed).");
         MongoId traderId = file.Id;
@@ -211,6 +212,7 @@ public class CustomTradersMod(
         int quests = 0;
         foreach (var quest in file.Quests)
         {
+            if (!quest.Enabled) { LogBlue($"[CustomTraders] {file.Name}: quest '{quest.Name}' is switched off — skipped."); continue; }
             if (AddQuest(file, quest, folder)) quests++;
         }
 
@@ -220,15 +222,19 @@ public class CustomTradersMod(
 
     private static JsonObject BuildTraderBase(TraderFile file, string avatarUrl)
     {
+        // buy_price_coef = the share the trader KEEPS: he pays (100 - coef)% of an item's value.
+        // BuyMultiplier scales what he pays (0 = buys nothing at all).
+        double buyMultiplier = Math.Max(0, file.BuyMultiplier);
         var loyalty = new JsonArray();
         foreach (var level in file.LoyaltyLevels.Take(4))
         {
+            double pays = Math.Clamp((100 - level.BuyPriceCoef) * buyMultiplier, 0, 100);
             loyalty.Add(new JsonObject
             {
                 ["minLevel"] = level.MinLevel,
                 ["minSalesSum"] = level.MinSalesSum,
                 ["minStanding"] = level.MinStanding,
-                ["buy_price_coef"] = level.BuyPriceCoef,
+                ["buy_price_coef"] = (int)Math.Round(100 - pays),
                 ["repair_price_coef"] = 110,
                 ["insurance_price_coef"] = 17,
                 ["exchange_price_coef"] = 0,
@@ -259,14 +265,11 @@ public class CustomTradersMod(
                 ["min_payment"] = 0,
                 ["min_return_hour"] = 0,
             },
-            // What the trader buys from players: weapons, mods, gear, ammo.
+            // What the trader buys from players (Buys: Default / Everything / Nothing / Categories).
             ["items_buy"] = new JsonObject
             {
                 ["id_list"] = new JsonArray(),
-                ["category"] = new JsonArray(
-                    "5422acb9af1c889c16000029", "5448fe124bdc2da5018b4567", "5448e53e4bdc2d60728b4567",
-                    "5448e5284bdc2dcb718b4567", "5448e54d4bdc2dcc718b4568", "543be5cb4bdc2deb348b4568",
-                    "5485a8684bdc2da71d8b4567", "5a341c4086f77401f2541505", "5448f39d4bdc2d0a728b4568"),
+                ["category"] = Strings(BuyClasses(file, buyMultiplier)),
             },
             ["items_buy_prohibited"] = new JsonObject
             {
@@ -295,6 +298,19 @@ public class CustomTradersMod(
         };
     }
 
+    /// <summary>Base classes the trader buys (items_buy.category).</summary>
+    private static IEnumerable<string> BuyClasses(TraderFile file, double buyMultiplier)
+    {
+        if (buyMultiplier <= 0) return Array.Empty<string>();
+        return (file.Buys ?? "Default") switch
+        {
+            "Nothing" => Array.Empty<string>(),
+            "Everything" => new[] { ItemGroups.AnyItem },
+            "Categories" => ItemGroups.All.Where(g => file.BuyCategories.Contains(g.Key)).SelectMany(g => g.Classes).Distinct(),
+            _ => ItemGroups.DefaultBuyClasses,
+        };
+    }
+
     // -------------------------------------------------------------------------
     // Offers
     // -------------------------------------------------------------------------
@@ -311,7 +327,7 @@ public class CustomTradersMod(
         // needs only one copy, tied to way A: finishing any way marks all its
         // ways completed (QuestOptions), way A included.
         var unlockedBy = new Dictionary<string, List<(string QuestId, int Quantity)>>();
-        foreach (var quest in file.Quests.Where(q => Ids.IsValid(q.Id)))
+        foreach (var quest in file.Quests.Where(q => Ids.IsValid(q.Id) && q.Enabled))
         foreach (var reward in quest.Rewards.Where(r => r.Type == RewardTypes.UnlockOffer && Ids.IsValid(r.OfferId)))
         {
             if (!unlockedBy.TryGetValue(reward.OfferId, out var list)) unlockedBy[reward.OfferId] = list = new();
@@ -320,11 +336,23 @@ public class CustomTradersMod(
 
         foreach (var offer in file.Offers)
         {
+            if (!offer.Enabled) continue; // switched off in the editor
             if (!Ids.IsValid(offer.Id) || !IsKnownItem(offer.ItemTpl, $"{file.Name} offer")) continue;
 
             var cost = new JsonArray();
+            int randomIndex = -1;
+            double multiplier = file.PriceMultiplier > 0 ? file.PriceMultiplier : 1;
             foreach (var c in offer.Cost.Where(c => c.Count > 0 && IsKnownItem(c.ItemTpl, $"{file.Name} offer cost")))
-                cost.Add(new JsonObject { ["count"] = c.Count, ["_tpl"] = c.ItemTpl });
+            {
+                bool money = Currencies.IsCurrency(c.ItemTpl);
+                double count = money ? Math.Max(1, Math.Round(c.Count * multiplier)) : c.Count;
+                if (money && randomIndex < 0 && offer.PriceMin > 0 && offer.PriceMax >= offer.PriceMin)
+                {
+                    randomIndex = cost.Count;
+                    count = RandomPrice(offer, multiplier);
+                }
+                cost.Add(new JsonObject { ["count"] = count, ["_tpl"] = c.ItemTpl });
+            }
             if (cost.Count == 0)
             {
                 logger.Warning($"[CustomTraders] {file.Name}: offer {offer.Id} ({ItemName(offer.ItemTpl)}) has no valid cost — skipped.");
@@ -361,6 +389,7 @@ public class CustomTradersMod(
                     items.Add(node);
 
                 barterScheme[entryId] = new JsonArray(new JsonArray(cost.Select(c => c!.DeepClone()).ToArray()));
+                if (randomIndex >= 0) RandomPrices.Add((file.Id, entryId, randomIndex, offer.PriceMin, offer.PriceMax, multiplier));
                 loyalLevelItems[entryId] = Math.Clamp(offer.LoyaltyLevel, 1, 4);
 
                 if (questId.Length > 0)
@@ -375,6 +404,53 @@ public class CustomTradersMod(
             ["barter_scheme"] = barterScheme,
             ["loyal_level_items"] = loyalLevelItems,
         };
+    }
+
+    /// <summary>Weapons of the objective's weapon classes / calibers, from the item database (mod weapons included).</summary>
+    private List<string> WeaponsOf(ConditionDef c)
+    {
+        var result = new List<string>();
+        if (c.WeaponClasses.Count == 0 && c.WeaponCalibers.Count == 0) return result;
+        var classIds = ItemGroups.WeaponClasses.Where(w => c.WeaponClasses.Contains(w.Key)).Select(w => w.Class).ToHashSet();
+        foreach (var (id, item) in templateTable.Items)
+        {
+            if (item.Type != "Item") continue;
+            bool byClass = classIds.Count > 0 && HasAncestor(id.ToString(), classIds);
+            bool byCaliber = c.WeaponCalibers.Count > 0 && item.Properties?.AmmoCaliber is { } cal && c.WeaponCalibers.Contains(cal)
+                             && HasAncestor(id.ToString(), new HashSet<string> { "5422acb9af1c889c16000029" });
+            if (byClass || byCaliber) result.Add(id.ToString());
+        }
+        if (result.Count == 0)
+            logger.Warning($"[CustomTraders] Kill objective: no weapons match {string.Join(", ", c.WeaponClasses.Concat(c.WeaponCalibers))}.");
+        return result;
+    }
+
+    private bool HasAncestor(string id, HashSet<string> classes)
+    {
+        for (int i = 0; i < 20 && templateTable.Items.TryGetValue(id, out var t); i++)
+        {
+            var parent = t.Parent.ToString();
+            if (string.IsNullOrEmpty(parent)) return false;
+            if (classes.Contains(parent)) return true;
+            id = parent;
+        }
+        return false;
+    }
+
+    /// <summary>Offers whose price is re-rolled on every restock (see TraderRestockPrices).</summary>
+    public static readonly List<(string TraderId, string EntryId, int CostIndex, int Min, int Max, double Multiplier)> RandomPrices = new();
+
+    /// <summary>Trader id -> wanted place in the game's trader list (TraderOrderRouter).</summary>
+    public static readonly Dictionary<string, int> TraderPriorities = new();
+
+    public static double RandomPrice(OfferDef offer, double multiplier) => RollPrice(offer.PriceMin, offer.PriceMax, multiplier);
+
+    public static double RollPrice(int min, int max, double multiplier)
+    {
+        double value = min + Random.Shared.NextDouble() * (max - min);
+        value *= multiplier;
+        double step = value >= 10000 ? 100 : value >= 1000 ? 10 : 1; // round like a trader price
+        return Math.Max(1, Math.Round(value / step) * step);
     }
 
     /// <summary>
@@ -787,6 +863,7 @@ public class CustomTradersMod(
                 bool boss = c.KillTarget == "Boss";
                 var roles = boss ? (c.BossRoles.Count > 0 ? c.BossRoles : KillTargets.Bosses.Select(b => b.Role).ToList()) : new List<string>();
                 var weapons = c.WeaponTpls.Where(t => IsKnownItem(t, "quest condition (weapon)")).ToList();
+                foreach (var w in WeaponsOf(c)) if (!weapons.Contains(w)) weapons.Add(w);
                 var kills = Counter("kills", "Kills", n =>
                 {
                     n["target"] = boss ? "Savage" : string.IsNullOrWhiteSpace(c.KillTarget) ? "Any" : c.KillTarget;
@@ -949,7 +1026,10 @@ public class CustomTradersMod(
                     "Boss" => c.BossRoles.Count > 0 ? string.Join(" or ", c.BossRoles.Select(KillTargets.BossName)) : "bosses",
                     _ => "any target",
                 };
-                string weapon = c.WeaponTpls.Count > 0 ? " while using " + string.Join(" or ", c.WeaponTpls.Select(ItemName)) : "";
+                var weaponWords = c.WeaponTpls.Select(ItemName)
+                    .Concat(ItemGroups.WeaponClasses.Where(w => c.WeaponClasses.Contains(w.Key)).Select(w => "any " + w.Name.ToLowerInvariant()))
+                    .Concat(c.WeaponCalibers.Select(x => "a " + CaliberName(x) + " weapon")).ToList();
+                string weapon = weaponWords.Count > 0 ? " while using " + string.Join(" or ", weaponWords) : "";
                 string ammo = c.Calibers.Count > 0 ? " with " + string.Join(" or ", c.Calibers.Select(CaliberName)) + " ammo" : "";
                 string parts = c.BodyParts.Count == 0 ? "" : c.BodyParts is ["Head"] ? " with headshots"
                     : " with shots to the " + string.Join(" or ", c.BodyParts.Select(BodyPartName));

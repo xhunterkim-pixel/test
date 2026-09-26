@@ -60,6 +60,19 @@ const CATEGORY_FILTERS = [
   ['Money', 'Money'], ['Other', 'Other'],
 ];
 const CAT_NAME = Object.fromEntries(CATEGORY_FILTERS);
+/** Offer categories (Shared/ItemGroups.cs) — every item carries its key as "g". */
+const ITEM_GROUPS = [
+  ['Weapons', 'Weapons'], ['Melee', 'Melee'], ['Grenades', 'Grenades'], ['Ammo', 'Ammo'], ['WeaponParts', 'Weapon Parts'], ['Armor', 'Armor'],
+  ['Headwear', 'Headwear'], ['Rigs', 'Rigs'], ['Backpacks', 'Backpacks'], ['Gear', 'Other Gear'], ['Medical', 'Medical'], ['Food', 'Food & Drink'],
+  ['Electronics', 'Electronics'], ['Barter', 'Barter Items'], ['Keys', 'Keys'], ['Containers', 'Containers'], ['QuestItems', 'Quest Items'],
+  ['Special', 'Special'], ['Other', 'Other'],
+];
+const groupName = k => (ITEM_GROUPS.find(g => g[0] === k) || [k, k])[1];
+const WEAPON_CLASSES = [
+  ['AssaultRifle', 'Assault Rifles'], ['AssaultCarbine', 'Assault Carbines'], ['Smg', 'SMGs'], ['Shotgun', 'Shotguns'], ['MarksmanRifle', 'Marksman Rifles'],
+  ['SniperRifle', 'Bolt-Action Rifles'], ['MachineGun', 'Machine Guns'], ['Pistol', 'Pistols'], ['Revolver', 'Revolvers'], ['GrenadeLauncher', 'Grenade Launchers'],
+  ['Knife', 'Melee'], ['ThrowWeap', 'Grenades'],
+];
 const catName = c => ({ Weapon: 'Weapon', Grenade: 'Grenade', Food: 'Food & Drink', Meds: 'Medical', AmmoBox: 'Ammo Pack', WeaponPart: 'Weapon Part', Key: 'Key', Barter: 'Barter Item', Container: 'Container', QuestItem: 'Quest Item' }[c] || CAT_NAME[c] || c || '');
 
 const mapName = id => (MAPS.find(m => m[0].toLowerCase() === String(id).toLowerCase()) || [id, id])[1];
@@ -111,6 +124,8 @@ const S = {
   open: new WeakMap(),  // objective -> Set of opened "must ..." sections
   picked: new Set(),    // offers / quests selected together (Ctrl/Shift-click or drag in empty space)
   search: { offers: '', quests: '', checks: '', mods: '' },
+  sort: { offers: null, quests: null },   // { key, dir } — a view order only; the saved order is the list itself
+  category: null,                          // offers page: 'g:Weapons' | 'tag:ARs' | null
   mods: [], modOff: new Map(), modMemory: {}, modSel: null,
   tradersOpen: false,
   traderRate: 60,       // best % of the handbook value a game trader pays
@@ -262,7 +277,7 @@ const def = (o, k, v) => { if (o[k] === undefined || o[k] === null) o[k] = v; };
 function fillCond(c) {
   def(c, 'id', newId()); def(c, 'type', 'HandoverItem'); def(c, 'option', 1); def(c, 'text', ''); def(c, 'count', 1);
   def(c, 'foundInRaid', true); def(c, 'killTarget', 'Any');
-  for (const k of ['itemTpls', 'bossRoles', 'weaponTpls', 'calibers', 'wearingTpls', 'locations', 'bodyParts', 'exitStatuses']) def(c, k, []);
+  for (const k of ['itemTpls', 'bossRoles', 'weaponTpls', 'weaponClasses', 'weaponCalibers', 'calibers', 'wearingTpls', 'locations', 'bodyParts', 'exitStatuses']) def(c, k, []);
   def(c, 'distance', 0); def(c, 'distanceCompare', '>='); def(c, 'daytimeFrom', 0); def(c, 'daytimeTo', 0); def(c, 'oneRaid', false); def(c, 'skill', '');
   return c;
 }
@@ -274,7 +289,7 @@ function fillReward(r) {
 function fillQuest(q) {
   def(q, 'id', newId()); def(q, 'name', 'Quest'); def(q, 'description', ''); def(q, 'successMessage', '');
   def(q, 'minLevel', 1); def(q, 'prerequisiteQuestIds', []); def(q, 'conditions', []); def(q, 'rewards', []);
-  def(q, 'failOnDeath', false); def(q, 'tags', []); def(q, 'notes', '');
+  def(q, 'failOnDeath', false); def(q, 'tags', []); def(q, 'notes', ''); def(q, 'enabled', true);
   q.conditions.forEach(fillCond);
   q.rewards.forEach(fillReward);
   return q;
@@ -282,6 +297,7 @@ function fillQuest(q) {
 function fillOffer(o) {
   def(o, 'id', newId()); def(o, 'itemTpl', ''); def(o, 'useDefaultPreset', true); def(o, 'loyaltyLevel', 1);
   def(o, 'unlimited', true); def(o, 'stock', 1); def(o, 'buyLimit', 0); def(o, 'cost', []); def(o, 'notes', ''); def(o, 'tags', []);
+  def(o, 'priceMin', 0); def(o, 'priceMax', 0); def(o, 'enabled', true);
   return o;
 }
 
@@ -292,6 +308,7 @@ function normalize(entry) {
   def(f, 'avatar', 'avatar.png'); def(f, 'refreshMinutesMin', 60); def(f, 'refreshMinutesMax', 120);
   def(f, 'loyaltyLevels', [{ minLevel: 1, minSalesSum: 0, minStanding: 0, buyPriceCoef: 50 }]);
   def(f, 'offers', []); def(f, 'quests', []);
+  def(f, 'priority', 0); def(f, 'priceMultiplier', 1); def(f, 'buyMultiplier', 1); def(f, 'buys', 'Default'); def(f, 'buyCategories', []);
   f.offers.forEach(fillOffer);
   for (const q of f.quests) {
     fillQuest(q);
@@ -327,6 +344,7 @@ function applySnapshot(snap) {
   S.ui = snap.ui || S.ui || {};
   applyItems(snap);
   S.deletedCount = snap.deletedCount || 0;
+  if (snap.version) { $('#appVersion').textContent = 'v' + snap.version; $('#homeVersion').textContent = 'v' + snap.version; }
   S.traders = (snap.traders || []).map(t => {
     const e = normalize({ ...t, dirty: false });
     e.migrated = e.dirty;                 // changed on load (old format) — stays unsaved until saved
@@ -345,6 +363,43 @@ function applySnapshot(snap) {
   status(S.modFolder ? `Loaded ${S.traders.length} trader(s). Restart the SPT server after saving to apply changes.` : 'Click Browse… and pick the CustomTraders mod folder.');
   runChecks();
   renderAll(true);
+  if (!S.homeSeen) { S.homeSeen = true; if (!window.__skipHome) showHome(); } // opening the editor starts at the trader menu
+}
+
+// =====================================================================
+// Start menu: every trader as a card, most recently edited first, and ＋ for a new one
+// =====================================================================
+
+const lastEdited = t => Math.max(t.modified || 0, t.edited || 0);
+function ago(ms) {
+  if (!ms) return 'never saved';
+  const m = Math.round((Date.now() - ms) / 60000);
+  if (m < 1) return 'just now';
+  if (m < 60) return `${m} min ago`;
+  const h = Math.round(m / 60);
+  if (h < 24) return `${h} hour${h === 1 ? '' : 's'} ago`;
+  const d = Math.round(h / 24);
+  return d < 30 ? `${d} day${d === 1 ? '' : 's'} ago` : new Date(ms).toLocaleDateString();
+}
+function showHome() { S.home = true; renderHome(); $('#home').hidden = false; animateIn($('#home .home-inner')); }
+function hideHome() { if (!S.home) return; S.home = false; $('#home').hidden = true; }
+function renderHome() {
+  const list = [...S.traders].sort((a, b) => lastEdited(b) - lastEdited(a));
+  $('#homeSub').textContent = S.traders.length ? `${S.traders.length} trader${S.traders.length === 1 ? '' : 's'} · most recently edited first` : 'Make your first trader';
+  const card = (t, big) => {
+    const f = t.file, i = S.traders.indexOf(t);
+    const img = t.images[f.avatar];
+    const errors = S.checks.filter(c => c.trader === t && c.level === 'error').length;
+    return `<button class="hcard ${big ? 'big' : ''} ${f.enabled ? '' : 'off'}" data-act="openTrader" data-arg="${i}" data-trader="${i}" style="--hc:${headerColor(t.avatarColor)}">
+      <div class="hpic">${img ? `<img src="${esc(img)}" alt="">` : `<span>${esc(initials(f.name))}</span>`}</div>
+      <div class="htext"><div class="hname">${esc(f.name)}</div>
+        <div class="hsub">${f.offers.length} Offers · ${f.quests.length} Quests</div>
+        <div class="hsub">Edited ${ago(lastEdited(t))}</div>
+        <div class="hbadges">${f.enabled ? '' : ui.badge('OFF', '#b3b3b3', 'keep')}${t.dirty ? ui.badge('UNSAVED', 'var(--pink)', 'keep') : ''}${errors ? ui.badge(errors + ' ✖', 'var(--red)', 'keep') : ''}${traderModBadge(t)}</div>
+        ${big ? '<span class="primary hgo">Continue ›</span>' : ''}</div></button>`;
+  };
+  $('#homeGrid').innerHTML = (list.length ? card(list[0], true) : '') + list.slice(1).map(t => card(t, false)).join('') +
+    `<button class="hcard hadd" data-act="homeNew" title="New trader (Ctrl+N)"><span class="plus">＋</span><span class="hsub">New Trader</span></button>`;
 }
 
 // =====================================================================
@@ -508,6 +563,7 @@ function renderLight() {
 }
 
 function renderAll(animate) {
+  if (S.home) renderHome();
   renderTraders();
   renderHeader();
   renderPage(animate);
@@ -586,6 +642,7 @@ function renderHeader() {
   document.querySelectorAll('#nav .nav').forEach(n => n.classList.toggle('on', n.dataset.arg === S.page));
   const box = $('#searchBox'), input = $('#search');
   box.hidden = S.page === 'trader';
+  $('#viewLabel').textContent = SORTS[S.page] ? sortLabel(S.page) : 'View';
   input.placeholder = { offers: 'Search Offers & Barters, “Modded” (Ctrl+F)', quests: 'Search Quests, Tags, Notes (Ctrl+F)', checks: 'Search the Log (Ctrl+F)', mods: 'Search Mods & Their Items (Ctrl+F)' }[S.page] || '';
   if (document.activeElement !== input) input.value = S.search[S.page] || '';
   box.classList.toggle('has', !!input.value);
@@ -664,7 +721,12 @@ function pageTrader() {
       const b = bind(() => l[k], v => { l[k] = clamp(v, min, max); }, 'light');
       return `<td><input type="number" data-b="${b}" value="${esc(l[k])}" step="${step}" min="${min}" max="${max}"></td>`;
     };
-    return `<tr><td>LL${i + 1}</td>${cell('minLevel', 1, 1, 79)}${cell('minSalesSum', 10000, 0, 1e12)}${cell('minStanding', .01, -10, 10)}${cell('buyPriceCoef', 1, 0, 100)}</tr>`;
+    // the file keeps SPT's buy_price_coef (the share the trader KEEPS); shown as what he PAYS
+    const pb = bind(() => 100 - l.buyPriceCoef, v => { l.buyPriceCoef = 100 - clamp(v, 0, 100); }, 'light');
+    const eff = clamp(Math.round((100 - l.buyPriceCoef) * (f.buyMultiplier ?? 1)), 0, 100);
+    return `<tr><td>LL${i + 1}</td>${cell('minLevel', 1, 1, 79)}${cell('minSalesSum', 10000, 0, 1e12)}${cell('minStanding', .01, -10, 10)}
+      <td><input type="number" data-b="${pb}" value="${100 - l.buyPriceCoef}" step="1" min="0" max="100"></td>
+      <td class="muted small">${f.buyMultiplier === 0 || f.buys === 'Nothing' ? 'Buys nothing' : eff + '% in game'}</td></tr>`;
   }).join('');
   const unlock = f.unlockedByDefault ? '' : `<div class="field"><label>Unlocked By</label><div class="itemline">
       <span class="name ${f.unlockQuestId ? '' : 'missing'}">${esc(f.unlockQuestId ? questLabel(f.unlockQuestId) : 'Nothing Yet — Pick the Quest That Unlocks This Trader')}</span>
@@ -683,9 +745,18 @@ function pageTrader() {
     ${ui.toggle("List This Trader's Offers on the Flea Market", () => f.listOnFlea, set('listOnFlea'), { label: 'Flea Market', refresh: 'light' })}
     ${ui.num('Restock Every (Min)', () => f.refreshMinutesMin, set('refreshMinutesMin'), { min: 1, max: 10080 })}
     ${ui.num('…Up To (Min)', () => f.refreshMinutesMax, set('refreshMinutesMax'), { min: 1, max: 10080 })}`)}
+  ${card('t-trade', 'Trading', `
+    ${ui.num('Position in Trader List', () => f.priority, set('priority'), { min: 0, max: 50 })}
+    ${ui.hint(f.priority > 0 ? `Shown as trader #${f.priority} in the game (Prapor is #1). The game's own traders move down one.` : '0 = default: after the game\'s traders. Type 1 to show it first, 3 for third…')}
+    ${ui.num('Price Multiplier', () => f.priceMultiplier, set('priceMultiplier'), { min: 0.05, max: 100, step: 0.05 })}
+    ${ui.hint(`Every money price of this trader's offers × ${fmt(f.priceMultiplier)} in game (1 = as set on the offers; 1.5 = a 1,000 ₽ offer costs 1,500 ₽). Barter items aren't changed.`)}
+    ${ui.num('Buy Multiplier', () => f.buyMultiplier, set('buyMultiplier'), { min: 0, max: 10, step: 0.05 })}
+    ${ui.hint(`× what the trader pays players (each loyalty level's Pays %). 1 = as set below, 0 = buys nothing at all.`)}
+    ${ui.chips('What Players Can Sell to This Trader', [['Default', 'Default (Guns, Parts, Gear, Ammo)'], ['Everything', 'Everything (Like Fence)'], ['Categories', 'Pick Categories'], ['Nothing', 'Nothing']], () => f.buys, set('buys'), { refresh: 'page' })}
+    ${f.buys === 'Categories' ? ui.multichips('', ITEM_GROUPS.filter(g => g[0] !== 'QuestItems'), f.buyCategories, { color: 'var(--accent)' }) : ''}`)}
   ${card('t-loyalty', 'Loyalty Levels', `
-    ${ui.hint(`What a player needs for each loyalty level (LL1 – LL4). Offers can require a loyalty level. "Spent" is counted in the trader's currency (${{ USD: 'dollars', EUR: 'euros' }[f.currency] || 'roubles'}) — the currency only decides this and what the trader pays when players sell to them; each offer's price is set on the offer. "Buys at %" = how much of an item's value the trader pays.`)}
-    <table class="loyalty"><tr><th></th><th>Player Level</th><th>Spent (${cur})</th><th>Standing</th><th>Buys At %</th></tr>${loyalty}</table>
+    ${ui.hint(`What a player needs for each loyalty level (LL1 – LL4). Offers can require a loyalty level. "Spent" is counted in the trader's currency (${{ USD: 'dollars', EUR: 'euros' }[f.currency] || 'roubles'}) — the currency only decides this and what the trader pays when players sell to them; each offer's price is set on the offer. "Pays %" = how much of an item's value the trader pays players (the best game trader pays ${S.traderRate}%).`)}
+    <table class="loyalty"><tr><th></th><th>Player Level</th><th>Spent (${cur})</th><th>Standing</th><th>Pays %</th><th></th></tr>${loyalty}</table>
     <div class="toolbar">
       <button class="outline" data-act="addLoyalty" ${f.loyaltyLevels.length >= 4 ? 'disabled' : ''}>+ Loyalty Level</button>
       <button class="danger" data-act="removeLoyalty" ${f.loyaltyLevels.length <= 1 ? 'disabled' : ''}>Remove Last</button>
@@ -719,7 +790,32 @@ function applyColumns() {
   });
 }
 function listHead(list) {
-  return `<div class="list-head"><div>#</div>${shownColumns(list).map((c, i) => `<div>${i > 0 ? `<span class="grip" data-grip="${list}|${c[0]}" title="Drag to Resize · Double-Click to Reset"></span>` : ''}<span class="head-text">${esc(c[1])}</span></div>`).join('')}</div>`;
+  const sortable = list === 'offers' || list === 'quests';
+  const cur = S.sort[list];
+  const arrow = key => cur?.key === key ? `<span class="sort-arrow">${cur.dir > 0 ? '▲' : '▼'}</span>` : '';
+  const head = (key, text) => sortable && key !== 'notes'
+    ? `<span class="head-text sortable ${cur?.key === key ? 'on' : ''}" data-act="sortBy" data-arg="${list}|${key}" title="Sort by ${esc(text)} (click again to flip)">${esc(text)}${arrow(key)}</span>`
+    : `<span class="head-text">${esc(text)}</span>`;
+  const idx = sortable ? `<span class="head-text sortable ${!cur ? 'on' : ''}" data-act="sortBy" data-arg="${list}|" title="Your own order (drag rows to change it)">#</span>` : '#';
+  return `<div class="list-head"><div>${idx}</div>${shownColumns(list).map((c, i) => `<div>${i > 0 ? `<span class="grip" data-grip="${list}|${c[0]}" title="Drag to Resize · Double-Click to Reset"></span>` : ''}${head(c[0], c[1])}</div>`).join('')}</div>`;
+}
+
+/** Indexes of a list in view order (a clicked column header sorts; otherwise your own order). */
+function sortedOrder(list, arr) {
+  const idx = arr.map((_, i) => i);
+  const cur = S.sort[list];
+  if (!cur) return idx;
+  const t = S.t;
+  const keyOf = {
+    offers: { title: o => itemName(o.itemTpl).toLowerCase(), ll: o => o.loyaltyLevel, unlock: o => offerUnlock(t, o).text.toLowerCase(),
+      stock: o => (o.unlimited ? 1e12 : o.stock), mod: o => objMods(t, o).names.join(','), price: o => costValue(o.cost) },
+    quests: { title: q => q.name.toLowerCase(), level: q => q.minLevel, ways: q => ways(q).length, mod: q => objMods(t, q).names.join(',') },
+  }[list]?.[cur.key];
+  if (!keyOf) return idx;
+  return idx.sort((a, b) => {
+    const x = keyOf(arr[a]), y = keyOf(arr[b]);
+    return (x < y ? -1 : x > y ? 1 : a - b) * cur.dir;
+  });
 }
 
 /** A line of small dark boxes: [{ label, text, color }] — label is drawn in the color (e.g. the way letter). */
@@ -730,9 +826,9 @@ function boxes(list) {
   }).join('')}</div>`;
 }
 
-function row({ list, act, arg, sel, three, thumb: th, title, titleColor, badges = [], line2, line3, line3Color, boxes2, boxes3, cols = {}, colColors = {}, colTitles = {} }) {
+function row({ list, act, arg, sel, three, off, thumb: th, title, titleColor, badges = [], line2, line3, line3Color, boxes2, boxes3, cols = {}, colColors = {}, colTitles = {} }) {
   const shown = list ? shownColumns(list).slice(1) : [];
-  return `<div class="row ${sel ? 'sel' : ''} ${three ? 'three' : ''}" data-act="${act}" data-arg="${arg}" data-row="${arg}">
+  return `<div class="row ${sel ? 'sel' : ''} ${three ? 'three' : ''} ${off ? 'off' : ''}" data-act="${act}" data-arg="${arg}" data-row="${arg}">
     <div class="idx">${Number(arg) + 1}</div>
     <div class="cell">${thumb(th)}<div class="text">
       <div class="line1"><span class="title" ${titleColor ? `style="color:${titleColor}"` : ''}>${esc(title)}</span><span class="badges">${badges.map(b => ui.badge(b[0], b[1], b[2])).join('')}</span></div>
@@ -747,7 +843,7 @@ function offerUnlock(t, o) {
   const mine = questsUnlocking(t, o);
   if (mine.length) return { kind: 'mine', text: '🔒 ' + mine.map(u => u.q.name).join(', '), badge: ['QUEST', 'var(--orange)'] };
   if (o.unlockedByQuestId) return { kind: 'game', text: '🔒 ' + questLabel(o.unlockedByQuestId), badge: ['GAME QUEST', 'var(--orange)'] };
-  return { kind: 'start', text: 'From Start', badge: null };
+  return { kind: 'start', text: 'Automatic', badge: null };
 }
 
 /** Search box: every word typed must appear somewhere in the text. */
@@ -773,18 +869,50 @@ function tagBar(page, list) {
     ${all.map(tag => `<button class="chip tagchip ${cur === tag ? 'on' : ''}" style="--c:${tagColor(tag)}" data-act="tagFilter" data-arg="${esc(tag)}" data-tag="${esc(tag)}" title="Right-click: Rename, Color, Remove">${esc(tag)} <small>${list.filter(x => x.tags.includes(tag)).length}</small></button>`).join('')}</div>`;
 }
 
+/** Offer categories: the item's group (Weapons, Ammo…) or one of your tags ("custom categories"). */
+const itemGroup = id => (isMoney(id) ? 'Other' : item(id)?.g || S.modOff?.get(id)?.g || 'Other');
+const inCategory = (o, cat) => (cat.startsWith('tag:') ? o.tags.includes(cat.slice(4)) : itemGroup(o.itemTpl) === cat.slice(2));
+const categoryName = cat => (cat.startsWith('tag:') ? cat.slice(4) : groupName(cat.slice(2)));
+
+function categoryMenu(anchor) {
+  closePopover();
+  const offers = S.t.file.offers;
+  const pop = document.createElement('div');
+  pop.className = 'popover ctx menu2';
+  const groups = ITEM_GROUPS.map(([k, n]) => [k, n, offers.filter(o => itemGroup(o.itemTpl) === k).length]).filter(g => g[2] > 0);
+  const tags = [...new Set(offers.flatMap(o => o.tags))].sort((a, b) => a.localeCompare(b));
+  const opt = (cat, text, n, color) => `<button class="${S.category === cat || (!S.category && !cat) ? 'on' : ''}" data-cat="${esc(cat)}">${color ? `<span class="dot" style="--c:${color}"></span>` : ''}${esc(text)}<span class="key">${n}</span></button>`;
+  pop.innerHTML = `<div class="menu-title">Show</div>${opt('', 'All Categories', offers.length)}
+    ${groups.map(([k, n, c]) => opt('g:' + k, n, c)).join('')}
+    <div class="menu-title">Your Tags</div>
+    ${tags.map(tag => opt('tag:' + tag, tag, offers.filter(o => o.tags.includes(tag)).length, tagColor(tag))).join('') || '<div class="menu-note">Tag offers (Tags & Notes) to make your own — e.g. "ARs".</div>'}`;
+  pop.addEventListener('click', e => {
+    const b = e.target.closest('[data-cat]');
+    if (!b) return;
+    S.category = b.dataset.cat || null;
+    S.picked = new Set();
+    closePopover();
+    renderPage(false);
+  });
+  const r = anchor.getBoundingClientRect();
+  popoverAt(pop, r.left, r.bottom + 6);
+}
+
 function pageOffers() {
   const t = S.t;
   const shown = [];
   (S.hasNotes ||= {}).offers = t.file.offers.some(o => o.notes);
   const tags = tagBar('offers', t.file.offers);
-  const rows = t.file.offers.map((o, i) => {
+  const rows = sortedOrder('offers', t.file.offers).map(i => {
+    const o = t.file.offers[i];
     const u = offerUnlock(t, o);
     const price = priceKind(o);
     if (S.tagFilters.offers && !o.tags.includes(S.tagFilters.offers)) return '';
+    if (S.category && !inCategory(o, S.category)) return '';
     if (!matches('offers', itemName(o.itemTpl), item(o.itemTpl)?.s || '', costText(o), u.text, o.notes, o.tags, price?.[0] || '', `LL${o.loyaltyLevel}`, objMods(t, o).names.length ? ['modded', ...objMods(t, o).names] : 'original')) return '';
     shown.push(o);
     const badges = [];
+    if (!o.enabled) badges.push(['OFF', '#8a8a8a', 'keep']);
     if (u.badge) badges.push(u.badge);
     if (price) badges.push(price);
     if (o.loyaltyLevel > 1) badges.push([`LL${o.loyaltyLevel}`, 'var(--violet)']);
@@ -792,10 +920,10 @@ function pageOffers() {
     const mods = objMods(t, o);
     if (mods.bad.length) badges.push(['✖ MOD MISSING', 'var(--red)', 'keep']);
     return row({
-      list: 'offers', act: 'selOffer', arg: i, sel: isPicked(o, S.offer),
+      list: 'offers', act: 'selOffer', arg: i, sel: isPicked(o, S.offer), off: !o.enabled,
       thumb: { text: initials(item(o.itemTpl)?.s || itemName(o.itemTpl)), color: u.kind !== 'start' ? 'var(--orange)' : '#3a3a3a', dark: u.kind !== 'start', item: o.itemTpl, wide: true },
       title: itemName(o.itemTpl), badges,
-      line2: costText(o),
+      line2: compact('offers') ? null : inGamePrice(t, o),
       cols: { unlock: u.text, ll: `LL${o.loyaltyLevel}`, stock: (o.unlimited ? 'Unlimited' : `${o.stock} / Restock`) + (o.buyLimit > 0 ? ` · Max ${o.buyLimit}` : ''), notes: o.notes, mod: modCell(mods) },
       colColors: { unlock: u.kind !== 'start' ? 'var(--orange)' : 'var(--green)', mod: modColor(mods) },
       colTitles: { mod: mods.names.join(', ') },
@@ -807,11 +935,12 @@ function pageOffers() {
       <button class="primary" data-act="addOffer">+ Add Offer</button>
       <button class="outline" data-act="dupOffer" ${n ? '' : 'disabled'}>${countLabel('Duplicate', n)}</button>
       <button class="danger" data-act="removeOffer" ${n ? '' : 'disabled'} title="Del">${countLabel('Remove', n)}</button>
-      <button class="icon-btn" data-act="moveOffer" data-arg="-1" title="Move Up">▲</button>
-      <button class="icon-btn" data-act="moveOffer" data-arg="1" title="Move Down">▼</button>
-      ${S.search.offers || S.tagFilters.offers ? `<span class="muted small">${shown.length} of ${t.file.offers.length} shown</span>` : ''}
+      <button class="outline cat-btn ${S.category ? 'on' : ''}" data-act="categoryMenu" title="Show one category (Weapons, Ammo, Armor…) or one of your tags">▦ ${esc(S.category ? categoryName(S.category) : 'All Categories')} ▾</button>
+      ${S.category ? '<button class="icon-btn" data-act="clearCategory" title="Show all">✕</button>' : ''}
+      <button class="outline" data-act="bulkEdit" title="Pick every offer shown and change them all at once (Ctrl+B)">☰ Bulk Edit</button>
+      ${S.search.offers || S.tagFilters.offers || S.category ? `<span class="muted small">${shown.length} of ${t.file.offers.length} shown</span>` : ''}
     </div>${tags}
-    <div class="list" data-list="offers">${listHead('offers')}${rows || `<div class="empty">${t.file.offers.length ? 'Nothing matches the search / tag' : 'No offers yet — click + Add Offer'}</div>`}</div>`;
+    <div class="list ${compact('offers') ? 'compact' : ''}" data-list="offers">${listHead('offers')}${rows || `<div class="empty">${t.file.offers.length ? 'Nothing matches the search / tag' : 'No offers yet — click + Add Offer'}</div>`}</div>`;
 }
 
 function pageQuests() {
@@ -820,13 +949,15 @@ function pageQuests() {
   const tagsHtml = tagBar('quests', t.file.quests);
   const shown = [];
   (S.hasNotes ||= {}).quests = t.file.quests.some(q => q.notes);
-  const rows = t.file.quests.map((q, i) => {
+  const rows = sortedOrder('quests', t.file.quests).map(i => {
+    const q = t.file.quests[i];
     if (S.tagFilters.quests && !q.tags.includes(S.tagFilters.quests)) return '';
     if (!matches('quests', q.name, q.tags, q.notes, q.description, q.conditions.map(shortCondition), rewardBoxes(t, q).map(b => `${b.label || ''} ${b.text}`), `level ${q.minLevel}`, q.failOnDeath ? 'hardcore' : '')) return '';
     shown.push(q);
     const w = ways(q);
     const badges = [];
     if (!v.hideWaysTag) badges.push([`${w.length} WAY${w.length > 1 ? 'S' : ''}`, 'var(--violet)']);
+    if (!q.enabled) badges.unshift(['OFF', '#8a8a8a', 'keep']);
     if (q.failOnDeath) badges.push(['HARDCORE', 'var(--red)']);
     if (q.prerequisiteQuestIds.length) badges.push([`AFTER ${q.prerequisiteQuestIds.length} QUEST${q.prerequisiteQuestIds.length > 1 ? 'S' : ''}`, 'var(--blue)']);
     if (!v.hideTags) for (const tag of q.tags) badges.push([tag.toUpperCase(), tagColor(tag)]);
@@ -835,16 +966,16 @@ function pageQuests() {
     if (mods.bad.length) badges.push(['✖ MOD MISSING', 'var(--red)', 'keep']);
     const pic = questPic(t, q);
     return row({
-      list: 'quests', act: 'selQuest', arg: i, sel: isPicked(q, S.quest), three: true,
+      list: 'quests', act: 'selQuest', arg: i, sel: isPicked(q, S.quest), three: !compact('quests'), off: !q.enabled,
       thumb: pic ? { img: pic.url } : { text: String(q.minLevel), color: 'var(--violet)' },
       title: q.name, badges,
-      boxes2: q.conditions.length
+      boxes2: compact('quests') ? null : q.conditions.length
         ? w.map(o => {
           const conds = q.conditions.filter(c => (c.option || 1) === o);
           return { label: w.length > 1 ? wayLetter(o) : '', color: WAY_COLOR[o], text: conds.map(shortCondition).join(' + '), icons: conds.flatMap(condIcons) };
         })
         : [{ text: 'No Objectives Yet' }],
-      boxes3: v.hideRewards ? null : q.rewards.length ? rewardBoxes(t, q) : [{ text: 'No Rewards Yet' }],
+      boxes3: v.hideRewards || compact('quests') ? null : q.rewards.length ? rewardBoxes(t, q) : [{ text: 'No Rewards Yet' }],
       cols: { level: `Lvl ${q.minLevel}`, ways: String(w.length), notes: q.notes, mod: modCell(mods) },
       colColors: { mod: modColor(mods) },
       colTitles: { mod: mods.names.join(', ') },
@@ -856,11 +987,10 @@ function pageQuests() {
       <button class="primary" data-act="addQuest">+ Add Quest</button>
       <button class="outline" data-act="dupQuest" ${n ? '' : 'disabled'}>${countLabel('Duplicate', n)}</button>
       <button class="danger" data-act="removeQuest" ${n ? '' : 'disabled'} title="Del">${countLabel('Remove', n)}</button>
-      <button class="icon-btn" data-act="moveQuest" data-arg="-1" title="Move Up">▲</button>
-      <button class="icon-btn" data-act="moveQuest" data-arg="1" title="Move Down">▼</button>
+      <button class="outline" data-act="bulkEdit" title="Pick every quest shown and change them all at once (Ctrl+B)">☰ Bulk Edit</button>
       ${S.search.quests || S.tagFilters.quests ? `<span class="muted small">${shown.length} of ${t.file.quests.length} shown</span>` : ''}
     </div>${tagsHtml}
-    <div class="list" data-list="quests">${listHead('quests')}${rows || `<div class="empty">${t.file.quests.length ? 'Nothing matches the search / tag' : 'No quests yet — click + Add Quest'}</div>`}</div>`;
+    <div class="list ${compact('quests') ? 'compact' : ''}" data-list="quests">${listHead('quests')}${rows || `<div class="empty">${t.file.quests.length ? 'Nothing matches the search / tag' : 'No quests yet — click + Add Quest'}</div>`}</div>`;
 }
 
 function pageChecks() {
@@ -989,7 +1119,8 @@ function detailsTrader() {
     ${ui.hint('Any png or jpg; it\'s cropped to a square. The game shows the new icon after you Save and restart the SPT server.')}
     ${card('t-summary', 'Summary', `<div class="req">Sells ${f.offers.length} thing(s), ${locked} of them unlocked by quests.
 ${f.quests.length} quest(s)${f.quests.length ? `, from level ${minLvl}` : ''}.
-Pays ${f.loyaltyLevels[0]?.buyPriceCoef ?? 0}% of an item's value when players sell to them.
+${f.buyMultiplier === 0 || f.buys === 'Nothing' ? 'Buys nothing from players.' : `Pays ${clamp(Math.round((100 - (f.loyaltyLevels[0]?.buyPriceCoef ?? 50)) * f.buyMultiplier), 0, 100)}% of an item's value when players sell to them (${{ Default: 'guns, parts, gear, ammo', Everything: 'buys everything', Categories: f.buyCategories.map(k => groupName(k)).join(', ') || 'no categories picked!' }[f.buys] || f.buys}).`}
+${f.priceMultiplier !== 1 ? `Prices × ${fmt(f.priceMultiplier)}.\n` : ''}${f.priority > 0 ? `Trader #${f.priority} in the game's list.` : 'Listed after the game\'s traders.'}
 ${f.unlockedByDefault ? 'Unlocked from the start.' : `Locked at start — unlocked by ${f.unlockQuestId ? questLabel(f.unlockQuestId) : 'nothing yet!'}.`}
 ${f.enabled ? 'Switched ON — loads into the game.' : 'Switched OFF — the server skips this trader.'}</div>`)}`];
 }
@@ -1008,7 +1139,7 @@ function detailsOffer() {
       ? `<div class="status" style="--c:var(--orange)"><h3>🔒 Locked — Unlocked by a Game Quest</h3><div class="req">• ${esc(questLabel(o.unlockedByQuestId))}</div></div>`
       : `<div class="status" style="--c:var(--green)"><h3>✔ For Sale From the Start</h3>${ui.hint(`Anyone with LL${o.loyaltyLevel} with ${esc(t.file.name)} can buy it.`)}</div>`;
   const unlockBody = `
-    ${ui.chips('', [['start', 'From the Start'], ['mine', 'After One of My Quests'], ['game', 'After a Game Quest']], () => u.kind, v => setOfferUnlock(o, v))}
+    ${ui.chips('', [['start', 'Automatic'], ['mine', 'Custom Quest'], ['game', 'Game Quest']], () => u.kind, v => setOfferUnlock(o, v))}
     ${u.kind === 'mine' ? `<div class="switches">${t.file.quests.map(q => ui.toggle(`${q.name} · lvl ${q.minLevel}`, () => unl.some(x => x.q === q), v => toggleQuestUnlocksOffer(q, o, v))).join('')}</div>
       ${ui.hint('Switching a quest on gives it an "Unlock offer" reward for this offer (you\'ll see it in the quest\'s rewards).')}` : ''}
     ${u.kind === 'game' ? `<div class="itemline"><span class="name">${esc(o.unlockedByQuestId ? questLabel(o.unlockedByQuestId) : '(Pick a Quest)')}</span><button class="outline" data-act="pickOfferGameQuest">Pick Game Quest…</button></div>` : ''}
@@ -1038,7 +1169,7 @@ function detailsOffer() {
       <div class="hero-text"><div class="kind">${esc((it?.c || 'Item').toUpperCase())}${it?.k ? ' · ' + esc(caliberName(it.k)) : ''}</div>
         <div class="hero-name">${esc(it?.s || itemName(o.itemTpl))}</div>
         <div class="muted small">${esc(costText(o))}${o.tags.length ? ' · ' + esc(o.tags.join(', ')) : ''}</div></div></div>`;
-  return [itemName(o.itemTpl), `${hero}${status}
+  return [itemName(o.itemTpl), `${hero}${onOffBar('offer', o)}${status}
     ${card('o-unlock', 'How It Unlocks', unlockBody)}
     ${card('o-item', 'Item', `
       ${ui.item('Item', () => o.itemTpl, v => { o.itemTpl = v; }, 'all')}
@@ -1052,6 +1183,7 @@ function detailsOffer() {
       ${values}
       ${ui.hint('Everything listed is needed to buy it. Only money = <b>BUY</b>; any item in the list = <b>BARTER</b>. New offers start at what traders pay for the item.')}
       <div class="mini">${costs || '<div class="empty" style="padding:14px">No Price Yet</div>'}</div>
+      ${randomPriceField(t, o)}
       <div class="toolbar" style="margin-top:8px">
         <button class="chip" data-act="addCost" data-arg="${CUR.RUB}">+ ₽ Roubles</button>
         <button class="chip" data-act="addCost" data-arg="${CUR.USD}">+ $ Dollars</button>
@@ -1061,6 +1193,79 @@ function detailsOffer() {
     ${card('o-notes', 'Tags & Notes', `
       ${tagField(o, S.t.file.offers, 'Group offers your way (e.g. "ARs", "Snipers", "Pistols", "Ammo") — filter by them above the list. Right-click a tag to rename, recolor or remove it.')}
       ${ui.area('Notes', () => o.notes, v => { o.notes = v; }, { rows: 3, placeholder: 'Only you see these (shown in the Notes column).' })}`)}`];
+}
+
+// ---- switching single offers / quests off (the server skips them; nothing is deleted)
+function onOffBar(kind, obj) {
+  const k = bind(() => obj.enabled, v => setEnabled(kind, [obj], v), 'details');
+  return `<div class="onoff ${obj.enabled ? 'is-on' : 'is-off'}"><label class="switch"><input type="checkbox" data-b="${k}" ${obj.enabled ? 'checked' : ''}><span class="track"></span>
+    <span>${obj.enabled ? 'On — In the Game' : 'Off — the Server Skips It'}</span></label>
+    <span class="muted small">${obj.enabled ? '' : 'Nothing is deleted; switch it back on any time.'}</span></div>`;
+}
+
+/** Quests (any trader) that need these quests first, directly or further down the chain. */
+function questsNeeding(quests) {
+  const ids = new Set(quests.map(q => q.id));
+  const out = [];
+  let grew = true;
+  while (grew) {
+    grew = false;
+    for (const { t, q } of allQuests()) {
+      if (ids.has(q.id)) continue;
+      if (q.prerequisiteQuestIds.some(id => ids.has(id))) { ids.add(q.id); out.push({ t, q }); grew = true; }
+    }
+  }
+  return out;
+}
+
+/** Switch offers / quests on or off; for quests, offer to do the same to the quests that need them. */
+function setEnabled(kind, objs, on) {
+  objs.forEach(o => { o.enabled = on; });
+  if (kind !== 'quest') {
+    const rewards = S.t.file.quests.filter(q => q.enabled && q.rewards.some(r => r.type === 'UnlockOffer' && objs.some(o => o.id === r.offerId)));
+    if (!on && rewards.length) toast(`${rewards.length} quest reward(s) unlock ${objs.length > 1 ? 'these offers' : 'this offer'} — they'll unlock nothing while it's off`);
+    return;
+  }
+  const linked = questsNeeding(objs).filter(x => x.q.enabled !== on);
+  if (!linked.length) return;
+  setTimeout(async () => {
+    const names = linked.slice(0, 12).map(x => `• ${x.q.name}${x.t !== S.t ? ` (${x.t.file.name})` : ''}`).join('\n') + (linked.length > 12 ? `\n… and ${linked.length - 12} more` : '');
+    const yes = await confirmBox(on ? 'Switch Linked Quests On Too?' : 'Linked Quests',
+      on ? `These quests need it and are switched off:\n\n${names}\n\nSwitch them back on too?`
+        : `These quests need it first — while it's off they can never unlock:\n\n${names}\n\nSwitch them off too?`,
+      on ? 'Switch Them On' : 'Switch Them Off Too', on ? 'Only This One' : 'Keep Them On');
+    if (!yes) return;
+    linked.forEach(x => { x.q.enabled = on; markDirty(x.t); });
+    changed(false);
+    toast(`${linked.length} linked quest(s) switched ${on ? 'on' : 'off'}`);
+  }, 0);
+}
+
+/** Random price per restock: the first money price is re-rolled between Lowest and Highest. */
+function randomPriceField(t, o) {
+  const line = o.cost.find(c => isMoney(c.itemTpl));
+  if (!line) return '';
+  const on = o.priceMax > 0;
+  const sym = MONEY_SYMBOL[line.itemTpl] || '';
+  const mult = t.file.priceMultiplier ?? 1;
+  return `<div style="margin-top:10px">${ui.toggle('Random Price on Every Restock', () => on, v => {
+      if (v) { o.priceMin = Math.max(1, Math.round(line.count * 0.8)); o.priceMax = Math.max(o.priceMin, Math.round(line.count * 1.2)); }
+      else { o.priceMin = 0; o.priceMax = 0; }
+    }, { label: 'Random Price' })}
+    ${on ? `${ui.num(`Lowest (${sym})`, () => o.priceMin, v => { o.priceMin = v; if (o.priceMax < v) o.priceMax = v; }, { min: 1, max: 1e9, step: 100 })}
+      ${ui.num(`Highest (${sym})`, () => o.priceMax, v => { o.priceMax = Math.max(v, o.priceMin); }, { min: 1, max: 1e9, step: 100 })}
+      ${ui.hint(`Each restock the ${sym} price becomes a random amount between ${fmt(o.priceMin)} and ${fmt(o.priceMax)}${mult !== 1 ? ` (× ${fmt(mult)} = ${fmt(o.priceMin * mult)}–${fmt(o.priceMax * mult)} in game)` : ''}. The ${fmt(line.count)} ${sym} above is ignored while this is on.`)}` : ''}</div>`;
+}
+
+/** Money prices as the game shows them (× the trader's price multiplier; random range when set). */
+function inGamePrice(t, o) {
+  const mult = t.file.priceMultiplier ?? 1;
+  if (o.priceMax > 0) {
+    const line = o.cost.find(c => isMoney(c.itemTpl));
+    return line ? `${fmt(o.priceMin * mult)}–${fmt(o.priceMax * mult)} ${MONEY_SYMBOL[line.itemTpl]} (Random)` : costText(o);
+  }
+  if (mult === 1) return costText(o);
+  return o.cost.map(c => isMoney(c.itemTpl) && [CUR.RUB, CUR.USD, CUR.EUR].includes(c.itemTpl) ? `${fmt(Math.round(c.count * mult))} ${MONEY_SYMBOL[c.itemTpl]}` : `${fmt(c.count)} × ${itemName(c.itemTpl)}`).join(' + ') + ` (× ${fmt(mult)})`;
 }
 
 /** An offer's worth in roubles: the whole default preset for guns sold assembled. */
@@ -1094,6 +1299,9 @@ function multiTagField(list) {
     ${ui.hint('Tags group things: questlines ("Main 1", "Kappa Path") or offers ("ARs", "Snipers", "Pistols").')}</div></div>`;
 }
 
+/** The value all of them share, or '' when they differ. */
+const common = (list, k) => (list.every(x => x[k] === list[0][k]) ? list[0][k] : '');
+
 // ---- multi-select panel
 function detailsMulti() {
   const offers = S.page === 'offers';
@@ -1106,11 +1314,25 @@ function detailsMulti() {
     edit = card('m-edit', 'Change All at Once', `
       ${ui.chips('Loyalty Level', [1, 2, 3, 4].map(n => [n, 'LL' + n]), () => same, v => { list.forEach(o => { o.loyaltyLevel = Number(v); }); }, { refresh: 'page' })}
       ${ui.chips('Stock', [['u', 'Unlimited'], ['l', 'Limited']], () => list.every(o => o.unlimited) ? 'u' : list.every(o => !o.unlimited) ? 'l' : '', v => { list.forEach(o => { o.unlimited = v === 'u'; }); }, { refresh: 'page' })}
+      ${list.every(o => !o.unlimited) ? ui.num('Stock per Restock', () => common(list, 'stock'), v => { list.forEach(o => { o.stock = v; }); }, { min: 1, max: 100000, refresh: 'page' }) : ''}
+      ${ui.num('Buy Limit per Player', () => common(list, 'buyLimit'), v => { list.forEach(o => { o.buyLimit = v; }); }, { min: 0, max: 100000, refresh: 'page' })}
+      <div class="field top"><label>Prices</label><div class="toolbar" style="padding:0">
+        <button class="outline" data-act="bulkPrice" data-arg="mult">× Multiply…</button>
+        <button class="outline" data-act="bulkPrice" data-arg="value" title="What the best game trader pays for each item">= Traders Pay Value</button>
+        <button class="outline" data-act="bulkPrice" data-arg="random">Random ±20%</button>
+        <button class="ghost" data-act="bulkPrice" data-arg="fixed">Fixed Prices</button></div></div>
+      <div class="field"><label>Unlock</label><div class="toolbar" style="padding:0"><button class="outline" data-act="bulkAutomatic">Make All Automatic</button></div></div>
+      <div class="field"><label>In the Game</label><div class="toolbar" style="padding:0">
+        <button class="outline" data-act="bulkOnOff" data-arg="1">Switch All On</button><button class="danger" data-act="bulkOnOff" data-arg="0">Switch All Off</button></div></div>
       ${multiTagField(list)}`);
   } else {
     const sameLvl = list.every(q => q.minLevel === list[0].minLevel) ? list[0].minLevel : '';
     edit = card('m-edit', 'Change All at Once', `
       ${ui.num('Unlocks at Level', () => sameLvl, v => { list.forEach(q => { q.minLevel = v; }); }, { min: 1, max: 79, refresh: 'page' })}
+      ${ui.chips('Hardcore', [[1, 'On'], [0, 'Off']], () => list.every(q => q.failOnDeath) ? 1 : list.every(q => !q.failOnDeath) ? 0 : -1, v => { list.forEach(q => { q.failOnDeath = Number(v) === 1; }); }, { refresh: 'page' })}
+      <div class="field"><label>Required Quest</label><div class="toolbar" style="padding:0"><button class="outline" data-act="bulkPrereq">+ Add to All…</button></div></div>
+      <div class="field"><label>In the Game</label><div class="toolbar" style="padding:0">
+        <button class="outline" data-act="bulkOnOff" data-arg="1">Switch All On</button><button class="danger" data-act="bulkOnOff" data-arg="0">Switch All Off</button></div></div>
       ${multiTagField(list)}`);
   }
   return [`${list.length} ${offers ? 'Offers' : 'Quests'} Selected`, `
@@ -1160,13 +1382,30 @@ function detailsQuest() {
   const reqBad = req.missing.length || req.cycle || req.chain.some(c => !chainOn(c));
 
   const pic = questPic(t, q);
-  const mineSwitches = allQuests().filter(x => x.q !== q).map(({ t: ot, q: oq }) => {
-    const n = ways(oq).length;
-    const text = `${oq.name} · ${ot.file.name} · lvl ${oq.minLevel}${n > 1 ? ` · any of ${n} ways` : ''}${ot.file.enabled ? '' : ' · trader OFF'}`;
-    return ui.toggle(text, () => q.prerequisiteQuestIds.includes(oq.id), v => {
-      q.prerequisiteQuestIds = q.prerequisiteQuestIds.filter(x => x !== oq.id);
-      if (v) q.prerequisiteQuestIds.push(oq.id);
-    });
+  // grouped by trader (your trader first), foldable, searchable; picked ones on top of each group
+  const reqQuery = (S.reqSearch || '').trim().toLowerCase();
+  const groups = S.traders.map(ot => {
+    const qs = ot.file.quests.filter(oq => oq !== q)
+      .filter(oq => !reqQuery || oq.name.toLowerCase().includes(reqQuery) || oq.tags.some(tag => tag.toLowerCase().includes(reqQuery)))
+      .filter(oq => !S.reqOnlyPicked || q.prerequisiteQuestIds.includes(oq.id))
+      .sort((a, b) => Number(q.prerequisiteQuestIds.includes(b.id)) - Number(q.prerequisiteQuestIds.includes(a.id)));
+    return { ot, qs, picked: ot.file.quests.filter(oq => q.prerequisiteQuestIds.includes(oq.id)).length };
+  }).filter(g => g.qs.length).sort((a, b) => Number(b.ot === t) - Number(a.ot === t));
+  const mineSwitches = groups.map(({ ot, qs, picked }) => {
+    const key = 'req:' + ot.folder;
+    const folded = S.ui.folded?.[key] && !reqQuery;
+    const items = qs.map(oq => {
+      const n = ways(oq).length;
+      const text = `${oq.name} · lvl ${oq.minLevel}${n > 1 ? ` · any of ${n} ways` : ''}${oq.enabled === false ? ' · OFF' : ''}`;
+      return ui.toggle(text, () => q.prerequisiteQuestIds.includes(oq.id), v => {
+        q.prerequisiteQuestIds = q.prerequisiteQuestIds.filter(x => x !== oq.id);
+        if (v) q.prerequisiteQuestIds.push(oq.id);
+      });
+    }).join('');
+    return `<div class="req-group ${folded ? 'folded' : ''}"><button class="req-head" data-act="fold" data-arg="${esc(key)}">
+        <span class="fold-arrow">▾</span>${ot.images[ot.file.avatar] ? `<img src="${esc(ot.images[ot.file.avatar])}" alt="">` : ''}<b>${esc(ot.file.name)}</b>
+        <span class="muted small">${qs.length} quest${qs.length === 1 ? '' : 's'}${picked ? ` · <span style="color:var(--accent)">${picked} picked</span>` : ''}${ot.file.enabled ? '' : ' · trader OFF'}</span></button>
+      ${folded ? '' : `<div class="switches">${items}</div>`}</div>`;
   }).join('');
   const others = q.prerequisiteQuestIds.filter(id => !allQuests().some(x => x.q.id === id)).map(id => {
     const g = S.gameQuests.get(id);
@@ -1191,7 +1430,7 @@ function detailsQuest() {
       <div class="text"><div class="title">${esc(d.title)}</div></div><span class="side">${esc(d.side || '')}</span></div></div>`;
   }).join('');
 
-  return [q.name, `
+  return [q.name, `${onOffBar('quest', q)}
     ${card('q-req', `<span style="color:${reqBad ? 'var(--red)' : 'var(--violet)'}">Unlock Requirements</span>`, `<div class="req">${esc(reqLines.join('\n'))}</div>`)}
     ${card('q-info', 'Quest', `
       ${ui.text('Name', () => q.name, v => { q.name = v; $('#detailsTitle').textContent = v; })}
@@ -1211,7 +1450,9 @@ function detailsQuest() {
       ${ui.area('Notes', () => q.notes, v => { q.notes = v; }, { rows: 2, placeholder: 'Only you see these (shown in the Notes column).' })}`)}
     ${card('q-prereq', 'Required Quests', `
       ${ui.hint('Switch on every quest that must be finished first. For a quest with several ways, <b>any one finished way counts</b>. Game quests (Prapor, Therapist…) can be required too.')}
-      <div class="switches">${mineSwitches || '<div class="hint">No other quests of yours yet.</div>'}</div>
+      <div class="req-tools"><input type="text" id="reqSearch" placeholder="Search quests or tags…" value="${esc(S.reqSearch || '')}" spellcheck="false">
+        <button class="chip ${S.reqOnlyPicked ? 'on' : ''}" data-act="reqOnlyPicked" style="--c:var(--accent)">Selected Only</button></div>
+      ${mineSwitches || `<div class="hint">${reqQuery || S.reqOnlyPicked ? 'Nothing matches.' : 'No other quests of yours yet.'}</div>`}
       ${others ? `<div class="switches" style="margin-top:8px">${others}</div>` : ''}
       <div class="toolbar" style="margin-top:8px"><button class="outline" data-act="addGamePrereq">+ Game Quest…</button></div>`)}
     ${card('q-obj', 'Objectives', `
@@ -1266,6 +1507,7 @@ function objectiveEditor(c) {
       { HandoverItem: 'What to Hand Over — Any One of These Counts (Items or Money)', FindItem: 'What to Find — Any One of These Counts', UseItem: 'What to Use — Any One of These Counts (Food, Drinks, Meds)' }[type],
       c.itemTpls, type === 'UseItem' ? 'Meds' : 'all', type === 'HandoverItem') : ''}
     ${kill ? needs('weapon', 'Must Kill With a Specific Weapon or Grenade', c.weaponTpls, () => itemList('Any One of These Counts', c.weaponTpls, 'weapons+')) : ''}
+    ${kill ? weaponTypeField(c, open) : ''}
     ${kill ? needs('caliber', 'Must Use Specific Ammo (Caliber)', c.calibers, () => caliberList(c.calibers)) : ''}
     ${kill || type === 'Extract' ? needs('wearing', 'Must Be Wearing Something', c.wearingTpls, () => itemList('Wearing Any One of These', c.wearingTpls, 'Gear')) : ''}
     ${kill || type === 'Extract' || type === 'UseItem' ? needs('maps', 'Only on Specific Maps', c.locations, () => ui.multichips('', MAPS, c.locations, { color: 'var(--green)' })) : ''}
@@ -1298,7 +1540,8 @@ function tarkovText(c) {
     case 'Kill': {
       const who = { Savage: 'Scavs', AnyPmc: 'PMC operatives', Usec: 'USEC PMC operatives', Bear: 'BEAR PMC operatives',
         Boss: c.bossRoles.length ? c.bossRoles.map(bossName).join(' or ') : 'bosses' }[c.killTarget] || 'any target';
-      const weapon = c.weaponTpls.length ? ' while using ' + c.weaponTpls.map(itemName).join(' or ') : '';
+      const wlist = [...c.weaponTpls.map(itemName), ...weaponWords({ weaponClasses: c.weaponClasses, weaponCalibers: c.weaponCalibers }).map(w => w.replace(/^Any /, 'any ').toLowerCase().replace(/^any /, 'any '))];
+      const weapon = wlist.length ? ' while using ' + wlist.join(' or ') : '';
       const ammo = c.calibers.length ? ` with ${c.calibers.map(caliberName).join(' or ')} ammo` : '';
       const parts = c.bodyParts.length ? (c.bodyParts.length === 1 && c.bodyParts[0] === 'Head' ? ' with headshots' :
         ' with shots to the ' + c.bodyParts.map(p => (BODY_PARTS.find(b => b[0] === p) || [p, p])[1].toLowerCase()).join(' or ')) : '';
@@ -1317,6 +1560,23 @@ function objectiveText(c) {
     ${ui.hint(c.text ? 'Your own text is used in game.' : 'Empty = the game shows the grey text above (Tarkov style), updated automatically.')}
     <div class="toolbar" style="padding:0"><button class="outline" data-act="useTarkovText">${c.text ? 'Reset to Tarkov Text' : 'Edit the Tarkov Text'}</button></div>
   </div></div>`;
+}
+
+/** Kill with any weapon of a class (Assault Rifles…) or chambered in a caliber (7.62x39…) — the server finds the guns, mod guns too. */
+function weaponTypeField(c, open) {
+  const on = c.weaponClasses.length > 0 || c.weaponCalibers.length > 0 || open.has('wtype');
+  const guns = [...S.items.values()].filter(i => i.c === 'Weapon' || i.c === 'Melee' || i.c === 'Grenade');
+  const calibers = [...new Set(guns.filter(i => i.c === 'Weapon' && i.k).map(i => i.k))].sort((a, b) => caliberName(a).localeCompare(caliberName(b), undefined, { numeric: true }));
+  const matching = guns.filter(i => c.weaponClasses.includes(i.wc) || (i.c === 'Weapon' && c.weaponCalibers.includes(i.k))).length;
+  return `${ui.toggle('Must Kill With a Type of Weapon (Any Assault Rifle, Any 7.62x39 Gun…)', () => on, v => {
+    const set = S.open.get(c) || new Set();
+    if (v) set.add('wtype'); else { set.delete('wtype'); c.weaponClasses.length = 0; c.weaponCalibers.length = 0; }
+    S.open.set(c, set);
+  })}${on ? `<div style="margin:6px 0 12px 54px">
+    ${ui.multichips('Any Weapon of These Types', WEAPON_CLASSES, c.weaponClasses, { color: 'var(--red)' })}
+    ${ui.multichips('Any Gun Chambered In', calibers.map(k => [k, caliberName(k)]), c.weaponCalibers, { color: 'var(--yellow)' })}
+    ${ui.hint(S.items.size ? `Right now that's <b>${matching}</b> weapon(s)${matching ? '' : ' — pick a type or caliber'}. The server looks them up at start, so modded guns of that type count too. Combined with specific weapons above: any of them counts.` : 'The server finds the matching guns at start (modded guns too).')}
+  </div>` : ''}`;
 }
 
 function distanceField(c, open) {
@@ -1442,6 +1702,12 @@ function killWho(c) {
 }
 function itemsText(l) { return l.length ? l.map(shortName).join(' / ') : '(Pick Items)'; }
 const hour = h => String(h).padStart(2, '0') + ':00';
+/** "M4A1", "Any Assault Rifle", "Any 7.62x39 Gun" — every weapon option of a kill objective. */
+function weaponWords(c) {
+  return [...(c.weaponTpls || []).map(shortName),
+    ...(c.weaponClasses || []).map(k => 'Any ' + (WEAPON_CLASSES.find(w => w[0] === k)?.[1] || k).replace(/s$/, '').replace(/^Melee$/, 'Melee Weapon')),
+    ...(c.weaponCalibers || []).map(k => `Any ${caliberName(k)} Gun`)];
+}
 const partName = p => (BODY_PARTS.find(b => b[0] === p) || [p, p])[1];
 /** Every filter an objective has, as short phrases ("With M4A1", "On Customs", "In One Raid"...). */
 function conditionExtras(c) {
@@ -1462,7 +1728,7 @@ function conditionExtras(c) {
 function shortCondition(c) {
   let base;
   switch (c.type) {
-    case 'Kill': base = `Kill ${c.count} ${killWho(c)}${c.weaponTpls.length ? ` With ${c.weaponTpls.map(shortName).join(' / ')}` : ''}`; break;
+    case 'Kill': { const w = weaponWords(c); base = `Kill ${c.count} ${killWho(c)}${w.length ? ` With ${w.join(' / ')}` : ''}`; break; }
     case 'Extract': base = c.count > 1 ? `Extract ${c.count} Times` : 'Survive and Extract'; break;
     case 'UseItem': base = `Use ${c.count}× ${itemsText(c.itemTpls)}`; break;
     case 'FindItem': base = `Find ${c.count}× ${itemsText(c.itemTpls)} in Raid`; break;
@@ -1491,7 +1757,7 @@ function conditionTitle(c) {
 }
 function conditionDetail(c) {
   const d = conditionExtras(c);
-  if (c.type === 'Kill' && c.weaponTpls.length) d.unshift('With ' + c.weaponTpls.map(shortName).join(' / '));
+  if (c.type === 'Kill' && weaponWords(c).length) d.unshift('With ' + weaponWords(c).join(' / '));
   if (c.type === 'HandoverItem' && c.foundInRaid && !isMoneyList(c.itemTpls)) d.push('Found in Raid');
   return d.join(' · ');
 }
@@ -1630,6 +1896,8 @@ function runChecks() {
       if (!o.unlimited && o.buyLimit > o.stock) add('info', where, `Buy limit (${o.buyLimit}) is higher than the stock (${o.stock}); the stock is the real limit.`, t, o);
       if (o.unlockedByQuestId && !questsUnlocking(t, o).length && S.gameQuests.size && !S.gameQuests.has(o.unlockedByQuestId) && !allQuests().some(x => x.q.id === o.unlockedByQuestId))
         add('error', where, `Unlocked by quest ${o.unlockedByQuestId}, which doesn't exist — it will never be for sale.`, t, o);
+      if (!o.enabled) add('info', where, 'Switched OFF — the server skips this offer.', t, o);
+      if (!o.enabled && questsUnlocking(t, o).some(u => u.q.enabled)) add('warning', where, `Switched OFF, but ${questsUnlocking(t, o).filter(u => u.q.enabled).map(u => u.q.name).join(', ')} still unlock(s) it — that reward does nothing.`, t, o);
       const unl = questsUnlocking(t, o);
       if (unl.length > 1) add('info', where, `Unlocked by ${unl.length} quests (${unl.map(u => u.q.name).join(', ')}) — each quest unlocks its own copy.`, t, o);
     }
@@ -1705,12 +1973,55 @@ function checkQuest(t, q, add, known) {
     if (before && ways(before.q).length > 1)
       A('info', `Requires "${before.q.name}", which has ${ways(before.q).length} ways (${ways(before.q).map(wayLetter).join(', ')}): this quest unlocks after ANY one of them is completed.`);
   }
+  if (!q.enabled) A('info', 'Switched OFF — the server skips this quest.');
+  for (const c of req.chain) if (!c.game && c.q.enabled === false && q.enabled)
+    A('error', `Requires "${c.q.name}", which is switched OFF — this quest can never unlock (switch it on, or this one off).`);
   for (const c of req.chain) if (!c.game && !c.t.file.enabled && t.file.enabled)
     A('error', `Requires "${c.q.name}" from ${c.t.file.name}, which is switched OFF — this quest can never unlock.`);
   if (errors === 0) {
     const chain = req.chain.length ? `after ${req.chain.length} quest(s): ${[...req.chain].sort((a, b) => b.depth - a.depth).map(c => c.game ? c.game.n : c.q.name).join(' → ')}` : 'no quests before it';
     A('ok', `Quest will work — unlocks at level ${req.effective}, ${chain}.`);
   }
+}
+
+// =====================================================================
+// Keyboard shortcuts (also listed in the ⌨ guide)
+// =====================================================================
+
+const SHORTCUTS = [
+  ['General', [['Ctrl+S', 'Save all'], ['Ctrl+Z', 'Undo'], ['Ctrl+Shift+Z / Ctrl+Y', 'Redo'], ['Ctrl+M', 'Start menu (all traders)'], ['F1 or ?', 'This guide'], ['Esc', 'Close / unselect']]],
+  ['Pages', [['Ctrl+1', 'Trader'], ['Ctrl+2', 'Offers & Barters'], ['Ctrl+3', 'Quests'], ['Ctrl+4', 'Mods'], ['Ctrl+5', 'Checks & Log']]],
+  ['Offers & Quests', [['Ctrl+N', 'New offer / quest (on the Trader page: new trader)'], ['Ctrl+D', 'Duplicate the selected'], ['Del', 'Remove the selected'],
+    ['Ctrl+B', 'Bulk edit everything shown'], ['Ctrl+A', 'Select everything shown'], ['Ctrl+F', 'Search'], ['↑ / ↓', 'Previous / next row'],
+    ['Alt+↑ / Alt+↓', 'Move the selected row up / down'], ['Drag a row', 'Move it anywhere'], ['Drag in empty space', 'Select several'], ['Ctrl-click / Shift-click', 'Select several']]],
+];
+function shortcutsBox() {
+  return openModal(`<div class="dialog"><h2>Keyboard Shortcuts</h2><div class="keys-grid">${SHORTCUTS.map(([title, rows]) => `<div><h3>${esc(title)}</h3>
+    ${rows.map(([k, d]) => `<div class="keyrow"><span>${esc(d)}</span><span class="kbds">${k.split(' / ').map(x => `<kbd>${esc(x)}</kbd>`).join(' ')}</span></div>`).join('')}</div>`).join('')}</div>
+    <div class="buttons"><button class="primary" data-m>Got It</button></div></div>`, m => { m.querySelector('[data-m]').onclick = () => closeModal(null); });
+}
+/** Returns true when the key was a shortcut (and handled). */
+function handleShortcut(e) {
+  const typing = /INPUT|TEXTAREA|SELECT/.test(document.activeElement?.tagName || '');
+  const ctrl = e.ctrlKey || e.metaKey, k = e.key.toLowerCase();
+  if (e.key === 'F1' || (!typing && e.key === '?')) { shortcutsBox(); return true; }
+  if (ctrl && k === 'm') { showHome(); return true; }
+  if (ctrl && /^[1-5]$/.test(k)) { hideHome(); showPage(['trader', 'offers', 'quests', 'mods', 'checks'][Number(k) - 1]); return true; }
+  if (ctrl && k === 'n') {
+    if (S.page === 'offers' && S.t) ACT.addOffer(); else if (S.page === 'quests' && S.t) ACT.addQuest(); else ACT.newTrader();
+    return true;
+  }
+  if (typing) return false;
+  if (ctrl && k === 'd' && S.t) { if (S.page === 'offers') ACT.dupOffer(); else if (S.page === 'quests') ACT.dupQuest(); return true; }
+  if (ctrl && k === 'b' && (S.page === 'offers' || S.page === 'quests')) { ACT.bulkEdit(); return true; }
+  if (e.altKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown') && S.t && (S.page === 'offers' || S.page === 'quests')) {
+    if (S.sort[S.page]) { toast('Sorted by a column — click # to use your own order'); return true; }
+    const d = e.key === 'ArrowUp' ? -1 : 1;
+    if (S.page === 'offers') ACT.moveOffer(d); else ACT.moveQuest(d);
+    document.querySelector('#page .row.sel')?.scrollIntoView({ block: 'nearest' });
+    return true;
+  }
+  return false;
 }
 
 let checkTimer = 0;
@@ -1752,6 +2063,7 @@ function showPage(page) {
 function markDirty(t = S.t) {
   if (!t) return;
   t.dirty = true;
+  t.edited = Date.now();
   checksSoon();
   if (!H.pendingSel) H.pendingSel = snapshotSel(); // where this change happens (restored by undo)
   clearTimeout(H.timer);
@@ -1953,33 +2265,58 @@ function popoverAt(pop, x, y) {
   closePopover.fn = outside;
 }
 
+/** Spotify-style menu: grey section titles, short options, the active one in the accent color with a ✓. */
+function menuHtml(sections) {
+  return sections.map(sec => `<div class="menu-title">${esc(sec.title)}</div>` +
+    sec.items.map(it => `<button class="${it.on ? 'on' : ''}" data-v="${esc(it.key)}"${it.title ? ` title="${esc(it.title)}"` : ''}>${it.icon ? `<span class="mi">${it.icon}</span>` : ''}${esc(it.text)}${it.on ? '<span class="check">✓</span>' : ''}</button>`).join('')).join('');
+}
+const SORTS = {
+  offers: [['', 'Custom Order'], ['title', 'Title'], ['ll', 'Loyalty Level'], ['unlock', 'Unlock'], ['stock', 'Stock'], ['price', 'Price'], ['mod', 'Modded']],
+  quests: [['', 'Custom Order'], ['title', 'Title'], ['level', 'Level'], ['ways', 'Ways'], ['mod', 'Modded']],
+};
+const compact = list => !!view()[`${list}.compact`];
+const sortLabel = list => (SORTS[list]?.find(x => x[0] === (S.sort[list]?.key || '')) || [, 'Custom Order'])[1];
+
 function viewMenu(anchor) {
   closePopover();
   const pop = document.createElement('div');
-  pop.className = 'popover';
+  pop.className = 'popover menu2';
+  const list = S.page === 'offers' ? 'offers' : S.page === 'checks' ? 'checks' : S.page === 'mods' ? 'mods' : 'quests';
   const draw = () => {
     const v = view();
-    const opt = (key, text, on) => `<button data-v="${key}">${esc(text)}${on ? '<span class="check">✓</span>' : ''}</button>`;
-    const list = S.page === 'offers' ? 'offers' : S.page === 'checks' ? 'checks' : 'quests';
-    const cols = COLUMNS[list].slice(1).map(([k, name]) => opt(`${list}.${k}`, `${name} Column`, colShown(list, k))).join('');
-    pop.innerHTML = `<div class="menu-title">${S.page === 'offers' ? 'Offers & Barters' : S.page === 'checks' ? 'Checks & Log' : 'Quests'} List</div>
-      ${opt('hideIdx', '# Column', !v.hideIdx)}${cols}
-      ${list === 'quests' ? `<hr>${opt('hideWaysTag', '"1 Way / 2 Ways" Tag', !v.hideWaysTag)}${opt('hideTags', 'Your Tags on Rows', !v.hideTags)}${opt('hideRewards', 'Rewards Line', !v.hideRewards)}` : ''}
-      <hr>${opt('noItemPics', 'Item Pictures (From tarkov.dev)', !v.noItemPics)}${opt('grey', 'Calm Grey Colors (Boxes & Tags)', !!S.ui.grey)}`;
+    const sections = [];
+    if (SORTS[list]) sections.push({ title: 'Sort By', items: SORTS[list].map(([k, n]) => ({ key: 'sort:' + k, text: n, on: (S.sort[list]?.key || '') === k })) });
+    if (list === 'offers' || list === 'quests')
+      sections.push({ title: 'View As', items: [{ key: 'as:list', text: 'List', on: !compact(list), icon: '☰' }, { key: 'as:compact', text: 'Compact', on: compact(list), icon: '≡' }] });
+    sections.push({ title: 'Columns', items: [{ key: 'hideIdx', text: '#', on: !v.hideIdx },
+      ...COLUMNS[list].slice(1).map(([k, n]) => ({ key: `${list}.${k}`, text: n, on: colShown(list, k) }))] });
+    const show = [{ key: 'noItemPics', text: 'Item Pictures', on: !v.noItemPics }];
+    if (list === 'quests') show.unshift({ key: 'hideWaysTag', text: 'Ways Tag', on: !v.hideWaysTag }, { key: 'hideRewards', text: 'Rewards', on: !v.hideRewards });
+    if (list === 'quests' || list === 'offers') show.push({ key: 'hideTags', text: 'Tags', on: !v.hideTags });
+    sections.push({ title: 'Show', items: show });
+    sections.push({ title: 'Colors', items: [{ key: 'color:1', text: 'Colorful', on: !S.ui.grey }, { key: 'color:0', text: 'Grey', on: !!S.ui.grey }] });
+    pop.innerHTML = menuHtml(sections);
   };
   draw();
   pop.addEventListener('click', e => {
     const b = e.target.closest('[data-v]');
     if (!b) return;
     const key = b.dataset.v;
-    const [list, col] = key.split('.');
-    if (key === 'grey') S.ui.grey = !S.ui.grey;
-    else if (col) view()[key] = colShown(list, col); // hide what's shown, show what's hidden
-    else view()[key] = !view()[key];
+    if (key.startsWith('sort:')) {
+      const k = key.slice(5);
+      S.sort[list] = k ? { key: k, dir: S.sort[list]?.key === k ? -S.sort[list].dir : 1 } : null;
+      renderHeader();
+    } else if (key.startsWith('color:')) S.ui.grey = key === 'color:0';
+    else if (key.startsWith('as:')) view()[`${list}.compact`] = key === 'as:compact';
+    else {
+      const [l, col] = key.split('.');
+      if (col) view()[key] = colShown(l, col); // hide what's shown, show what's hidden
+      else view()[key] = !view()[key];
+    }
     applyUi(); saveUi(); renderPage(false); renderDetails(false); draw();
   });
   const r = anchor.getBoundingClientRect();
-  popoverAt(pop, r.left, r.bottom + 6);
+  popoverAt(pop, r.right - 230, r.bottom + 6);
 }
 
 function contextMenu(x, y, items) {
@@ -2144,6 +2481,7 @@ document.addEventListener('contextmenu', e => {
       { text: `Duplicate ${noun}`, run: () => (kind === 'offer' ? ACT.dupOffer() : ACT.dupQuest()) },
       { text: 'Move Up', disabled: n > 1, run: () => (kind === 'offer' ? ACT.moveOffer(-1) : ACT.moveQuest(-1)) },
       { text: 'Move Down', disabled: n > 1, run: () => (kind === 'offer' ? ACT.moveOffer(1) : ACT.moveQuest(1)) },
+      { text: picked(S[kind]).every(x => x.enabled) ? `Switch Off` : 'Switch On', run: () => { const l = picked(S[kind]); setEnabled(kind, l, !l.every(x => x.enabled)); changed(false); } },
       { text: 'Select All', key: 'Ctrl+A', run: () => pickMany(S.shownRows || []) },
       '-',
       { text: `Remove ${noun}`, key: 'Del', danger: true, run: () => (kind === 'offer' ? ACT.removeOffer() : ACT.removeQuest()) },
@@ -2175,6 +2513,7 @@ $('#search').addEventListener('keydown', e => {
 
 document.addEventListener('input', e => {
   const el = e.target;
+  if (el.id === 'reqSearch') { S.reqSearch = el.value; detailsSoon(); return; }
   const b = B.get(el.dataset.b);
   if (!b || el.type === 'checkbox' || el.tagName === 'SELECT') return;
   let v = el.value;
@@ -2228,6 +2567,7 @@ document.addEventListener('click', e => {
   }
   const el = e.target.closest('[data-act]');
   if (!el) return;
+  if (suppressClick && (el.dataset.act === 'selOffer' || el.dataset.act === 'selQuest')) return; // the end of a row drag
   const fn = ACT[el.dataset.act];
   if (fn) fn(el.dataset.arg ?? '', el, e);
 });
@@ -2241,6 +2581,7 @@ document.addEventListener('keydown', e => {
   if (e.target.id === 'tagInput' && e.key === 'Enter') { ACT.addTag(e.target.value); return; }
   if (e.target.id === 'multiTagInput' && e.key === 'Enter') { ACT.multiTag(e.target.value); return; }
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f' && $('#modal').hidden && S.page !== 'trader') { e.preventDefault(); $('#search').focus(); $('#search').select(); return; }
+  if ($('#modal').hidden && handleShortcut(e)) { e.preventDefault(); return; }
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') { e.preventDefault(); ACT.save(); return; }
   if ((e.ctrlKey || e.metaKey) && $('#modal').hidden) {
     const k = e.key.toLowerCase();
@@ -2276,7 +2617,7 @@ document.addEventListener('keydown', e => {
     pickMany(S.shownRows || []);
     return;
   }
-  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+  if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && !e.altKey) {
     const d = e.key === 'ArrowDown' ? 1 : -1;
     const lists = { offers: [S.t?.file.offers, 'offer'], quests: [S.t?.file.quests, 'quest'] };
     const [list, key] = lists[S.page] || [];
@@ -2291,19 +2632,82 @@ document.addEventListener('keydown', e => {
   }
 });
 
+// ---- dragging rows into a new order
+function rowDragMove(e) {
+  const d = drag;
+  if (!d.moving) {
+    if (Math.abs(e.clientY - d.y0) < 6) return;
+    if (S.sort[S.page]) { drag = null; toast('Sorted by a column — click # to use your own order, then drag'); return; }
+    d.moving = true;
+    d.el.classList.add('drag-src');
+    d.line = document.createElement('div');
+    d.line.className = 'drop-line';
+    document.body.appendChild(d.line);
+    document.body.classList.add('dragging');
+  }
+  const page = $('#page'), r = page.getBoundingClientRect();
+  if (e.clientY > r.bottom - 30) page.scrollTop += 16; else if (e.clientY < r.top + 60) page.scrollTop -= 16;
+  const rows = [...page.querySelectorAll('.row[data-row]')];
+  let target = rows.length, y = 0;
+  for (let i = 0; i < rows.length; i++) {
+    const b = rows[i].getBoundingClientRect();
+    if (e.clientY < b.top + b.height / 2) { target = i; y = b.top; break; }
+    y = b.bottom;
+  }
+  d.target = target;
+  const lr = (rows[0] || d.el).getBoundingClientRect();
+  Object.assign(d.line.style, { left: lr.left + 'px', width: lr.width + 'px', top: (y - 1) + 'px' });
+}
+function rowDragEnd(d) {
+  document.body.classList.remove('dragging');
+  d.line?.remove();
+  d.el.classList.remove('drag-src');
+  if (!d.moving) return;
+  suppressClick = true; setTimeout(() => { suppressClick = false; }, 0);
+  const list = S.page === 'offers' ? S.t.file.offers : S.t.file.quests;
+  const rows = [...$('#page').querySelectorAll('.row[data-row]')].map(r => list[Number(r.dataset.row)]);
+  const moving = list[d.index];
+  const before = rows[d.target]; // drop above this one (undefined = after the last shown row)
+  const after = d.target > 0 ? rows[d.target - 1] : null;
+  if (before === moving || after === moving) return;
+  list.splice(list.indexOf(moving), 1);
+  const at = before ? list.indexOf(before) : after ? list.indexOf(after) + 1 : list.length;
+  list.splice(at, 0, moving);
+  if (S.page === 'offers') S.offer = moving; else if (moving !== S.quest) selectQuest(moving);
+  S.picked = new Set();
+  changed(false);
+  toast('Moved — this is also the order in the game');
+}
+let suppressClick = false;
+
 // ---- column resizing, panel widths, drag-select
 let drag = null;
 document.addEventListener('mousedown', e => {
   if (e.button !== 0) return;
   const grip = e.target.closest('[data-grip]');
   if (grip) {
+    // Spotify style: a divider only moves the border between the two columns next to it.
     const [list, key] = grip.dataset.grip.split('|');
-    const i = shownColumns(list).slice(1).findIndex(c => c[0] === key);
-    drag = { kind: 'col', list, key, x: e.clientX, w: colWidths(list)[i], el: grip };
+    const cols = shownColumns(list).slice(1);
+    const widths = colWidths(list);
+    const i = cols.findIndex(c => c[0] === key);
+    const left = i > 0 ? cols[i - 1][0] : null; // null = the Title column (it just takes what's left)
+    drag = { kind: 'col', list, key, left, x: e.clientX, w: widths[i], lw: left ? widths[i - 1] : 0, el: grip };
+    const listEl = grip.closest('.list').getBoundingClientRect();
+    drag.guide = document.createElement('div');
+    drag.guide.className = 'col-guide';
+    Object.assign(drag.guide.style, { left: e.clientX + 'px', top: listEl.top + 'px', height: Math.min(listEl.height, window.innerHeight - listEl.top) + 'px' });
+    document.body.appendChild(drag.guide);
     grip.classList.add('drag');
     document.body.classList.add('col-drag');
     e.preventDefault();
     return;
+  }
+  // press on a row and move = drag it to another place (your own order)
+  const rowEl = e.target.closest('#page .row[data-row]');
+  if (rowEl && (S.page === 'offers' || S.page === 'quests') && !e.ctrlKey && !e.shiftKey && !e.metaKey && !e.target.closest('button, input, select, textarea, .grip')) {
+    drag = { kind: 'row', el: rowEl, index: Number(rowEl.dataset.row), y0: e.clientY, moving: false };
+    return; // no preventDefault: a plain click still selects
   }
   if (e.target.classList.contains('splitter')) {
     const left = e.target.id === 'splitLeft';
@@ -2349,9 +2753,18 @@ function marqueeMove(e) {
 document.addEventListener('mousemove', e => {
   if (!drag) return;
   if (drag.kind === 'marquee') return marqueeMove(e);
+  if (drag.kind === 'row') return rowDragMove(e);
   if (drag.kind === 'col') {
-    const w = clamp(drag.w + (drag.x - e.clientX), 50, 700); // dragging the left edge left = wider
-    (S.ui.colw ||= {})[`${drag.list}.${drag.key}`] = w;
+    const colw = (S.ui.colw ||= {});
+    let dx = e.clientX - drag.x;
+    if (drag.left) {
+      dx = clamp(dx, 50 - drag.lw, drag.w - 50); // both neighbours keep at least 50px
+      colw[`${drag.list}.${drag.left}`] = drag.lw + dx;
+      colw[`${drag.list}.${drag.key}`] = drag.w - dx;
+    } else {
+      colw[`${drag.list}.${drag.key}`] = clamp(drag.w - dx, 50, 700); // Title on the left takes the rest
+    }
+    drag.guide.style.left = (drag.x + (drag.left ? dx : drag.w - colw[`${drag.list}.${drag.key}`])) + 'px';
     applyColumns();
   } else if (drag.kind === 'left') {
     const w = clamp(drag.w + (e.clientX - drag.x), 220, 460);
@@ -2367,6 +2780,8 @@ document.addEventListener('mouseup', () => {
   if (!drag) return;
   const d = drag;
   drag = null;
+  if (d.kind === 'row') return rowDragEnd(d);
+  d.guide?.remove();
   if (d.kind === 'marquee') {
     d.el?.remove();
     document.body.classList.remove('dragging');
@@ -2415,10 +2830,11 @@ async function modCall(method, args, message) {
 }
 
 const ACT = {
-  page: arg => showPage(arg),
+  page: arg => { hideHome(); showPage(arg); },
   selTrader: arg => {
     const t = S.traders[Number(arg)];
     S.tradersOpen = false;
+    hideHome();
     if (t && t !== S.t) selectTrader(t); else renderTraders();
   },
   toggleTraders() {
@@ -2454,6 +2870,57 @@ const ACT = {
   },
   clearSearch() { S.search[S.page] = ''; $('#search').value = ''; renderHeader(); renderPage(false); },
   viewMenu: (arg, el) => viewMenu(el),
+  sortBy(arg) {
+    const [list, key] = arg.split('|');
+    const cur = S.sort[list];
+    S.sort[list] = !key ? null : cur?.key === key ? (cur.dir > 0 ? { key, dir: -1 } : null) : { key, dir: 1 }; // asc → desc → your order
+    renderHeader(); renderPage(false);
+  },
+  categoryMenu: (arg, el) => categoryMenu(el),
+  clearCategory() { S.category = null; renderPage(false); },
+  reqOnlyPicked() { S.reqOnlyPicked = !S.reqOnlyPicked; renderDetails(false); },
+  async bulkPrice(how) {
+    const list = [...S.picked];
+    const moneyLines = o => o.cost.filter(c => isMoney(c.itemTpl));
+    if (how === 'mult') {
+      const f = Number(((await promptBox('Multiply Prices', `Multiply the money price of ${list.length} offers by (e.g. 1.5 = 50% more, 0.8 = 20% less)`, '1.5')) || '').replace(',', '.'));
+      if (!(f > 0)) return;
+      list.forEach(o => moneyLines(o).forEach(c => { c.count = Math.max(1, Math.round(c.count * f)); }));
+      list.forEach(o => { if (o.priceMax > 0) { o.priceMin = Math.max(1, Math.round(o.priceMin * f)); o.priceMax = Math.max(o.priceMin, Math.round(o.priceMax * f)); } });
+    } else if (how === 'value') {
+      let n = 0;
+      list.forEach(o => { const v = offerValue(o, 'p'); if (!v) return; const cur = moneyLines(o)[0]?.itemTpl || traderMoney(); const line = o.cost.find(c => c.itemTpl === cur); const count = toCurrency(v, cur); if (line) line.count = count; else o.cost.unshift({ itemTpl: cur, count }); n++; });
+      toast(`${n} of ${list.length} priced at what traders pay`);
+    } else if (how === 'random') {
+      list.forEach(o => { const c = moneyLines(o)[0]; if (c) { o.priceMin = Math.max(1, Math.round(c.count * 0.8)); o.priceMax = Math.max(o.priceMin, Math.round(c.count * 1.2)); } });
+    } else list.forEach(o => { o.priceMin = 0; o.priceMax = 0; });
+    changed(false);
+  },
+  bulkAutomatic() {
+    const list = [...S.picked];
+    const ids = new Set(list.map(o => o.id));
+    for (const q of S.t.file.quests) q.rewards = q.rewards.filter(r => !(r.type === 'UnlockOffer' && ids.has(r.offerId)));
+    list.forEach(o => { delete o.unlockedByQuestId; });
+    changed(false);
+    toast(`${list.length} offers are for sale from the start`);
+  },
+  bulkOnOff(arg) {
+    const list = [...S.picked];
+    setEnabled(S.page === 'offers' ? 'offer' : 'quest', list, arg === '1');
+    changed(false);
+  },
+  async bulkPrereq() {
+    const id = await pickQuest('Quest all picked quests need first', true);
+    if (!id) return;
+    [...S.picked].forEach(q => { if (q.id !== id && !q.prerequisiteQuestIds.includes(id)) q.prerequisiteQuestIds.push(id); });
+    changed(false);
+  },
+  bulkEdit() {
+    const rows = S.shownRows || [];
+    if (rows.length < 2) return toast('Bulk edit needs at least 2 rows — filter by a category or tag, or Ctrl-click rows');
+    pickMany(rows);
+    toast(`${rows.length} picked — change them on the right`);
+  },
   selMod: arg => { S.modSel = S.shownMods?.[Number(arg)]?.name || null; renderPage(false); renderDetails(true, true); },
   goUse(arg) {
     const u = S.modUses?.[Number(arg)]; if (!u) return;
@@ -2789,7 +3256,7 @@ const ACT = {
       t.file.requiredMods = [...traderMods(t).keys()].sort(); // the server names them if an item is missing
       try {
         await host.call('saveTrader', { folder: t.folder, text: JSON.stringify(t.file, (k, v) => v === null ? undefined : v, 2) });
-        t.dirty = false; t.migrated = false; t.savedJson = JSON.stringify(t.file); saved++;
+        t.dirty = false; t.migrated = false; t.savedJson = JSON.stringify(t.file); t.modified = Date.now(); saved++;
         const e = S.checks.filter(c => c.trader === t && c.level === 'error').length;
         log(e ? 'warning' : 'ok', t.file.name, e ? `Saved with ${e} error(s) — see the checks.` : 'Saved. Restart the SPT server to apply.', t);
       } catch (err) { log('error', t.file.name, 'Could not save: ' + err.message, t); }
@@ -2809,6 +3276,14 @@ const ACT = {
   },
   appearance: (arg, el) => appearanceMenu(el),
   undo: () => undo(),
+  home: () => showHome(),
+  openTrader(arg) {
+    const t = S.traders[Number(arg)]; if (!t) return;
+    hideHome();
+    if (t !== S.t) selectTrader(t); else renderAll(true);
+  },
+  async homeNew() { const before = S.traders.length; await ACT.newTrader(); if (S.traders.length > before) hideHome(); },
+  shortcuts: () => shortcutsBox(),
   redo: () => redo(),
 };
 
@@ -2854,40 +3329,37 @@ function saveUi() {
 function appearanceMenu(anchor) {
   closePopover();
   const u = S.ui;
-  const dim = u.dim ?? 55;
   const pop = document.createElement('div');
-  pop.className = 'popover';
-  pop.innerHTML = `
-    <button data-pop="bg">🖼  Background picture…</button>
-    ${[[25, 'Picture: bright'], [55, 'Picture: medium'], [75, 'Picture: dark']].map(([v, t]) =>
-      `<button data-pop="dim" data-v="${v}" ${S.background ? '' : 'disabled'}>${t}${dim === v ? '<span class="check">✓</span>' : ''}</button>`).join('')}
-    <button data-pop="nobg" ${S.background ? '' : 'disabled'}>Remove picture</button>
-    <hr>
-    <label class="menu">Button color <input type="color" value="${u.accent || '#1ed760'}" data-pop="color" style="margin-left:auto"></label>
-    <hr>
-    <button data-pop="pics">Item Pictures (From tarkov.dev)${view().noItemPics ? '' : '<span class="check">✓</span>'}</button>
-    <button data-pop="grey">Calm Grey Colors${u.grey ? '<span class="check">✓</span>' : ''}</button>
-    <button data-pop="green" ${u.accent ? '' : 'disabled'}>Button color: default green</button>`;
-  document.body.appendChild(pop);
-  const r = anchor.getBoundingClientRect();
-  pop.style.top = (r.bottom + 6) + 'px';
-  pop.style.left = Math.min(window.innerWidth - pop.offsetWidth - 8, r.left) + 'px';
+  pop.className = 'popover menu2';
+  const draw = () => {
+    const dim = u.dim ?? 55;
+    pop.innerHTML = menuHtml([
+      { title: 'Background', items: [
+        { key: 'bg', text: S.background ? 'Change Picture…' : 'Choose Picture…', icon: '🖼' },
+        ...(S.background ? [[25, 'Bright'], [55, 'Medium'], [75, 'Dark']].map(([v, t]) => ({ key: 'dim:' + v, text: t, on: dim === v })) : []),
+        ...(S.background ? [{ key: 'nobg', text: 'Remove Picture' }] : []),
+      ] },
+      { title: 'Button Color', items: [{ key: 'green', text: 'Default Green', on: !u.accent }, { key: 'pick', text: 'Custom…', on: !!u.accent, icon: `<span class="dot" style="--c:${u.accent || '#1ed760'}"></span>` }] },
+      { title: 'Show', items: [{ key: 'pics', text: 'Item Pictures', on: !view().noItemPics }, { key: 'grey', text: 'Grey Colors', on: !!u.grey }] },
+    ]) + '<input type="color" id="accentPick" value="' + (u.accent || '#1ed760') + '" style="position:absolute;opacity:0;pointer-events:none;width:0;height:0">';
+    pop.querySelector('#accentPick').addEventListener('input', e => { u.accent = e.target.value; applyUi(); saveUi(); draw(); });
+  };
+  draw();
   pop.addEventListener('click', async e => {
-    const b = e.target.closest('[data-pop]');
-    if (!b || b.dataset.pop === 'color') return;
-    const what = b.dataset.pop;
-    if (what === 'bg') { const url = await host.call('chooseBackground').catch(errorBox); if (url) applyBackground(url); }
+    const b = e.target.closest('[data-v]');
+    if (!b) return;
+    const what = b.dataset.v;
+    if (what === 'bg') { closePopover(); const url = await host.call('chooseBackground').catch(errorBox); if (url) applyBackground(url); return; }
     if (what === 'nobg') { await host.call('clearBackground'); applyBackground(null); }
-    if (what === 'dim') { u.dim = Number(b.dataset.v); applyUi(); saveUi(); }
+    if (what.startsWith('dim:')) { u.dim = Number(what.slice(4)); applyUi(); saveUi(); }
     if (what === 'green') { delete u.accent; applyUi(); saveUi(); }
+    if (what === 'pick') { pop.querySelector('#accentPick').click(); return; }
     if (what === 'pics') { view().noItemPics = !view().noItemPics; badPics.clear(); saveUi(); renderPage(false); renderDetails(false); }
     if (what === 'grey') { u.grey = !u.grey; applyUi(); saveUi(); }
-    closePopover();
+    draw();
   });
-  pop.querySelector('[data-pop=color]').addEventListener('input', e => { u.accent = e.target.value; applyUi(); saveUi(); });
-  setTimeout(() => document.addEventListener('mousedown', outside), 0);
-  function outside(e) { if (!pop.contains(e.target)) closePopover(); }
-  closePopover.fn = outside;
+  const r = anchor.getBoundingClientRect();
+  popoverAt(pop, r.right - 230, r.bottom + 6);
 }
 function closePopover() {
   document.querySelector('.popover')?.remove();
