@@ -107,6 +107,7 @@ public sealed class HostForm : Form
         "reload" => Snapshot(_configFile),
         "browse" => Browse(),
         "save" => Save(a["set"] as JsonObject, a["remove"] as JsonArray),
+        "saveStats" => SaveStats(a["edits"] as JsonObject),
         "modsScanAll" => ModsScanAll(),
         "modAddFolder" => ModAddFolder(),
         "modSet" => ModSet((string?)a["name"] ?? "", (bool?)a["enabled"] ?? true),
@@ -314,7 +315,12 @@ public sealed class HostForm : Form
                 result["itemsStatus"] = "Item database not found — pick the level_requirements.json inside your SPT folder (Browse…); the item list is read from SPT_Data\\database there.";
                 return;
             }
-            if (_db.SourceFolder != dbFolder || !_db.IsLoaded) _db.Load(dbFolder);
+            if (_db.SourceFolder != dbFolder || !_db.IsLoaded) { _db.Load(dbFolder); _statsLoaded = null; }
+            if (_statsLoaded != dbFolder)
+            {
+                try { _stats.Load(dbFolder, _db, ModsRoot()); } catch (Exception e) { result["statsError"] = e.Message; }
+                _statsLoaded = dbFolder;
+            }
             var items = new JsonArray();
             foreach (var item in _db.Items.Values)
             {
@@ -331,9 +337,16 @@ public sealed class HostForm : Form
                     ["h"] = _db.Handbook.TryGetValue(item.Id, out var h) ? Math.Round(h) : null,
                     ["f"] = _db.Flea.TryGetValue(item.Id, out var f) ? Math.Round(f) : null,
                     ["x"] = item.Hidden ? 1 : null,
+                    ["st"] = _stats.Show.TryGetValue(item.Id, out var st) ? st.DeepClone() : null,
+                    ["mk"] = _stats.Meds.TryGetValue(item.Id, out var med) ? (string?)med["kind"] : null,
                 });
             }
             int modded = AddModItems(items, result);
+            var meds = new JsonObject();
+            foreach (var (id, m) in _stats.Meds) meds[id] = m.DeepClone();
+            result["meds"] = meds;
+            result["statSources"] = new JsonArray(_stats.Sources.Select(x => (JsonNode?)JsonValue.Create(x)).ToArray());
+            StatsPayload(result);
             result["items"] = items;
             result["itemsStatus"] = $"{_db.Items.Count:N0} items" + (modded > 0 ? $" + {modded:N0} modded" : "");
         }
@@ -341,6 +354,45 @@ public sealed class HostForm : Form
         {
             result["itemsStatus"] = "Item database failed to load: " + e.Message;
         }
+    }
+
+    // ------------------------------------------------------------------ item stat edits (applied by the LevelGate server mod)
+
+    private readonly ItemStats _stats = new();
+    private string? _statsLoaded;
+
+    /// <summary>SPT\...\user\mods\LevelGate\item_stats.json — the LevelGate server mod applies it when the server starts.</summary>
+    private string? StatsFile() => ModsRoot() is { } mods ? Path.Combine(mods, "LevelGate", "item_stats.json") : null;
+
+    private void StatsPayload(JsonObject result)
+    {
+        var file = StatsFile();
+        result["statsFile"] = file;
+        result["serverMod"] = file != null && File.Exists(Path.Combine(Path.GetDirectoryName(file)!, "LevelGate.Server.dll"));
+        var edits = new JsonObject();
+        try
+        {
+            if (file != null && File.Exists(file) && JsonNode.Parse(File.ReadAllText(file), documentOptions: Lenient) is JsonObject all)
+                foreach (var (id, e) in all)
+                    if (e is JsonObject) edits[id] = e.DeepClone();
+        }
+        catch (Exception e) { result["statsError"] = "item_stats.json couldn't be read: " + e.Message; }
+        result["statEdits"] = edits;
+    }
+
+    private JsonNode SaveStats(JsonObject? edits)
+    {
+        var file = StatsFile() ?? throw new InvalidOperationException("The SPT user\\mods folder wasn't found — pick the level_requirements.json inside your SPT folder first.");
+        Directory.CreateDirectory(Path.GetDirectoryName(file)!);
+        var clean = new JsonObject();
+        foreach (var (id, e) in edits ?? new JsonObject())
+            if (e is JsonObject o && o.Count > 0) clean[id] = o.DeepClone();
+        var temp = file + ".tmp";
+        File.WriteAllText(temp, clean.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
+        File.Move(temp, file, overwrite: true);
+        var result = new JsonObject();
+        StatsPayload(result);
+        return result;
     }
 
     // ------------------------------------------------------------------ items from other mods
@@ -407,7 +459,7 @@ public sealed class HostForm : Form
     private JsonObject ItemsPayload(bool rescan = false)
     {
         var result = new JsonObject();
-        if (rescan) _modScan.Clear();
+        if (rescan) { _modScan.Clear(); _statsLoaded = null; }
         LoadItems(result);
         return result;
     }

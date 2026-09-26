@@ -1,11 +1,12 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <!--
-    Tiny SPT 4.1.x SERVER mod for LevelGate. It adds nothing to gameplay —
-    all the gating runs in the BepInEx client plugin (../LevelGate). It
-    exists so the server lists LevelGate among its mods at startup:
+    SPT 4.1.x SERVER mod for LevelGate. The level gating runs in the BepInEx
+    client plugin (../LevelGate); this applies the item stat edits made in
+    the LevelGate Editor's Item Stats tab (item_stats.json next to the DLL)
+    and lists LevelGate among the server's mods at startup:
 
-      Mod: LevelGate version: 1.1.0 (GUID: com.yourname.levelgate | targets SPT: ~4.1.0) by: ... loaded
+      Mod: LevelGate version: 1.6.0 (GUID: com.yourname.levelgate | targets SPT: ~4.1.0) by: ... loaded
 
     and prints how many item limits the client config holds.
 

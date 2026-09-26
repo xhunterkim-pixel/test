@@ -188,11 +188,27 @@ is ever touched.
   file as it is on disk right now (entries added in the game's F9 window
   meanwhile are kept); undo / redo; changes made in game show up live
 
+- stats in the list and in the item details: ammo penetration / damage /
+  armor damage / speed, armor class (also of armored rigs, from their
+  default plates), rig and backpack slots, what meds treat, food energy /
+  hydration, stim effects — as the game has them, other server mods'
+  changes (Item Property Backport, BalancedMeds) included
+- **Overall** (top of the right panel): how many items unlock at which
+  levels; click a band to list only those
+- **Item Stats** tab: edit meds, painkillers, stims and food — use time,
+  uses / HP resource, HP per use, energy and hydration, what they treat or
+  suppress (and for how long), and effects over time (skills, regen,
+  stamina, carry weight, side effects…). Saved to
+  `user\mods\LevelGate\item_stats.json`; the **LevelGate server mod**
+  applies it when the SPT server starts (after other mods, so these edits
+  win). Restart the server after saving. The Level Limits tab shows the
+  edited stats too.
+
 While the game runs, LevelGate (1.6.0+) notices the saved file within ~2 s
 and reloads it (F9 → Reload from disk does the same). Reopen the inventory
 to refresh item names.
 
-The prebuilt editor is in `Editor\` of the release zip. Put that folder
+The prebuilt editor is in `LevelGate Editor\` of the release zip. Put that folder
 anywhere **outside BepInEx** (e.g. `C:\SPT\LevelGate Editor\`) — BepInEx
 would try to load its dlls as plugins. It finds
 `C:\SPT\BepInEx\plugins\LevelGate\config\level_requirements.json` by
@@ -214,15 +230,17 @@ Search that file for the item's name — you'll find lines like:
 The ID is the part before ` Name` — copy that exactly into the F9 menu or
 `level_requirements.json`.
 
-## Server mod (optional)
+## Server mod (needed for Item Stats edits)
 
-`../LevelGate.Server` is a tiny SPT 4.1.x server mod. It changes nothing in
-gameplay; it only makes the server list LevelGate at startup
-(`Mod: LevelGate version: 1.1.0 (GUID: com.yourname.levelgate | targets SPT:
+`../LevelGate.Server` is a small SPT 4.1.x server mod. It applies the item
+stat edits made in the editor's Item Stats tab
+(`user\mods\LevelGate\item_stats.json`: meds, stims, food) when the server
+starts, after other mods. It also makes the server list LevelGate at startup
+(`Mod: LevelGate version: 1.6.0 (GUID: com.yourname.levelgate | targets SPT:
 ~4.1.0) ... loaded`) and log how many item limits the client config holds.
 Open `LevelGate.Server/LevelGate.Server.csproj`, check `<SptServerDir>` (the
 folder containing `user\mods`, e.g. `C:\SPT\SPT_Runtime`), and build; the
-DLL is copied to `user\mods\LevelGate\`. Needs the .NET 10 SDK (SPT 4.1.x server packages target net10.0).
+DLL is copied to `user\mods\LevelGate\` (a prebuilt `LevelGate.Server.dll` is in the release zip under `Install\SPT_Runtime\user\mods\LevelGate\`). Needs the .NET 10 SDK (SPT 4.1.x server packages target net10.0).
 
 ## Build steps
 

@@ -63,6 +63,9 @@ const S = {
   limit: 300, shown: [],
   undo: [], redo: [],
   ui: {},
+  // Item Stats tab (meds, stims, food): base = game + other mods, edits = LevelGate's item_stats.json
+  tab: 'levels', statCat: 'all', band: null,
+  meds: {}, statEdits: {}, statSaved: {}, statsFile: null, serverMod: false, statSources: [],
 };
 
 // =====================================================================
@@ -95,6 +98,11 @@ function applyItems(snap) {
   if (snap.mods) S.mods = snap.mods;
   if (snap.modItemsOff) S.modItemsOff = snap.modItemsOff;
   if (snap.itemsStatus !== undefined) $('#itemsStatus').textContent = snap.itemsStatus;
+  if (snap.meds) S.meds = snap.meds;
+  if (snap.statSources) S.statSources = snap.statSources;
+  if (snap.statsFile !== undefined) S.statsFile = snap.statsFile;
+  if (snap.serverMod !== undefined) S.serverMod = !!snap.serverMod;
+  if (snap.statEdits) { S.statEdits = JSON.parse(JSON.stringify(snap.statEdits)); S.statSaved = JSON.parse(JSON.stringify(snap.statEdits)); }
 }
 
 function restoreUi() {
@@ -102,13 +110,15 @@ function restoreUi() {
   if (u.cat) S.cat = u.cat;
   if (u.filter) S.filter = u.filter;
   if (u.sort) S.sort = u.sort;
+  if (u.tab) S.tab = u.tab;
+  if (u.statCat) S.statCat = u.statCat;
   S.showHidden = !!u.showHidden;
   if (u.left) document.documentElement.style.setProperty('--left', clamp(u.left, 200, 420) + 'px');
   if (u.right) document.documentElement.style.setProperty('--right', clamp(u.right, 340, 900) + 'px');
 }
 let uiTimer = 0;
 function saveUi() {
-  Object.assign(S.ui, { cat: S.cat, filter: S.filter, sort: S.sort, showHidden: S.showHidden });
+  Object.assign(S.ui, { cat: S.cat, filter: S.filter, sort: S.sort, showHidden: S.showHidden, tab: S.tab, statCat: S.statCat });
   clearTimeout(uiTimer);
   uiTimer = setTimeout(() => host.call('saveUi', { ui: S.ui }).catch(() => { }), 400);
 }
@@ -160,6 +170,7 @@ function undo(redo = false) {
   const from = redo ? S.redo : S.undo, to = redo ? S.undo : S.redo;
   const step = from.pop();
   if (!step) return;
+  if (step.stat) { undoStat(step, redo); to.push(step); return; }
   for (const c of step) {
     const v = redo ? c.to : c.from;
     if (v === undefined) S.levels.delete(c.id); else S.levels.set(c.id, v);
@@ -205,6 +216,7 @@ function shownItems() {
   let list = catItems(S.cat).filter(it => matches(it, q));
   if (S.filter === 'limited') list = list.filter(it => isLimited(it.i));
   else if (S.filter === 'free') list = list.filter(it => !isLimited(it.i));
+  if (S.band) list = list.filter(it => { const l = levelOf(it.i); return l !== undefined && l >= S.band[0] && l <= S.band[1]; });
   const d = S.sort.dir;
   const byName = (a, b) => (a.n || '').localeCompare(b.n || '');
   const cmp = {
@@ -236,6 +248,9 @@ function catCounts(cat) {
 }
 
 function renderNav() {
+  document.querySelectorAll('#pagebar .tab').forEach(t => t.classList.toggle('on', t.dataset.arg === S.tab));
+  if (S.tab === 'stats') { statsNav(); return; }
+  $('#navModsBtn').hidden = false;
   const entry = (key, name, color) => {
     const c = catCounts(key);
     if (key !== 'all' && key !== 'modded' && !c.total) return '';
@@ -260,22 +275,21 @@ function catColor(cat) {
 
 function renderHeader() {
   const mods = S.page === 'mods';
-  $('#headerKind').textContent = mods ? 'MODS' : 'LEVEL LIMITS';
-  $('#headerTitle').textContent = mods ? 'Modded Items' : catName(S.cat);
-  const color = mods ? '#ff7ab6' : catColor(S.cat);
-  $('#header').style.setProperty('--hc', color);
-  $('#headerArt').style.setProperty('--c', color);
-  $('#headerArt').textContent = mods ? '⚙' : S.cat === 'all' ? 'LV' : catName(S.cat).slice(0, 2).toUpperCase();
-  if (mods) {
+  if (S.tab === 'stats') {
+    const ids = statIds('all');
+    $('#headerSub').textContent = `${fmt(ids.length)} meds, stims & food · ${Object.keys(S.statEdits).length} edited by LevelGate` +
+      (S.statSources.length ? ` · also changed by: ${S.statSources.join(', ')}` : '');
+  } else if (mods) {
     $('#headerSub').textContent = `${S.mods.length} mod${S.mods.length === 1 ? '' : 's'} imported · their items show in the categories (switch a mod off to hide its items)`;
   } else {
     const list = catItems(S.cat);
     const lv = list.map(it => levelOf(it.i)).filter(x => x !== undefined);
-    $('#headerSub').textContent = `${fmt(lv.length)} limited of ${fmt(list.length)} item${list.length === 1 ? '' : 's'}` +
+    $('#headerSub').textContent = `${catName(S.cat)} · ${fmt(lv.length)} limited of ${fmt(list.length)} item${list.length === 1 ? '' : 's'}` +
       (lv.length ? ` · Levels ${Math.min(...lv)}–${Math.max(...lv)}` : '');
   }
   $('#chips').hidden = mods;
-  $('#viewLabel').textContent = (SORTS.find(s => s[0] === S.sort.key) || SORTS[0])[1];
+  document.querySelector('#chips .view-btn').hidden = S.tab === 'stats';
+  $('#viewLabel').textContent = S.tab === 'stats' ? 'Name' : (SORTS.find(s => s[0] === S.sort.key) || SORTS[0])[1];
   const box = $('#searchBox'), input = $('#search');
   if (document.activeElement !== input) input.value = S.search;
   box.classList.toggle('has', !!input.value);
@@ -310,6 +324,7 @@ function rowHtml(it, n) {
     <div class="cell">${icon(it)}<div class="text"><div class="line1"><span class="title">${esc(it.n)}</span><span class="dirty" title="Changed — not saved yet">•</span><div class="badges">${badges}</div></div>
       <div class="line2">${esc(it.s || '')}${it.s ? ' · ' : ''}<span class="mono">${id}</span></div></div></div>
     <div class="col"><i class="dot" style="--c:${g?.color || '#888'}"></i>${esc(g?.name || 'Other')}</div>
+    <div class="col stats" title="${esc(statsShort(it))}">${esc(statsShort(it)) || '<span class="muted">—</span>'}</div>
     <div class="col num">${price ? fmt(price) + ' ₽' : '—'}</div>
     ${levelCell(id)}
   </div>`;
@@ -326,8 +341,8 @@ function updateRow(id) {
 }
 
 function listHead() {
-  const cols = [['', '#'], ['name', 'Item'], ['cat', 'Category'], ['price', 'Price'], ['level', 'Level']];
-  return `<div class="list-head">${cols.map(([k, t]) => k
+  const cols = [['', '#'], ['name', 'Item'], ['cat', 'Category'], ['', 'Stats'], ['price', 'Price'], ['level', 'Level']];
+  return `<div class="list-head">${cols.map(([k, t]) => k && k !== ''
     ? `<div><span class="head-text sortable ${S.sort.key === k ? 'on' : ''}" data-act="sortBy" data-arg="${k}">${t}${S.sort.key === k ? `<span class="sort-arrow">${S.sort.dir > 0 ? '▲' : '▼'}</span>` : ''}</span></div>`
     : `<div>${t}</div>`).join('')}</div>`;
 }
@@ -336,12 +351,14 @@ function renderPage(keepScroll = true) {
   const page = $('#page');
   const top = page.scrollTop;
   if (S.page === 'mods') { page.innerHTML = modsPage(); if (!keepScroll) page.scrollTop = 0; return; }
+  if (S.tab === 'stats') { page.innerHTML = statsPage(); page.scrollTop = keepScroll ? top : 0; return; }
   const list = S.shown = shownItems();
   const rows = list.slice(0, S.limit).map((it, i) => rowHtml(it, i + 1)).join('');
   const n = S.picked.size;
   const chip = (v, t) => `<button class="chip ${S.filter === v ? 'on' : ''}" data-act="filter" data-arg="${v}">${t}</button>`;
   page.innerHTML = `<div class="toolbar sticky">
       ${chip('all', 'All')}${chip('limited', 'Limited')}${chip('free', 'Not Limited')}
+      ${S.band ? `<button class="chip on" style="--c:var(--accent)" data-act="band" title="Showing only these levels — click to show all">Levels ${S.band[0]}–${S.band[1]} ✕</button>` : ''}
       <span class="sep"></span>
       <button class="outline" data-act="bulkSet" ${n ? '' : 'disabled'} title="Set one level for every picked item">${n > 1 ? `Set Level (${n})…` : 'Set Level…'}</button>
       <button class="danger" data-act="bulkRemove" ${n ? '' : 'disabled'} title="Del">${n > 1 ? `Remove Limit (${n})` : 'Remove Limit'}</button>
@@ -358,17 +375,18 @@ function renderDetails() {
   const d = $('#details');
   const picked = [...S.picked];
   if (S.page === 'mods') { $('#detailsTitle').textContent = 'Mods'; d.innerHTML = modsHelp(); return; }
-  if (picked.length > 1) { $('#detailsTitle').textContent = `${picked.length} Items Picked`; d.innerHTML = multiDetails(picked); return; }
+  if (S.tab === 'stats') { statsDetails(); return; }
+  if (picked.length > 1) { $('#detailsTitle').textContent = `${picked.length} Items Picked`; d.innerHTML = overall() + multiDetails(picked); return; }
   if (!S.sel) {
     $('#detailsTitle').textContent = 'LevelGate Editor';
-    d.innerHTML = welcome();
+    d.innerHTML = overall(true) + welcome();
     return;
   }
   const it = itemOf(S.sel);
   const lvl = levelOf(it.i), was = S.saved.get(it.i);
   const g = GROUP[groupOf(it)];
   $('#detailsTitle').textContent = it.n;
-  d.innerHTML = `
+  d.innerHTML = overall() + `
     <div class="card hero">${icon(it, true)}
       <div class="hero-text"><div class="kind" style="color:${g?.color}">${esc((g?.name || 'Other').toUpperCase())}</div>
         <div class="hero-name">${esc(it.s || it.n)}</div>
@@ -384,6 +402,7 @@ function renderDetails() {
       </div>
       <div class="hint">${lvl === undefined ? 'Anyone can use it.' : lvl === 1 ? 'Level 1 = usable from the start, but tracked (green stripes).' : `Players below level ${lvl} can't use, equip or load it (red stripes); from level ${lvl} on it's unlocked (green).`}</div>
     </div>
+    ${statsCard(it)}
     <div class="card">
       <h3>Item</h3>
       <div class="field"><label>Name</label><div>${esc(it.n)}</div></div>
@@ -423,14 +442,22 @@ function multiDetails(ids) {
 }
 
 function welcome() {
+  return `<div class="card"><h3>How It Works</h3>
+      <div class="hint">Click an item to set the level it unlocks at, or type it straight into the Level column (empty = no limit). Ctrl / Shift-click to pick several.</div></div>
+    <div class="card"><h3>While You Play</h3>
+      <div class="hint">Save here and LevelGate picks the file up in game within a couple of seconds (or press F9 → Reload from disk). Reopen the inventory to refresh item names. Changes made in the game's F9 window show up here too.</div></div>`;
+}
+
+/** Overall: how many items unlock at which levels. Always on top of the right panel; click a band to list only those. */
+function overall(open) {
   const lv = [...S.levels.values()];
   const bands = [[1, 1], [2, 10], [11, 20], [21, 30], [31, 40], [41, MAX_LEVEL]];
   const max = Math.max(1, ...bands.map(([a, b]) => lv.filter(x => x >= a && x <= b).length));
-  return `<div class="card"><h3>Level Limits</h3>
-      <div class="hint">${fmt(S.levels.size)} item(s) limited. Click an item to set the level it unlocks at, or type it straight into the Level column. Empty = no limit.</div>
-      <div class="bars">${bands.map(([a, b]) => { const n = lv.filter(x => x >= a && x <= b).length; return `<div class="bar-row"><span>${a === b ? 'Lvl ' + a : `Lvl ${a}–${b === MAX_LEVEL ? b + '' : b}`}</span><div class="bar"><i style="width:${(n / max) * 100}%"></i></div><b>${n}</b></div>`; }).join('')}</div></div>
-    <div class="card"><h3>While You Play</h3>
-      <div class="hint">Save here and LevelGate picks the file up in game within a couple of seconds (or press F9 → Reload from disk). Reopen the inventory to refresh item names. Changes made in the game's F9 window show up here too.</div></div>`;
+  const folded = !open && S.ui.overallFolded;
+  return `<div class="card overall ${folded ? 'folded' : ''}"><h3 class="card-title" data-act="foldOverall"><span class="fold">▾</span>Overall <span class="muted small">${fmt(S.levels.size)} limited</span></h3>
+      ${folded ? '' : `<div class="bars">${bands.map(([a, b]) => { const n = lv.filter(x => x >= a && x <= b).length; const on = S.band && S.band[0] === a && S.band[1] === b;
+        return `<div class="bar-row ${on ? 'on' : ''}" data-act="band" data-arg="${a}-${b}" title="Show only items unlocking at these levels"><span>${a === b ? 'Lvl ' + a : `Lvl ${a}–${b}`}</span><div class="bar"><i style="width:${(n / max) * 100}%"></i></div><b>${n}</b></div>`; }).join('')}</div>`}
+    </div>`;
 }
 
 // ---- Mods page
@@ -456,7 +483,7 @@ function modsHelp() {
 }
 
 function renderBottom() {
-  const n = changes().length;
+  const n = changes().length + statChanges().length;
   $('#unsaved').textContent = n ? `${n} Unsaved` : '';
   $('#undoBtn').disabled = !S.undo.length;
   $('#redoBtn').disabled = !S.redo.length;
@@ -468,6 +495,14 @@ function renderBottom() {
 // =====================================================================
 
 const ACT = {
+  tab(t) { S.tab = t; S.page = 'items'; S.sel = null; S.picked = new Set(); S.limit = 300; saveUi(); renderAll(); $('#page').scrollTop = 0; },
+  band(arg) {
+    const b = arg ? arg.split('-').map(Number) : null;
+    S.band = b && !(S.band && S.band[0] === b[0] && S.band[1] === b[1]) ? b : null;
+    if (S.band) S.filter = 'all';
+    S.limit = 300; renderPage(false); renderDetails();
+  },
+  foldOverall() { S.ui.overallFolded = !S.ui.overallFolded; saveUi(); renderDetails(); },
   cat(key) { S.page = 'items'; S.cat = key; S.limit = 300; S.picked = new Set(); saveUi(); renderAll(); $('#page').scrollTop = 0; },
   page(p) { S.page = p; renderAll(); },
   filter(v) { S.filter = v; S.limit = 300; saveUi(); renderPage(false); renderHeader(); },
@@ -534,27 +569,39 @@ const ACT = {
   undo() { undo(false); },
   redo() { undo(true); },
   async save() {
-    const list = changes();
-    if (!list.length) return toast('Nothing to save');
-    if (!S.configFile) return toast('Pick the config file first (Browse…)');
-    if (!await reviewChanges(list)) return;
-    const set = {}, remove = [];
-    for (const c of list) c.to === undefined ? remove.push(c.id) : (set[c.id] = c.to);
+    const list = changes(), stats = statChanges();
+    if (!list.length && !stats.length) return toast('Nothing to save');
+    if (list.length && !S.configFile) return toast('Pick the config file first (Browse…)');
+    if (!await reviewChanges(list, stats)) return;
+    const done = [];
     try {
-      const r = await host.call('save', { set, remove });
-      S.saved = new Map(Object.entries(r.levels || {}));
-      S.levels = new Map(S.saved);
+      if (list.length) {
+        const set = {}, remove = [];
+        for (const c of list) c.to === undefined ? remove.push(c.id) : (set[c.id] = c.to);
+        const r = await host.call('save', { set, remove });
+        S.saved = new Map(Object.entries(r.levels || {}));
+        S.levels = new Map(S.saved);
+        done.push(`${list.length} level change(s) — in game within ~2 s (or F9 → Reload from disk)`);
+      }
+      if (stats.length) {
+        const r = await host.call('saveStats', { edits: S.statEdits });
+        S.statEdits = JSON.parse(JSON.stringify(r.statEdits || {}));
+        S.statSaved = JSON.parse(JSON.stringify(r.statEdits || {}));
+        if (r.serverMod !== undefined) S.serverMod = !!r.serverMod;
+        done.push(`${stats.length} item stat change(s) — restart the SPT server to apply`);
+      }
       renderAll();
-      status(`Saved ${list.length} change(s) at ${new Date().toLocaleTimeString()}. In game: picked up within ~2 s (or F9 → Reload from disk).`);
-      toast(`Saved ${list.length} change${list.length === 1 ? '' : 's'}`);
-    } catch (e) { errorBox(e); }
+      status(`Saved at ${new Date().toLocaleTimeString()}: ${done.join(' · ')}.`);
+      toast(stats.length ? 'Saved — restart the SPT server for the item stats' : `Saved ${list.length} change${list.length === 1 ? '' : 's'}`);
+    } catch (e) { renderAll(); errorBox(e); }
   },
   async reload() {
-    if (changes().length && !await confirmBox('Unsaved changes', `${changes().length} unsaved change(s) will be lost. Reload anyway?`, 'Reload')) return;
+    const n = changes().length + statChanges().length;
+    if (n && !await confirmBox('Unsaved changes', `${n} unsaved change(s) will be lost. Reload anyway?`, 'Reload')) return;
     try { apply(await host.call('reload')); toast('Reloaded'); } catch (e) { errorBox(e); }
   },
   async browse() {
-    if (changes().length && !await confirmBox('Unsaved changes', 'Pick another file and lose the unsaved changes?', 'Continue')) return;
+    if (changes().length + statChanges().length && !await confirmBox('Unsaved changes', 'Pick another file and lose the unsaved changes?', 'Continue')) return;
     try { const r = await host.call('browse'); if (r) apply(r); } catch (e) { errorBox(e); }
   },
   openFolder() { host.call('openConfigFolder').catch(errorBox); },
@@ -684,17 +731,18 @@ function promptBox(title, label, initial = '') {
     m.querySelectorAll('[data-m]').forEach(b => b.onclick = () => done(b.dataset.m === '1'));
   });
 }
-function reviewChanges(list) {
+function reviewChanges(list, stats = []) {
   const kinds = { add: [], edit: [], del: [] };
   for (const c of list) (c.from === undefined ? kinds.add : c.to === undefined ? kinds.del : kinds.edit).push(c);
   const line = (c, sign, color, text) => `<div class="chg"><span class="chg-i" style="color:${color}">${sign}</span><div>${esc(itemOf(c.id).n)} <span class="muted">${text}</span></div></div>`;
   const section = (title, arr, fn) => arr.length ? `<div class="chg-trader"><h3>${title} <span class="muted small">${arr.length}</span></h3>${arr.slice(0, 300).map(fn).join('')}${arr.length > 300 ? `<div class="muted small">… and ${arr.length - 300} more</div>` : ''}</div>` : '';
   return openModal(`<div class="dialog"><h2>Save These Changes?</h2>
-      <div class="muted small" style="margin-bottom:10px">${list.length} change${list.length === 1 ? '' : 's'} to ${esc(S.configFile)}</div>
+      <div class="muted small" style="margin-bottom:10px">${list.length ? `${list.length} level change${list.length === 1 ? '' : 's'} to ${esc(S.configFile)}` : ''}${list.length && stats.length ? '<br>' : ''}${stats.length ? `${stats.length} item stat change${stats.length === 1 ? '' : 's'} to ${esc(S.statsFile || 'user\\mods\\LevelGate\\item_stats.json')}` : ''}</div>
       <div class="chg-list">
         ${section('New Limits', kinds.add, c => line(c, '+', 'var(--green)', `→ Level ${c.to}`))}
         ${section('Changed', kinds.edit, c => line(c, '•', 'var(--orange)', `Level ${c.from} → ${c.to}`))}
         ${section('Limits Removed', kinds.del, c => line(c, '−', 'var(--red)', `was Level ${c.from}`))}
+        ${section('Item Stats (after a server restart)', stats, id => `<div class="chg"><span class="chg-i" style="color:var(--violet)">✎</span><div>${esc(itemOf(id).n)} <span class="muted">${esc(statDiffText(id))}</span></div></div>`)}
       </div>
       <div class="buttons"><button class="outline" data-m="0">Cancel</button><button class="primary" data-m="1">Save</button></div></div>`,
     m => { m.querySelectorAll('[data-m]').forEach(b => b.onclick = () => closeModal(b.dataset.m === '1')); m.querySelector('[data-m="1"]').focus(); });
@@ -813,6 +861,7 @@ document.addEventListener('keydown', e => {
     }
     return;
   }
+  if (S.tab === 'stats') return; // the keys below edit level limits
   if (inLevel) { if (k === 'Enter' || k === 'Escape') e.target.blur(); return; }
   if (k === 'Escape') { if (S.picked.size) { S.picked = new Set(); markSelection(); renderDetails(); } else if (S.search) ACT.clearSearch(); return; }
   if ((k === 'Delete' || k === 'Backspace') && (S.sel || S.picked.size)) { e.preventDefault(); ACT.bulkRemove(); return; }
@@ -845,4 +894,3 @@ document.addEventListener('dblclick', e => {
   saveUi();
 });
 
-start();

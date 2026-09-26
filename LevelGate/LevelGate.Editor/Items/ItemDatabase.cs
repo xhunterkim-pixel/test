@@ -79,6 +79,17 @@ public sealed class ItemDatabase
 
     private readonly Dictionary<string, string> _parents = new();
 
+    /// <summary>True when <paramref name="cls"/> is the item's parent, grandparent...</summary>
+    public bool HasAncestor(string id, string cls)
+    {
+        for (int i = 0; i < 20 && _parents.TryGetValue(id, out var parent) && !string.IsNullOrEmpty(parent); i++)
+        {
+            if (parent == cls) return true;
+            id = parent;
+        }
+        return false;
+    }
+
     /// <summary>Offer category (ItemGroups key: Weapons, Ammo, Armor, Headwear, Rigs...) — nearest matching base class.</summary>
     public string GroupOf(string id, bool questItem = false)
     {

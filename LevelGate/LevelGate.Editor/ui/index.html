@@ -35,13 +35,12 @@
     <div class="splitter" id="splitLeft" title="Drag to resize · double-click to reset"></div>
 
     <section id="center" class="panel">
-      <div id="header">
-        <div id="headerArt"></div>
-        <div class="header-text">
-          <div id="headerKind" class="kind">LEVEL LIMITS</div>
-          <h1 id="headerTitle">All Items</h1>
-          <div id="headerSub" class="muted"></div>
+      <div id="pagebar">
+        <div class="tabs">
+          <button class="tab" data-act="tab" data-arg="levels">Level Limits</button>
+          <button class="tab" data-act="tab" data-arg="stats">Item Stats</button>
         </div>
+        <div id="headerSub" class="muted small"></div>
       </div>
       <nav id="chips">
         <div id="searchBox" class="search" title="Search (Ctrl+F)"><svg viewBox="0 0 24 24"><path d="M10.5 3a7.5 7.5 0 0 1 6 12l4.7 4.7-1.4 1.4-4.7-4.7A7.5 7.5 0 1 1 10.5 3Zm0 2a5.5 5.5 0 1 0 0 11 5.5 5.5 0 0 0 0-11Z"/></svg>
@@ -78,5 +77,7 @@
     if (!(window.chrome && window.chrome.webview)) document.write('<script src="dev-mock.js"><\/script>');
   </script>
   <script src="app.js"></script>
+  <script src="stats.js"></script>
+  <script>start();</script>
 </body>
 </html>
