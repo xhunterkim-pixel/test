@@ -67,6 +67,14 @@ background from the game's item colors (click the color button to cycle).
 Changes apply live; item names already on screen update when the inventory
 is reopened. An empty label keeps the game's own short name.
 
+**Hover tooltip:** instead of `[UNLOCKED - Lvl 1] Army crackers` the tooltip
+shows `UNLOCKED - Army Crackers` with `UNLOCKED At Level 1` underneath (the
+level in yellow; LOCKED items say `Unlocks At Level X`, SEMI LOCKED
+magazines `Rounds Unlock At Level X`). Other mods' tooltip lines, like Show
+Me The Money's trader / flea prices, stay below it. F9: "Tooltip 2 lines"
+ON/OFF (BepInEx config `Labels / TooltipTwoLines`). Startup log:
+`LevelGate: tooltip layout hooked: SimpleTooltip.Show + N item view(s).`
+
 **Striped backgrounds:** LOCKED, UNLOCKED and SEMI LOCKED items get the
 game's own striped background, the built-in layer the game shows on items
 you pin / lock in the stash (`GridItemView._pinBackground`). LevelGate just

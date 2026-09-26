@@ -27,7 +27,7 @@ namespace LevelGate
     {
         public const string PluginGuid = "com.yourname.levelgate";
         public const string PluginName = "LevelGate";
-        public const string PluginVersion = "1.3.0";
+        public const string PluginVersion = "1.4.0";
 
         internal static ManualLogSource Log;
         internal static ConfigEntry<KeyboardShortcut> ToggleMenuKey;
@@ -36,6 +36,7 @@ namespace LevelGate
         internal static ConfigEntry<string> SemiLockedLabel;
         internal static ConfigEntry<bool> LabelBrackets;
         internal static ConfigEntry<bool> LabelShowLevel;
+        internal static ConfigEntry<bool> TooltipLayout;
         internal static ConfigEntry<string> LockedColor;
         internal static ConfigEntry<string> UnlockedColor;
         internal static ConfigEntry<string> SemiLockedColor;
@@ -93,6 +94,8 @@ namespace LevelGate
                 "Wrap the label in [ ] (e.g. turn off for just  X  or  ✓).");
             LabelShowLevel = Config.Bind("Labels", "ShowLevelInFullName", true,
                 "Add ' - Lvl X' to the label in the full item name.");
+            TooltipLayout = Config.Bind("Labels", "TooltipTwoLines", true,
+                "Hover tooltip: 'UNLOCKED - Army Crackers' with 'UNLOCKED At Level X' (level in yellow) underneath, above other mods' lines (e.g. Show Me The Money prices).");
 
             var colorNames = Enum.GetNames(typeof(JsonType.TaxonomyColor));
             string Pick(string preferred, string fallback) =>
@@ -116,6 +119,7 @@ namespace LevelGate
             MagazineSemiLock.PatchNames(harmony);
             GearSlotGate.Apply(harmony);
             StripeOverlay.Apply(harmony);
+            TooltipLayoutPatch.Apply(harmony);
             StripesEnabled.SettingChanged += (_, __) => StripeOverlay.RefreshAll();
             StripeStrength.SettingChanged += (_, __) => StripeOverlay.RefreshAll();
             StripesGameStyle.SettingChanged += (_, __) => StripeOverlay.RefreshAll();
@@ -213,6 +217,8 @@ namespace LevelGate
                 LabelBrackets.Value = !LabelBrackets.Value;
             if (GUILayout.Button("Show level: " + (LabelShowLevel.Value ? "ON" : "OFF"), GUILayout.Width(120)))
                 LabelShowLevel.Value = !LabelShowLevel.Value;
+            if (GUILayout.Button("Tooltip 2 lines: " + (TooltipLayout.Value ? "ON" : "OFF"), GUILayout.Width(140)))
+                TooltipLayout.Value = !TooltipLayout.Value;
             if (GUILayout.Button("Defaults", GUILayout.Width(80)))
             {
                 foreach (var entry in new ConfigEntryBase[] { LockedLabel, UnlockedLabel, SemiLockedLabel, LabelBrackets, LabelShowLevel, LockedColor, UnlockedColor, SemiLockedColor })
@@ -2741,8 +2747,129 @@ namespace LevelGate
         }
     }
 
+    // -----------------------------------------------------------------
+    // Hover tooltip layout. The tooltip's first line is the item's full name,
+    // which LevelGate labels ("[UNLOCKED - Lvl 1] Army crackers"). Just before
+    // the game shows it (SimpleTooltip.Show(text) — the same call Show Me
+    // The Money appends its prices to), this rewrites ONLY that name into
+    //   UNLOCKED - Army Crackers
+    //   UNLOCKED At Level 1        (level in yellow)
+    // Runs last (after other mods), so their lines (Therapist / Flea prices)
+    // stay below, untouched. Tooltips without LevelGate's label are left alone.
+    // -----------------------------------------------------------------
+    internal static class TooltipLayoutPatch
+    {
+        private static EFT.InventoryLogic.Item _hovered;
+        private const string Yellow = "#FFD24A";
+        private static readonly HashSet<string> SmallWords = new HashSet<string> { "of", "and", "the", "for", "with", "in", "on", "a", "an", "to", "or" };
+
+        public static void Apply(Harmony harmony)
+        {
+            try
+            {
+                var tooltip = AccessTools.TypeByName("EFT.UI.SimpleTooltip");
+                var show = tooltip == null ? null : AccessTools.GetDeclaredMethods(tooltip)
+                    .FirstOrDefault(m => m.Name == "Show" && m.GetParameters().Length > 0 && m.GetParameters()[0].Name == "text" && m.GetParameters()[0].ParameterType == typeof(string));
+                if (show == null)
+                {
+                    LevelGatePlugin.Log.LogWarning("LevelGate: SimpleTooltip.Show(text) not found — tooltip layout is off.");
+                    return;
+                }
+                harmony.Patch(show, prefix: new HarmonyMethod(typeof(TooltipLayoutPatch), nameof(BeforeShow)) { priority = Priority.Last });
+
+                // Which item the pointer is on (every item cell type that handles it).
+                var itemView = AccessTools.TypeByName("EFT.UI.DragAndDrop.ItemView");
+                int hooks = 0;
+                if (itemView != null)
+                {
+                    foreach (var type in itemView.Assembly.GetTypes().Where(t => itemView.IsAssignableFrom(t)))
+                    {
+                        var enter = AccessTools.DeclaredMethod(type, "OnPointerEnter");
+                        if (enter == null || enter.IsAbstract) continue;
+                        try { harmony.Patch(enter, prefix: new HarmonyMethod(typeof(TooltipLayoutPatch), nameof(OnEnter))); hooks++; }
+                        catch (Exception e) { LevelGatePlugin.Log.LogWarning($"LevelGate: couldn't hook {type.Name}.OnPointerEnter: {e.Message}"); }
+                    }
+                }
+                LevelGatePlugin.Log.LogInfo($"LevelGate: tooltip layout hooked: {show.DeclaringType?.Name}.Show + {hooks} item view(s).");
+            }
+            catch (Exception e)
+            {
+                LevelGatePlugin.Log.LogError("LevelGate: tooltip layout hooks failed. " + e);
+            }
+        }
+
+        private static void OnEnter(object __instance)
+        {
+            _hovered = ReflectionUtil.GetMember(__instance, "Item") as EFT.InventoryLogic.Item;
+        }
+
+        private static void BeforeShow(ref string text)
+        {
+            try
+            {
+                if (!(LevelGatePlugin.TooltipLayout?.Value ?? true) || string.IsNullOrEmpty(text) || _hovered == null) return;
+                var item = _hovered;
+                string tpl = item.TemplateId;
+
+                // same states as the labels / backgrounds
+                ConfigEntry<string> label;
+                int level;
+                string levelLine;
+                bool inConfig = LevelGatePlugin.Data.Items.TryGetValue(tpl, out int required);
+                int semi = MagazineSemiLock.GatedAmmoLevel(item);
+                if (inConfig && LevelGateCheck.IsBlocked(LevelGateCheck.GetMainPlayer(), tpl, out required))
+                {
+                    label = LevelGatePlugin.LockedLabel; level = required;
+                    levelLine = $"Unlocks At <color={Yellow}>Level {level}</color>";
+                }
+                else if (semi > 0)
+                {
+                    label = LevelGatePlugin.SemiLockedLabel; level = semi;
+                    levelLine = $"Rounds Unlock At <color={Yellow}>Level {level}</color>";
+                }
+                else if (inConfig)
+                {
+                    label = LevelGatePlugin.UnlockedLabel; level = required;
+                    levelLine = $"{label.Value} At <color={Yellow}>Level {level}</color>";
+                }
+                else return;
+
+                string plain = ItemRenameShared.PlainNames.TryGetValue(tpl, out var n) && !string.IsNullOrEmpty(n) ? n : null;
+                if (plain == null) return;
+                string shown = LabelStyle.Full(label, level, plain); // exactly what the name line says now
+                int at = text.IndexOf(shown, StringComparison.Ordinal);
+                if (at < 0) return; // not our tooltip (or already rewritten)
+
+                string word = label.Value ?? "";
+                string header = string.IsNullOrEmpty(word) ? TitleCase(plain) : $"{word} - {TitleCase(plain)}";
+                text = text.Substring(0, at) + header + "\n" + levelLine + text.Substring(at + shown.Length);
+            }
+            catch (Exception e)
+            {
+                LevelGatePlugin.Log.LogError("LevelGate tooltip layout error: " + e);
+            }
+        }
+
+        /// <summary>"Can of beef stew (Large)" -> "Can of Beef Stew (Large)"; numbers / codes stay as they are.</summary>
+        private static string TitleCase(string name)
+        {
+            var words = name.Split(' ');
+            for (int i = 0; i < words.Length; i++)
+            {
+                var w = words[i];
+                if (w.Length == 0 || !char.IsLower(w[0])) continue;
+                if (i > 0 && SmallWords.Contains(w)) continue;
+                words[i] = char.ToUpperInvariant(w[0]) + w.Substring(1);
+            }
+            return string.Join(" ", words);
+        }
+    }
+
     internal static class ItemRenameShared
     {
+        /// <summary>The game's own full name per template id, before LevelGate's label (for the tooltip layout).</summary>
+        public static readonly Dictionary<string, string> PlainNames = new Dictionary<string, string>();
+
         // Keys look like "<TemplateId> Name" or "<TemplateId> ShortName" —
         // the exact format used in en.json. Only these two suffixes are
         // touched; "Description" and anything else is left alone.
@@ -2783,6 +2910,7 @@ namespace LevelGate
                     }
                 }
                 if (templateId == null) return;
+                if (showLevel) PlainNames[templateId] = result;
 
                 // Not in the config at all — nothing to label either way.
                 if (!LevelGatePlugin.Data.Items.TryGetValue(templateId, out int required)) return;
