@@ -27,7 +27,7 @@ namespace LevelGate
     {
         public const string PluginGuid = "com.yourname.levelgate";
         public const string PluginName = "LevelGate";
-        public const string PluginVersion = "1.5.0";
+        public const string PluginVersion = "1.5.1";
 
         internal static ManualLogSource Log;
         internal static ConfigEntry<KeyboardShortcut> ToggleMenuKey;
@@ -190,38 +190,24 @@ namespace LevelGate
             {
                 StripesGameStyle.Value = !StripesGameStyle.Value;
             }
-            GUILayout.EndHorizontal();
-            GUILayout.BeginHorizontal();
-            GUILayout.Label("LG strength:", GUILayout.Width(90));
-            foreach (var choice in StripeStrengthChoices)
-            {
-                bool selected = StripeStrength.Value == choice;
-                if (GUILayout.Button(selected ? "> " + choice + " <" : choice, GUILayout.Width(85)))
-                {
-                    StripeStrength.Value = choice;
-                }
-            }
-            GUILayout.EndHorizontal();
-
-            GUILayout.Space(6);
-            GUILayout.Label("Labels & colors (applied live; reopen the inventory to refresh names):");
-            DrawLabelRow("Locked:", LockedLabel, LockedColor);
-            DrawLabelRow("Unlocked:", null, UnlockedColor);
-            DrawLabelRow("Semi locked:", SemiLockedLabel, SemiLockedColor);
-
-            GUILayout.BeginHorizontal();
-            if (GUILayout.Button("Brackets [ ]: " + (LabelBrackets.Value ? "ON" : "OFF"), GUILayout.Width(130)))
-                LabelBrackets.Value = !LabelBrackets.Value;
-            if (GUILayout.Button("Show level: " + (LabelShowLevel.Value ? "ON" : "OFF"), GUILayout.Width(120)))
-                LabelShowLevel.Value = !LabelShowLevel.Value;
             if (GUILayout.Button("Tooltip 2 lines: " + (TooltipLayout.Value ? "ON" : "OFF"), GUILayout.Width(140)))
                 TooltipLayout.Value = !TooltipLayout.Value;
-            if (GUILayout.Button("Defaults", GUILayout.Width(80)))
-            {
-                foreach (var entry in new ConfigEntryBase[] { LockedLabel, SemiLockedLabel, LabelBrackets, LabelShowLevel, LockedColor, UnlockedColor, SemiLockedColor })
-                    entry.BoxedValue = entry.DefaultValue;
-            }
             GUILayout.EndHorizontal();
+            // the strength only changes LevelGate's own drawn stripes, not the game's
+            if (!StripesGameStyle.Value)
+            {
+                GUILayout.BeginHorizontal();
+                GUILayout.Label("LG strength:", GUILayout.Width(90));
+                foreach (var choice in StripeStrengthChoices)
+                {
+                    bool selected = StripeStrength.Value == choice;
+                    if (GUILayout.Button(selected ? "> " + choice + " <" : choice, GUILayout.Width(85)))
+                    {
+                        StripeStrength.Value = choice;
+                    }
+                }
+                GUILayout.EndHorizontal();
+            }
 
             GUILayout.Space(10);
             GUILayout.Label("Add / update an entry:");
@@ -313,28 +299,6 @@ namespace LevelGate
             }
 
             GUILayout.EndVertical();
-        }
-
-        // One row: label text field + a color button that cycles through the
-        // game's item background colors.
-        private static void DrawLabelRow(string title, ConfigEntry<string> label, ConfigEntry<string> color)
-        {
-            GUILayout.BeginHorizontal();
-            GUILayout.Label(title, GUILayout.Width(80));
-            if (label != null)
-            {
-                string text = GUILayout.TextField(label.Value ?? "", 24, GUILayout.Width(150));
-                if (text != label.Value) label.Value = text;
-            }
-            else GUILayout.Label("(no label — just the name)", GUILayout.Width(150));
-
-            if (GUILayout.Button(color.Value, GUILayout.Width(120)))
-            {
-                var names = Enum.GetNames(typeof(JsonType.TaxonomyColor));
-                int i = Array.IndexOf(names, color.Value);
-                color.Value = names[(i + 1) % names.Length];
-            }
-            GUILayout.EndHorizontal();
         }
 
         // Uses the same Localized() fallback behavior discovered earlier
@@ -2779,6 +2743,13 @@ namespace LevelGate
                     return;
                 }
                 harmony.Patch(show, prefix: new HarmonyMethod(typeof(TooltipLayoutPatch), nameof(BeforeShow)) { priority = Priority.Last });
+                int setTexts = 0;
+                for (var t = tooltip; t != null && t != typeof(object) && t.Assembly == tooltip.Assembly; t = t.BaseType)
+                    foreach (var m in AccessTools.GetDeclaredMethods(t).Where(m => m.Name == "SetText" && !m.IsAbstract && m.GetParameters().Length > 0 && m.GetParameters()[0].ParameterType == typeof(string)))
+                    {
+                        try { harmony.Patch(m, prefix: new HarmonyMethod(typeof(TooltipLayoutPatch), nameof(BeforeSetText)) { priority = Priority.Last }); setTexts++; }
+                        catch (Exception e) { LevelGatePlugin.Log.LogWarning($"LevelGate: couldn't hook {t.Name}.SetText: {e.Message}"); }
+                    }
 
                 // The item under the pointer, the way Show Me The Money does it: every grid cell
                 // (stash, inventory, containers, trader screens, in raid) is a GridItemView.
@@ -2788,7 +2759,7 @@ namespace LevelGate
                 var exit = grid == null ? null : AccessTools.GetDeclaredMethods(grid).FirstOrDefault(m => m.Name == "OnPointerExit" && m.GetParameters().Length == 1);
                 if (enter != null) { harmony.Patch(enter, postfix: new HarmonyMethod(typeof(TooltipLayoutPatch), nameof(OnEnter))); hover = true; }
                 if (exit != null) harmony.Patch(exit, postfix: new HarmonyMethod(typeof(TooltipLayoutPatch), nameof(OnExit)));
-                LevelGatePlugin.Log.LogInfo($"LevelGate: tooltip layout hooked: {show.DeclaringType?.Name}.Show{(hover ? " + GridItemView hover" : "")}.");
+                LevelGatePlugin.Log.LogInfo($"LevelGate: tooltip layout hooked: {show.DeclaringType?.Name}.Show + {setTexts} SetText{(hover ? " + GridItemView hover" : "")}.");
             }
             catch (Exception e)
             {
@@ -2802,6 +2773,17 @@ namespace LevelGate
         }
 
         private static void OnExit() { _hoveredTpl = null; }
+
+        /// <summary>SetText(text, ...) on the tooltip or its base types: Show Me The Money replaces the whole text
+        /// with it once a price arrives (the first time an item is hovered), which would undo the layout.</summary>
+        private static void BeforeSetText(object[] __args)
+        {
+            if (__args != null && __args.Length > 0 && __args[0] is string text)
+            {
+                BeforeShow(ref text);
+                __args[0] = text;
+            }
+        }
 
         private static void BeforeShow(ref string text)
         {

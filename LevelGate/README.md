@@ -61,12 +61,12 @@ with an **orange** background, next to `[LOCKED]`/red. Unlocked items keep
 their own name (so the short name stays readable) with a **green** background.
 Magazines only — ammo boxes are excluded.
 
-**Labels & colors:** the F9 window (and BepInEx config sections "Labels"
-and "Colors") lets you change the LOCKED / SEMI LOCKED text, turn
-the `[ ]` brackets and the " - Lvl X" part on/off, and pick each state's
-background from the game's item colors (click the color button to cycle).
-Changes apply live; item names already on screen update when the inventory
-is reopened. An empty label keeps the game's own short name.
+**Labels & colors:** the LOCKED / SEMI LOCKED text, the `[ ]` brackets, the
+" - Lvl X" part and each state's background color are in the BepInEx config
+(sections "Labels" and "Colors", also editable in the Configuration Manager).
+The F9 window keeps just the switches you'd actually flip in game: stripes
+ON/OFF, game / LevelGate style, tooltip 2 lines, and the stripe strength
+(shown only for LevelGate-style stripes, the only ones it changes).
 
 **Hover tooltip:** the name line becomes two lines (level in yellow):
 
@@ -81,7 +81,9 @@ trader screens, in raid): the item is recognised from its name, and like Show
 Me The Money from the grid cell under the pointer (`GridItemView`). Other
 mods' tooltip lines (Show Me The Money's prices) stay below. F9: "Tooltip 2
 lines" ON/OFF (BepInEx config `Labels / TooltipTwoLines`). Startup log:
-`LevelGate: tooltip layout hooked: SimpleTooltip.Show + GridItemView hover.`
+`LevelGate: tooltip layout hooked: SimpleTooltip.Show + N SetText + GridItemView hover.`
+The SetText hook matters with Show Me The Money: the first time an item is
+hovered it replaces the tooltip text once the price is ready.
 
 **Striped backgrounds:** LOCKED, UNLOCKED and SEMI LOCKED items get the
 game's own striped background, the built-in layer the game shows on items
