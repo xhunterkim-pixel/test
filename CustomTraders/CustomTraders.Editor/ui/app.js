@@ -443,17 +443,33 @@ function questLabel(id) {
 const chainLabel = c => c.game ? `${c.game.n}${c.game.t ? ` (${c.game.t}, game quest)` : ' (game quest)'}` : `${c.t.file.name}: ${c.q.name}`;
 const chainOn = c => c.game || c.t.file.enabled;
 
-/** Picture of a game item (tarkov.dev keeps one for every item id); kind: icon | grid-image | 512. */
+/** Picture of a game item; kind: icon | grid-image | 512. The editor downloads it once from tarkov.dev
+ *  (a picture for every game item id) and keeps it on the PC — served as files.local/icon/…; a plain
+ *  browser (tests) asks tarkov.dev directly. */
 function itemPic(id, kind = 'icon') {
   if (!id || isMoney(id) && !item(id) || view().noItemPics) return null;
-  const url = `https://assets.tarkov.dev/${id}-${kind}.webp`;
+  const name = `${id}-${kind}.webp`;
+  const url = window.chrome?.webview && !directPics.has(name) ? `https://files.local/icon/${name}` : `https://assets.tarkov.dev/${name}`;
   return badPics.has(url) ? null : url;
 }
 /** When a picture can't load (modded item, offline…), the initials under it show instead. */
 const picFail = `onerror="picFailed(this)"`;
 const badPics = new Set();
-/** A picture that can't load is remembered, so redraws don't try (and flicker) again. */
-function picFailed(img) { badPics.add(img.getAttribute('src')); img.remove(); }
+/** A picture that can't load is skipped for a while, so redraws don't try (and flicker) again and again. */
+const directPics = new Set(); // pictures the editor couldn't fetch, loaded straight from tarkov.dev instead
+function picFailed(img) {
+  const src = img.getAttribute('src');
+  const local = 'https://files.local/icon/', direct = 'https://assets.tarkov.dev/';
+  if (src.startsWith(local)) { // the editor couldn't fetch it: let the page try tarkov.dev itself
+    const name = src.slice(local.length);
+    directPics.add(name);
+    img.src = direct + name;
+    return;
+  }
+  badPics.add(src);
+  img.remove();
+}
+setInterval(() => badPics.clear(), 60000); // …but a hiccup never hides a picture for good
 function thumb(t) {
   if (t.img) return `<img class="thumb${t.wide ? ' wide' : ''}" src="${esc(t.img)}" alt="" loading="lazy">`;
   const dark = t.dark ? ' dark' : '';

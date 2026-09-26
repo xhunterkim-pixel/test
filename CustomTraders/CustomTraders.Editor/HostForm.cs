@@ -682,6 +682,7 @@ public sealed class HostForm : Form
         {
             var uri = new Uri(e.Request.Uri);
             var parts = uri.AbsolutePath.Trim('/').Split('/').Select(Uri.UnescapeDataString).ToArray();
+            if (parts is ["icon", var iconName]) { ServeIcon(e, iconName); return; }
             string? path = null;
             if (parts is ["background"]) path = _settings.BackgroundImage;
             else if (parts is ["game", "quests", var gameFile] && _gameQuestImages != null &&
@@ -716,6 +717,29 @@ public sealed class HostForm : Form
         {
             e.Response = env.CreateWebResourceResponse(null, 500, "Error", "Cache-Control: no-store");
         }
+    }
+
+    /// <summary>https://files.local/icon/&lt;id&gt;-icon.webp — downloaded / cached in the background (ItemIcons).</summary>
+    private void ServeIcon(CoreWebView2WebResourceRequestedEventArgs e, string name)
+    {
+        var deferral = e.GetDeferral();
+        _ = Task.Run(async () =>
+        {
+            byte[]? bytes = null;
+            try { bytes = await ItemIcons.GetAsync(name); } catch { /* shown as "no picture" */ }
+            BeginInvoke(() =>
+            {
+                try
+                {
+                    var env = _web.CoreWebView2.Environment;
+                    e.Response = bytes == null
+                        ? env.CreateWebResourceResponse(null, 404, "Not found", "Cache-Control: no-store")
+                        : env.CreateWebResourceResponse(new MemoryStream(bytes), 200, "OK", "Content-Type: image/webp\r\nCache-Control: max-age=604800\r\nAccess-Control-Allow-Origin: *");
+                }
+                catch { /* window closing */ }
+                finally { deferral.Complete(); }
+            });
+        });
     }
 
     private static Bitmap LoadBitmap(string path)
