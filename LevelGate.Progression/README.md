@@ -1,13 +1,15 @@
-# LevelGate Progression (0.5.0, test build)
+# LevelGate Progression (0.6.0, test build)
 
 A Call of Duty style **Progression** screen inside Tarkov's main menu. It adds a
 **PROGRESSION** button to the menu bar next to Character, Trading, Flea Market and the rest.
 
 - **Bottom half:** five level cards per page (16 pages for levels 1–79).
-  - Each card has a rank diamond, its unlock count and the first few item names.
-  - Each card also says whether the level is **UNLOCKED**, **YOUR LEVEL** or **LOCKED** for you.
+  - Each card has a rank badge and title (a new rank every 5 levels), the first items and its unlock count.
+  - Each card also says whether the level is **Unlocked**, your **Current level**, the **Next level** or **Locked**.
 - **Top half:** everything that unlocks at the picked level, grouped by category.
-  - The header shows your level and how far you are to the next one.
+  - The header shows your level, your XP toward the next level and the next level's reward count.
+  - Left-click an item to show it big; right-click to inspect it.
+  - A red bloom glows from the right, stronger on locked levels.
 - **Controls:**
   - ← → change the level by one.
   - Q / E, the arrows, the mouse wheel over the cards or the page dots change the page.

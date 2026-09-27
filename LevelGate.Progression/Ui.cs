@@ -175,7 +175,50 @@ namespace LevelGate.Progression
 
         // ---------------------------------------------------------------- generated pictures
 
-        private static Sprite _diamond, _white, _vgrad;
+        private static Sprite _diamond, _white, _vgrad, _hgrad, _radial, _dots;
+
+        /// <summary>See-through on the left, white on the right, eased so the glow hugs the right edge — tint it for bloom.</summary>
+        public static Sprite HorizontalFade()
+        {
+            if (_hgrad != null) return _hgrad;
+            const int w = 256;
+            var tex = new Texture2D(w, 2, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Clamp };
+            for (int x = 0; x < w; x++) { float a = Mathf.Pow(x / (w - 1f), 2.2f); var c = new Color(1, 1, 1, a); tex.SetPixel(x, 0, c); tex.SetPixel(x, 1, c); }
+            tex.Apply();
+            return _hgrad = Sprite.Create(tex, new Rect(0, 0, w, 2), new Vector2(.5f, .5f));
+        }
+
+        /// <summary>A soft round glow (white in the middle, see-through at the edge) — tint it for corner bloom.</summary>
+        public static Sprite Radial()
+        {
+            if (_radial != null) return _radial;
+            const int n = 128;
+            var tex = new Texture2D(n, n, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Clamp };
+            for (int y = 0; y < n; y++)
+                for (int x = 0; x < n; x++)
+                {
+                    float d = Vector2.Distance(new Vector2(x, y), new Vector2(n / 2f, n / 2f)) / (n / 2f);
+                    float a = Mathf.Clamp01(1 - d);
+                    tex.SetPixel(x, y, new Color(1, 1, 1, a * a));
+                }
+            tex.Apply();
+            return _radial = Sprite.Create(tex, new Rect(0, 0, n, n), new Vector2(.5f, .5f));
+        }
+
+        /// <summary>A dotted line that fades out toward its right end (flip it with a -1 x scale for the left side).</summary>
+        public static Sprite FadingDots()
+        {
+            if (_dots != null) return _dots;
+            const int w = 240, h = 2;
+            var tex = new Texture2D(w, h, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Clamp, filterMode = FilterMode.Point };
+            for (int x = 0; x < w; x++)
+            {
+                float a = (x % 6) < 3 ? Mathf.Pow(1 - x / (float)w, 1.4f) : 0;
+                for (int y = 0; y < h; y++) tex.SetPixel(x, y, new Color(1, 1, 1, a));
+            }
+            tex.Apply();
+            return _dots = Sprite.Create(tex, new Rect(0, 0, w, h), new Vector2(.5f, .5f));
+        }
 
         /// <summary>A filled diamond (square turned 45°) — the menu button icon.</summary>
         public static Sprite DiamondSprite()

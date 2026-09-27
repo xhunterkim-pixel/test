@@ -288,6 +288,13 @@ namespace LevelGate.Progression
             catch (Exception e) { L.ErrorOnce("Localized(" + key + ")", e); return null; }
         }
 
+        /// <summary>The game's description text of an item ("" when there is none).</summary>
+        public static string DescriptionOf(string tpl)
+        {
+            var s = Localize(tpl + " Description");
+            return string.IsNullOrEmpty(s) || s == tpl + " Description" ? "" : s.Trim();
+        }
+
         /// <summary>The game's name without LevelGate's "[LOCKED - Lvl 40] " in front.</summary>
         public static string NameOf(string tpl)
         {
@@ -350,6 +357,23 @@ namespace LevelGate.Progression
                 return to > from ? Mathf.Clamp01((exp - from) / (float)(to - from)) : -1;
             }
             catch (Exception e) { L.ErrorOnce("level progress", e); return -1; }
+        }
+
+        /// <summary>Experience into the current level and needed for the next one (false if unknown / max level).</summary>
+        public static bool LevelExp(out int have, out int need)
+        {
+            have = need = 0;
+            try
+            {
+                if (!(Refl.Get(Refl.Get(Profile(), "Info"), "Experience") is int exp)) return false;
+                int level = PlayerLevel();
+                var table = ExpTable();
+                if (table == null || level <= 0 || level >= table.Length) return false;
+                have = Mathf.Max(0, exp - table[level - 1]);
+                need = table[level] - table[level - 1];
+                return need > 0;
+            }
+            catch (Exception e) { L.ErrorOnce("level experience", e); return false; }
         }
 
         private static int[] _expTable;

@@ -40,6 +40,26 @@ Versions are **MAJOR.MINOR.PATCH**:
 
 ## LevelGate Progression (BepInEx plugin, separate DLL)
 
+### 0.6.0
+- **Ranks:** a new rank title every 5 levels, from Scavenger (1–5) to Legend of Tarkov (76–79), each with its own badge colour.
+- **Bloom:** an Arena-style red bloom glows from the right edge and fades to the left. It gets stronger, and the panel borders turn reddish, while the picked level is locked.
+- **XP block (Arena style):**
+  - It sits above the centre panel: an orange square with your level, an XP bar, "have / need EXP" for the next level, and "Next level reward: N unlocks".
+  - Click the reward line to jump to that level.
+- **Removed:** the old top-right "your level" block.
+- **Selecting items:**
+  - Hovering no longer changes the big view.
+  - Left-click an item to show it (with the game's click sound); right-click still inspects.
+- **Right panel:** now also shows DETAILS (size, weight, damage, penetration, armour class, calibre, resource) and the item's description.
+- **Cards:**
+  - Tighter spacing: a small badge and a bold rank title on one row, bigger pictures filling the card, and the count and state right under them.
+  - Headers have Arena-style dots fading from the middle out.
+- **Centre panel:** the ITEM / CATEGORY / UNLOCKS AT labels and their values now line up in two columns.
+- **Icons:**
+  - The small card icons load faster (no forced re-render).
+  - The big picture is rendered at a higher resolution.
+- **Text:** bold for headings and important text.
+
 ### 0.5.0
 - **New layout** after the Tarkov and Arena battle passes:
   - **header:** PROGRESSION plus the picked level on the left, your level (Arena-style square and bar) and the Tarkov logo on the right;

@@ -107,7 +107,7 @@ namespace LevelGate.Progression
             for (int i = 1; i < ps.Length; i++)
                 args[i] = ps[i].ParameterType == typeof(int) && ps[i].Name.IndexOf("scale", StringComparison.OrdinalIgnoreCase) >= 0 ? scale
                     // a bigger picture has to be drawn again, not taken from the stash-size cache
-                    : ps[i].ParameterType == typeof(bool) && ps[i].Name.IndexOf("forced", StringComparison.OrdinalIgnoreCase) >= 0 ? (object)(scale > 1)
+                    : ps[i].ParameterType == typeof(bool) && ps[i].Name.IndexOf("forced", StringComparison.OrdinalIgnoreCase) >= 0 ? (object)(scale >= 3)
                     : ps[i].HasDefaultValue ? ps[i].DefaultValue : ps[i].ParameterType == typeof(int) ? (object)1 : false;
             return m.Invoke(null, args);
         }
@@ -278,6 +278,29 @@ namespace LevelGate.Progression
         }
 
         /// <summary>Opens the game's item inspect window. Tries every ItemUiContext.Inspect* that can take just the item.</summary>
+        /// <summary>A few facts from the item's template (size, weight, damage…) for the details panel.</summary>
+        public static List<(string Label, string Value)> Facts(string tpl)
+        {
+            var list = new List<(string, string)>();
+            try
+            {
+                var item = ItemOf(tpl);
+                var t = Refl.Get(item, "Template");
+                if (t == null) return list;
+                object Num(params string[] names) { foreach (var n in names) { var v = Refl.Get(t, n); if (v != null && !(v is string s && s.Length == 0)) return v; } return null; }
+                var w = Num("Width"); var h = Num("Height");
+                if (w != null && h != null) list.Add(("Size", $"{w} × {h}"));
+                if (Num("Weight") is float kg) list.Add(("Weight", $"{kg:0.###} kg"));
+                if (Num("Damage") is int dmg && dmg > 0) list.Add(("Damage", dmg.ToString()));
+                if (Num("PenetrationPower") is int pen && pen > 0) list.Add(("Penetration", pen.ToString()));
+                if (Num("ArmorClass", "armorClass") is int ac && ac > 0) list.Add(("Armor class", ac.ToString()));
+                if (Num("ammoCaliber", "AmmoCaliber") is string cal && cal.Length > 0) list.Add(("Caliber", cal.Replace("Caliber", "")));
+                if (Num("MaxHpResource") is int hp && hp > 0) list.Add(("Resource", hp.ToString()));
+            }
+            catch (Exception e) { L.ErrorOnce("item facts", e); }
+            return list;
+        }
+
         public static void Inspect(string tpl)
         {
             var item = ItemOf(tpl);
