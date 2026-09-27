@@ -544,6 +544,9 @@ namespace LevelGate.Progression
                 if (acBest > 0) list.Add(("Armor class", acBest.ToString()));
                 if (Num("ammoCaliber", "AmmoCaliber", "Caliber", "caliber") is string cal && cal.Length > 0) list.Add(("Caliber", CaliberName(cal)));
                 if (Num("MaxHpResource") is int hp && hp > 0) list.Add(("Resource", hp.ToString()));
+                // food & drink: what it gives (the template's health effects: Energy / Hydration)
+                foreach (var (key, label) in new[] { ("Energy", "Energy"), ("Hydration", "Hydration") })
+                    if (HealthEffect(t, key) is double fx && Math.Abs(fx) >= .5) list.Add((label, $"{fx:+0;-0}"));
                 // weapons: the template's own handling numbers (base weapon, before mods)
                 double? D(object v) { try { return v == null || v is string || v is bool ? (double?)null : Convert.ToDouble(v); } catch { return null; } }
                 // bolt-actions: "30 rpm" read like a bug — the action instead
@@ -650,6 +653,26 @@ namespace LevelGate.Progression
                 L.Info($"armor class of {tpl}: {best} ({string.Join("; ", notes.ToArray())}); template members: {members}");
             }
             return best;
+        }
+
+        /// <summary>A food / drink's effect on Energy or Hydration (its template's effects_health), or null.</summary>
+        private static double? HealthEffect(object template, string key)
+        {
+            try
+            {
+                var effects = Refl.Get(template, "effects_health") ?? Refl.Get(template, "HealthEffects") ?? Refl.Get(template, "EffectsHealth");
+                if (!(effects is System.Collections.IEnumerable list)) return null;
+                foreach (var e in list)
+                {
+                    var k = Refl.Get(e, "Key")?.ToString() ?? Refl.Get(e, "Type")?.ToString();
+                    if (k == null || k.IndexOf(key, StringComparison.OrdinalIgnoreCase) < 0) continue;
+                    var v = Refl.Get(e, "Value");
+                    var n = Refl.Get(v, "Value") ?? Refl.Get(v, "value") ?? v;
+                    return Convert.ToDouble(n);
+                }
+            }
+            catch { }
+            return null;
         }
 
         /// <summary>"ArmoredSteel" → "Armored steel", "UHMWPE" stays.</summary>

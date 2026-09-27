@@ -1660,7 +1660,7 @@ namespace LevelGate.Progression
             Ui.SetText(_featName, it.Name);
             // stats: damage / penetration / armor class / resource big; weight / size / caliber small (nothing invented, nothing dropped)
             var facts = GameItems.Facts(it.Tpl);
-            var majorKeys = new[] { "Damage", "Penetration", "Armor class", "Resource", "Fire rate", "Ergonomics", "Recoil" };
+            var majorKeys = new[] { "Damage", "Penetration", "Armor class", "Resource", "Energy", "Hydration", "Fire rate", "Ergonomics", "Recoil" };
             var majors = facts.Where(f => majorKeys.Contains(f.Label)).ToList();
             var minors = new[] { "Weight", "Size", "Caliber" }.Select(k => facts.FirstOrDefault(f => f.Label == k)).Where(f => f.Label != null)
                 .Concat(facts.Where(f => !majorKeys.Contains(f.Label) && f.Label != "Weight" && f.Label != "Size" && f.Label != "Caliber")).ToList();

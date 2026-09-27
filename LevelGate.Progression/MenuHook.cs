@@ -114,6 +114,9 @@ namespace LevelGate.Progression
         private static bool _worldTried;
 
         /// <summary>In a raid: the game world exists (also while the in-raid Esc menu shows the main menu).</summary>
+        private static PropertyInfo _worldInstance;
+        private static bool _hideoutLogged;
+
         public static bool InRaid()
         {
             try
@@ -123,9 +126,19 @@ namespace LevelGate.Progression
                     _worldTried = true;
                     var gw = AccessTools.TypeByName("EFT.GameWorld");
                     _worldInstantiated = gw == null ? null : AccessTools.TypeByName("Comfort.Common.Singleton`1")?.MakeGenericType(gw).GetProperty("Instantiated", BindingFlags.Public | BindingFlags.Static);
+                    _worldInstance = gw == null ? null : AccessTools.TypeByName("Comfort.Common.Singleton`1")?.MakeGenericType(gw).GetProperty("Instance", BindingFlags.Public | BindingFlags.Static);
                     L.Info(_worldInstantiated != null ? "raid check: Singleton<EFT.GameWorld>.Instantiated" : "raid check: GameWorld not found — only the screen type is used");
                 }
-                return _worldInstantiated != null && _worldInstantiated.GetValue(null, null) is bool b && b;
+                if (!(_worldInstantiated != null && _worldInstantiated.GetValue(null, null) is bool b && b)) return false;
+                // the hideout has a game world of its own (HideoutGameWorld), and it can still be there back on the main
+                // menu: that's not a raid (it greyed the tab out after a hideout visit)
+                var world = _worldInstance?.GetValue(null, null);
+                if (world != null && world.GetType().Name.IndexOf("Hideout", StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    if (!_hideoutLogged) { _hideoutLogged = true; L.Info($"raid check: {world.GetType().Name} is the hideout's world, not a raid"); }
+                    return false;
+                }
+                return true;
             }
             catch (Exception e) { L.ErrorOnce("raid check", e); return false; }
         }

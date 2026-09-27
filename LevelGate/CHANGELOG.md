@@ -40,6 +40,12 @@ Versions are **MAJOR.MINOR.PATCH**:
 
 ## LevelGate Progression (BepInEx plugin, separate DLL)
 
+### 0.9.40
+- **Fix: after visiting the hideout, the PROGRESSION tab and shortcut stayed greyed out / hidden.** The hideout has its own game world, which can still be there back on the main menu, and the raid check only asked "is there a game world". The hideout's world no longer counts as a raid (logged once).
+- **Food & drink:** Energy and Hydration shown as big stats.
+- **Main-menu shortcut:** level and XP are back under PROGRESSION ("Level 40 · Renegade | 62 039 / 206 188 EXP").
+- (0.9.38's armor class from the game data works: the log shows items.json read in 144 ms, 452 items with a class.)
+
 ### 0.9.39
 - **Main-menu shortcut:** the line under PROGRESSION shows only your rank title ("Renegade"). It showed "Level 40 · Renegade | 62 039 / 206 188 EXP"; level and XP are on the screen itself.
 
