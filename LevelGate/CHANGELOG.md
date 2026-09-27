@@ -40,6 +40,11 @@ Versions are **MAJOR.MINOR.PATCH**:
 
 ## LevelGate Progression (BepInEx plugin, separate DLL)
 
+### 0.9.45
+- **Streaks, Contours and Topo now move**, very slowly: contour lines flow along the slope (rings grow and shrink on Topo), streaks shimmer and drift. **2. Graphics > PatternMotion** (0–3, default 1) sets how fast; 0 = still.
+- **Many more lines**: Contours is now ~55 long wavy lines across the screen; Topo is a dense topographic map with every fifth line a little brighter (index lines).
+- **Light on performance**: the pattern is worked out on a worker thread (the game's main thread only takes the finished picture, ~10×/s, 5×/s on Low). It only runs while the progression screen is open and stops completely otherwise; going into a raid frees its memory.
+
 ### 0.9.44
 - **2. Graphics > Pattern** (F12): pick the faint background behind the screen: **Dots** (the old grid, default), **Streaks** (vertical grain lines), **Contours** (smooth wavy lines) or **Topo** (busier topographic lines). Drawn in code, no colour; its strength follows the Scratches slider. Each pattern is drawn once the first time you pick it (a fraction of a second) and kept.
 

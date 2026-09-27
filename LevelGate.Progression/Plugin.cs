@@ -25,7 +25,7 @@ namespace LevelGate.Progression
         public const string Guid = "com.kkyangg.levelgate.progression";
         public const string Name = "LevelGate Progression";
         // MAJOR.MINOR.PATCH — see CHANGELOG.md
-        public const string Version = "0.9.44";
+        public const string Version = "0.9.45";
 
         internal static ProgressionPlugin Instance;
         internal static ConfigEntry<KeyboardShortcut> OpenKey;
@@ -54,6 +54,7 @@ namespace LevelGate.Progression
         internal static ConfigEntry<bool> GameSounds;
         internal static ConfigEntry<float> Scratches, Vignette, RedGlow;
         internal static ConfigEntry<BackgroundPattern> Pattern;
+        internal static ConfigEntry<float> PatternMotion;
         internal static ConfigEntry<int> PreviewLevels;
         internal static ConfigEntry<bool> PreviewLevelUp, PreviewRank, PreviewUnlock;
         internal static ConfigEntry<int> ShownXp;
@@ -102,7 +103,10 @@ namespace LevelGate.Progression
             RedGlow = Config.Bind(Gfx, "RedGlow", 1.1f, Desc("How strong the red glow in the top-right is (1 = the original, 0 = none).", 83, new AcceptableValueRange<float>(0f, 3f)));
             Pattern = Config.Bind(Gfx, "Pattern", BackgroundPattern.Dots, Desc(
                 "The faint pattern behind the screen: Dots (the grid of dots), Streaks (vertical streaks), Contours (long wavy lines), Topo (busy topographic lines). Its strength follows Scratches.",
-                86));
+                87));
+            PatternMotion = Config.Bind(Gfx, "PatternMotion", 1f, Desc(
+                "How fast Streaks / Contours / Topo slowly move (0 = still, 1 = a gentle drift). Only while the screen is open; it stops completely when you leave it.",
+                86, new AcceptableValueRange<float>(0f, 3f)));
             Pattern.SettingChanged += (_, __) => ProgScreen.ApplyLook();
             Scratches.SettingChanged += (_, __) => ProgScreen.ApplyLook();
             Vignette.SettingChanged += (_, __) => ProgScreen.ApplyLook();

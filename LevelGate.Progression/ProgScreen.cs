@@ -629,8 +629,8 @@ namespace LevelGate.Progression
             {
                 // the background pattern (F12 > Graphics > Pattern): the dots tile; the line patterns cover the screen once
                 var pat = ProgressionPlugin.Pattern?.Value ?? BackgroundPattern.Dots;
-                if (pat == BackgroundPattern.Dots) { _dotGrid.sprite = Ui.DotGrid(); _dotGrid.type = Image.Type.Tiled; }
-                else { _dotGrid.sprite = Ui.Pattern(pat.ToString()); _dotGrid.type = Image.Type.Simple; _dotGrid.preserveAspect = false; }
+                if (pat == BackgroundPattern.Dots) { BgPattern.Use(_dotGrid, null); _dotGrid.sprite = Ui.DotGrid(); _dotGrid.type = Image.Type.Tiled; _dotGrid.enabled = true; }
+                else BgPattern.Use(_dotGrid, pat.ToString()); // worked out off the main thread; shows once ready, moves while open
                 float basis = pat == BackgroundPattern.Dots ? .035f : pat == BackgroundPattern.Streaks ? .035f : .045f;
                 _dotGrid.color = new Color(1, 1, 1, Mathf.Clamp01(basis * sc));
             }
@@ -1634,6 +1634,7 @@ namespace LevelGate.Progression
         /// <summary>Before a raid: let go of the kept pictures (memory), the next visit loads them again.</summary>
         public static void Unload(string why)
         {
+            BgPattern.Release();
             if (!_warm && !_loading) return;
             _warm = _loading = false;
             _loadQueue.Clear(); _loadWaiting.Clear();
@@ -1934,6 +1935,7 @@ namespace LevelGate.Progression
         {
             if (_restoreAgainAt > 0 && Time.unscaledTime > _restoreAgainAt && !IsOpen && MenuHook.QuietMenu()) { _restoreAgainAt = -1; GameItems.RestoreIcons(); }
             if (!IsOpen) { CheckMenuShown(); return; }
+            BgPattern.Tick(); // the background pattern's slow motion: only ever while open
             if (!_xpKnown && ProgData.HasExpTable) { _xpKnown = true; UpdateXp(); } // the SPT server's answer came in
             if (_fade != null && _fade.alpha < 1)
             {
