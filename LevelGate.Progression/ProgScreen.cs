@@ -228,6 +228,7 @@ namespace LevelGate.Progression
             Ui.Img(root, Ui.Hex("#0a0f12", ProgressionPlugin.Opacity.Value), null, true); // blocks clicks to the menu underneath
             // the Arena dot grid, barely there (fades in with the rest of the screen)
             var grid = Ui.Img(Ui.Fill(root, "DotGrid"), new Color(1, 1, 1, .035f), Ui.DotGrid());
+            _dotGrid = grid;
             grid.type = Image.Type.Tiled;
             grid.raycastTarget = false;
             // Arena-style colour bloom: red, strongest on the right edge and fading out to the left;
@@ -251,7 +252,10 @@ namespace LevelGate.Progression
             // vignette over everything (its own canvas, so it draws last), and the whole screen fades in on open
             var vig = Ui.Rect(root, "Vignette", Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
             SubCanvas(vig);
-            Ui.Img(vig, new Color(0, 0, 0, .14f), Ui.Vignette()).raycastTarget = false;
+            _vignette = Ui.Img(vig, new Color(0, 0, 0, .14f), Ui.Vignette());
+            _vignette.raycastTarget = false;
+            Ui.Grits.RemoveAll(g => g.Img == null);
+            ApplyLook();
             _fade = root.gameObject.AddComponent<CanvasGroup>();
 
             // hover tooltip (full item names, setting hints): its own layer, over everything
@@ -607,6 +611,20 @@ namespace LevelGate.Progression
         private static GameObject _featBand;
         private static Component _featBandText;
         private static Image _featReqLock;
+        private static Image _dotGrid, _vignette;
+
+        /// <summary>
+        /// The surface texture from F12 > Graphics: Scratches (grime / scratches on the panels and pictures, and the dot grid)
+        /// and Vignette, as multiples of their built-in strength. Live: changed in F12, it updates at once.
+        /// </summary>
+        public static void ApplyLook()
+        {
+            float sc = ProgressionPlugin.Scratches?.Value ?? 1f, vg = ProgressionPlugin.Vignette?.Value ?? 1f;
+            foreach (var (img, a) in Ui.Grits) if (img != null) { var c = img.color; c.a = Mathf.Clamp01(a * sc); img.color = c; }
+            if (_dotGrid != null) _dotGrid.color = new Color(1, 1, 1, Mathf.Clamp01(.035f * sc));
+            if (_vignette != null) _vignette.color = new Color(0, 0, 0, Mathf.Clamp01(.14f * vg));
+            _mood = -1; // repaint the glow next frame
+        }
         private static RectTransform _focusXp, _focusList, _focusStage, _focusSide, _pageBarRt;
 
         private static void BuildRequirement(RectTransform info)
@@ -1787,8 +1805,9 @@ namespace LevelGate.Progression
             // the red glow is the screen's colour on every level; locked levels only push it a little further
             // ~40% under the old strength: it supports the screen, it doesn't compete with it
             // calmer than it was (it pulled the eye to an empty corner): a hint of red, a little more while the level is locked
-            if (_bloom.Count > 0 && _bloom[0] != null) _bloom[0].color = new Color(.85f, .14f, .08f, Mathf.Lerp(.07f, .1f, m));
-            if (_bloom.Count > 1 && _bloom[1] != null) _bloom[1].color = new Color(.95f, .2f, .1f, Mathf.Lerp(.05f, .08f, m));
+            float glow = ProgressionPlugin.RedGlow.Value; // F12 > Graphics > RedGlow
+            if (_bloom.Count > 0 && _bloom[0] != null) _bloom[0].color = new Color(.85f, .14f, .08f, Mathf.Clamp01(Mathf.Lerp(.07f, .1f, m) * glow));
+            if (_bloom.Count > 1 && _bloom[1] != null) _bloom[1].color = new Color(.95f, .2f, .1f, Mathf.Clamp01(Mathf.Lerp(.05f, .08f, m) * glow));
             var border = Border; // the panel borders stay as they are (only the glow turns red)
             foreach (var f in _panelFrames) if (f != null) f.color = border;
         }

@@ -45,6 +45,8 @@ namespace LevelGate.Progression
                         .OrderBy(m => m.GetParameters().Length).FirstOrDefault();
                     _preset = factoryType.GetMethods(Refl.All)
                         .FirstOrDefault(m => m.Name.Contains("Preset") && !m.ContainsGenericParameters && m.GetParameters().Length == 1 && IsId(m.GetParameters()[0].ParameterType) && _itemType != null && _itemType.IsAssignableFrom(m.ReturnType));
+                    _fill = factoryType.GetMethods(Refl.All)
+                        .FirstOrDefault(m => m.Name == "CreateAndFillItem" && !m.ContainsGenericParameters && m.GetParameters().Length == 1 && IsId(m.GetParameters()[0].ParameterType));
                     L.Info($"items: create with {(_create == null ? "NOTHING (no icons)" : "ItemFactory." + _create.Name + "(" + Sig(_create) + ")")}, weapon presets with {(_preset == null ? "nothing (bare receivers)" : "ItemFactory." + _preset.Name + "(" + Sig(_preset) + ")")}");
                 }
 
@@ -533,7 +535,7 @@ namespace LevelGate.Progression
                 if (Num("PenetrationPower") is int pen && pen > 0) list.Add(("Penetration", pen.ToString()));
                 // armor class: the item's own, else the best of its plates (armored rigs / armor carry their protection in plate
                 // slots; LevelGate sets the carriers' own class to 0 — read only, LevelGate is untouched)
-                int acOwn = Num("ArmorClass", "armorClass") is int ac ? ac : 0;
+                int acOwn = ClassOf(t);
                 string grp = ProgData.GroupOf(tpl);
                 bool armored = grp == "Armor" || grp == "Rigs" || grp == "Headwear"; // helmets: their armor parts
                 int acBest = acOwn > 0 ? acOwn : armored ? PlateClass(tpl, item) : 0;
@@ -574,30 +576,78 @@ namespace LevelGate.Progression
             return r;
         }
 
+        private static MethodInfo _fill;
+        private static bool _armorLogged;
+
+        /// <summary>An armor class from a template: its ArmorClass / armorClass (int, or a number as text), 0 if none.</summary>
+        private static int ClassOf(object template)
+        {
+            var v = Refl.Get(template, "ArmorClass") ?? Refl.Get(template, "armorClass");
+            if (v is int i) return i;
+            return v != null && int.TryParse(v.ToString(), out int p) ? p : 0;
+        }
+
+        /// <summary>
+        /// The best armor class among an item's default plates / armor parts. The item is made filled
+        /// (ItemFactory.CreateAndFillItem: plates inserted, like the game's own), else from its preset, else as it is; and
+        /// as a last try, the default plate ids in its slots' filters. What was found is logged once, for the first one.
+        /// </summary>
         private static int PlateClassOf(string tpl, object item)
         {
+            var notes = new List<string>();
+            int best = 0;
             try
             {
-                object withPlates = null;
+                var sources = new List<(string How, object Item)>();
+                if (_fill != null && _factory != null)
+                    try { sources.Add(("filled", _fill.Invoke(_factory, new[] { Id(_fill.GetParameters()[0].ParameterType, tpl) }))); } catch (Exception e) { notes.Add("filled: " + e.GetBaseException().Message); }
                 if (_preset != null && _factory != null)
-                    try { withPlates = _preset.Invoke(_factory, new[] { Id(_preset.GetParameters()[0].ParameterType, tpl) }); } catch { }
-                int best = 0;
-                foreach (var source in new[] { withPlates, item })
+                    try { sources.Add(("preset", _preset.Invoke(_factory, new[] { Id(_preset.GetParameters()[0].ParameterType, tpl) }))); } catch { }
+                sources.Add(("bare", item));
+                foreach (var (how, source) in sources)
                 {
-                    if (source == null) continue;
+                    if (source == null) { notes.Add(how + ": none"); continue; }
                     var all = AccessTools.Method(source.GetType(), "GetAllItems", Type.EmptyTypes)?.Invoke(source, null) as System.Collections.IEnumerable;
-                    if (all == null) continue;
-                    foreach (var part in all)
-                    {
-                        if (part == null || ReferenceEquals(part, source)) continue;
-                        var t = Refl.Get(part, "Template");
-                        if ((Refl.Get(t, "ArmorClass") ?? Refl.Get(t, "armorClass")) is int c && c > best) best = c;
-                    }
+                    int parts = 0;
+                    if (all != null)
+                        foreach (var part in all)
+                        {
+                            if (part == null || ReferenceEquals(part, source)) continue;
+                            parts++;
+                            best = Math.Max(best, ClassOf(Refl.Get(part, "Template")));
+                        }
+                    notes.Add($"{how}: {parts} part(s), best class {best}");
                     if (best > 0) break;
                 }
-                return best;
+                // the default plates named in the slots' filters ("Plate": id)
+                if (best == 0 && Refl.Get(Refl.Get(item, "Template"), "Slots") is System.Collections.IEnumerable slots)
+                {
+                    int plates = 0;
+                    foreach (var slot in slots)
+                    {
+                        var props = Refl.Get(slot, "Props") ?? Refl.Get(slot, "_props") ?? slot;
+                        if (!(Refl.Get(props, "filters") is System.Collections.IEnumerable filters)) continue;
+                        foreach (var f in filters)
+                        {
+                            var plate = Refl.Get(f, "Plate")?.ToString();
+                            if (string.IsNullOrEmpty(plate) || plate == "0") continue;
+                            plates++;
+                            best = Math.Max(best, ClassOf(Refl.Get(ItemOf(plate), "Template")));
+                        }
+                    }
+                    notes.Add($"slot filters: {plates} default plate(s), best class {best}");
+                }
             }
-            catch { return 0; }
+            catch (Exception e) { notes.Add("error: " + e.GetBaseException().Message); }
+            if (!_armorLogged)
+            {
+                _armorLogged = true;
+                var t = Refl.Get(item, "Template");
+                var members = t == null ? "" : string.Join(", ", t.GetType().GetFields(Refl.All).Select(f => f.Name).Concat(t.GetType().GetProperties(Refl.All).Select(p => p.Name))
+                    .Where(n => n.IndexOf("armor", StringComparison.OrdinalIgnoreCase) >= 0 || n.IndexOf("class", StringComparison.OrdinalIgnoreCase) >= 0 || n.IndexOf("slot", StringComparison.OrdinalIgnoreCase) >= 0).Distinct().Take(30).ToArray());
+                L.Info($"armor class of {tpl}: {best} ({string.Join("; ", notes.ToArray())}); template members: {members}");
+            }
+            return best;
         }
 
         /// <summary>"ArmoredSteel" → "Armored steel", "UHMWPE" stays.</summary>

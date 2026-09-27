@@ -40,6 +40,13 @@ Versions are **MAJOR.MINOR.PATCH**:
 
 ## LevelGate Progression (BepInEx plugin, separate DLL)
 
+### 0.9.37
+- **Armor class for armor, armored rigs and helmets, second try:** the item is made filled (ItemFactory.CreateAndFillItem: its default plates inserted, as the game does), else from its preset, else bare; then the default plate ids in its slots' filters. The first armored item logs what each route found and the template's armor / class / slot members.
+- **F12 > 2. Graphics, new sliders (live):**
+  - **Scratches** (0–5, now 2): the scratches / smudges on panels, cards and pictures, and the dot grid. At the original strength they were barely visible.
+  - **Vignette** (0–3, 1): how dark the corners are.
+  - **RedGlow** (0–3, now 1.1): the red top-right glow, 10% stronger by default as asked.
+
 ### 0.9.36
 - **Centre picture crisper:**
   - It's shown at an exact whole-pixel size (never enlarged, shrunk to fit when bigger) and snapped onto the screen's pixel grid.

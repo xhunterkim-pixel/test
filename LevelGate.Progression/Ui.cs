@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using HarmonyLib;
 using UnityEngine;
@@ -375,7 +376,11 @@ namespace LevelGate.Progression
             if ((variant / 2) % 2 == 1) rt.localScale = new Vector3(-1, 1, 1);
             var img = Img(rt, new Color(.82f, .85f, .86f, alpha), Grime(variant));
             img.raycastTarget = false;
+            Grits.Add((img, alpha));
         }
+
+        /// <summary>Every scratch / smudge overlay with its base opacity (F12 > Graphics > Scratches scales them).</summary>
+        internal static readonly List<(Image Img, float Alpha)> Grits = new List<(Image, float)>();
 
         /// <summary>A small padlock (white, tint it), drawn with 4x supersampling for smooth edges.</summary>
         public static Sprite Lock()

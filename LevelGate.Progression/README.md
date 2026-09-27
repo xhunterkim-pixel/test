@@ -1,4 +1,4 @@
-# LevelGate Progression (0.9.36, test build)
+# LevelGate Progression (0.9.37, test build)
 
 A Call of Duty style **Progression** screen inside Tarkov's main menu. It adds a
 **PROGRESSION** button to the menu bar next to Character, Trading, Flea Market and the rest.
@@ -39,6 +39,7 @@ Settings are in `BepInEx\config\com.kkyangg.levelgate.progression.cfg` (or the F
   - Medium (default): sharp item pictures; weapons at stash size.
   - High: extra-sharp weapons too (every level-list weapon is redrawn at stash size after the screen closes, since the game can carry big weapon pictures over to stash weapons).
 - **2. Graphics > XpAnimation** (on by default): after you gain XP, the next open plays it out in beats: the XP bar and level ups, then a new rank emblem, then the new levels' cards unlocking, then your new level is selected. Space (or a click): tap = next moment (next level up, the rank, the cards, the summary, the end), hold Space = next part. Esc closes.
+- **2. Graphics > Scratches / Vignette / RedGlow**: how strong the worn surface (scratches, smudges, dot grid), the dark corners and the red top-right glow are (1 = original; live).
 - **2. Graphics > RefreshIcons**: tick once to redraw every item picture (the screen's own and the stash icons). A message at the top of the screen shows the progress and when it's done. Changing Quality does this by itself for the pictures it affects.
 - The first open of a menu visit shows a short LOADING PROGRESSION screen while the pictures of your page and the pages next to it are drawn. Going into a raid lets them go (memory); the next open loads them again.
 - **4. Preview**: PlayLevelUp / PlayNextRank / PlayUnlock (with Levels) play the XP animation with made-up numbers. Nothing real changes; closing the screen brings your real level back.
