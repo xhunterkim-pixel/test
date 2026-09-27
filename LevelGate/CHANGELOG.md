@@ -40,6 +40,13 @@ Versions are **MAJOR.MINOR.PATCH**:
 
 ## LevelGate Progression (BepInEx plugin, separate DLL)
 
+### 0.9.38
+- **Armor class from the game data on disk.** The 0.9.37 log shows the client's armor data has class 0 and no parts: LevelGate (server side) sets it before the game receives it. The plugin now reads SPT_Data/…/templates/items.json once, read-only, on a background thread: each item's own armorClass and its default plates ("Plate" ids in its slots). Armor, armored rigs and helmets show the original class. LevelGate, the server and the file are untouched. The log says where the file was found and how many items have a class.
+- **Tarkov-style section titles** in the rewards list: a dark strip with small caps and a › chevron, like the game's slot titles (the category colour kept as a 2 px edge).
+- **Diagonal hatching** (like the game's empty slots) behind the list's tiles and on a card with no new items.
+- **Big number, small unit** for the small stats: weight "3.31 kg", eff. range "300 m", movement / turning "%".
+- **Removed:** the "UNLOCKS AT LEVEL X" band over the preview (the requirement on the right says it).
+
 ### 0.9.37
 - **Armor class for armor, armored rigs and helmets, second try:** the item is made filled (ItemFactory.CreateAndFillItem: its default plates inserted, as the game does), else from its preset, else bare; then the default plate ids in its slots' filters. The first armored item logs what each route found and the template's armor / class / slot members.
 - **F12 > 2. Graphics, new sliders (live):**

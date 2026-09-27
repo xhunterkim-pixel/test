@@ -181,6 +181,27 @@ namespace LevelGate.Progression
         private static Sprite _dotGrid, _cutTR, _tabIcon, _tick, _cornerGlow;
 
         /// <summary>A glow from the right edge that also fades out toward the bottom (no hard edge anywhere). White: tint it.</summary>
+        private static Sprite _hatch;
+
+        /// <summary>Diagonal stripes like the game's empty slots (a 16 px tile, white; tint it faint and tile it).</summary>
+        public static Sprite Hatch()
+        {
+            if (_hatch != null) return _hatch;
+            const int n = 16;
+            var tex = new Texture2D(n, n, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Repeat, filterMode = FilterMode.Bilinear };
+            var px = new Color32[n * n];
+            for (int y = 0; y < n; y++)
+                for (int x = 0; x < n; x++)
+                {
+                    int d = (x + y) % n; // 45° stripes, 3 px wide every 16
+                    px[y * n + x] = new Color32(255, 255, 255, (byte)(d < 3 ? 255 : 0));
+                }
+            tex.SetPixels32(px);
+            tex.Apply(false, true);
+            _hatch = Sprite.Create(tex, new Rect(0, 0, n, n), new Vector2(.5f, .5f), 100, 0, SpriteMeshType.FullRect);
+            return _hatch;
+        }
+
         private static Sprite _hexSpinner;
 
         /// <summary>A hexagon ring in three parts (like the game's loading mark), white on transparent, 128 px.</summary>

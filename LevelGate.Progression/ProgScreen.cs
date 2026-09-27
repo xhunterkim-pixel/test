@@ -463,6 +463,10 @@ namespace LevelGate.Progression
             var viewport = Ui.Fill(view, "Viewport");
             viewport.gameObject.AddComponent<RectMask2D>();
             Ui.Img(viewport, new Color(0, 0, 0, 0), null, true);
+            // faint diagonal hatching behind the tiles: the empty part of the panel reads like the game's empty slots
+            var hatch = Ui.Img(Ui.Fill(viewport, "Hatch"), new Color(1, 1, 1, .03f), Ui.Hatch());
+            hatch.type = Image.Type.Tiled; hatch.raycastTarget = false;
+            hatch.transform.SetAsFirstSibling();
             _content = Ui.Rect(viewport, "Content", new Vector2(0, 1), new Vector2(1, 1), Vector2.zero, Vector2.zero);
             _content.pivot = new Vector2(.5f, 1);
             var vl = _content.gameObject.AddComponent<VerticalLayoutGroup>();
@@ -1104,9 +1108,13 @@ namespace LevelGate.Progression
 
                 // section header: the category's colour once, as a 3 px bar; name in small caps; the count quieter
                 var head = Ui.Rect(section, "Head", Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
-                head.gameObject.AddComponent<LayoutElement>().preferredHeight = 20;
-                Ui.Img(Ui.Rect(head, "Bar", new Vector2(0, .5f), new Vector2(0, .5f), new Vector2(0, -7), new Vector2(3, 7)), Ui.Hex(g.Color, .85f));
-                Ui.Label(Ui.Rect(head, "Name", Vector2.zero, Vector2.one, new Vector2(3 + S2, 0), Vector2.zero), "Text",
+                head.gameObject.AddComponent<LayoutElement>().preferredHeight = 22;
+                // like the game's slot titles (EARPIECE ›, BACKPACK ›): a dark strip, caps, a chevron at the end
+                Ui.Img(head, Ui.Hex("#1a2124", .95f));
+                Ui.Img(Ui.Rect(head, "Line", Vector2.zero, new Vector2(1, 0), Vector2.zero, new Vector2(0, 1)), Ui.Hex("#3a4346"));
+                Ui.Img(Ui.Rect(head, "Bar", Vector2.zero, new Vector2(0, 1), Vector2.zero, new Vector2(2, 0)), Ui.Hex(g.Color, .85f));
+                Ui.Label(Ui.Rect(head, "Chevron", new Vector2(1, 0), Vector2.one, new Vector2(-20, 0), new Vector2(-S2, 0)), "Text", "›", TStrong, Ui.Hex("#7d8588"), TextAnchor.MiddleRight, false);
+                Ui.Label(Ui.Rect(head, "Name", Vector2.zero, Vector2.one, new Vector2(2 + S2, 0), new Vector2(-24, 0)), "Text",
                     $"{g.Name.ToUpperInvariant()}  <color=#7d8588>{list.Count}{(list.Count > max ? $" · showing {max}" : "")}</color>", TCaps, Ui.Hex("#b9c0c3"), TextAnchor.MiddleLeft, false, Caps);
 
                 var grid = Ui.Rect(section, "Grid", Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
@@ -1679,7 +1687,7 @@ namespace LevelGate.Progression
             _featCheck.enabled = met;
             _featReqLock.enabled = !met && player > 0;
             bool lockedHere = player > 0 && it.Level > player;
-            _featBand.SetActive(lockedHere);
+            _featBand.SetActive(false); // removed on request: the requirement on the right says it
             if (lockedHere) Ui.SetText(_featBandText, $"UNLOCKS AT LEVEL {it.Level}  ·  {it.Level - player} LEVEL{(it.Level - player == 1 ? "" : "S")} AWAY");
             Ui.SetText(_featReq, $"Reach level {it.Level}");
             Ui.SetText(_featReqValue, player > 0 ? (met ? $"{Mathf.Min(player, it.Level)} / {it.Level}" : $"<color={Red}>{Mathf.Min(player, it.Level)} / {it.Level}</color>") : "");
@@ -2073,6 +2081,7 @@ namespace LevelGate.Progression
                 }
             }
             private Component _float;
+            private Image _emptyHatch;
             private float _floatAt = -10;
 
             /// <summary>XP animation: "+N ITEMS" rises out of the card and fades (0.7 s).</summary>
@@ -2205,6 +2214,9 @@ namespace LevelGate.Progression
                     Ui.Grit(face, _gritSeed++, .02f);
                 }
                 // a level with nothing on it: a quiet line in the picture area instead of empty boxes
+                _emptyHatch = Ui.Img(Ui.Fill(pics, "Hatch"), new Color(1, 1, 1, .045f), Ui.Hatch());
+                _emptyHatch.type = Image.Type.Tiled; _emptyHatch.raycastTarget = false;
+                _emptyHatch.gameObject.SetActive(false);
                 _empty = Ui.Label(pics, "Empty", "NO NEW ITEMS", TCaps, Dim, TextAnchor.MiddleCenter, false, Caps);
                 _empty.gameObject.SetActive(false);
                 // footer: "147 unlocks" left, the level's state right in small caps (one small lock for future levels)
@@ -2255,6 +2267,7 @@ namespace LevelGate.Progression
                     _hits.Add((_picRects[i], it));
                 }
                 _empty.gameObject.SetActive(items.Count == 0);
+                _emptyHatch.gameObject.SetActive(items.Count == 0);
                 // one item: its picture centred in the card (not in the left column with an empty one beside it)
                 if (_picRects[0].parent is RectTransform area)
                 {

@@ -530,7 +530,7 @@ namespace LevelGate.Progression
                 object Num(params string[] names) { foreach (var n in names) { var v = Refl.Get(t, n); if (v != null && !(v is string s && s.Length == 0)) return v; } return null; }
                 var (cw, ch) = CellsOf(item); // the whole item (weapons: the preset, not just its receiver)
                 list.Add(("Size", $"{cw} × {ch}"));
-                if ((WeightOf(item) ?? (Num("Weight") as float?)) is float kg) list.Add(("Weight", $"{kg:0.###} kg"));
+                if ((WeightOf(item) ?? (Num("Weight") as float?)) is float kg) list.Add(("Weight", $"{kg:0.###}<size=65%> kg</size>"));
                 if (Num("Damage") is int dmg && dmg > 0) list.Add(("Damage", dmg.ToString()));
                 if (Num("PenetrationPower") is int pen && pen > 0) list.Add(("Penetration", pen.ToString()));
                 // armor class: the item's own, else the best of its plates (armored rigs / armor carry their protection in plate
@@ -538,7 +538,9 @@ namespace LevelGate.Progression
                 int acOwn = ClassOf(t);
                 string grp = ProgData.GroupOf(tpl);
                 bool armored = grp == "Armor" || grp == "Rigs" || grp == "Headwear"; // helmets: their armor parts
-                int acBest = acOwn > 0 ? acOwn : armored ? PlateClass(tpl, item) : 0;
+                // the game data on disk first (LevelGate sets the class to 0 in what the server sends; the file is untouched)
+                int acDisk = armored ? OriginalArmor.Get(tpl) : 0;
+                int acBest = acDisk > 0 ? acDisk : acOwn > 0 ? acOwn : armored && !OriginalArmor.Ready ? PlateClass(tpl, item) : 0;
                 if (acBest > 0) list.Add(("Armor class", acBest.ToString()));
                 if (Num("ammoCaliber", "AmmoCaliber", "Caliber", "caliber") is string cal && cal.Length > 0) list.Add(("Caliber", CaliberName(cal)));
                 if (Num("MaxHpResource") is int hp && hp > 0) list.Add(("Resource", hp.ToString()));
@@ -550,14 +552,14 @@ namespace LevelGate.Progression
                     list.Add(("Fire rate", bolt || rpm < 100 ? "Bolt<size=60%> action</size>" : $"{rpm:0}<size=60%> rpm</size>"));
                 if (D(Num("Ergonomics")) is double ergo && ergo > 0) list.Add(("Ergonomics", $"{ergo:0}"));
                 if (D(Num("RecoilForceUp")) is double rec && rec > 0) list.Add(("Recoil", $"{rec:0}"));
-                if (D(Num("bEffDist")) is double eff && eff > 0) list.Add(("Eff. range", $"{eff:0} m"));
+                if (D(Num("bEffDist")) is double eff && eff > 0) list.Add(("Eff. range", $"{eff:0}<size=65%> m</size>"));
                 // gear (only what the template has, not zero): armor, rigs, backpacks, headwear
                 if (D(Num("MaxDurability", "Durability")) is double dur && dur > 0 && !(Num("bFirerate") != null)) list.Add(("Durability", $"{dur:0}"));
                 if (Num("ArmorMaterial") is object mat && mat.ToString() is string ms && ms.Length > 0 && ms != "None") list.Add(("Material", Spaced(ms)));
                 int cap = Capacity(t);
                 if (cap > 0) list.Add(("Capacity", $"{cap}<size=60%> slots</size>"));
-                if (D(Num("speedPenaltyPercent")) is double sp && Math.Abs(sp) >= .5) list.Add(("Movement", $"{sp:+0;-0}%"));
-                if (D(Num("mousePenalty")) is double mp && Math.Abs(mp) >= .5) list.Add(("Turning", $"{mp:+0;-0}%"));
+                if (D(Num("speedPenaltyPercent")) is double sp && Math.Abs(sp) >= .5) list.Add(("Movement", $"{sp:+0;-0}<size=65%>%</size>"));
+                if (D(Num("mousePenalty")) is double mp && Math.Abs(mp) >= .5) list.Add(("Turning", $"{mp:+0;-0}<size=65%>%</size>"));
                 if (D(Num("weaponErgonomicPenalty")) is double ep && Math.Abs(ep) >= .5) list.Add(("Ergo penalty", $"{ep:+0;-0}"));
             }
             catch (Exception e) { L.ErrorOnce("item facts", e); }
