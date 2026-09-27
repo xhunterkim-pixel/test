@@ -25,7 +25,7 @@ namespace LevelGate.Progression
         public const string Guid = "com.kkyangg.levelgate.progression";
         public const string Name = "LevelGate Progression";
         // MAJOR.MINOR.PATCH — see CHANGELOG.md
-        public const string Version = "0.9.18";
+        public const string Version = "0.9.19";
 
         internal static ProgressionPlugin Instance;
         internal static ConfigEntry<KeyboardShortcut> OpenKey;
@@ -48,6 +48,7 @@ namespace LevelGate.Progression
         internal static ConfigEntry<bool> PerformanceMode;
         internal static ConfigEntry<bool> MenuShortcut;
         internal static ConfigEntry<bool> FixStashIcons;
+        internal static ConfigEntry<bool> SharpWeaponPreview;
         internal static ConfigEntry<int> LastSeenLevel;
 
         private void Awake()
@@ -78,6 +79,9 @@ namespace LevelGate.Progression
             PerformanceMode = Config.Bind("Screen", "PerformanceMode", false,
                 "Lighter pictures for slower PCs: the big item picture and the card pictures are drawn at a smaller size, the rank emblems stand still, and the list shows up to 12 items per category.");
             PerformanceMode.SettingChanged += (_, __) => ProgScreen.Refresh();
+            SharpWeaponPreview = Config.Bind("Screen", "SharpWeaponPreview", false,
+                "Draw weapons extra sharp in the big centre picture. The game can carry those big weapon pictures over to other weapons in your stash, so while this is on, every weapon on the level list is redrawn at stash size when you close the screen (weapon icons may show loading cogs for a little while).");
+            SharpWeaponPreview.SettingChanged += (_, __) => ProgScreen.Refresh();
             FixStashIcons = Config.Bind("Screen", "FixStashIcons", false,
                 "Tick once to redraw every level-list item's icon at stash size (clears big icons left in the game's icon cache by older builds). It turns itself off again. Takes a few minutes; the stash shows loading icons meanwhile.");
             FixStashIcons.SettingChanged += (_, __) =>

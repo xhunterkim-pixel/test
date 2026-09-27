@@ -75,6 +75,7 @@ namespace LevelGate.Progression
         private static string _featTpl;
         private static object _featIcon;
         private static int _featScale;
+        private static bool _sharpWeaponShown;
         // bottom
         private static readonly Card[] _cards = new Card[PerPage];
         private static readonly List<Image> _segments = new List<Image>();
@@ -149,6 +150,14 @@ namespace LevelGate.Progression
             MenuHook.SetOn(false);
             HideMenu(false);
             GameItems.RestoreIcons(); // the big renders replaced the stash's cached icons: put them back
+            if (_sharpWeaponShown && GameItems.RepairLeft == 0)
+            {
+                // sharp weapon pictures can leak onto other stash weapons: redraw every level-list weapon at stash size
+                var weapons = ProgData.Levels.Keys.Where(t => ProgData.GroupOf(t) == "Weapons").ToList();
+                L.Info($"sharp weapon previews were shown: redrawing {weapons.Count} weapon icon(s) at stash size");
+                GameItems.RepairAll(weapons);
+            }
+            _sharpWeaponShown = false;
             _restoreAgainAt = Time.unscaledTime + 2f; // and once more, for big renders that were still being drawn
             bool gameSwitching = why.StartsWith("game screen");
             MenuCamera.Turn(false, instant: gameSwitching); // the game moves the camera itself when it switches screens
@@ -1291,7 +1300,8 @@ namespace LevelGate.Progression
             // weapons: never a bigger render. The game's weapon icons can leak a big render onto OTHER weapons in the
             // stash (a VPO-215 came out huge after VPO-136 / VPO-209 were drawn big) — nothing we could put back.
             // They're 4–5 cells wide, so stash size is already ~256–320 px.
-            if (it.Group == "Weapons") featScale = 1;
+            if (it.Group == "Weapons" && !ProgressionPlugin.SharpWeaponPreview.Value) featScale = 1;
+            else if (it.Group == "Weapons") _sharpWeaponShown = true; // weapons get repaired on close
             _featScale = featScale;
             var kept = GameItems.CopyOf(it.Tpl, featScale);
             if (kept != null) { _featIcon = null; _featPic.sprite = kept; _featPic.enabled = true; _featShort.gameObject.SetActive(false); }

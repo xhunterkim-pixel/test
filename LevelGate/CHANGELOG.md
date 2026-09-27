@@ -40,6 +40,12 @@ Versions are **MAJOR.MINOR.PATCH**:
 
 ## LevelGate Progression (BepInEx plugin, separate DLL)
 
+### 0.9.19
+- **New option `Screen > SharpWeaponPreview`** (F12, off by default):
+  - Weapons get the extra-sharp render in the centre picture again.
+  - To undo the game carrying those big pictures over to stash weapons, every weapon on the level list is redrawn at stash size when the screen closes (the same repair as FixStashIcons, weapons only). This is logged.
+  - Changing the option redraws the open screen.
+
 ### 0.9.18
 - **Fix: a stash weapon came out huge again.** A VPO-215 was only ever drawn at stash size by the plugin, but other weapons (VPO-136, VPO-209…) had been drawn big. The game's weapon icons can carry a big render over to other weapons, and that can't be put back per item.
   - Weapons now never get a bigger render: the centre picture and the cards use the stash-size icon, which is already 4–5 cells (~256–320 px) wide.

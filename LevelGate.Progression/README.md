@@ -1,4 +1,4 @@
-# LevelGate Progression (0.9.18, test build)
+# LevelGate Progression (0.9.19, test build)
 
 A Call of Duty style **Progression** screen inside Tarkov's main menu. It adds a
 **PROGRESSION** button to the menu bar next to Character, Trading, Flea Market and the rest.
@@ -37,4 +37,5 @@ Settings are in `BepInEx\config\com.kkyangg.levelgate.progression.cfg` (or the F
 - **Screen > TopMargin / BottomMargin**: keep the game's bars uncovered.
 - **Menu Button > AddButton = false**: use the P key only (General > OpenScreenKey).
 - **Screen > PerformanceMode** (also the PERFORMANCE MODE checkbox bottom-right on the screen): lighter pictures and still emblems for slower PCs.
+- **Screen > SharpWeaponPreview**: extra-sharp weapons in the centre picture (every level-list weapon is redrawn at stash size when the screen closes, since the game can carry big weapon pictures over to stash weapons).
 - **Screen > FixStashIcons**: tick once to redraw every level-list item's icon at stash size (clears big icons left by older builds).
