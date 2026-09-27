@@ -130,10 +130,13 @@ namespace LevelGate.Progression
             try
             {
                 // copied inside a hidden holder, so the game's button code doesn't start up on the copy before it's switched off
-                var holder = new GameObject("LevelGateProgressionHolder");
+                GameObject holder = null, clone = null;
+                try
+                {
+                holder = new GameObject("LevelGateProgressionHolder");
                 holder.SetActive(false);
                 holder.transform.SetParent(template.parent, false);
-                var clone = UnityEngine.Object.Instantiate(template.gameObject, holder.transform, false);
+                clone = UnityEngine.Object.Instantiate(template.gameObject, holder.transform, false);
                 clone.name = "LevelGateProgressionButton";
                 clone.SetActive(true);
                 Neutralize(clone);
@@ -152,7 +155,15 @@ namespace LevelGate.Progression
                 }
                 else L.Debug("button row layout: " + (layout == null ? "none" : layout.GetType().Name));
                 _button = clone;
+                clone = null;
                 L.Info("PROGRESSION button added to the menu bar.");
+                }
+                finally
+                {
+                    // a failed attempt leaves nothing behind (the next try starts clean)
+                    if (clone != null) { UnityEngine.Object.Destroy(clone); _toggle = null; }
+                    if (holder != null) UnityEngine.Object.Destroy(holder);
+                }
             }
             catch (Exception e) { L.Error("adding the menu button", e); _button = null; }
         }
@@ -226,7 +237,10 @@ namespace LevelGate.Progression
         private static void Neutralize(GameObject clone)
         {
             foreach (Transform ch in clone.transform.Cast<Transform>().ToList())
-                if (ch.name.StartsWith("NewInformation")) { UnityEngine.Object.DestroyImmediate(ch.gameObject); L.Debug($"  removed '{ch.name}' (counters)"); }
+            {
+                string n = ch.name; // read before destroying it
+                if (n.StartsWith("NewInformation")) { UnityEngine.Object.DestroyImmediate(ch.gameObject); L.Debug($"  removed '{n}' (counters)"); }
+            }
             foreach (var c in clone.GetComponentsInChildren<Component>(true))
             {
                 if (c == null) continue;

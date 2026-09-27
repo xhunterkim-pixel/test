@@ -40,6 +40,9 @@ Versions are **MAJOR.MINOR.PATCH**:
 
 ## LevelGate Progression (BepInEx plugin, separate DLL)
 
+### 0.2.2
+- The tab didn't appear in 0.2.1: adding it crashed on a log line that read the name of the counter it had just removed, and each retry failed the same way. Fixed; a failed attempt now also leaves nothing behind.
+
 ### 0.2.1
 - The PROGRESSION tab was greyed out and couldn't be clicked: it was copied at start-up, while the game still has every tab disabled. Now it's copied once the game has enabled its tabs, then forced enabled and clickable and kept that way. Anything it has to fix is logged.
 
