@@ -25,7 +25,7 @@ namespace LevelGate.Progression
         public const string Guid = "com.kkyangg.levelgate.progression";
         public const string Name = "LevelGate Progression";
         // MAJOR.MINOR.PATCH — see CHANGELOG.md
-        public const string Version = "0.9.2";
+        public const string Version = "0.9.3";
 
         internal static ProgressionPlugin Instance;
         internal static ConfigEntry<KeyboardShortcut> OpenKey;
@@ -45,6 +45,7 @@ namespace LevelGate.Progression
         internal static ConfigEntry<float> Opacity;
         internal static ConfigEntry<float> CameraTurn;
         internal static ConfigEntry<bool> BlurBackground;
+        internal static ConfigEntry<bool> PerformanceMode;
 
         private void Awake()
         {
@@ -70,6 +71,8 @@ namespace LevelGate.Progression
                 "How far the menu's 3D background turns while the screen is open, like the game does for Character / Traders (negative = to the left, positive = right, 0 = off).",
                 new AcceptableValueRange<float>(-150f, 150f)));
             BlurBackground = Config.Bind("Screen", "BlurBackground", true, "Switch on a blur effect on the background camera while open (if the game's camera has one).");
+            PerformanceMode = Config.Bind("Screen", "PerformanceMode", false,
+                "Lighter pictures for slower PCs: the big item picture and the cards' main pictures are drawn at normal size instead of extra sharp, and the rank emblems stand still. Also switchable with the checkbox on the screen.");
             HideMainMenu = Config.Bind("Screen", "HideMainMenu", true, "Fade out the main menu (ESCAPE FROM TARKOV, CHARACTER, TRADING, EXIT…) while the screen is open.");
             FreeItemsAtLevel1 = Config.Bind("Screen", "CountFreeItemsAtLevel1", false,
                 "Count items without a limit as level 1 unlocks (that's most of the game's items).");
@@ -147,7 +150,8 @@ namespace LevelGate.Progression
         private static bool _fileTried;
 
         /// <summary>A step marker that only goes to Progression.log (for finding where a crash happened).</summary>
-        public static void Step(string s) => File("step ", s);
+        public static void Step(string s) { LastStep = s; File("step ", s); }
+        public static string LastStep = "";
 
         private static void File(string kind, string s)
         {

@@ -128,7 +128,8 @@ namespace LevelGate.Progression
         {
             if (Sprites == null || Sprites.Length == 0) return;
             if (_img == null) _img = GetComponent<Image>();
-            int f = (int)(Time.unscaledTime * 1000f / Ms) % Sprites.Length;
+            // performance mode: the emblem stands still on its first frame
+            int f = ProgressionPlugin.PerformanceMode.Value ? 0 : (int)(Time.unscaledTime * 1000f / Ms) % Sprites.Length;
             if (f == _shown && _img.sprite == Sprites[f]) return;
             _shown = f;
             _img.sprite = Sprites[f];

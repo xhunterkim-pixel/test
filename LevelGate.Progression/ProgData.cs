@@ -448,9 +448,20 @@ namespace LevelGate.Progression
             {
                 L.Step("experience table: type search");
                 Type[] types;
-                try { types = _appType.Assembly.GetTypes(); } catch (ReflectionTypeLoadException e) { types = e.Types.Where(x => x != null).ToArray(); }
-                MemberInfo TableMember(Type t) => (MemberInfo)t.GetFields(Refl.All).FirstOrDefault(f => !f.IsStatic && f.Name.IndexOf("ExpTable", StringComparison.OrdinalIgnoreCase) >= 0)
-                    ?? t.GetProperties(Refl.All).FirstOrDefault(p => p.Name.IndexOf("ExpTable", StringComparison.OrdinalIgnoreCase) >= 0 && p.GetIndexParameters().Length == 0);
+                // every game assembly (the backend config classes are not always in Assembly-CSharp)
+                var all = new List<Type>();
+                foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
+                {
+                    var an = asm.GetName().Name;
+                    if (an.StartsWith("System") || an.StartsWith("Unity") || an.StartsWith("mscorlib") || an.StartsWith("Mono.") || an.StartsWith("BepInEx") || an.StartsWith("0Harmony") || an.StartsWith("Newtonsoft")) continue;
+                    try { all.AddRange(asm.GetTypes()); } catch (ReflectionTypeLoadException e) { all.AddRange(e.Types.Where(x => x != null)); } catch { }
+                }
+                types = all.ToArray();
+                // for next time: what the game calls its experience classes
+                L.Info("experience table: types named *Exp*Level* / *Level*Exp* / *ExpTable*: " + string.Join(", ", types.Where(t => { var n = t.Name; return n.IndexOf("ExpTable", StringComparison.OrdinalIgnoreCase) >= 0
+                    || (n.IndexOf("Exp", StringComparison.Ordinal) >= 0 && n.IndexOf("Level", StringComparison.Ordinal) >= 0); }).Select(t => t.FullName).Take(20).ToArray()));
+                MemberInfo TableMember(Type t) => (MemberInfo)t.GetFields(Refl.All).FirstOrDefault(f => !f.IsStatic && IsTableName(f.Name))
+                    ?? t.GetProperties(Refl.All).FirstOrDefault(p => IsTableName(p.Name) && p.GetIndexParameters().Length == 0);
                 var holders = types.Where(t => !t.IsGenericTypeDefinition && TableMember(t) != null).ToList();
                 L.Info("experience table: classes with an ExpTable: " + (holders.Count == 0 ? "none" : string.Join(", ", holders.Select(t => t.FullName + "." + TableMember(t).Name).ToArray())));
                 var singleton = AccessTools.TypeByName("Comfort.Common.Singleton`1");
@@ -491,6 +502,9 @@ namespace LevelGate.Progression
             L.Info($"experience table: not found ({(DateTime.Now - t0).TotalMilliseconds:0} ms)");
             return null;
         }
+
+        private static bool IsTableName(string n) => n.IndexOf("ExpTable", StringComparison.OrdinalIgnoreCase) >= 0 || n.IndexOf("exp_table", StringComparison.OrdinalIgnoreCase) >= 0
+            || n.IndexOf("ExperienceTable", StringComparison.OrdinalIgnoreCase) >= 0;
 
         private sealed class RefEq : IEqualityComparer<object>
         {

@@ -40,6 +40,17 @@ Versions are **MAJOR.MINOR.PATCH**:
 
 ## LevelGate Progression (BepInEx plugin, separate DLL)
 
+### 0.9.3
+- **Performance mode** (checkbox bottom-right, or `Screen > PerformanceMode` in the config):
+  - The big picture and the cards' main pictures are drawn at normal size instead of extra sharp.
+  - The emblems stand still.
+  - The unlock list shows up to 12 items per category.
+- **Centre picture:** now uses the same preview box as the card pictures (frame, dark face, soft light, faded edges) and shows a lock while the item's level is locked.
+- **Locked levels:** the whole card is darker and the rank title dims, so unlocked and locked levels are easy to tell apart. The pictures inside are unchanged.
+- **EXP tag:** always shown; while the XP table is unknown it reads "— / —  EXP".
+- **XP table search:** now covers every game assembly and more names (ExpTable / exp_table / ExperienceTable). It also logs the game's experience-related classes, so a still-missing table can be fixed by name.
+- **Stutter finder:** any frame slower than 60 ms is logged with the step that ran just before it.
+
 ### 0.9.2
 - **Fix: game crash when opening the screen.** The two risky pieces added in 0.8.0 are gone:
   - The XP search no longer walks through the game session's live objects. It now looks by class only and reads the table from the class the game keeps as a Singleton.
