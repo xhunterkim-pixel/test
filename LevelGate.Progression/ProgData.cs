@@ -388,6 +388,21 @@ namespace LevelGate.Progression
             catch (Exception e) { L.ErrorOnce("level experience", e); return false; }
         }
 
+        /// <summary>XP still needed to reach a level (false if unknown or already there).</summary>
+        public static bool XpTo(int level, out int xp)
+        {
+            xp = 0;
+            try
+            {
+                if (!(Refl.Get(Refl.Get(Profile(), "Info"), "Experience") is int exp)) return false;
+                var table = ExpTable();
+                if (table == null || level < 1 || level > table.Length) return false;
+                xp = table[level - 1] - exp;
+                return xp > 0;
+            }
+            catch (Exception e) { L.ErrorOnce("xp to level", e); return false; }
+        }
+
         private static int[] _expTable;
         private static bool _expTried;
 

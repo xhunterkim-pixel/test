@@ -177,7 +177,30 @@ namespace LevelGate.Progression
 
         private static Sprite _white, _vgrad, _hgrad, _radial, _dots, _cut, _lock, _vignette;
         private static Sprite[] _grime;
-        private static Sprite _dotGrid, _cutTR, _tabIcon;
+        private static Sprite _dotGrid, _cutTR, _tabIcon, _tick;
+
+        /// <summary>A check mark (white, tint it), anti-aliased.</summary>
+        public static Sprite Tick()
+        {
+            if (_tick != null) return _tick;
+            const int n = 32;
+            var tex = new Texture2D(n, n, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Clamp };
+            float Seg(Vector2 p, Vector2 a, Vector2 b)
+            {
+                var ab = b - a; float t = Mathf.Clamp01(Vector2.Dot(p - a, ab) / ab.sqrMagnitude);
+                return (p - (a + ab * t)).magnitude;
+            }
+            Vector2 p0 = new Vector2(6, 16), p1 = new Vector2(13, 9), p2 = new Vector2(26, 24);
+            for (int y = 0; y < n; y++)
+                for (int x = 0; x < n; x++)
+                {
+                    var p = new Vector2(x + .5f, y + .5f);
+                    float d = Mathf.Min(Seg(p, p0, p1), Seg(p, p1, p2));
+                    tex.SetPixel(x, y, new Color(1, 1, 1, Mathf.Clamp01(2.6f - d)));
+                }
+            tex.Apply();
+            return _tick = Sprite.Create(tex, new Rect(0, 0, n, n), new Vector2(.5f, .5f));
+        }
 
         /// <summary>A block with its top-right corner cut off (the EXPANSIONS icon shape). White: tint it.</summary>
         public static Sprite CutCornerTopRight()

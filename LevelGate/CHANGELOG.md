@@ -40,6 +40,39 @@ Versions are **MAJOR.MINOR.PATCH**:
 
 ## LevelGate Progression (BepInEx plugin, separate DLL)
 
+### 0.9.12 — audit fixes
+- **Page bar:**
+  - Pages are labelled by their level range ("1–5", "6–10"…), not page numbers that read like levels. On narrow screens only the current range shows.
+  - Segments brighten on hover.
+- **Each state said once:**
+  - The list header shows only the item count (plus CURRENT / NEXT). "X levels away" and the lock are gone from it.
+  - Cards for past levels show no state (NEW and LOCKED remain).
+  - The requirement box is the one place for UNLOCKED / LOCKED / levels away.
+- **Requirement box:**
+  - Moved up under the item's stats, into the content flow, which removes the right panel's dead zone.
+  - A real tick instead of a filled square.
+  - Locked items add "7 453 EXP to go · preview only".
+- **INSPECT:** full width, with its RMB keycap inside the button (no separate "Inspect" text).
+- **Readability:**
+  - Tile names are light grey (locked: mid grey, shown by the dimmed icon instead).
+  - Name padding is 8 px all round.
+  - Future cards keep readable text; their pictures are dimmed instead of the whole card.
+- **Stat columns:** equal widths, so SIZE lines up under PENETRATION.
+- **Scroll cues:** a thin thumb on the reward list and the description when they scroll, and a fade at the list's bottom edge while more is below.
+- **Header:**
+  - "CURRENT LEVEL" sits directly over the level square it names, with "212 / 903 ITEMS UNLOCKED" opposite it.
+  - XP reads "564 / 3 017".
+  - The next-level count isn't orange (orange is for you).
+  - The title is on the 12 px top guide.
+- **Less competition:**
+  - The red glow stays in the top half.
+  - The rank title shows only on the card where a rank starts.
+  - Card pictures are full strength only on the viewing / current card.
+- **Details:**
+  - Title and state share a baseline.
+  - The performance checkbox sits on the page-number line.
+  - Ammo now shows its caliber (the game's field name differs from weapons).
+
 ### 0.9.11
 - **Reward list header:** back to the cleaner 0.9.9 look, "LEVEL 21 REWARDS" with "4 ITEMS · 19 LEVELS AWAY" and a small lock on the right. The state words stay the 0.9.10 ones (CURRENT / UNLOCKED / NEXT / X LEVELS AWAY).
 - **Pictures, fixes to the 0.9.10 sharpness work (found in the log):**

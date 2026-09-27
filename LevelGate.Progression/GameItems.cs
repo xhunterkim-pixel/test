@@ -465,7 +465,7 @@ namespace LevelGate.Progression
                 if (Num("Damage") is int dmg && dmg > 0) list.Add(("Damage", dmg.ToString()));
                 if (Num("PenetrationPower") is int pen && pen > 0) list.Add(("Penetration", pen.ToString()));
                 if (Num("ArmorClass", "armorClass") is int ac && ac > 0) list.Add(("Armor class", ac.ToString()));
-                if (Num("ammoCaliber", "AmmoCaliber") is string cal && cal.Length > 0) list.Add(("Caliber", cal.Replace("Caliber", "")));
+                if (Num("ammoCaliber", "AmmoCaliber", "Caliber", "caliber") is string cal && cal.Length > 0) list.Add(("Caliber", cal.Replace("Caliber", "")));
                 if (Num("MaxHpResource") is int hp && hp > 0) list.Add(("Resource", hp.ToString()));
             }
             catch (Exception e) { L.ErrorOnce("item facts", e); }
