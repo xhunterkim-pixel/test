@@ -155,6 +155,7 @@ namespace LevelGate.Progression
                 }
                 else L.Debug("button row layout: " + (layout == null ? "none" : layout.GetType().Name));
                 _button = clone;
+                LogLayout(template, clone);
                 clone = null;
                 L.Info("PROGRESSION button added to the menu bar.");
                 }
@@ -215,7 +216,7 @@ namespace LevelGate.Progression
         private static Transform PickTemplate()
         {
             string want = ProgressionPlugin.ButtonTemplate.Value?.Trim();
-            if (string.IsNullOrEmpty(want)) want = "Handbook";
+            if (string.IsNullOrEmpty(want)) want = "Character"; // a plain tab: no counters next to it (Handbook's made the copy wider)
             if (!string.IsNullOrEmpty(want))
             {
                 var hit = _candidates.FirstOrDefault(t => t.name.IndexOf(want, StringComparison.OrdinalIgnoreCase) >= 0);
@@ -230,7 +231,6 @@ namespace LevelGate.Progression
 
         /// <summary>Switches off the copied button's own behaviour (toggle group, localisation that would reset the text).</summary>
         private static Toggle _toggle;
-        private static bool _syncing;
 
         /// <summary>The copy keeps its Toggle (so it hovers / lights up like the others) but loses its old wiring:
         /// no toggle group, fresh events, no localisation (it would reset the text), no counters or tooltip.</summary>
@@ -267,9 +267,7 @@ namespace LevelGate.Progression
         public static void SetOn(bool on)
         {
             if (_toggle == null || _toggle.isOn == on) return;
-            _syncing = true;
             try { _toggle.isOn = on; } catch (Exception e) { L.ErrorOnce("tab state", e); }
-            _syncing = false;
         }
 
         private static void SetLabel(GameObject clone)
@@ -301,17 +299,17 @@ namespace LevelGate.Progression
 
         private static void MakeClickable(GameObject clone)
         {
-            if (_toggle != null)
-            {
-                _toggle.onValueChanged.AddListener(on =>
+            // the game's tab (AnimatedToggle) handles clicks itself without firing onValueChanged, so a click
+            // catcher goes on every object that can receive the click (Unity calls all of them on that object)
+            int n = 0;
+            foreach (var t in clone.GetComponentsInChildren<Transform>(true))
+                if (t == clone.transform || t.GetComponent<Selectable>() != null || t.GetComponent<Graphic>() is Graphic g && g.raycastTarget)
                 {
-                    if (_syncing) return;
-                    L.Info($"PROGRESSION tab clicked ({(on ? "on" : "off")})");
-                    if (on) ProgScreen.Open("menu tab"); else ProgScreen.Close("menu tab");
-                });
-                L.Debug("  clicks come from the copied tab's own Toggle");
-                return;
-            }
+                    t.gameObject.AddComponent<TabClick>();
+                    n++;
+                }
+            L.Debug($"  click catchers on {n} object(s): {string.Join(", ", clone.GetComponentsInChildren<TabClick>(true).Select(c => c.name).ToArray())}");
+            if (_toggle != null) return;
             var graphic = clone.GetComponent<Graphic>();
             if (graphic == null)
             {
@@ -325,6 +323,25 @@ namespace LevelGate.Progression
             button.targetGraphic = graphic;
             button.transition = Selectable.Transition.None;
             button.onClick.AddListener(() => { L.Info("PROGRESSION button clicked"); ProgScreen.Toggle("menu button"); });
+        }
+
+        /// <summary>Size and spacing of the copy next to the tab it was copied from (for "it's wider than the others").</summary>
+        private static void LogLayout(Transform template, GameObject clone)
+        {
+            string Describe(Transform t)
+            {
+                var parts = new List<string>();
+                foreach (var x in t.GetComponentsInChildren<Transform>(true).Take(6))
+                {
+                    var rt = x as RectTransform;
+                    var hl = x.GetComponent<HorizontalLayoutGroup>();
+                    var le = x.GetComponent<LayoutElement>();
+                    parts.Add($"{x.name} w={rt?.rect.width:0}" + (hl != null ? $" pad={hl.padding.left}/{hl.padding.right} gap={hl.spacing:0}" : "") + (le != null ? $" le(min {le.minWidth:0}, pref {le.preferredWidth:0})" : ""));
+                }
+                return string.Join(" | ", parts.ToArray());
+            }
+            L.Debug("layout of the original: " + Describe(template));
+            L.Debug("layout of the copy:     " + Describe(clone.transform));
         }
 
         public static void Dump()
@@ -355,6 +372,23 @@ namespace LevelGate.Progression
             }
             Walk(root, 0);
             return sb.ToString();
+        }
+    }
+}
+
+namespace LevelGate.Progression
+{
+    /// <summary>Catches the click on our copied menu tab (the game's own tab code doesn't tell us).</summary>
+    internal sealed class TabClick : MonoBehaviour, UnityEngine.EventSystems.IPointerClickHandler
+    {
+        private static int _lastFrame = -1;
+
+        public void OnPointerClick(UnityEngine.EventSystems.PointerEventData e)
+        {
+            if (e.button != UnityEngine.EventSystems.PointerEventData.InputButton.Left || Time.frameCount == _lastFrame) return;
+            _lastFrame = Time.frameCount;
+            L.Info($"PROGRESSION tab clicked (on '{name}')");
+            ProgScreen.Toggle("menu tab");
         }
     }
 }

@@ -40,6 +40,10 @@ Versions are **MAJOR.MINOR.PATCH**:
 
 ## LevelGate Progression (BepInEx plugin, separate DLL)
 
+### 0.2.3
+- Clicking the tab did nothing: the game's tab code handles clicks itself without telling anyone. The tab now has its own click catcher.
+- The tab is copied from Character instead of Handbook (Handbook's counter area made the copy wider than the others). The log shows the sizes of both.
+
 ### 0.2.2
 - The tab didn't appear in 0.2.1: adding it crashed on a log line that read the name of the counter it had just removed, and each retry failed the same way. Fixed; a failed attempt now also leaves nothing behind.
 
