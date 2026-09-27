@@ -148,6 +148,7 @@ namespace LevelGate.Progression
         private static void Rebuild(bool free)
         {
             var t0 = Time.realtimeSinceStartup;
+            Templates(); // first: loading them resets the lists
             _byLevel = new Dictionary<int, List<ProgItem>>();
             _byLevelFree = free;
             foreach (var kv in Levels) Add(kv.Key, kv.Value);
@@ -352,12 +353,13 @@ namespace LevelGate.Progression
         }
 
         private static int[] _expTable;
-        private static bool _expLogged;
+        private static bool _expLogged, _expTried;
 
         /// <summary>Total experience needed for each level (index 0 = level 1), from the game's globals.</summary>
         private static int[] ExpTable()
         {
-            if (_expTable != null) return _expTable;
+            if (_expTable != null || _expTried) return _expTable;
+            _expTried = true; // looked up once: searching all the game's classes every time made the screen lag
             var singleton = AccessTools.TypeByName("Comfort.Common.Singleton`1");
             var cfgType = AccessTools.TypeByName("BackendConfigSettingsClass");
             if (singleton == null || cfgType == null) { if (!_expLogged) { _expLogged = true; L.Debug("BackendConfigSettingsClass not found — no level progress %"); } return null; }

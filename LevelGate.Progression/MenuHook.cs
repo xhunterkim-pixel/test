@@ -143,47 +143,70 @@ namespace LevelGate.Progression
         private static void FindCandidates()
         {
             _candidates.Clear();
-            foreach (var t in _bar.GetComponentsInChildren<Transform>(true))
+            // each tab is a holder (Character, Merchants, Handbook…) with a Toggle inside (CharacterButton…)
+            foreach (var toggle in _bar.GetComponentsInChildren<Toggle>(true))
             {
-                if (t == _bar.transform || t.name == "LevelGateProgressionButton") continue;
-                bool toggleLike = t.GetComponents<Component>().Any(c => c != null && (c is Toggle || c is Button || c.GetType().Name.Contains("Toggle") || c.GetType().Name.Contains("Button")));
-                if (!toggleLike) continue;
-                // only top-level buttons of the bar, not parts inside a button
-                bool insideAnother = _candidates.Any(p => t.IsChildOf(p));
-                if (!insideAnother) _candidates.Add(t);
+                var holder = toggle.transform.parent;
+                if (holder == null || holder == _bar.transform || holder.name == "LevelGateProgressionButton" || _candidates.Contains(holder)) continue;
+                _candidates.Add(holder);
             }
         }
 
         private static Transform PickTemplate()
         {
             string want = ProgressionPlugin.ButtonTemplate.Value?.Trim();
+            if (string.IsNullOrEmpty(want)) want = "Handbook";
             if (!string.IsNullOrEmpty(want))
             {
                 var hit = _candidates.FirstOrDefault(t => t.name.IndexOf(want, StringComparison.OrdinalIgnoreCase) >= 0);
                 if (hit != null) return hit;
                 L.Warn($"Menu Button > CopyButton '{want}' matches no button name — picking one by itself.");
             }
-            // the row holding the most buttons is the bar; take its last visible button
+            // the row holding the most tabs is the bar; take its last visible tab
             var row = _candidates.GroupBy(t => t.parent).OrderByDescending(g => g.Count()).First();
             L.Debug($"button row: '{Path(row.Key)}' with {row.Count()} buttons");
             return row.LastOrDefault(t => t.gameObject.activeSelf) ?? row.Last();
         }
 
         /// <summary>Switches off the copied button's own behaviour (toggle group, localisation that would reset the text).</summary>
+        private static Toggle _toggle;
+        private static bool _syncing;
+
+        /// <summary>The copy keeps its Toggle (so it hovers / lights up like the others) but loses its old wiring:
+        /// no toggle group, fresh events, no localisation (it would reset the text), no counters or tooltip.</summary>
         private static void Neutralize(GameObject clone)
         {
+            foreach (Transform ch in clone.transform.Cast<Transform>().ToList())
+                if (ch.name.StartsWith("NewInformation")) { UnityEngine.Object.Destroy(ch.gameObject); L.Debug($"  removed '{ch.name}' (counters)"); }
             foreach (var c in clone.GetComponentsInChildren<Component>(true))
             {
                 if (c == null) continue;
                 string n = c.GetType().Name;
-                if (c is Toggle tg) { tg.group = null; tg.onValueChanged.RemoveAllListeners(); tg.isOn = false; tg.enabled = false; L.Debug($"  disabled Toggle on '{c.name}'"); continue; }
-                if (c is Button bt) { bt.onClick.RemoveAllListeners(); bt.enabled = false; L.Debug($"  disabled Button on '{c.name}'"); continue; }
-                if (c is Behaviour b && (n.Contains("Toggle") || n.Contains("Localiz") || n.Contains("Button") || n.Contains("Tooltip") || n.Contains("Notifier") || n.Contains("Hover")))
+                if (c is ToggleGroup g) { g.enabled = false; continue; }
+                if (c is Toggle tg)
+                {
+                    tg.group = null;
+                    tg.onValueChanged = new Toggle.ToggleEvent();
+                    tg.isOn = false;
+                    _toggle ??= tg;
+                    L.Debug($"  kept {n} on '{c.name}' (fresh events, no group)");
+                    continue;
+                }
+                if (c is Behaviour b && (n.Contains("Localiz") || n.Contains("Tooltip") || n.Contains("Hover")))
                 {
                     b.enabled = false;
                     L.Debug($"  disabled {n} on '{c.name}'");
                 }
             }
+        }
+
+        /// <summary>Lights our tab up while the screen is open (and not otherwise).</summary>
+        public static void SetOn(bool on)
+        {
+            if (_toggle == null || _toggle.isOn == on) return;
+            _syncing = true;
+            try { _toggle.isOn = on; } catch (Exception e) { L.ErrorOnce("tab state", e); }
+            _syncing = false;
         }
 
         private static void SetLabel(GameObject clone)
@@ -215,6 +238,17 @@ namespace LevelGate.Progression
 
         private static void MakeClickable(GameObject clone)
         {
+            if (_toggle != null)
+            {
+                _toggle.onValueChanged.AddListener(on =>
+                {
+                    if (_syncing) return;
+                    L.Info($"PROGRESSION tab clicked ({(on ? "on" : "off")})");
+                    if (on) ProgScreen.Open("menu tab"); else ProgScreen.Close("menu tab");
+                });
+                L.Debug("  clicks come from the copied tab's own Toggle");
+                return;
+            }
             var graphic = clone.GetComponent<Graphic>();
             if (graphic == null)
             {

@@ -20,6 +20,9 @@ Versions are **MAJOR.MINOR.PATCH**:
 
 ## Level Gate (BepInEx plugin)
 
+### 1.7.0
+- Grid cells keep the game's short name (no `[LOCKED]`); the red striped background shows it's locked. New setting Labels > LabelShortNames brings the old label back.
+
 ### 1.6.3
 - Tooltip: any `[LOCKED - Lvl N]` / `[LOCKED]` left in a rewritten tooltip is removed (also when Show Me The Money wraps the name in color tags).
 - Debug > TooltipLog (on for now): the first 80 tooltips of each game start are written to the log, before and after the rewrite.
@@ -39,6 +42,12 @@ Versions are **MAJOR.MINOR.PATCH**:
 - Applies the Item Stats edits (meds, stims, food) at server start.
 
 ## LevelGate Progression (BepInEx plugin, separate DLL)
+
+### 0.2.0
+- The PROGRESSION button is a real tab in the menu bar (a copy of the Handbook tab, with the same hover and lit look). 0.1.0 copied the whole row of tabs.
+- No more lag: each level change took ~0.6 s because a failed lookup (the XP table for "% to next level") searched all the game's classes every time. It's now looked up once. The top and bottom halves also redraw separately.
+- Item icons from the game itself (weapons as their default preset). Right-click a tile to open the game's inspect window.
+- Fixed an error on the first open, and big titles and the page label being cut off.
 
 ### 0.1.0
 - First test build: a PROGRESSION button in the main menu bar and a Call of Duty style progression screen. It reads LevelGate's level list and logs a lot for troubleshooting.

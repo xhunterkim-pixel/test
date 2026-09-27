@@ -73,13 +73,14 @@ namespace LevelGate.Progression
             return img;
         }
 
-        public static Component Label(Transform parent, string name, string text, float size, Color color, TextAnchor align, bool bold = false, float spacing = 0)
+        public static Component Label(Transform parent, string name, string text, float size, Color color, TextAnchor align, bool bold = false, float spacing = 0, bool ellipsis = false)
         {
             var rt = Fill(parent, name);
-            return AddText(rt.gameObject, text, size, color, align, bold, spacing);
+            return AddText(rt.gameObject, text, size, color, align, bold, spacing, ellipsis);
         }
 
-        public static Component AddText(GameObject go, string text, float size, Color color, TextAnchor align, bool bold = false, float spacing = 0)
+        /// <summary>ellipsis: cut long text with "…" (tiles); otherwise text may run past its box (titles).</summary>
+        public static Component AddText(GameObject go, string text, float size, Color color, TextAnchor align, bool bold = false, float spacing = 0, bool ellipsis = false)
         {
             var tmp = TmpType;
             if (tmp != null)
@@ -98,7 +99,7 @@ namespace LevelGate.Progression
                     Refl.Set(c, "richText", true);
                     Refl.Set(c, "raycastTarget", false);
                     Refl.Set(c, "enableWordWrapping", false);
-                    SetEnum(c, "overflowMode", "Ellipsis");
+                    SetEnum(c, "overflowMode", ellipsis ? "Ellipsis" : "Overflow");
                     SetEnum(c, "alignment", TmpAlign(align));
                     if (bold) SetEnum(c, "fontStyle", "Bold");
                     Refl.Set(c, "fontSize", size);
