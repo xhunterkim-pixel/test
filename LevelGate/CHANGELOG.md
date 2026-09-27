@@ -44,6 +44,7 @@ Versions are **MAJOR.MINOR.PATCH**:
 - **Fix: weapon size and weight were the receiver's, not the whole gun's** (DS Arms SA58 showed 2 × 1 and 1.46 kg). Size and weight now come from the assembled weapon (the preset the game shows in the stash).
   - The same size also sets how big the game is asked to draw a weapon, so the renders are asked for at the right scale.
 - **Level cards: the big picture is landscape** (fills its column) instead of a small square. Weapons are wide, and in the square they came out tiny.
+- **Card pictures follow the game's screen resolution:** drawn for ~200 px at 1920x1080, scaled up at 1440p / 4K (the centre picture already did this). The resolution and UI scale are logged on open.
 - **Level cards: pictures on future levels are less dimmed** (85% instead of 65%; other cards 90%). Dark weapons on levels ahead were hard to make out.
 
 ### 0.9.25

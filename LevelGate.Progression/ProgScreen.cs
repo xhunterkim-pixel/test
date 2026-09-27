@@ -115,6 +115,7 @@ namespace LevelGate.Progression
                 L.Info($"open: player level {player}, {xpNow}; last seen level {seen}" +
                        (_newFrom > 0 ? $" → NEW: levels {_newFrom + 1}–{player}, {newItems} item(s) tagged NEW" : " → nothing new since last visit"));
                 MenuWidget.Seen(player); // the NEW tag on the main-menu shortcut goes away
+                L.Info($"screen: game resolution {Screen.width}x{Screen.height} (UI scale {(_canvas.GetComponentInParent<Canvas>()?.scaleFactor ?? 1):0.00}), card pictures ~{CardPx():0} px");
                 L.Info($"screen open ({why}); player level {player}, {ProgData.Levels.Count} limited items; graphics {ProgressionPlugin.Quality.Value}{(Perf ? " — emblems stand still, pictures drawn smaller" : "")}");
                 if (player > 0 && _level == 1) { _level = Mathf.Clamp(player, 1, ProgData.MaxLevel); _page = (_level - 1) / PerPage; }
                 _canvas.SetActive(true);
@@ -1199,11 +1200,22 @@ namespace LevelGate.Progression
 
         /// <summary>Card pictures (and their pre-loading) share one scale per item: about 120 px on the long side.</summary>
         // weapons only on High (like the centre picture: High redraws the stash's weapons at stash size after closing)
+        /// <summary>
+        /// Real screen pixels of a card's big picture: ~200 wide at 1920x1080, scaled with the game's resolution
+        /// (2560x1440: ~267, 3840x2160: ~400), so cards are drawn as sharp as the screen can show them.
+        /// </summary>
+        private static float CardPx()
+        {
+            var c = _bottom != null ? _bottom.GetComponentInParent<Canvas>() : null;
+            float sf = c != null && c.scaleFactor > 0 ? c.scaleFactor : Screen.height / 1080f;
+            return 200f * Mathf.Max(.5f, sf);
+        }
+
         private static int CardScaleOf(string tpl)
         {
             bool weapon = ProgData.GroupOf(tpl) == "Weapons";
             if (Perf || (weapon && !ProgressionPlugin.High)) return 1;
-            int scale = GameItems.CardScale(tpl, 120);
+            int scale = GameItems.CardScale(tpl, CardPx());
             if (weapon && scale > 1) _sharpWeaponShown = true; // weapons get repaired on close
             return scale;
         }
