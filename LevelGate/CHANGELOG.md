@@ -40,6 +40,10 @@ Versions are **MAJOR.MINOR.PATCH**:
 
 ## LevelGate Progression (BepInEx plugin, separate DLL)
 
+### 0.9.16
+- **Empty levels** (nothing assigned in the level list): the card shows a quiet "NO NEW ITEMS" instead of empty boxes. There's no LOCKED state (nothing to unlock) and no extra fading.
+- **Single-item levels:** the picture is centred in the card instead of sitting in the left column next to an empty one.
+
 ### 0.9.15
 - **Fix: a 3-digit fire rate ran into ERGONOMICS** ("600 rpm30"). The stats now use three equal columns. Small stats wrap onto a second line (effective range goes under weight) instead of squeezing the big stats into four columns. "rpm" is drawn smaller than the number.
 

@@ -1520,7 +1520,7 @@ namespace LevelGate.Progression
             private readonly CanvasGroup _group;
             private readonly Image _frame, _bg, _glow, _top, _stateLock;
             private readonly DottedLine _headL, _headR;
-            private readonly Component _head, _count, _state, _tier;
+            private readonly Component _head, _count, _state, _tier, _empty;
             private readonly Image[] _pics = new Image[3];
             private readonly ProgItem[] _picItems = new ProgItem[3];
             private readonly Component[] _picNames = new Component[3];
@@ -1601,6 +1601,9 @@ namespace LevelGate.Progression
                     Ui.EdgeFade(face, .18f, .55f);
                     Ui.Grit(face, _gritSeed++, .02f);
                 }
+                // a level with nothing on it: a quiet line in the picture area instead of empty boxes
+                _empty = Ui.Label(pics, "Empty", "NO NEW ITEMS", TCaps, Dim, TextAnchor.MiddleCenter, false, Caps);
+                _empty.gameObject.SetActive(false);
                 // footer: "147 unlocks" left, the level's state right in small caps (one small lock for future levels)
                 _count = Ui.Label(Ui.Rect(inner, "Count", new Vector2(0, 0), new Vector2(.5f, 0), new Vector2(Pad, S1), new Vector2(0, Foot - S1)), "Text", "", TBody, Text, TextAnchor.MiddleLeft, false);
                 _state = Ui.Label(Ui.Rect(inner, "State", new Vector2(.5f, 0), new Vector2(1, 0), new Vector2(0, S1), new Vector2(-Pad, Foot - S1)), "Text", "", TCaps, Grey, TextAnchor.MiddleRight, false, Caps);
@@ -1627,7 +1630,7 @@ namespace LevelGate.Progression
                 _badge.Set(level, items.Count == 0);
                 _badge.Visible = _first;
                 Ui.SetText(_tier, _first ? TierOf(level).Name : "");
-                Ui.SetText(_count, items.Count == 0 ? "No items" : $"{items.Count} item{(items.Count == 1 ? "" : "s")}");
+                Ui.SetText(_count, items.Count == 0 ? "" : $"{items.Count} item{(items.Count == 1 ? "" : "s")}");
                 for (int i = 0; i < 3; i++)
                 {
                     var it = i < picks.Count ? picks[i] : null;
@@ -1640,7 +1643,16 @@ namespace LevelGate.Progression
                     RequestIcon(_cardIcons, it.Tpl, CardScaleOf(it.Tpl), _pics[i], _picNames[i]);
                     _hits.Add((_picRects[i], it));
                 }
-                _group.alpha = items.Count == 0 ? .55f : 1f;
+                _empty.gameObject.SetActive(items.Count == 0);
+                // one item: its picture centred in the card (not in the left column with an empty one beside it)
+                if (_picRects[0].parent is RectTransform area)
+                {
+                    bool single = picks.Count == 1;
+                    area.anchorMin = new Vector2(single ? .18f : 0, 0);
+                    area.anchorMax = new Vector2(single ? .82f : .64f, 1);
+                    area.offsetMax = new Vector2(single ? 0 : -S1, area.offsetMax.y);
+                }
+                _group.alpha = 1f;
             }
 
             /// <summary>current (your level): orange header + state · selected: light 2 px frame + top bar · hover: brighter edge ·
@@ -1668,9 +1680,10 @@ namespace LevelGate.Progression
                 float hw = Ui.PreferredWidth(_head, label) / 2 + S2;
                 _headL.rectTransform.offsetMax = new Vector2(-hw, _headL.rectTransform.offsetMax.y);
                 _headR.rectTransform.offsetMin = new Vector2(hw, _headR.rectTransform.offsetMin.y);
-                string state = player <= 0 ? "" : fresh ? "<color=#e0562f>NEW</color>" : reached ? "" : "LOCKED";
+                bool empty = ProgData.CountAt(_level) == 0;
+                string state = player <= 0 || empty ? "" : fresh ? "<color=#e0562f>NEW</color>" : reached ? "" : "LOCKED";
                 Ui.SetText(_state, state);
-                _stateLock.enabled = locked;
+                _stateLock.enabled = locked && !empty;
                 if (_stateLock.enabled)
                 {
                     float w = Ui.PreferredWidth(_state, "LOCKED");
@@ -1679,7 +1692,7 @@ namespace LevelGate.Progression
                     lr.offsetMax = new Vector2(-S3 - w - S1, lr.offsetMax.y);
                 }
                 // future levels step back (unless picked or under the mouse)
-                _baseAlpha = (ProgData.CountAt(_level) == 0 ? .55f : 1f) * (locked && !sel && !_hover ? .85f : 1f);
+                _baseAlpha = locked && !sel && !_hover && !empty ? .85f : 1f;
                 // the pictures carry the weight: full only on the viewing / current card (or under the mouse)
                 float pa = sel || current || _hover ? 1f : locked ? .65f : .8f;
                 foreach (var pic in _pics) FadeTo(pic, new Color(1, 1, 1, pa));
