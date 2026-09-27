@@ -605,3 +605,20 @@ body.left-mini .menu-title, body.left-mini .menu-add span { display: none; }
 body.left-mini .menu-add { text-align: center; padding: 8px 0; }
 body.left-mini .trader { grid-template-columns: 44px; justify-content: center; padding: 4px 0; }
 body.left-mini .trader > div:not(.ph) { display: none; }
+
+/* ---- Add-ons (Level Gate levels) */
+.list.with-lvl .list-head, .list.with-lvl .row { grid-template-columns: 40px 64px var(--cols); }
+.list.with-lvl.no-idx .list-head, .list.with-lvl.no-idx .row { grid-template-columns: 64px var(--cols); }
+.lvl-col { display: flex; align-items: center; }
+.lvl-pill { display: inline-block; padding: 1px 7px; border-radius: 5px; background: rgba(245, 205, 70, .16); color: var(--yellow); font-weight: 800; font-size: 12px; white-space: nowrap; margin-left: 6px; vertical-align: 1px; }
+.lvl-col .lvl-pill { margin-left: 0; font-size: 13px; }
+.lvl-none { color: #5a5a5a; }
+#navAddons.addon-on { color: var(--yellow); }
+.section-title { margin: 22px 0 6px; font-size: 18px; }
+.list.dim { opacity: .55; }
+.bands { display: grid; gap: 8px; }
+.band { display: grid; grid-template-columns: 86px 1fr 40px; align-items: center; gap: 10px; font-size: 13px; }
+.band .bar { height: 8px; border-radius: 4px; background: #2a2a2a; overflow: hidden; }
+.band .bar i { display: block; height: 100%; background: var(--yellow); border-radius: 4px; }
+.band b { text-align: right; }
+.lvl-pill.first { margin-left: 0; }

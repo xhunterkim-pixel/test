@@ -34,6 +34,9 @@ public sealed class Settings
     /// <summary>Every mod item id ever seen: id -> [mod name, item name]. Kept when an import is removed, so the checks can still say which mod an id came from.</summary>
     public Dictionary<string, string[]> ModIdMemory { get; set; } = new();
 
+    /// <summary>Add-ons page: a Level Gate file picked by hand (its DLL or level_requirements.json), when it isn't found by itself.</summary>
+    public string? LevelGatePath { get; set; }
+
     public static Settings Load()
     {
         try

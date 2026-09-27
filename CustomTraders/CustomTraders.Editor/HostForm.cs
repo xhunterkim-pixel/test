@@ -132,10 +132,26 @@ public sealed class HostForm : Form
         "saveUi" => SaveUi(a["ui"] as JsonObject),
         "setUnsaved" => SetUnsaved((int?)a["count"] ?? 0),
         "openFolder" => OpenFolder(Str(a, "folder")),
+        "addonsScan" => Addons.Scan(_modFolder, _settings.LevelGatePath),
+        "addonLocate" => AddonLocate(),
         _ => throw new InvalidOperationException($"Unknown request '{method}'."),
     };
 
     private static string Str(JsonObject a, string key) => (string?)a[key] ?? "";
+
+    /// <summary>Add-ons page: pick Level Gate's DLL or its level_requirements.json by hand.</summary>
+    private JsonNode? AddonLocate()
+    {
+        using var dialog = new OpenFileDialog
+        {
+            Title = "Find Level Gate — pick LevelGate.dll or its config\\level_requirements.json",
+            Filter = "Level Gate|LevelGate.dll;level_requirements.json|All files|*.*",
+        };
+        if (dialog.ShowDialog(this) != DialogResult.OK) return null;
+        _settings.LevelGatePath = dialog.FileName;
+        _settings.Save();
+        return Addons.Scan(_modFolder, _settings.LevelGatePath);
+    }
 
     // ------------------------------------------------------------------ mod folder / traders
 

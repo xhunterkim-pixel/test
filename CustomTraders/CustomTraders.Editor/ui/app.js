@@ -637,6 +637,9 @@ function renderTraders() {
   const modBad = modList().some(e => modStatus(e) !== 'on' && e.uses.length);
   $('#navMods').textContent = S.mods.length || modBad ? (modBad ? '⚠ ' : '') + `${S.mods.filter(m => m.enabled).length}/${S.mods.length}` : '';
   $('#navMods').className = modBad ? 'bad' : '';
+  const lg = S.addons?.levelgate;
+  $('#navAddons').textContent = lg?.found ? (lgOn() ? 'ON' : 'OFF') : '';
+  $('#navAddons').className = lg?.found && lgOn() ? 'addon-on' : '';
   $('#navChecks').className = errors ? 'bad' : '';
   document.querySelectorAll('#nav .nav').forEach(n => n.classList.toggle('on', n.dataset.arg === S.page));
 }
@@ -656,7 +659,7 @@ function renderHeader() {
   const img = t && t.images[f.avatar];
   const avatar = $('#headerAvatar');
   if (img) { if (avatar.getAttribute('src') !== img) avatar.src = img; avatar.hidden = false; } else avatar.hidden = true;
-  $('#headerKind').textContent = (f && !f.enabled ? 'TRADER · SWITCHED OFF' : 'TRADER') + ' · ' + { trader: 'PROFILE', offers: 'OFFERS & BARTERS', quests: 'QUESTS', checks: 'CHECKS & LOG', mods: 'MODS' }[S.page];
+  $('#headerKind').textContent = (f && !f.enabled ? 'TRADER · SWITCHED OFF' : 'TRADER') + ' · ' + { trader: 'PROFILE', offers: 'OFFERS & BARTERS', quests: 'QUESTS', checks: 'CHECKS & LOG', mods: 'MODS', addons: 'ADD-ONS' }[S.page];
   $('#headerKind').style.color = f && !f.enabled ? 'var(--orange)' : '';
   $('#headerTitle').textContent = f?.name || 'No trader';
   const needs = t ? [...traderMods(t).keys()] : [];
@@ -667,7 +670,7 @@ function renderHeader() {
   const box = $('#searchBox'), input = $('#search');
   $('#chips').hidden = S.page === 'trader' || !S.t;
   $('#viewLabel').textContent = SORTS[S.page] ? sortLabel(S.page) : 'View';
-  input.placeholder = { offers: 'Search Offers & Barters, “Modded” (Ctrl+F)', quests: 'Search Quests, Tags, Notes (Ctrl+F)', checks: 'Search the Log (Ctrl+F)', mods: 'Search Mods & Their Items (Ctrl+F)' }[S.page] || '';
+  input.placeholder = { offers: 'Search Offers & Barters, “Modded” (Ctrl+F)', quests: 'Search Quests, Tags, Notes (Ctrl+F)', checks: 'Search the Log (Ctrl+F)', mods: 'Search Mods & Their Items (Ctrl+F)', addons: 'Search Level Gate Items, “Level 20” (Ctrl+F)' }[S.page] || '';
   if (document.activeElement !== input) input.value = S.search[S.page] || '';
   box.classList.toggle('has', !!input.value);
   box.classList.toggle('open', !!input.value || document.activeElement === input);
@@ -725,8 +728,9 @@ function renderPage(animate) {
   B = new Map([...B].filter(([k, v]) => v.zone !== 'page'));
   const zoneStart = bindSeq;
   let html = '';
-  if (!S.t && S.page !== 'checks' && S.page !== 'mods') html = '<div class="empty">No trader selected.</div>';
+  if (!S.t && S.page !== 'checks' && S.page !== 'mods' && S.page !== 'addons') html = '<div class="empty">No trader selected.</div>';
   else if (S.page === 'mods') html = pageMods();
+  else if (S.page === 'addons') html = pageAddons();
   else if (S.page === 'trader') html = pageTrader();
   else if (S.page === 'offers') html = pageOffers();
   else if (S.page === 'quests') html = pageQuests();
@@ -803,6 +807,8 @@ const COLUMNS = {
   offers: [['title', 'Title'], ['unlock', 'Unlock', 190], ['ll', 'LL', 56], ['stock', 'Stock', 110], ['mod', 'Modded', 100], ['notes', 'Notes', 150]],
   quests: [['title', 'Title'], ['level', 'Level', 80], ['ways', 'Ways', 70], ['mod', 'Modded', 100], ['notes', 'Notes', 150]],
   mods: [['title', 'Mod'], ['items', 'Items', 90], ['used', 'Used By', 170]],
+  addons: [['title', 'Add-on'], ['items', 'Items', 110], ['state', 'Status', 130]],
+  lgitems: [['title', 'Item'], ['cat', 'Category', 130], ['used', 'Sold By Your Traders', 170], ['lvl', 'Level', 90]],
   checks: [['title', 'Title'], ['when', 'When', 90]],
 };
 const view = () => (S.ui.view ||= {});
@@ -836,7 +842,8 @@ function listHead(list) {
     ? `<span class="head-text sortable ${cur?.key === key ? 'on' : ''}" data-act="sortBy" data-arg="${list}|${key}" title="Sort by ${esc(text)} (click again to flip)">${esc(text)}${arrow(key)}</span>`
     : `<span class="head-text">${esc(text)}</span>`;
   const idx = sortable ? `<span class="head-text sortable ${!cur ? 'on' : ''}" data-act="sortBy" data-arg="${list}|" title="Your own order (Ctrl + drag rows to change it)">#</span>` : '#';
-  return `<div class="list-head"><div>${idx}</div>${shownColumns(list).map((c, i) => `<div>${i > 0 ? `<span class="grip" data-grip="${list}|${c[0]}" title="Drag to Resize · Double-Click to Reset"></span>` : ''}${head(c[0], c[1])}</div>`).join('')}</div>`;
+  const lvl = list === 'offers' && lgOn() ? `<div class="lvlh">${head('lvl', 'Level')}</div>` : '';
+  return `<div class="list-head"><div>${idx}</div>${lvl}${shownColumns(list).map((c, i) => `<div>${i > 0 ? `<span class="grip" data-grip="${list}|${c[0]}" title="Drag to Resize · Double-Click to Reset"></span>` : ''}${head(c[0], c[1])}</div>`).join('')}</div>`;
 }
 
 /** Indexes of a list in view order (a clicked column header sorts; otherwise your own order). */
@@ -847,7 +854,7 @@ function sortedOrder(list, arr) {
   const t = S.t;
   const keyOf = {
     offers: { title: o => itemName(o.itemTpl).toLowerCase(), ll: o => o.loyaltyLevel, unlock: o => offerUnlock(t, o).text.toLowerCase(),
-      stock: o => (o.unlimited ? 1e12 : o.stock), mod: o => objMods(t, o).names.join(','), price: o => costValue(o.cost) },
+      stock: o => (o.unlimited ? 1e12 : o.stock), mod: o => objMods(t, o).names.join(','), price: o => costValue(o.cost), lvl: o => lgLevel(o.itemTpl) || 0 },
     quests: { title: q => q.name.toLowerCase(), level: q => q.minLevel, ways: q => ways(q).length, mod: q => objMods(t, q).names.join(',') },
   }[list]?.[cur.key];
   if (!keyOf) return idx;
@@ -865,10 +872,10 @@ function boxes(list) {
   }).join('')}</div>`;
 }
 
-function row({ list, act, arg, sel, three, off, thumb: th, title, titleColor, badges = [], line2, line3, line3Color, boxes2, boxes3, cols = {}, colColors = {}, colTitles = {} }) {
+function row({ list, act, arg, sel, three, off, thumb: th, title, titleColor, badges = [], line2, line3, line3Color, boxes2, boxes3, cols = {}, colColors = {}, colTitles = {}, lvl }) {
   const shown = list ? shownColumns(list).slice(1) : [];
   return `<div class="row ${sel ? 'sel' : ''} ${three ? 'three' : ''} ${off ? 'off' : ''}" data-act="${act}" data-arg="${arg}" data-row="${arg}">
-    <div class="idx">${Number(arg) + 1}</div>
+    <div class="idx">${Number(arg) + 1}</div>${lvl !== undefined ? `<div class="lvl-col">${lvlPill(lvl, true)}</div>` : ''}
     <div class="cell">${thumb(th)}<div class="text">
       <div class="line1"><span class="title" ${titleColor ? `style="color:${titleColor}"` : ''}>${esc(title)}</span><span class="badges">${badges.map(b => ui.badge(b[0], b[1], b[2])).join('')}</span></div>
       ${boxes2 ? boxes(boxes2) : line2 ? `<div class="line2">${esc(line2)}</div>` : ''}
@@ -948,7 +955,8 @@ function pageOffers() {
     const price = priceKind(o);
     if (S.tagFilters.offers && !o.tags.includes(S.tagFilters.offers)) return '';
     if (S.category && !inCategory(o, S.category)) return '';
-    if (!matches('offers', itemName(o.itemTpl), item(o.itemTpl)?.s || '', costText(o), u.text, o.notes, o.tags, price?.[0] || '', `LL${o.loyaltyLevel}`, objMods(t, o).names.length ? ['modded', ...objMods(t, o).names] : 'original')) return '';
+    const lvl = lgLevel(o.itemTpl);
+    if (!matches('offers', itemName(o.itemTpl), item(o.itemTpl)?.s || '', costText(o), u.text, o.notes, o.tags, price?.[0] || '', `LL${o.loyaltyLevel}`, objMods(t, o).names.length ? ['modded', ...objMods(t, o).names] : 'original', lvl ? `level ${lvl} lvl${lvl}` : '')) return '';
     shown.push(o);
     const badges = [];
     if (!o.enabled) badges.push(['OFF', '#8a8a8a', 'keep']);
@@ -965,6 +973,7 @@ function pageOffers() {
       line2: compact('offers') ? null : inGamePrice(t, o),
       cols: { unlock: u.text, ll: `LL${o.loyaltyLevel}`, stock: (o.unlimited ? 'Unlimited' : `${o.stock} / Restock`) + (o.buyLimit > 0 ? ` · Max ${o.buyLimit}` : ''), notes: o.notes, mod: modCell(mods) },
       colColors: { unlock: u.kind !== 'start' ? 'var(--orange)' : 'var(--green)', mod: modColor(mods) },
+      lvl: lgOn() ? (lvl || 0) : undefined,
       colTitles: { mod: mods.names.join(', ') },
     });
   }).join('');
@@ -979,7 +988,7 @@ function pageOffers() {
       <button class="outline" data-act="bulkEdit" title="Pick every offer shown and change them all at once (Ctrl+B)">☰ Bulk Edit</button>
       ${S.search.offers || S.tagFilters.offers || S.category ? `<span class="muted small">${shown.length} of ${t.file.offers.length} shown</span>` : ''}
     </div>${tags}
-    <div class="list ${compact('offers') ? 'compact' : ''}" data-list="offers">${listHead('offers')}${rows || `<div class="empty">${t.file.offers.length ? 'Nothing matches the search / tag' : 'No offers yet — click + Add Offer'}</div>`}</div>`;
+    <div class="list ${compact('offers') ? 'compact' : ''} ${lgOn() ? 'with-lvl' : ''}" data-list="offers">${listHead('offers')}${rows || `<div class="empty">${t.file.offers.length ? 'Nothing matches the search / tag' : 'No offers yet — click + Add Offer'}</div>`}</div>`;
 }
 
 function pageQuests() {
@@ -1095,6 +1104,111 @@ function pageMods() {
     <div class="list" data-list="mods">${listHead('mods')}${rows || '<div class="empty">No mods imported yet — click Scan My Mods Folder</div>'}</div>`;
 }
 
+// ---------------------------------------------------------------- add-ons (our other mods, read only)
+
+const addonOn = id => S.ui?.addons?.[id] !== false;
+/** Level Gate found, read and switched on (Add-ons page). */
+const lgOn = () => !!(S.addons?.levelgate?.found && S.addons.levelgate.items && addonOn('levelgate'));
+/** The level Level Gate asks for this item (undefined = no limit, or the add-on is off). */
+const lgLevel = tpl => (lgOn() && tpl ? S.addons.levelgate.items[tpl] : undefined);
+/** Small yellow "Lvl 20" (nothing when there's no limit; a dim dash in the list column). */
+const lvlPill = (lvl, dash) => lvl ? `<span class="lvl-pill" title="Level Gate: can't be used before level ${lvl}">Lvl ${lvl}</span>` : dash ? '<span class="lvl-none">—</span>' : '';
+
+async function scanAddons(say) {
+  try {
+    const r = await host.call('addonsScan', {});
+    const before = JSON.stringify(S.addons || null);
+    S.addons = r || {};
+    if (JSON.stringify(S.addons) !== before) renderAll(false);
+    const lg = S.addons.levelgate;
+    if (say) toast(lg?.found ? `Level Gate${lg.version ? ' ' + lg.version : ''} · ${fmt(Object.keys(lg.items || {}).length)} item levels` : 'Level Gate not found');
+  } catch (err) { if (say) errorBox(err); }
+}
+
+/** Offers (all your traders) per item id, for the Level Gate list. */
+function lgUses() {
+  const m = new Map();
+  for (const t of S.traders) for (const o of t.file.offers) m.set(o.itemTpl, [...(m.get(o.itemTpl) || []), { t, o }]);
+  return m;
+}
+
+function pageAddons() {
+  const lg = S.addons?.levelgate || { found: false };
+  const n = Object.keys(lg.items || {}).length;
+  const on = lgOn();
+  const state = !S.addons ? ['SCANNING…', 'var(--muted)'] : !lg.found ? ['NOT FOUND', '#8a8a8a'] : !lg.items ? ['PROBLEM', 'var(--red)'] : on ? ['ON', 'var(--yellow)'] : ['OFF', '#8a8a8a'];
+  const toggle = lg.found && lg.items ? `<button class="modcheck ${on ? 'on' : ''}" data-act="addonToggle" data-arg="levelgate" title="${on ? 'On — click to switch off' : 'Off — click to switch on'}">${on ? '✓' : ''}</button>` : '';
+  const addonRow = row({
+    list: 'addons', act: 'selAddon', arg: 0, sel: !S.addonItemSel,
+    thumb: { text: 'LG', color: lg.found ? 'var(--yellow)' : '#3a3a3a', dark: lg.found },
+    title: 'Level Gate', badges: [lg.version ? ['v' + lg.version, 'var(--yellow)'] : null, state].filter(Boolean),
+    line2: lg.found ? (lg.dll || lg.config) : 'Not found in BepInEx\\plugins next to your SPT install — use Locate Level Gate… if it’s somewhere else.',
+    cols: { items: { html: `${toggle}<span>${lg.items ? fmt(n) + ' Levels' : '—'}</span>` }, state: lg.found ? (on ? 'Shown in Offers' : 'Hidden') : 'Not Installed' },
+    colColors: { state: on ? 'var(--yellow)' : 'var(--muted)' },
+  });
+  // Level Gate's items, lowest level first
+  let items = '';
+  if (lg.items) {
+    const uses = lgUses();
+    const limit = S.lgLimit || 300;
+    const list = Object.entries(lg.items).map(([id, lvl]) => ({ id, lvl, it: item(id) }))
+      .filter(x => matches('addons', x.it?.n || '', x.it?.s || '', x.id, `level ${x.lvl} lvl${x.lvl}`, x.it ? catName(x.it.c) : 'unknown'))
+      .sort((a, b) => a.lvl - b.lvl || (a.it?.n || a.id).localeCompare(b.it?.n || b.id));
+    S.shownLgItems = list.map(x => x.id);
+    const rows = list.slice(0, limit).map((x, i) => {
+      const used = uses.get(x.id)?.length || 0;
+      return row({
+        list: 'lgitems', act: 'addonSel', arg: i, sel: S.addonItemSel === x.id,
+        thumb: { text: initials(x.it?.s || x.it?.n || '?'), color: '#3a3a3a', item: x.it ? x.id : null, wide: true },
+        title: x.it?.n || `Unknown Item ${x.id}`, titleColor: x.it ? null : 'var(--muted)',
+        line2: `${x.it?.s ? x.it.s + ' · ' : ''}${x.id}`,
+        cols: { cat: x.it ? catName(x.it.c) : '—', used: used ? `${used} Offer${used === 1 ? '' : 's'}` : '', lvl: { html: lvlPill(x.lvl).replace('lvl-pill', 'lvl-pill first') } },
+        colColors: { used: 'var(--accent)' },
+      });
+    }).join('');
+    items = `<h3 class="section-title">Level Gate Items <span class="muted small">${fmt(list.length)}${list.length !== n ? ` of ${fmt(n)}` : ''} · Lowest Level First</span></h3>
+      <div class="list ${on ? '' : 'dim'}" data-list="lgitems">${listHead('lgitems')}${rows || '<div class="empty">Nothing matches the search</div>'}
+      ${list.length > limit ? `<button class="more" data-act="lgMore">Show More (${fmt(list.length - limit)} Left)</button>` : ''}</div>`;
+  }
+  return `<div class="toolbar sticky">
+      <button class="primary" data-act="addonsRescan" title="Looks for Level Gate in BepInEx\\plugins next to your SPT install and reads its levels again">Rescan</button>
+      <button class="outline" data-act="addonLocate" title="Pick LevelGate.dll or its config\\level_requirements.json">Locate Level Gate…</button>
+    </div>
+    ${ui.hint('Add-ons are our other mods the editor can read. <b>Level Gate</b>: each item’s unlock level shows in <b>Offers &amp; Barters</b> (a yellow <b>Level</b> column between # and Title), next to barter items and in the item picker. Switch it off (✓) and it isn’t shown anywhere. Nothing of Level Gate’s is changed — set levels in the Level &amp; Item Editor; changes show up here when you come back to this window.')}
+    <div class="list" data-list="addons">${listHead('addons')}${addonRow}</div>
+    ${items}`;
+}
+
+function detailsAddons() {
+  const lg = S.addons?.levelgate || { found: false };
+  const on = lgOn();
+  if (S.addonItemSel && lg.items?.[S.addonItemSel]) {
+    const id = S.addonItemSel, it = item(id), uses = lgUses().get(id) || [];
+    S.addonUses = uses;
+    const big = itemPic(id, '512');
+    return [it?.n || id, `<div class="hero">
+        <div class="hero-pic">${esc(initials(it?.s || it?.n || '?'))}${big ? `<img src="${big}" alt="" ${picFail}>` : ''}</div>
+        <div class="hero-text"><div class="kind">${esc((it?.c || 'Item').toUpperCase())}</div><div class="hero-name">${esc(it?.s || it?.n || id)}</div>
+          <div>${lvlPill(lg.items[id]).replace('lvl-pill', 'lvl-pill first')}</div></div></div>
+      ${card('a-lvl', 'Level Gate', `<div class="req">Players can’t use it before level ${lg.items[id]}.\n${esc(id)}</div>${ui.hint('Change it in the Level &amp; Item Editor (Level Limits tab).')}`)}
+      ${card('a-used', `Sold By Your Traders ${uses.length ? `(${uses.length})` : ''}`, uses.length ? `<div class="mini">${uses.map((u, i) => `<div class="row" data-act="goAddonUse" data-arg="${i}"><div class="cell">${thumb({ text: initials(u.t.file.name), item: id, color: '#3a3a3a' })}
+          <div class="text"><div class="title">${esc(u.t.file.name)}</div><div class="line2">${esc(costText(u.o))} · LL${u.o.loyaltyLevel}</div></div></div></div>`).join('')}</div>${ui.hint('Click one to open it.')}` : ui.hint('None of your traders sell it.'))}
+      <div class="toolbar"><button class="outline" data-act="selAddon">‹ Back to Level Gate</button></div>`];
+  }
+  const sw = lg.found && lg.items ? ui.toggle('Show Levels', () => on, () => { }, {}).replace('data-b=', 'data-addon-toggle="levelgate" data-x=') : '';
+  const explain = !lg.found ? 'Level Gate wasn’t found in BepInEx\\plugins next to your SPT install. If it’s installed somewhere else, use Locate Level Gate… and pick LevelGate.dll or its level_requirements.json.'
+    : lg.error ? esc(lg.error)
+    : on ? 'Switched on: every item’s unlock level shows in Offers &amp; Barters, next to barter items and in the item picker.'
+    : 'Switched off: levels aren’t shown anywhere in the editor.';
+  const levels = Object.values(lg.items || {});
+  const bands = [[1, 10], [11, 20], [21, 30], [31, 40], [41, 79]].map(([a, b]) => [a, b, levels.filter(l => l >= a && l <= b).length]);
+  const max = Math.max(1, ...bands.map(x => x[2]));
+  return ['Level Gate', `
+    <div class="status" style="--c:${on ? 'var(--yellow)' : '#8a8a8a'}"><h3>${!lg.found ? 'Not Found' : on ? 'On' : 'Off'}<span class="grow"></span>${sw}</h3><div class="hint" style="margin:0">${explain}</div></div>
+    ${lg.found ? card('a-info', 'Found', `<div class="req">${lg.version ? `Version ${esc(lg.version)}\n` : ''}${lg.dll ? `Plugin: ${esc(lg.dll)}\n` : ''}${lg.config ? `Levels: ${esc(lg.config)}` : ''}</div>`) : ''}
+    ${levels.length ? card('a-bands', `Levels (${fmt(levels.length)} Items)`, `<div class="bands">${bands.map(([a, b, n]) => `<div class="band"><span>Lvl ${a}–${b}</span><div class="bar"><i style="width:${n / max * 100}%"></i></div><b>${n}</b></div>`).join('')}</div>`) : ''}`];
+}
+
 function detailsMod() {
   const e = modList().find(x => x.name === S.modSel);
   if (!e) return ['Mods', '<div class="empty">Import mods with the buttons on the left.</div>'];
@@ -1135,6 +1249,7 @@ function renderDetails(animate, toTop) {
   let title = '', html = '';
   if (S.page === 'checks') [title, html] = detailsCheck();
   else if (S.page === 'mods') [title, html] = detailsMod();
+  else if (S.page === 'addons') [title, html] = detailsAddons();
   else if (!S.t) [title, html] = ['', '<div class="empty">Pick or create a trader on the left.</div>'];
   else if (S.page === 'trader') [title, html] = detailsTrader();
   else if (S.picked.size > 1) [title, html] = detailsMulti();
@@ -1187,7 +1302,7 @@ function detailsOffer() {
     const k = bind(() => c.count, v => { c.count = Math.max(1, v); }, 'light');
     const lk = listRef(o.cost);
     return `<div class="row"><div class="cell">${thumb({ text: isMoney(c.itemTpl) ? MONEY_SYMBOL[c.itemTpl] : initials(item(c.itemTpl)?.s), color: isMoney(c.itemTpl) ? 'var(--yellow)' : '#3a3a3a', dark: isMoney(c.itemTpl), item: isMoney(c.itemTpl) ? null : c.itemTpl })}
-      <div class="text"><div class="title">${esc(isMoney(c.itemTpl) ? MONEY_NAME[c.itemTpl] : itemName(c.itemTpl))}</div></div>
+      <div class="text"><div class="title">${esc(isMoney(c.itemTpl) ? MONEY_NAME[c.itemTpl] : itemName(c.itemTpl))}${isMoney(c.itemTpl) ? '' : lvlPill(lgLevel(c.itemTpl))}</div></div>
       <input type="number" data-b="${k}" value="${c.count}" min="1" style="width:140px"><button class="icon-btn" data-act="removeAt" data-arg="${lk}|${i}" title="Remove">✕</button></div></div>`;
   }).join('');
   // what the thing is worth, so nobody has to look prices up
@@ -1212,6 +1327,7 @@ function detailsOffer() {
     ${card('o-unlock', 'How It Unlocks', unlockBody)}
     ${card('o-item', 'Item', `
       ${ui.item('Item', () => o.itemTpl, v => { o.itemTpl = v; }, 'all')}
+      ${lgOn() ? `<div class="field"><label>Level Gate</label><div>${lgLevel(o.itemTpl) ? `${lvlPill(lgLevel(o.itemTpl)).replace('lvl-pill', 'lvl-pill first')} <span class="muted small">players can't use it before this level</span>` : '<span class="muted small">No level limit</span>'}</div></div>` : ''}
       ${isWeapon || o.useDefaultPreset === false ? ui.toggle('Sell the Assembled Gun (Not a Bare Receiver)', () => o.useDefaultPreset, v => { o.useDefaultPreset = v; }, { label: 'Weapon Preset', refresh: 'details' }) : ''}
       ${ui.num('Loyalty Level', () => o.loyaltyLevel, v => { o.loyaltyLevel = v; }, { min: 1, max: 4 })}
       ${ui.toggle('Unlimited Stock', () => o.unlimited, v => { o.unlimited = v; }, { label: 'Stock' })}
@@ -2334,7 +2450,7 @@ function menuHtml(sections) {
     sec.items.map(it => `<button class="${it.on ? 'on' : ''}" data-v="${esc(it.key)}"${it.title ? ` title="${esc(it.title)}"` : ''}>${it.icon ? `<span class="mi">${it.icon}</span>` : ''}${esc(it.text)}${it.on ? '<span class="check">✓</span>' : ''}</button>`).join('')).join('');
 }
 const SORTS = {
-  offers: [['', 'Custom Order'], ['title', 'Title'], ['ll', 'Loyalty Level'], ['unlock', 'Unlock'], ['stock', 'Stock'], ['price', 'Price'], ['mod', 'Modded']],
+  offers: [['', 'Custom Order'], ['lvl', 'Level (Level Gate)'], ['title', 'Title'], ['ll', 'Loyalty Level'], ['unlock', 'Unlock'], ['stock', 'Stock'], ['price', 'Price'], ['mod', 'Modded']],
   quests: [['', 'Custom Order'], ['title', 'Title'], ['level', 'Level'], ['ways', 'Ways'], ['mod', 'Modded']],
 };
 const compact = list => !!view()[`${list}.compact`];
@@ -2344,11 +2460,11 @@ function viewMenu(anchor) {
   closePopover();
   const pop = document.createElement('div');
   pop.className = 'popover menu2';
-  const list = S.page === 'offers' ? 'offers' : S.page === 'checks' ? 'checks' : S.page === 'mods' ? 'mods' : 'quests';
+  const list = S.page === 'offers' ? 'offers' : S.page === 'checks' ? 'checks' : S.page === 'mods' ? 'mods' : S.page === 'addons' ? 'addons' : 'quests';
   const draw = () => {
     const v = view();
     const sections = [];
-    if (SORTS[list]) sections.push({ title: 'Sort By', items: SORTS[list].map(([k, n]) => ({ key: 'sort:' + k, text: n, on: (S.sort[list]?.key || '') === k })) });
+    if (SORTS[list]) sections.push({ title: 'Sort By', items: SORTS[list].filter(x => x[0] !== 'lvl' || lgOn()).map(([k, n]) => ({ key: 'sort:' + k, text: n, on: (S.sort[list]?.key || '') === k })) });
     if (list === 'offers' || list === 'quests')
       sections.push({ title: 'View As', items: [{ key: 'as:list', text: 'List', on: !compact(list), icon: '☰' }, { key: 'as:compact', text: 'Compact', on: compact(list), icon: '≡' }] });
     sections.push({ title: 'Columns', items: [{ key: 'hideIdx', text: '#', on: !v.hideIdx },
@@ -2613,6 +2729,7 @@ function detailsSoon() {
 document.addEventListener('change', e => {
   const el = e.target;
   if (el.dataset.modToggle) { ACT.modToggle(el.dataset.modToggle); return; }
+  if (el.dataset.addonToggle) { ACT.addonToggle(el.dataset.addonToggle); return; }
   const b = B.get(el.dataset.b);
   if (!b) return;
   if (el.type === 'checkbox') b.set(el.checked);
@@ -2765,7 +2882,7 @@ document.addEventListener('mousedown', e => {
     const cols = shownColumns(list);
     const i = cols.findIndex(c => c[0] === key);
     // freeze every column at the width it has on screen right now, then only the two neighbours change
-    const cells = [...grip.closest('.list-head').children].slice(1);
+    const cells = [...grip.closest('.list-head').children].filter(c => !c.classList.contains('lvlh')).slice(1);
     const px = cols.map((c, n) => cells[n] ? cells[n].getBoundingClientRect().width : 50);
     const saved = (S.ui.colf ||= {})[list] = {};
     cols.forEach((c, n) => { saved[c[0]] = px[n]; });
@@ -3018,6 +3135,25 @@ const ACT = {
   modsScanAll: () => modCall('modsScanAll', {}, r => r.added?.length ? `Imported ${r.added.length} mod(s): ${r.added.join(', ')}` : 'No new mods with items found'),
   modAddFolder: () => modCall('modAddFolder', {}, r => `Imported ${r.added?.[0] || 'the mod'}`),
   modRescan: () => modCall('modRescan', {}, () => 'Rescanned'),
+  addonToggle(id) {
+    (S.ui.addons ||= {})[id] = !addonOn(id);
+    saveUi();
+    renderAll(false);
+    toast(`Level Gate add-on switched ${addonOn(id) ? 'ON' : 'OFF'}`);
+  },
+  addonsRescan: () => scanAddons(true),
+  async addonLocate() {
+    try { const r = await host.call('addonLocate', {}); if (r) { S.addons = r; renderAll(false); toast(r.levelgate?.found ? 'Level Gate found' : 'That isn’t Level Gate'); } } catch (err) { errorBox(err); }
+  },
+  selAddon() { S.addonItemSel = null; renderPage(false); renderDetails(true, true); },
+  addonSel(i) { S.addonItemSel = S.shownLgItems?.[Number(i)] || null; renderPage(false); renderDetails(true, true); },
+  lgMore() { S.lgLimit = (S.lgLimit || 300) + 300; renderPage(false); },
+  goAddonUse(arg) {
+    const u = S.addonUses?.[Number(arg)]; if (!u) return;
+    if (u.t !== S.t) selectTrader(u.t, false);
+    S.offer = u.o; S.page = 'offers'; S.ui.page = 'offers'; S.picked = new Set();
+    renderAll(true);
+  },
   modToggle(name) {
     const m = S.mods.find(x => x.name === name); if (!m) return;
     modCall('modSet', { name, enabled: !m.enabled }, () => `${name} switched ${m.enabled ? 'OFF' : 'ON'}`);
@@ -3592,7 +3728,7 @@ function pickItem(filter = 'all') {
   const hiddenCount = all.filter(it => it.x).length;
   const mods = [...new Set(all.filter(it => it.m).map(it => it.m))].sort();
   const rowHtml = it => `<div class="row" data-pick="${it.i}"><div class="cell">
-      ${thumb({ text: initials(it.s || it.n), color: '#3a3a3a', item: it.c === 'Money' ? null : it.i, wide: true })}<div class="text"><div class="title">${esc(it.n)}</div><div class="line2">${esc(it.s)}${it.m ? ` · <span style="color:var(--accent)">${esc(it.m)}</span>` : ''}</div></div></div>
+      ${thumb({ text: initials(it.s || it.n), color: '#3a3a3a', item: it.c === 'Money' ? null : it.i, wide: true })}<div class="text"><div class="title">${esc(it.n)}${lvlPill(lgLevel(it.i))}</div><div class="line2">${esc(it.s)}${it.m ? ` · <span style="color:var(--accent)">${esc(it.m)}</span>` : ''}</div></div></div>
       <div class="col" ${it.m ? 'style="color:var(--accent)"' : ''}>${esc(it.m ? 'MODDED' : it.c === 'Ammo' && it.k ? caliberName(it.k) : catName(it.c))}</div></div>`;
   const draw = m => {
     const found = all.filter(match);
@@ -3678,4 +3814,5 @@ function status(text) { $('#status').textContent = text; }
 // Start
 // =====================================================================
 
-host.call('init').then(applySnapshot).catch(errorBox);
+host.call('init').then(applySnapshot).then(() => scanAddons()).catch(errorBox);
+window.addEventListener('focus', () => scanAddons());
