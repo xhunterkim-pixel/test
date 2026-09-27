@@ -40,6 +40,24 @@ Versions are **MAJOR.MINOR.PATCH**:
 
 ## LevelGate Progression (BepInEx plugin, separate DLL)
 
+### 0.9.10 — final audit fixes
+- **Level terms spelled out:**
+  - The header has "CURRENT LEVEL" next to your level number, and the rank line reads "Rank 1 of 16 · next: Drifter (level 6)".
+  - The reward link reads "Next level 3: 13 unlocks ›".
+  - The list title reads "VIEWING LEVEL 1 REWARDS", with its state on the line below (CURRENT / UNLOCKED / NEXT / X LEVELS AWAY).
+  - Card headers name their role: LEVEL 1 · VIEWING, LEVEL 2 · CURRENT, LEVEL 3 · NEXT. The card footer only says UNLOCKED, LOCKED or NEW.
+- **Centre preview sharpness (real fix):**
+  - The "big" copy was often the game's stash-size render (64 px a cell), because the first picture to arrive was accepted, so the preview was a stretched thumbnail.
+  - Only a render of the requested size is kept now. A stash-size fallback is shown but never cached.
+  - The render scale follows the item's cells and the preview's size on screen: 2–8x, about 440 px on the long side at 1080p.
+  - Copies get mipmaps, so big renders shown small stay clean.
+- **Performance mode:** back on screen as a quiet PERFORMANCE MODE checkbox (bottom-right, on the page-bar line), still also in the config. Still emblems in performance mode are intended. The open-screen log line says whether it's on.
+- **Level cards:** about 30% of the screen height (was 33%). Future levels are dimmer, and only the viewing or current card has a bright count.
+- **Narrow screens:**
+  - The page bar stretches between fixed insets instead of a fixed 1120 px, so it can't run into the checkbox.
+  - The list title and state are on two lines.
+  - The rank line is shorter.
+
 ### 0.9.9 — UI/UX pass
 - **Hierarchy:**
   - The header is about you only: your rank emblem, rank name, "Rank X of 16 · next rank at level N", your level square and XP.

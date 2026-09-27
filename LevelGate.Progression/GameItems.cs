@@ -192,7 +192,13 @@ namespace LevelGate.Progression
                     L.Step($"icon: {Refl.Get(item, "TemplateId") ?? item.GetType().Name} at {scale}x");
                     var before = scale != 1 ? SpriteOf(CallIcon(_loadIcon, item, 1, false)) : null; // what the stash has now
                     var icon = CallIcon(_loadIcon, item, scale);
-                    if (scale != 1 && icon != null) _pending[icon] = (before, Time.realtimeSinceStartup + 3f, item, scale);
+                    if (scale != 1 && icon != null)
+                    {
+                        // what a render at this scale should measure on its long side (the game draws 64 px per cell at 1x)
+                        var (w, h) = CellsOf(item);
+                        float expect = PxPerCell * Mathf.Max(w, h) * scale;
+                        _pending[icon] = (before, Time.realtimeSinceStartup + 6f, item, scale, expect);
+                    }
                     return icon;
                 }
                 catch (Exception e) { L.ErrorOnce("icon loader", e); return null; }
@@ -242,7 +248,33 @@ namespace LevelGate.Progression
 
         // A bigger render goes into the game's one shared icon cache (the stash uses it too). So as soon as it arrives it is
         // copied into a picture of our own, and the game's icon is drawn again at stash size right away.
-        private static readonly Dictionary<object, (Sprite Before, float Deadline, object Item, int Scale)> _pending = new Dictionary<object, (Sprite, float, object, int)>();
+        private static readonly Dictionary<object, (Sprite Before, float Deadline, object Item, int Scale, float Expect)> _pending = new Dictionary<object, (Sprite, float, object, int, float)>();
+
+        /// <summary>The game's icon size per inventory cell at scale 1 (measured: a 1×1 item is 64×64, 6x gives 384×384).</summary>
+        public const float PxPerCell = 64;
+
+        /// <summary>An item's size in cells (from its template), at least 1×1.</summary>
+        public static (int W, int H) CellsOf(object item)
+        {
+            try
+            {
+                var t = Refl.Get(item, "Template");
+                int w = Refl.Get(t, "Width") is int a ? a : 1, h = Refl.Get(t, "Height") is int b ? b : 1;
+                return (Mathf.Max(1, w), Mathf.Max(1, h));
+            }
+            catch { return (1, 1); }
+        }
+
+        /// <summary>The render scale that gives about targetPx on the item's long side (so a 1×1 box of ammo gets as many
+        /// real pixels as a rifle), clamped to 2–8x and to 2048 px.</summary>
+        public static int ScaleFor(string tpl, float targetPx)
+        {
+            var (w, h) = CellsOf(ItemOf(tpl));
+            float basePx = PxPerCell * Mathf.Max(w, h);
+            int scale = Mathf.CeilToInt(targetPx / basePx);
+            scale = Mathf.Min(scale, Mathf.FloorToInt(2048f / basePx));
+            return Mathf.Clamp(scale, 2, 8);
+        }
         private static readonly Dictionary<string, Sprite> _copies = new Dictionary<string, Sprite>();
         private static readonly Queue<string> _copyOrder = new Queue<string>();
 
@@ -254,10 +286,19 @@ namespace LevelGate.Progression
         {
             var sp = SpriteOf(icon);
             if (sp == null || icon == null || !_pending.TryGetValue(icon, out var p)) return sp;
-            // the bigger one isn't drawn yet (still the stash-size picture, or one no bigger than it)
-            bool bigger = sp != p.Before && (p.Before == null || sp.rect.width > p.Before.rect.width * 1.2f);
-            if (!bigger && Time.realtimeSinceStartup < p.Deadline) return null;
+            // only the render we asked for counts: at least ~70% of the expected size. The first picture to arrive is often
+            // the game's stash-size one (64 px a cell) — taking that one made the big preview a stretched thumbnail.
+            float longSide = Mathf.Max(sp.rect.width, sp.rect.height);
+            bool bigEnough = sp != p.Before && longSide >= p.Expect * .7f;
+            if (!bigEnough && Time.realtimeSinceStartup < p.Deadline) return null;
             _pending.Remove(icon);
+            if (!bigEnough)
+            {
+                // gave up waiting: show what there is, but don't keep it (next time asks again), and put the stash's back
+                L.Debug($"icon: {tpl} came back {sp.rect.width:0}x{sp.rect.height:0}, expected ~{p.Expect:0} px at {p.Scale}x — shown, not kept");
+                try { CallIcon(_loadIcon, p.Item, 1, true); } catch (Exception e) { L.ErrorOnce("putting an icon back to stash size", e); }
+                return sp;
+            }
             var copy = Copy(sp);
             try { CallIcon(_loadIcon, p.Item, 1, true); } catch (Exception e) { L.ErrorOnce("putting an icon back to stash size", e); }
             if (copy == null) return sp;
@@ -286,9 +327,10 @@ namespace LevelGate.Progression
                 // whole pixels only (the game's sprite rects are fractional, e.g. 293.85 wide)
                 int x = Mathf.RoundToInt(r.x), y = Mathf.RoundToInt(r.y);
                 int w = Mathf.Clamp(Mathf.FloorToInt(r.width), 1, src.width - x), h = Mathf.Clamp(Mathf.FloorToInt(r.height), 1, src.height - y);
-                var dst = new Texture2D(w, h, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Clamp };
+                // with mipmaps + trilinear: a big render shown smaller (a rifle in a card) stays clean instead of shimmering
+                var dst = new Texture2D(w, h, TextureFormat.RGBA32, true) { wrapMode = TextureWrapMode.Clamp, filterMode = FilterMode.Trilinear, anisoLevel = 4 };
                 dst.ReadPixels(new Rect(x, y, w, h), 0, 0);
-                dst.Apply(false, true); // no CPU copy kept
+                dst.Apply(true, true); // mipmaps built, no CPU copy kept
                 return Sprite.Create(dst, new Rect(0, 0, w, h), new Vector2(.5f, .5f), sp.pixelsPerUnit);
             }
             catch (Exception e) { L.ErrorOnce("copying an icon", e); return null; }
