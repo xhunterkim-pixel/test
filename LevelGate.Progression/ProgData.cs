@@ -467,11 +467,12 @@ namespace LevelGate.Progression
                         int end = json.IndexOf(']', at);
                         var steps = Regex.Matches(json.Substring(at, end - at), "\"exp\"\\s*:\\s*(\\d+)").Cast<Match>().Select(m => int.Parse(m.Groups[1].Value)).ToList();
                         if (steps.Count < 2) { L.Info("experience table: exp_table is empty"); _sptHandler = false; return; }
+                        // exp_table[i].exp is the XP from level i to i+1, with [0] = 0: level L starts at the sum of 0..L-1
                         var totals = new int[steps.Count];
                         int sum = 0;
-                        for (int i = 0; i < steps.Count; i++) { totals[i] = sum; sum += steps[i]; }
+                        for (int i = 0; i < steps.Count; i++) { sum += steps[i]; totals[i] = sum; }
                         _expTable = totals;
-                        L.Info($"experience table: {totals.Length} levels from the SPT server (level 2 at {totals[1]} xp; {(DateTime.Now - t0).TotalMilliseconds:0} ms)");
+                        L.Info($"experience table: {totals.Length} levels from the SPT server (level 2 at {totals[1]} xp, level 3 at {(totals.Length > 2 ? totals[2] : 0)}; {(DateTime.Now - t0).TotalMilliseconds:0} ms)");
                     }
                     catch (Exception e) { L.Error("reading exp_table from the SPT server", e.GetBaseException()); _sptHandler = false; }
                 });

@@ -40,6 +40,15 @@ Versions are **MAJOR.MINOR.PATCH**:
 
 ## LevelGate Progression (BepInEx plugin, separate DLL)
 
+### 0.9.5
+- **XP bar:** fixed an off-by-one-level sum. At level 2 it showed your total XP (1 364 / 1 000) instead of the XP into the level (364 / 1 000).
+- **Enlarged stash icons:**
+  - A bigger render is now copied into the screen's own picture the moment it arrives, and the game's shared icon is redrawn at stash size right away, instead of only when the screen closes.
+  - Copies are reused, so the same item isn't rendered big again.
+  - The close-time restore still runs as a backup.
+- **Background:** a faint Arena-style dot grid, which fades in with the screen.
+- **Grit** on the preview frames is 85% lighter, and the **vignette** is 80% lighter.
+
 ### 0.9.4
 - **XP bar:** now reads the experience table from the SPT server (`/client/globals` → `exp_table`) in the background, since the game client has no class holding it by name. The bar fills in as soon as the answer arrives.
 - **Stutter:** icons the game hasn't drawn yet are requested a few per frame (cards first) instead of all at once. Performance mode halves the rate.

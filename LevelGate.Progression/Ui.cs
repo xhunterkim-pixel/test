@@ -177,6 +177,25 @@ namespace LevelGate.Progression
 
         private static Sprite _diamond, _white, _vgrad, _hgrad, _radial, _dots, _cut, _lock, _vignette;
         private static Sprite[] _grime;
+        private static Sprite _dotGrid;
+
+        /// <summary>A repeating tile: a fine dot grid with a faint line every 4th dot (the Arena background pattern).</summary>
+        public static Sprite DotGrid()
+        {
+            if (_dotGrid != null) return _dotGrid;
+            const int n = 24, step = 6;
+            var tex = new Texture2D(n, n, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Repeat, filterMode = FilterMode.Point };
+            for (int y = 0; y < n; y++)
+                for (int x = 0; x < n; x++)
+                {
+                    float a = 0;
+                    if (x % step == 0 && y % step == 0) a = 1;            // dots
+                    else if (x == 0 || y == 0) a = .35f;                   // the faint line through every 4th dot
+                    tex.SetPixel(x, y, new Color(1, 1, 1, a));
+                }
+            tex.Apply();
+            return _dotGrid = Sprite.Create(tex, new Rect(0, 0, n, n), new Vector2(.5f, .5f), 100, 0, SpriteMeshType.FullRect);
+        }
 
         /// <summary>Clear in the middle, darkening toward the edges and corners (tint it black).</summary>
         public static Sprite Vignette()

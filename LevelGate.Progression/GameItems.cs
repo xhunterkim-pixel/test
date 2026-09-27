@@ -190,7 +190,10 @@ namespace LevelGate.Progression
                 {
                     if (scale != 1) _scaled.Add(item);
                     L.Step($"icon: {Refl.Get(item, "TemplateId") ?? item.GetType().Name} at {scale}x");
-                    return CallIcon(_loadIcon, item, scale);
+                    var before = scale != 1 ? SpriteOf(CallIcon(_loadIcon, item, 1, false)) : null; // what the stash has now
+                    var icon = CallIcon(_loadIcon, item, scale);
+                    if (scale != 1 && icon != null) _pending[icon] = (before, Time.realtimeSinceStartup + 3f, item, scale);
+                    return icon;
                 }
                 catch (Exception e) { L.ErrorOnce("icon loader", e); return null; }
             }
@@ -235,6 +238,62 @@ namespace LevelGate.Progression
             }
             // kept (not cleared): every item ever drawn bigger is put back on each close and on the second pass after it
             L.Info($"items: {n} icon(s) drawn again at stash size ({(DateTime.Now - t0).TotalMilliseconds:0} ms)");
+        }
+
+        // A bigger render goes into the game's one shared icon cache (the stash uses it too). So as soon as it arrives it is
+        // copied into a picture of our own, and the game's icon is drawn again at stash size right away.
+        private static readonly Dictionary<object, (Sprite Before, float Deadline, object Item, int Scale)> _pending = new Dictionary<object, (Sprite, float, object, int)>();
+        private static readonly Dictionary<string, Sprite> _copies = new Dictionary<string, Sprite>();
+        private static readonly Queue<string> _copyOrder = new Queue<string>();
+
+        /// <summary>Our own copy of a bigger render of this item, if we made one already.</summary>
+        public static Sprite CopyOf(string tpl, int scale) => _copies.TryGetValue(tpl + "@" + scale, out var sp) && sp != null ? sp : null;
+
+        /// <summary>The picture to show for an icon: normal ones as they are; bigger ones copied (then the game's is put back).</summary>
+        public static Sprite TakeSprite(object icon, string tpl)
+        {
+            var sp = SpriteOf(icon);
+            if (sp == null || icon == null || !_pending.TryGetValue(icon, out var p)) return sp;
+            // the bigger one isn't drawn yet (still the stash-size picture, or one no bigger than it)
+            bool bigger = sp != p.Before && (p.Before == null || sp.rect.width > p.Before.rect.width * 1.2f);
+            if (!bigger && Time.realtimeSinceStartup < p.Deadline) return null;
+            _pending.Remove(icon);
+            var copy = Copy(sp);
+            try { CallIcon(_loadIcon, p.Item, 1, true); } catch (Exception e) { L.ErrorOnce("putting an icon back to stash size", e); }
+            if (copy == null) return sp;
+            var key = tpl + "@" + p.Scale;
+            _copies[key] = copy;
+            _copyOrder.Enqueue(key);
+            while (_copyOrder.Count > 40)
+            {
+                var old = _copyOrder.Dequeue();
+                if (_copies.TryGetValue(old, out var o) && o != null && old != key) { UnityEngine.Object.Destroy(o.texture); _copies.Remove(old); }
+            }
+            L.Debug($"icon: kept a {copy.rect.width:0}x{copy.rect.height:0} copy of {tpl} and put the game's back to stash size");
+            return copy;
+        }
+
+        private static Sprite Copy(Sprite sp)
+        {
+            RenderTexture rt = null, prev = RenderTexture.active;
+            try
+            {
+                var src = sp.texture;
+                var r = sp.textureRect;
+                rt = RenderTexture.GetTemporary(src.width, src.height, 0, RenderTextureFormat.ARGB32);
+                Graphics.Blit(src, rt);
+                RenderTexture.active = rt;
+                var dst = new Texture2D((int)r.width, (int)r.height, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Clamp };
+                dst.ReadPixels(new Rect(r.x, r.y, r.width, r.height), 0, 0);
+                dst.Apply(false, true); // no CPU copy kept
+                return Sprite.Create(dst, new Rect(0, 0, r.width, r.height), new Vector2(.5f, .5f), sp.pixelsPerUnit);
+            }
+            catch (Exception e) { L.ErrorOnce("copying an icon", e); return null; }
+            finally
+            {
+                RenderTexture.active = prev;
+                if (rt != null) RenderTexture.ReleaseTemporary(rt);
+            }
         }
 
         public static Sprite SpriteOf(object icon)

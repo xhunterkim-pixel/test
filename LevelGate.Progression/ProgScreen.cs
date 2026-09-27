@@ -160,6 +160,10 @@ namespace LevelGate.Progression
             var root = Ui.Rect(_canvas.transform, "Panel", Vector2.zero, Vector2.one,
                 new Vector2(0, ProgressionPlugin.BottomMargin.Value), new Vector2(0, -ProgressionPlugin.TopMargin.Value));
             Ui.Img(root, Ui.Hex("#0a0f12", ProgressionPlugin.Opacity.Value), null, true); // blocks clicks to the menu underneath
+            // the Arena dot grid, barely there (fades in with the rest of the screen)
+            var grid = Ui.Img(Ui.Fill(root, "DotGrid"), new Color(1, 1, 1, .035f), Ui.DotGrid());
+            grid.type = Image.Type.Tiled;
+            grid.raycastTarget = false;
             // Arena-style colour bloom: red, strongest on the right edge and fading out to the left;
             // it always glows a little and flares up while the picked level is still locked
             _bloom.Clear(); _panelFrames.Clear();
@@ -179,7 +183,7 @@ namespace LevelGate.Progression
             // vignette over everything (its own canvas, so it draws last), and the whole screen fades in on open
             var vig = Ui.Rect(root, "Vignette", Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
             SubCanvas(vig);
-            Ui.Img(vig, new Color(0, 0, 0, .7f), Ui.Vignette()).raycastTarget = false;
+            Ui.Img(vig, new Color(0, 0, 0, .14f), Ui.Vignette()).raycastTarget = false;
             _fade = root.gameObject.AddComponent<CanvasGroup>();
 
             if (!_changedHooked)
@@ -357,7 +361,7 @@ namespace LevelGate.Progression
             _featPic.enabled = false;
             _featShort = Ui.Label(Ui.Fill(picFace, "Short", 36), "Text", "", 34, Dim, TextAnchor.MiddleCenter, false, 1, true);
             Ui.EdgeFade(picFace, .14f, .55f);
-            Ui.Grit(picFace, 2, .11f); // worn edges, like the battle pass frames
+            Ui.Grit(picFace, 2, .017f); // worn edges, like the battle pass frames
             _featLock = Ui.Img(Ui.Rect(picFace, "Lock", new Vector2(1, 0), new Vector2(1, 0), new Vector2(-46, 12), new Vector2(-12, 46)), Ui.Hex("#aeb6b9", .85f), Ui.Lock());
             _featLock.enabled = false;
             // ITEM / CATEGORY / UNLOCKS AT: a label column and a value column, so the values line up
@@ -726,6 +730,8 @@ namespace LevelGate.Progression
                 var r = _iconRequests[0];
                 _iconRequests.RemoveAt(0);
                 if (r.Pic == null) continue;
+                var have = r.Scale != 1 ? GameItems.CopyOf(r.Tpl, r.Scale) : null;
+                if (have != null) { r.Pic.sprite = have; r.Pic.enabled = true; if (r.Placeholder != null) r.Placeholder.gameObject.SetActive(false); budget++; continue; }
                 r.Target.Add((GameItems.IconOf(GameItems.ItemOf(r.Tpl), r.Scale), r.Pic, r.Placeholder, r.Tpl));
             }
         }
@@ -736,7 +742,7 @@ namespace LevelGate.Progression
             {
                 var (icon, pic, placeholder, tpl) = list[i];
                 if (pic == null) { list.RemoveAt(i); continue; }
-                var sprite = GameItems.SpriteOf(icon);
+                var sprite = GameItems.TakeSprite(icon, tpl);
                 if (sprite == null) continue;
                 pic.sprite = sprite;
                 pic.enabled = true;
@@ -781,7 +787,10 @@ namespace LevelGate.Progression
             Ui.SetText(_featDesc, desc.Length > 520 ? desc.Substring(0, 520).TrimEnd() + "…" : desc);
             int you = ProgData.PlayerLevel();
             _featLock.enabled = you > 0 && it.Level > you;
-            _featIcon = GameItems.IconOf(GameItems.ItemOf(it.Tpl), Perf ? 2 : 6);
+            int featScale = Perf ? 2 : 6;
+            var kept = GameItems.CopyOf(it.Tpl, featScale);
+            if (kept != null) { _featIcon = null; _featPic.sprite = kept; _featPic.enabled = true; _featShort.gameObject.SetActive(false); }
+            else _featIcon = GameItems.IconOf(GameItems.ItemOf(it.Tpl), featScale);
             MarkSelectedTile();
         }
 
@@ -890,7 +899,7 @@ namespace LevelGate.Progression
             }
             if (_featIcon != null && !_featPic.enabled)
             {
-                var sp = GameItems.SpriteOf(_featIcon);
+                var sp = GameItems.TakeSprite(_featIcon, _featTpl);
                 if (sp != null)
                 {
                     _featPic.sprite = sp; _featPic.enabled = true; _featShort.gameObject.SetActive(false);
@@ -1046,7 +1055,7 @@ namespace LevelGate.Progression
                     _pics[i].preserveAspect = true;
                     _pics[i].enabled = false;
                     Ui.EdgeFade(face, .18f, .55f);
-                    Ui.Grit(face, _gritSeed++, .13f);
+                    Ui.Grit(face, _gritSeed++, .02f);
                     float ls = i == 0 ? 22 : 16;
                     _locks[i] = Ui.Img(Ui.Rect(face, "Lock", new Vector2(1, 0), new Vector2(1, 0), new Vector2(-ls - 6, 6), new Vector2(-6, ls + 6)), Ui.Hex("#aeb6b9", .85f), Ui.Lock());
                 }
