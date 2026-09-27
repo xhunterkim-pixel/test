@@ -99,7 +99,7 @@ namespace LevelGate.Progression
         }
 
         /// <summary>scale: the game's scaleFactor (1 = stash size; 2–3 = a sharper render for big pictures).</summary>
-        private static object CallIcon(MethodInfo m, object item, int scale = 1)
+        private static object CallIcon(MethodInfo m, object item, int scale = 1, bool? forced = null)
         {
             var ps = m.GetParameters();
             var args = new object[ps.Length];
@@ -107,7 +107,7 @@ namespace LevelGate.Progression
             for (int i = 1; i < ps.Length; i++)
                 args[i] = ps[i].ParameterType == typeof(int) && ps[i].Name.IndexOf("scale", StringComparison.OrdinalIgnoreCase) >= 0 ? scale
                     // a bigger picture has to be drawn again, not taken from the stash-size cache
-                    : ps[i].ParameterType == typeof(bool) && ps[i].Name.IndexOf("forced", StringComparison.OrdinalIgnoreCase) >= 0 ? (object)(scale >= 3)
+                    : ps[i].ParameterType == typeof(bool) && ps[i].Name.IndexOf("forced", StringComparison.OrdinalIgnoreCase) >= 0 ? (object)(forced ?? scale >= 2)
                     : ps[i].HasDefaultValue ? ps[i].DefaultValue : ps[i].ParameterType == typeof(int) ? (object)1 : false;
             return m.Invoke(null, args);
         }
@@ -186,7 +186,11 @@ namespace LevelGate.Progression
             if (item == null) return null;
             if (_loadIcon != null)
             {
-                try { return CallIcon(_loadIcon, item, scale); }
+                try
+                {
+                    if (scale != 1) _scaled.Add(item);
+                    return CallIcon(_loadIcon, item, scale);
+                }
                 catch (Exception e) { L.ErrorOnce("icon loader", e); return null; }
             }
             if (_iconPicked) return null;
@@ -208,6 +212,25 @@ namespace LevelGate.Progression
             }
             L.Warn($"items: none of the {_iconCandidates.Count} icon loaders worked — tiles show names. The list is above.");
             return null;
+        }
+
+        // The game keeps ONE cached icon per item look (shared with the stash): a bigger render made here replaces
+        // the stash's picture too. Every item drawn bigger is remembered and drawn again at stash size on close.
+        private static readonly HashSet<object> _scaled = new HashSet<object>();
+
+        /// <summary>Puts the game's cached icons back to stash size (call when the screen closes).</summary>
+        public static void RestoreIcons()
+        {
+            if (_loadIcon == null || _scaled.Count == 0) return;
+            int n = 0;
+            var t0 = DateTime.Now;
+            foreach (var item in _scaled)
+            {
+                try { CallIcon(_loadIcon, item, 1, true); n++; }
+                catch (Exception e) { L.ErrorOnce("restoring an icon to stash size", e); }
+            }
+            _scaled.Clear();
+            L.Info($"items: {n} icon(s) drawn again at stash size ({(DateTime.Now - t0).TotalMilliseconds:0} ms)");
         }
 
         public static Sprite SpriteOf(object icon)

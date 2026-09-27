@@ -40,6 +40,17 @@ Versions are **MAJOR.MINOR.PATCH**:
 
 ## LevelGate Progression (BepInEx plugin, separate DLL)
 
+### 0.8.0
+- **Fix: stash icons blown up after using the screen.**
+  - The game keeps one cached icon per item look, shared with the stash, so a bigger render here replaced the stash's picture too.
+  - Every item drawn bigger is now redrawn at stash size when the screen closes.
+  - The left list's tiles are now drawn at stash size, so they no longer touch the cache at all.
+- **XP bar:** if the session's config isn't where expected, it searches the session's objects for the experience table and logs where it found it (or the classes that hold one).
+- **Cards (Arena look):**
+  - Each item preview has a thin frame, a dark face with a soft light, and a dark fade around the edges.
+  - A lock icon sits in the bottom-right while the level is locked and disappears once it's unlocked.
+  - Unlocked levels get a warm red hue in the card's top-right corner, and "Unlocked" is in Arena's salmon colour.
+
 ### 0.7.0
 - **Animated rank emblems:**
   - The 19 animated emblems replace the diamond badges, in the header and on every card.

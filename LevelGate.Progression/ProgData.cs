@@ -413,10 +413,10 @@ namespace LevelGate.Progression
                 _expTried = true; // from here on, looked up once: searching the game's classes every time made the screen lag
                 // 2) any singleton whose type has Experience.Level.ExpTable (the class name changes between game versions)
                 if (cfg == null) cfg = ScanForConfig();
-                var rows = Rows(cfg);
+                var rows = Rows(cfg) ?? FindTable(session);
                 if (rows == null) { L.Info("experience table not found — the XP bar shows 'experience unknown'"); return null; }
                 var steps = new List<int>();
-                foreach (var r in rows) steps.Add(Refl.Get(r, "Experience") is int x ? x : 0);
+                foreach (var r in rows) steps.Add(Refl.Get(r, "Experience") is int x ? x : Refl.Get(r, "exp") is int y ? y : FirstInt(r));
                 // the table holds the experience of each step; the totals are the running sum
                 var totals = new int[steps.Count];
                 int sum = 0;
@@ -429,6 +429,64 @@ namespace LevelGate.Progression
         }
 
         private static IEnumerable Rows(object cfg) => Refl.Get(Refl.Get(Refl.Get(cfg, "Experience"), "Level"), "ExpTable") as IEnumerable;
+
+        private static int FirstInt(object o)
+        {
+            if (o is int i) return i;
+            if (o == null) return 0;
+            foreach (var f in o.GetType().GetFields(Refl.All)) if (!f.IsStatic && f.FieldType == typeof(int)) return (int)f.GetValue(o);
+            foreach (var p in o.GetType().GetProperties(Refl.All)) if (p.PropertyType == typeof(int) && p.GetIndexParameters().Length == 0) try { return (int)p.GetValue(o, null); } catch { }
+            return 0;
+        }
+
+        /// <summary>Last resort: walks the session's objects (a few levels deep) for a list whose member name has "ExpTable" in it.</summary>
+        private static IEnumerable FindTable(object root)
+        {
+            var t0 = DateTime.Now;
+            var seen = new HashSet<object>(new RefEq());
+            var queue = new Queue<(object o, string path, int depth)>();
+            queue.Enqueue((root, "Session", 0));
+            int visited = 0;
+            while (queue.Count > 0 && visited < 20000)
+            {
+                var (o, path, depth) = queue.Dequeue();
+                if (o == null || !seen.Add(o)) continue;
+                visited++;
+                var type = o.GetType();
+                for (var t = type; t != null && t != typeof(object); t = t.BaseType)
+                    foreach (var f in t.GetFields(Refl.All | BindingFlags.DeclaredOnly))
+                    {
+                        if (f.IsStatic) continue;
+                        var ft = f.FieldType;
+                        if (ft.IsPrimitive || ft.IsEnum || ft == typeof(string) || typeof(Delegate).IsAssignableFrom(ft) || typeof(UnityEngine.Object).IsAssignableFrom(ft) || ft.IsPointer) continue;
+                        object v;
+                        try { v = f.GetValue(o); } catch { continue; }
+                        if (v == null) continue;
+                        if (f.Name.IndexOf("ExpTable", StringComparison.OrdinalIgnoreCase) >= 0 && v is IEnumerable list && !(v is string))
+                        {
+                            L.Info($"experience table found at {path}.{f.Name} ({type.FullName}; {visited} objects searched, {(DateTime.Now - t0).TotalMilliseconds:0} ms)");
+                            return list;
+                        }
+                        if (depth < 7 && !(v is IEnumerable) && !ft.IsValueType) queue.Enqueue((v, path + "." + f.Name, depth + 1));
+                    }
+            }
+            L.Info($"experience table: not found in the session's objects ({visited} searched, {(DateTime.Now - t0).TotalMilliseconds:0} ms)");
+            // log where the game keeps it, to fix this by name next time
+            try
+            {
+                var holders = _appType.Assembly.GetTypes().Where(t => t.GetFields(Refl.All).Any(f => f.Name.IndexOf("ExpTable", StringComparison.OrdinalIgnoreCase) >= 0)
+                    || t.GetProperties(Refl.All).Any(p => p.Name.IndexOf("ExpTable", StringComparison.OrdinalIgnoreCase) >= 0)).Select(t => t.FullName).Take(10).ToArray();
+                L.Info("experience table: types with an ExpTable member: " + (holders.Length == 0 ? "none" : string.Join(", ", holders)));
+            }
+            catch (Exception e) { L.Debug("type scan: " + e.GetBaseException().Message); }
+            return null;
+        }
+
+        private sealed class RefEq : IEqualityComparer<object>
+        {
+            public new bool Equals(object a, object b) => ReferenceEquals(a, b);
+            public int GetHashCode(object o) => System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(o);
+        }
 
         private static object ScanForConfig()
         {

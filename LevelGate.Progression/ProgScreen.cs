@@ -109,6 +109,7 @@ namespace LevelGate.Progression
             _canvas.SetActive(false);
             MenuHook.SetOn(false);
             HideMenu(false);
+            GameItems.RestoreIcons(); // the big renders replaced the stash's cached icons: put them back
             bool gameSwitching = why.StartsWith("game screen");
             MenuCamera.Turn(false, instant: gameSwitching); // the game moves the camera itself when it switches screens
             if (!gameSwitching) Sounds.Click();
@@ -628,7 +629,7 @@ namespace LevelGate.Progression
             var pic = Ui.Img(Ui.Fill(slot, "Icon", 5), Color.white);
             pic.preserveAspect = true;
             pic.enabled = false;
-            _icons.Add((GameItems.IconOf(GameItems.ItemOf(it.Tpl), 2), pic, shortName, it.Tpl));
+            _icons.Add((GameItems.IconOf(GameItems.ItemOf(it.Tpl), 1), pic, shortName, it.Tpl));
             _hits.Add((rt, it));
             if (!reached) Ui.Img(Ui.Rect(slot, "Lock", new Vector2(1, 1), new Vector2(1, 1), new Vector2(-9, -9), new Vector2(-4, -4)), Ui.Hex(Red));
             _tiles.Add((group, inner, Mathf.Min(index, 40) * .012f));
@@ -871,6 +872,7 @@ namespace LevelGate.Progression
             private readonly DottedLine _headL, _headR;
             private readonly Component _head, _count, _more, _state, _tier;
             private readonly Image[] _pics = new Image[3];
+            private readonly Image[] _locks = new Image[3];
             private readonly Component[] _picNames = new Component[3];
             private readonly RectTransform[] _picRects = new RectTransform[3];
             private readonly Badge _badge;
@@ -919,12 +921,19 @@ namespace LevelGate.Progression
                 _picRects[2] = Square(pics, "Pic2", new Vector2(.58f, 0), new Vector2(.86f, .5f), new Vector2(Pad / 2, 0), new Vector2(0, -Pad / 4));
                 for (int i = 0; i < 3; i++)
                 {
+                    // Arena item preview: thin frame, dark face, the item, a soft dark fade around the edges, lock bottom-right
                     var picSlot = _picRects[i];
-                    Ui.Img(picSlot, new Color(1, 1, 1, .04f));
-                    _picNames[i] = Ui.Label(picSlot, "Name", "", 11, Grey, TextAnchor.MiddleCenter, false, 0, true);
-                    _pics[i] = Ui.Img(Ui.Fill(picSlot, "Img", i == 0 ? 6 : 3), Color.white);
+                    Ui.Img(picSlot, Ui.Hex("#2a3134"));
+                    var face = Ui.Fill(picSlot, "Face", 2);
+                    Ui.Img(face, Ui.Hex("#0f1315"));
+                    Ui.Img(Ui.Fill(face, "Light"), new Color(1, 1, 1, .05f), Ui.Radial());
+                    _picNames[i] = Ui.Label(face, "Name", "", 11, Grey, TextAnchor.MiddleCenter, false, 0, true);
+                    _pics[i] = Ui.Img(Ui.Fill(face, "Img", i == 0 ? 8 : 4), Color.white);
                     _pics[i].preserveAspect = true;
                     _pics[i].enabled = false;
+                    Ui.EdgeFade(face, .18f, .55f);
+                    float ls = i == 0 ? 22 : 16;
+                    _locks[i] = Ui.Img(Ui.Rect(face, "Lock", new Vector2(1, 0), new Vector2(1, 0), new Vector2(-ls - 6, 6), new Vector2(-6, ls + 6)), Ui.Hex("#aeb6b9", .85f), Ui.Lock());
                 }
                 _more = Ui.Label(Ui.Rect(inner, "More", new Vector2(.86f, 0), new Vector2(1, 1), new Vector2(Pad, Foot), new Vector2(-Pad, -Head)), "Text", "", 17, Accent, TextAnchor.MiddleCenter, true);
                 // bottom row: count left, state right, right under the pictures
@@ -967,13 +976,16 @@ namespace LevelGate.Progression
             {
                 bool sel = _level == picked, current = _level == player;
                 _frame.color = sel ? Ui.Hex(Orange, .9f) : Border;
-                _glow.color = sel ? Ui.Hex(Orange, .28f) : new Color(0, 0, 0, 0);
+                bool unlocked = player > 0 && _level <= player;
+                // Arena: unlocked levels carry a warm red hue in the top-right corner; the picked card gets it strongest
+                _glow.color = sel ? Ui.Hex(Orange, .32f) : unlocked ? Ui.Hex("#d0453a", .22f) : new Color(0, 0, 0, 0);
+                foreach (var l in _locks) l.enabled = !unlocked;
                 _bg.color = sel ? Ui.Hex("#171d20", .95f) : Ui.Hex("#12181b", .92f);
                 // Arena: your current level in orange, the picked one white, the rest grey
                 var c = current ? Ui.Hex(Orange) : sel ? Text : Grey;
                 Ui.SetColor(_head, c);
                 _headL.color = _headR.color = current ? Ui.Hex(Orange) : sel ? Text : Grey;
-                string state = player <= 0 ? "" : _level < player ? $"<color={Green}>Unlocked</color>" : _level == player ? $"<color={Yellow}>Current level</color>"
+                string state = player <= 0 ? "" : _level < player ? "<color=#e8765a>Unlocked</color>" : _level == player ? $"<color={Yellow}>Current level</color>"
                     : _level == player + 1 ? "<color=#7fb3a8>Next level</color>" : $"<color={Red}>Locked</color>";
                 Ui.SetText(_state, state);
             }

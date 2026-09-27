@@ -175,7 +175,56 @@ namespace LevelGate.Progression
 
         // ---------------------------------------------------------------- generated pictures
 
-        private static Sprite _diamond, _white, _vgrad, _hgrad, _radial, _dots, _cut;
+        private static Sprite _diamond, _white, _vgrad, _hgrad, _radial, _dots, _cut, _lock;
+
+        /// <summary>A small padlock (white, tint it), drawn with 4x supersampling for smooth edges.</summary>
+        public static Sprite Lock()
+        {
+            if (_lock != null) return _lock;
+            const int n = 48, ss = 4;
+            var tex = new Texture2D(n, n, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Clamp };
+            bool Inside(float x, float y)
+            {
+                // body: rounded box
+                float bx0 = 9, bx1 = 39, by0 = 4, by1 = 26, r = 4;
+                float qx = Mathf.Max(bx0 + r - x, 0, x - (bx1 - r)), qy = Mathf.Max(by0 + r - y, 0, y - (by1 - r));
+                bool body = x >= bx0 && x <= bx1 && y >= by0 && y <= by1 && qx * qx + qy * qy <= r * r;
+                // keyhole
+                float kx = x - 24, ky = y - 16;
+                bool hole = kx * kx + ky * ky <= 9 || (Mathf.Abs(kx) <= 1.5f && y >= 9 && y <= 16);
+                if (body) return !hole;
+                // shackle: a thick ring, top half, with legs down into the body
+                float sx = x - 24, sy = y - 31, d = Mathf.Sqrt(sx * sx + sy * sy);
+                bool ring = d >= 7 && d <= 11.5f && sy >= 0;
+                bool legs = y >= 25 && y <= 31 && ((x >= 12.5f && x <= 17) || (x >= 31 && x <= 35.5f));
+                return ring || legs;
+            }
+            for (int y = 0; y < n; y++)
+                for (int x = 0; x < n; x++)
+                {
+                    int hit = 0;
+                    for (int j = 0; j < ss; j++) for (int i = 0; i < ss; i++) if (Inside(x + (i + .5f) / ss, y + (j + .5f) / ss)) hit++;
+                    tex.SetPixel(x, y, new Color(1, 1, 1, hit / (float)(ss * ss)));
+                }
+            tex.Apply();
+            return _lock = Sprite.Create(tex, new Rect(0, 0, n, n), new Vector2(.5f, .5f));
+        }
+
+        /// <summary>Darkens a box's edges toward the inside (the soft fade around Arena's item previews).</summary>
+        public static void EdgeFade(RectTransform box, float depth = .16f, float alpha = .6f)
+        {
+            var c = new Color(0, 0, 0, alpha);
+            var top = Rect(box, "FadeT", new Vector2(0, 1 - depth), Vector2.one, Vector2.zero, Vector2.zero);
+            Img(top, c, VerticalFade());
+            var bottom = Rect(box, "FadeB", Vector2.zero, new Vector2(1, depth), Vector2.zero, Vector2.zero);
+            bottom.localScale = new Vector3(1, -1, 1);
+            Img(bottom, c, VerticalFade());
+            var right = Rect(box, "FadeR", new Vector2(1 - depth, 0), Vector2.one, Vector2.zero, Vector2.zero);
+            Img(right, c, HorizontalFade());
+            var left = Rect(box, "FadeL", Vector2.zero, new Vector2(depth, 1), Vector2.zero, Vector2.zero);
+            left.localScale = new Vector3(-1, 1, 1);
+            Img(left, c, HorizontalFade());
+        }
 
         /// <summary>A square with its bottom-right corner cut off at 45° (the Arena level box).</summary>
         public static Sprite CutCorner()
