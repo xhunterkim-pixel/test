@@ -17,7 +17,7 @@ namespace LevelGate.Progression
     ///   bottom        five level cards under dotted "Level X" headers, arrows, and a numbered page bar with Q / E
     /// It lives inside the game's own UI (after the main menu), so the game's windows open on top of it.
     /// </summary>
-    internal static class ProgScreen
+    internal static partial class ProgScreen
     {
         private const int PerPage = 5;
         private static int Pages => Mathf.CeilToInt(ProgData.MaxLevel / (float)PerPage);
@@ -127,6 +127,7 @@ namespace LevelGate.Progression
                 Sounds.Open();
                 _frames = 0; _frameTime = 0; _frameLogAt = Time.unscaledTime + 5;
                 StartLoading(); // first open of this menu visit: pictures drawn behind a short loading screen
+                PrepareXpAnim();
                 ShowPage(_page, 0);
                 ShowLevel(_level, true);
             }
@@ -157,6 +158,7 @@ namespace LevelGate.Progression
             double open = Math.Max(.001, Time.unscaledTime - _sOpenedAt), logMs = L.CostMs - _sLogMs;
             L.Info($"logging: {L.CostLines - _sLogLines} line(s) took {logMs:0.0} ms while open ({logMs / 10 / open:0.00}% of the time); " +
                    $"since start {L.CostLines} line(s), {L.CostMs:0} ms ({L.CostMs / 10 / Math.Max(1, Time.realtimeSinceStartup):0.000}% of play time); verbose {(L.Verbose ? "on" : "off")}");
+            FinishXpAnim("screen closed");
             _canvas.SetActive(false);
             MenuHook.SetOn(false);
             HideMenu(false);
@@ -338,7 +340,8 @@ namespace LevelGate.Progression
             Ui.SetText(_headNext, player <= 0 ? "" : $"Page {index} of {Tiers.Length}" + (total > 0 ? $"  ·  {Thousands(owned)} / {Thousands(total)} items unlocked" : ""));
         }
 
-        private static Component _xpLevel, _xpText, _xpNext;
+        private static Component _xpLevel, _xpText, _xpNext, _xpCaption;
+        private static RectTransform _xpRight;
         private static RectTransform _xpFill;
         private static Image _xpSquare;
         private static RectTransform _xpTag;
@@ -349,11 +352,12 @@ namespace LevelGate.Progression
             L.Step("BuildXp");
             var xp = Ui.Rect(top, "Xp", new Vector2(.34f, 1), new Vector2(.74f, 1), new Vector2(Gutter / 2, -(S3 + 80)), new Vector2(-Gutter / 2, -S3));
             // "CURRENT LEVEL" heads the block, directly over the level square it names; the overall unlock count sits opposite
-            Ui.Label(Ui.Rect(xp, "CurrentLabel", new Vector2(0, 1), new Vector2(1, 1), new Vector2(0, -14), Vector2.zero), "Text", "CURRENT LEVEL", TCaps, Grey, TextAnchor.MiddleLeft, false, Caps);
+            _xpCaption = Ui.Label(Ui.Rect(xp, "CurrentLabel", new Vector2(0, 1), new Vector2(1, 1), new Vector2(0, -14), Vector2.zero), "Text", "CURRENT LEVEL", TCaps, Grey, TextAnchor.MiddleLeft, false, Caps);
             var sq = Ui.Rect(xp, "Level", new Vector2(0, 1), new Vector2(0, 1), new Vector2(0, -80), new Vector2(64, -18));
             _xpSquare = Ui.Img(sq, Ui.Hex("#e0562f"), Ui.CutCorner());
             _xpLevel = Ui.Label(sq, "Text", "", TLevel, Color.white, TextAnchor.MiddleCenter, true);
             var right = Ui.Rect(xp, "Right", Vector2.zero, Vector2.one, new Vector2(64 + S4, 0), Vector2.zero);
+            _xpRight = right;
             // the bar: dark frame, thin grey edge, orange fill
             var bar = Ui.Rect(right, "Bar", new Vector2(0, 1), new Vector2(1, 1), new Vector2(0, -30), new Vector2(0, -18));
             Ui.Img(bar, Ui.Hex("#4a5155"));
@@ -392,37 +396,40 @@ namespace LevelGate.Progression
         private static void UpdateXp()
         {
             L.Step("UpdateXp");
-            if (_xpLevel == null) return;
+            if (_xpLevel == null || XpAnimating) return; // the XP animation draws the block itself
             int player = ProgData.PlayerLevel();
-            Ui.SetText(_xpLevel, player > 0 ? player.ToString() : "?");
-            _xpSquare.color = Ui.Hex("#e0562f");
+            bool known = ProgData.LevelExp(out int have, out int need);
+            ShowXpState(player, have, need, known);
+            UpdateXpNext();
+            UpdateHeader(player);
+        }
+
+        /// <summary>The XP block for a level and XP into it (the XP animation calls this every frame).</summary>
+        private static void ShowXpState(int level, int have, int need, bool known)
+        {
+            Ui.SetText(_xpLevel, level > 0 ? level.ToString() : "?");
             float frac = 0;
-            if (ProgData.LevelExp(out int have, out int need))
+            if (known)
             {
                 frac = Mathf.Clamp01(have / (float)need);
                 // your XP / needed XP, bold: yours a shade softer, the target bright (Arena)
-                string text = $"<color=#b9c0c3>{Thousands(have)}</color><color=#6f777a> / </color><color=#eef2f3>{Thousands(need)}</color>";
-                Ui.SetText(_xpText, text);
-                float w = Ui.PreferredWidth(_xpText, text);
-                _xpTag.gameObject.SetActive(true);
-                _xpTag.offsetMin = new Vector2(w + 12, _xpTag.offsetMin.y);
-                _xpTag.offsetMax = new Vector2(w + 12 + 40, _xpTag.offsetMax.y);
+                SetXpText($"<color=#b9c0c3>{Thousands(have)}</color><color=#6f777a> / </color><color=#eef2f3>{Thousands(need)}</color>");
             }
-            else if (player >= ProgData.MaxLevel && player > 0) { _xpTag.gameObject.SetActive(false); Ui.SetText(_xpText, "<color=#e0562f>MAX LEVEL</color>"); }
-            else
-            {
-                // the game's XP table wasn't found: dashes, but the EXP tag stays
-                string text = "<color=#6f777a>— / —</color>";
-                Ui.SetText(_xpText, text);
-                float w = Ui.PreferredWidth(_xpText, text);
-                _xpTag.gameObject.SetActive(true);
-                _xpTag.offsetMin = new Vector2(w + 12, _xpTag.offsetMin.y);
-                _xpTag.offsetMax = new Vector2(w + 12 + 40, _xpTag.offsetMax.y);
-            }
+            else if (level >= ProgData.MaxLevel && level > 0) { _xpTag.gameObject.SetActive(false); Ui.SetText(_xpText, "<color=#e0562f>MAX LEVEL</color>"); }
+            else SetXpText("<color=#6f777a>— / —</color>"); // the game's XP table wasn't found: dashes, but the EXP tag stays
             _xpFill.anchorMax = new Vector2(frac, 1);
-            UpdateXpNext();
-            UpdateHeader(player);
+        }
 
+        private static float _xpTextWidth;
+
+        private static void SetXpText(string text)
+        {
+            Ui.SetText(_xpText, text);
+            float w = Ui.PreferredWidth(_xpText, text);
+            _xpTextWidth = w;
+            _xpTag.gameObject.SetActive(true);
+            _xpTag.offsetMin = new Vector2(w + 12, _xpTag.offsetMin.y);
+            _xpTag.offsetMax = new Vector2(w + 12 + 40, _xpTag.offsetMax.y);
         }
 
         private static Component _listState;
@@ -514,12 +521,13 @@ namespace LevelGate.Progression
             _descScroll = descView.gameObject.AddComponent<ScrollRect>();
             _descScroll.horizontal = false; _descScroll.scrollSensitivity = 30; _descScroll.movementType = ScrollRect.MovementType.Clamped;
             var dvp = Ui.Fill(descView, "Viewport");
+            dvp.offsetMin = new Vector2(-4, dvp.offsetMin.y); // the mask reaches 4 px further left than the text (it cut the first pixels of g / p / r)
             dvp.gameObject.AddComponent<RectMask2D>();
             Ui.Img(dvp, new Color(0, 0, 0, 0), null, true);
             var dContent = Ui.Rect(dvp, "Content", new Vector2(0, 1), new Vector2(1, 1), Vector2.zero, Vector2.zero);
             dContent.pivot = new Vector2(.5f, 1);
             var dcl = dContent.gameObject.AddComponent<VerticalLayoutGroup>();
-            dcl.childControlHeight = true; dcl.childControlWidth = true; dcl.childForceExpandHeight = false; dcl.padding = new RectOffset(0, (int)S2, 0, 0);
+            dcl.childControlHeight = true; dcl.childControlWidth = true; dcl.childForceExpandHeight = false; dcl.padding = new RectOffset(4, (int)S2, 0, 0);
             dContent.gameObject.AddComponent<ContentSizeFitter>().verticalFit = ContentSizeFitter.FitMode.PreferredSize;
             _featDesc = FlowText(dContent, "Text", TBody, Grey, false, 0, wrap: true);
             Refl.Set(_featDesc, "lineSpacing", 6f);
@@ -980,6 +988,9 @@ namespace LevelGate.Progression
             // small levels (a handful of items over several categories): one grid, the category as a label on each tile,
             // instead of a one-tile section per category (a single column with the panel ¾ empty)
             bool compact = items.Count <= 8 && groups.Count > 1;
+            // three or fewer: three bigger tiles across (at 4 across, 3 items left most of the panel empty)
+            if (compact && items.Count <= 3 && cols > 3) { cols = 3; cell = Mathf.Floor((width - (cols - 1) * S2) / cols); }
+            _tileCell = cell;
             if (compact)
             {
                 var grid = Ui.Rect(_content, "Grid", Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
@@ -1085,7 +1096,7 @@ namespace LevelGate.Progression
                 Ui.Img(tag, Ui.Hex(Orange, .9f));
                 Ui.Label(tag, "Text", "NEW", 10, Ui.Hex("#1a1210"), TextAnchor.MiddleCenter, true, 1);
             }
-            RequestIcon(_icons, it.Tpl, 1, v.Pic, placeholder);
+            RequestIcon(_icons, it.Tpl, TileScaleOf(it.Tpl), v.Pic, placeholder);
             _hits.Add((rt, it));
             HoverHook.Add(v.Frame, on =>
             {
@@ -1200,6 +1211,19 @@ namespace LevelGate.Progression
 
         /// <summary>Card pictures (and their pre-loading) share one scale per item: about 120 px on the long side.</summary>
         // weapons only on High (like the centre picture: High redraws the stash's weapons at stash size after closing)
+        private static float _tileCell = 130;
+
+        /// <summary>List tiles: stash size, except on High (up to 2x, for the tile's real size on screen).</summary>
+        private static int TileScaleOf(string tpl)
+        {
+            if (!ProgressionPlugin.High) return 1;
+            var c = _content != null ? _content.GetComponentInParent<Canvas>() : null;
+            float px = _tileCell * .8f * (c != null && c.scaleFactor > 0 ? c.scaleFactor : 1f);
+            int scale = Mathf.Min(2, GameItems.CardScale(tpl, px));
+            if (scale > 1 && ProgData.GroupOf(tpl) == "Weapons") _sharpWeaponShown = true;
+            return scale;
+        }
+
         /// <summary>
         /// Real screen pixels of a card's big picture: ~200 wide at 1920x1080, scaled with the game's resolution
         /// (2560x1440: ~267, 3840x2160: ~400), so cards are drawn as sharp as the screen can show them.
@@ -1586,6 +1610,7 @@ namespace LevelGate.Progression
                 if (input.GetKeyDown(KeyCode.Escape)) Close("Escape (while loading)");
                 return;
             }
+            RunXpAnim();
             bool window = GameWindowOpen();
             // the game may close its window on this same Esc before we look: a window seen a moment ago still owns the key
             if (window) _windowSeenAt = Time.unscaledTime;
@@ -1727,6 +1752,8 @@ namespace LevelGate.Progression
             }
 
             private readonly Image _emblem;
+
+            public RectTransform Root => _root;
 
             public bool Visible { set { if (_root.gameObject.activeSelf != value) _root.gameObject.SetActive(value); } }
 

@@ -25,7 +25,7 @@ namespace LevelGate.Progression
         public const string Guid = "com.kkyangg.levelgate.progression";
         public const string Name = "LevelGate Progression";
         // MAJOR.MINOR.PATCH — see CHANGELOG.md
-        public const string Version = "0.9.26";
+        public const string Version = "0.9.27";
 
         internal static ProgressionPlugin Instance;
         internal static ConfigEntry<KeyboardShortcut> OpenKey;
@@ -49,6 +49,8 @@ namespace LevelGate.Progression
         internal static ConfigEntry<bool> MenuShortcut;
         internal static ConfigEntry<bool> RefreshIcons;
         internal static ConfigEntry<int> LastSeenLevel;
+        internal static ConfigEntry<bool> XpAnimation;
+        internal static ConfigEntry<int> ShownXp;
 
         private void Awake()
         {
@@ -79,7 +81,10 @@ namespace LevelGate.Progression
                 RefreshPictures(false);
                 Toast.Show($"Graphics: {Quality.Value} — pictures redrawn");
             };
-            RefreshIcons = Config.Bind(Gfx, "RefreshIcons", false, Desc(
+            XpAnimation = Config.Bind(Gfx, "XpAnimation", true, Desc(
+                "After you gain experience (a raid, a quest…), the next time you open the screen the XP bar fills up from where you last saw it: " +
+                "level ups, the new level number, a new rank emblem. Click or Space skips it. Off: the screen just shows your current XP.", 95));
+                        RefreshIcons = Config.Bind(Gfx, "RefreshIcons", false, Desc(
                 "Tick once to redraw every item picture: the Progression screen's own pictures are thrown away and drawn again, " +
                 "and every level-list item's stash icon is redrawn at stash size (use it if a stash icon ever looks too big). It turns itself off again. " +
                 "A message at the top of the screen shows the progress and says when it's done (about a minute, on the main menu).", 90));
@@ -112,7 +117,9 @@ namespace LevelGate.Progression
                 "Write detailed lines to the log (icons, menu objects, screen changes…). Its cost is measured and written in each session line of Progression.log; turn it off if that ever gets noticeable.", 20));
             DumpKey = Config.Bind(A, "DumpKey", new KeyboardShortcut(KeyCode.F10, KeyCode.LeftControl), Desc(
                 "Writes everything the plugin knows (menu bar objects, data, screen state) to the log.", 10));
-            LastSeenLevel = Config.Bind(A, "LastSeenLevel", 0, new ConfigDescription(
+            ShownXp = Config.Bind(A, "ShownXp", 0, new ConfigDescription(
+                "Your total experience the last time the screen showed it (the XP animation plays from here). Set by the plugin.", null, new ConfigurationManagerAttributes { Browsable = false }));
+                        LastSeenLevel = Config.Bind(A, "LastSeenLevel", 0, new ConfigDescription(
                 "Your level when you last opened the screen (the NEW tag shows after a level-up). Set by the plugin.", null, new ConfigurationManagerAttributes { Browsable = false }));
 
             MigrateOldSettings();

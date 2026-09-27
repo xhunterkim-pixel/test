@@ -406,6 +406,26 @@ namespace LevelGate.Progression
             catch (Exception e) { L.ErrorOnce("xp to level", e); return false; }
         }
 
+        /// <summary>The level a total experience amount reaches (0 if the table is unknown).</summary>
+        public static int LevelOfExp(int exp)
+        {
+            var table = ExpTable();
+            if (table == null || table.Length == 0) return 0;
+            for (int l = table.Length; l >= 1; l--) if (exp >= table[l - 1]) return l;
+            return 1;
+        }
+
+        /// <summary>Experience into a level and needed for the next one, for any total (false at max level / unknown).</summary>
+        public static bool ExpInLevel(int exp, int level, out int have, out int need)
+        {
+            have = need = 0;
+            var table = ExpTable();
+            if (table == null || level <= 0 || level >= table.Length) return false;
+            have = Mathf.Max(0, exp - table[level - 1]);
+            need = table[level] - table[level - 1];
+            return need > 0;
+        }
+
         private static int[] _expTable;
         private static bool _expTried;
 

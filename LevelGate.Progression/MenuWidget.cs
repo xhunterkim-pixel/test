@@ -31,14 +31,15 @@ namespace LevelGate.Progression
             }
         }
 
-        // play-test log: every change of the profile's level / XP (after a raid, a quest, …), checked every 2 s in the menu
+        // play-test log: every change of the profile's level / XP (after a raid, a quest, …), checked every 30 s outside a raid
         private static int _watchLevel = -1, _watchExp = -1;
         private static float _watchNext;
 
         private static void WatchProfile()
         {
-            if (Time.unscaledTime < _watchNext) return;
-            _watchNext = Time.unscaledTime + 2f;
+            // outside a raid only, every 30 s (and once at start): cheap, and the screen reads the XP itself when it opens
+            if (Time.unscaledTime < _watchNext || MenuHook.InRaid()) return;
+            _watchNext = Time.unscaledTime + 30f;
             int level = ProgData.PlayerLevel(), exp = ProgData.TotalExp();
             if (level <= 0) return;
             if (_watchLevel < 0) { _watchLevel = level; _watchExp = exp; L.Info($"profile: level {level}, {exp} total XP"); return; }
@@ -50,6 +51,8 @@ namespace LevelGate.Progression
                 L.Info($"profile: LEVEL UP {_watchLevel} → {level}{gained}; {items} item(s) unlocked by it; last seen level {ProgressionPlugin.LastSeenLevel.Value}");
             }
             else L.Info($"profile: XP {_watchExp} → {exp}{gained}, still level {level}");
+            int shown = ProgressionPlugin.ShownXp.Value;
+            if (ProgressionPlugin.XpAnimation.Value && shown > 0 && exp > shown) L.Info($"xp: +{exp - shown} EXP not shown yet — plays when the Progression screen opens");
             _watchLevel = level; _watchExp = exp;
         }
 

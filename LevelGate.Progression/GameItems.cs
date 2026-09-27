@@ -534,7 +534,10 @@ namespace LevelGate.Progression
                 if (Num("MaxHpResource") is int hp && hp > 0) list.Add(("Resource", hp.ToString()));
                 // weapons: the template's own handling numbers (base weapon, before mods)
                 double? D(object v) { try { return v == null || v is string || v is bool ? (double?)null : Convert.ToDouble(v); } catch { return null; } }
-                if (D(Num("bFirerate")) is double rpm && rpm > 0) list.Add(("Fire rate", $"{rpm:0}<size=60%> rpm</size>"));
+                // bolt-actions: "30 rpm" read like a bug — the action instead
+                bool bolt = Num("BoltAction") is bool ba && ba;
+                if (D(Num("bFirerate")) is double rpm && rpm > 0)
+                    list.Add(("Fire rate", bolt || rpm < 100 ? "Bolt<size=60%> action</size>" : $"{rpm:0}<size=60%> rpm</size>"));
                 if (D(Num("Ergonomics")) is double ergo && ergo > 0) list.Add(("Ergonomics", $"{ergo:0}"));
                 if (D(Num("RecoilForceUp")) is double rec && rec > 0) list.Add(("Recoil", $"{rec:0}"));
                 if (D(Num("bEffDist")) is double eff && eff > 0) list.Add(("Eff. range", $"{eff:0} m"));
@@ -553,7 +556,8 @@ namespace LevelGate.Progression
             foreach (var (id, real) in new[] { ("127x", "12.7x"), ("93x", "9.3x"), ("68x", "6.8x"), ("86x", "8.6x"), ("57x", "5.7x"), ("46x", "4.6x") })
                 if (s.StartsWith(id)) { var rest = s.Substring(id.Length); var mm = System.Text.RegularExpressions.Regex.Match(rest, @"^(\d+)(.*)$"); return mm.Success ? $"{real}{mm.Groups[1]} {mm.Groups[2]}".Trim() : real + rest; }
             var m = System.Text.RegularExpressions.Regex.Match(s, @"^(\d)(\d{2})x(\d+)(.*)$");                   // 556x45NATO → 5.56x45 NATO
-            if (m.Success) return $"{m.Groups[1]}.{m.Groups[2]}x{m.Groups[3]} {m.Groups[4]}".Trim();
+            // a one-letter suffix stays attached, like the game's own names: 762x54R → 7.62x54R (not "7.62x54 R")
+            if (m.Success) return $"{m.Groups[1]}.{m.Groups[2]}x{m.Groups[3]}{(m.Groups[4].Length == 1 ? "" : " ")}{m.Groups[4]}".Trim();
             m = System.Text.RegularExpressions.Regex.Match(s, @"^(\d{3})([A-Za-z].*)$");                            // 366TKM → .366 TKM
             if (m.Success) return $".{m.Groups[1]} {m.Groups[2]}";
             m = System.Text.RegularExpressions.Regex.Match(s, @"^(\d+x\d+)(.*)$");                                // 9x19PARA → 9x19 PARA

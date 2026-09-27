@@ -40,6 +40,21 @@ Versions are **MAJOR.MINOR.PATCH**:
 
 ## LevelGate Progression (BepInEx plugin, separate DLL)
 
+### 0.9.27
+- **XP animation (Graphics > XpAnimation, on by default).** The screen remembers the total XP it last showed. When you have more (a raid, a quest…), the next open plays it out:
+  - the bar fills from where you last saw it, with the XP numbers counting and a "+N" in orange after the EXP tag;
+  - level up: the level number pops with a white flash, the caption reads LEVEL UP, the bar flashes and starts over, and the unlocked count grows;
+  - new rank (next page): the header emblem swaps with a shrink-overshoot and a warm glow, and the rank name changes;
+  - then more fills until your current XP. Many levels at once speed up to ~7 s in total.
+  - Click or Space skips; closing finishes it. The first open after installing sets the starting point (no animation).
+- The profile XP check runs every 30 s outside a raid (was every 2 s) and notes XP not shown yet.
+- **UI fixes from the 0.9.26 screenshot:**
+  - The description's first letters were clipped at the left edge (g / p / r); the mask now leaves room.
+  - Bolt-action rifles showed "30 rpm", which read like a bug; they now show "Bolt action".
+  - Calibers with a one-letter suffix match the game's names ("7.62x54R", not "7.62x54 R").
+  - Levels with 3 or fewer items: three bigger tiles across instead of four small ones.
+  - High: list tiles are drawn up to 2x for their size on screen (Medium keeps stash size).
+
 ### 0.9.26
 - **Fix: weapon size and weight were the receiver's, not the whole gun's** (DS Arms SA58 showed 2 × 1 and 1.46 kg). Size and weight now come from the assembled weapon (the preset the game shows in the stash).
   - The same size also sets how big the game is asked to draw a weapon, so the renders are asked for at the right scale.
