@@ -366,7 +366,9 @@ namespace LevelGate.Progression
                 int x = Mathf.RoundToInt(r.x), y = Mathf.RoundToInt(r.y);
                 int w = Mathf.Clamp(Mathf.FloorToInt(r.width), 1, src.width - x), h = Mathf.Clamp(Mathf.FloorToInt(r.height), 1, src.height - y);
                 // with mipmaps + trilinear: a big render shown smaller (a rifle in a card) stays clean instead of shimmering
-                var dst = new Texture2D(w, h, TextureFormat.RGBA32, true) { wrapMode = TextureWrapMode.Clamp, filterMode = FilterMode.Trilinear, anisoLevel = 4 };
+                // mip bias -0.5: shown a little smaller than drawn (fit to the stage), it stays crisp instead of blending in the
+                // half-size copy
+                var dst = new Texture2D(w, h, TextureFormat.RGBA32, true) { wrapMode = TextureWrapMode.Clamp, filterMode = FilterMode.Trilinear, anisoLevel = 4, mipMapBias = -.5f };
                 dst.ReadPixels(new Rect(x, y, w, h), 0, 0);
                 dst.Apply(true, true); // mipmaps built, no CPU copy kept
                 return Sprite.Create(dst, new Rect(0, 0, w, h), new Vector2(.5f, .5f), sp.pixelsPerUnit);
@@ -529,7 +531,13 @@ namespace LevelGate.Progression
                 if ((WeightOf(item) ?? (Num("Weight") as float?)) is float kg) list.Add(("Weight", $"{kg:0.###} kg"));
                 if (Num("Damage") is int dmg && dmg > 0) list.Add(("Damage", dmg.ToString()));
                 if (Num("PenetrationPower") is int pen && pen > 0) list.Add(("Penetration", pen.ToString()));
-                if (Num("ArmorClass", "armorClass") is int ac && ac > 0) list.Add(("Armor class", ac.ToString()));
+                // armor class: the item's own, else the best of its plates (armored rigs / armor carry their protection in plate
+                // slots; LevelGate sets the carriers' own class to 0 — read only, LevelGate is untouched)
+                int acOwn = Num("ArmorClass", "armorClass") is int ac ? ac : 0;
+                string grp = ProgData.GroupOf(tpl);
+                bool armored = grp == "Armor" || grp == "Rigs" || grp == "Headwear"; // helmets: their armor parts
+                int acBest = acOwn > 0 ? acOwn : armored ? PlateClass(tpl, item) : 0;
+                if (acBest > 0) list.Add(("Armor class", acBest.ToString()));
                 if (Num("ammoCaliber", "AmmoCaliber", "Caliber", "caliber") is string cal && cal.Length > 0) list.Add(("Caliber", CaliberName(cal)));
                 if (Num("MaxHpResource") is int hp && hp > 0) list.Add(("Resource", hp.ToString()));
                 // weapons: the template's own handling numbers (base weapon, before mods)
@@ -555,6 +563,43 @@ namespace LevelGate.Progression
         }
 
         /// <summary>"Caliber366TKM" → the game's own name if it has one, else a readable form: ".366 TKM", "5.56x45 NATO", "9x19 PARA".</summary>
+        /// <summary>The highest armor class among an item's parts (its default plates), 0 if none: from its preset when it has one.</summary>
+        private static readonly Dictionary<string, int> _plateClass = new Dictionary<string, int>();
+
+        private static int PlateClass(string tpl, object item)
+        {
+            if (_plateClass.TryGetValue(tpl, out int known)) return known; // a preset is made once per item, not per click
+            int r = PlateClassOf(tpl, item);
+            _plateClass[tpl] = r;
+            return r;
+        }
+
+        private static int PlateClassOf(string tpl, object item)
+        {
+            try
+            {
+                object withPlates = null;
+                if (_preset != null && _factory != null)
+                    try { withPlates = _preset.Invoke(_factory, new[] { Id(_preset.GetParameters()[0].ParameterType, tpl) }); } catch { }
+                int best = 0;
+                foreach (var source in new[] { withPlates, item })
+                {
+                    if (source == null) continue;
+                    var all = AccessTools.Method(source.GetType(), "GetAllItems", Type.EmptyTypes)?.Invoke(source, null) as System.Collections.IEnumerable;
+                    if (all == null) continue;
+                    foreach (var part in all)
+                    {
+                        if (part == null || ReferenceEquals(part, source)) continue;
+                        var t = Refl.Get(part, "Template");
+                        if ((Refl.Get(t, "ArmorClass") ?? Refl.Get(t, "armorClass")) is int c && c > best) best = c;
+                    }
+                    if (best > 0) break;
+                }
+                return best;
+            }
+            catch { return 0; }
+        }
+
         /// <summary>"ArmoredSteel" → "Armored steel", "UHMWPE" stays.</summary>
         private static string Spaced(string s)
         {

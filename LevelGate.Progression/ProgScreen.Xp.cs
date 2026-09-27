@@ -353,7 +353,7 @@ namespace LevelGate.Progression
                     if (!quiet && st.Dur > 0)
                     {
                         int n = ProgData.CountAt(st.Level);
-                        foreach (var c in _cards) if (c.Level == st.Level) { c.Flash(); if (n > 0) c.Float($"+{n} ITEM{(n == 1 ? "" : "S")}"); }
+                        foreach (var c in _cards) if (c.Level == st.Level) c.Flash(); // (no "+N ITEMS" float: barely visible, looked cheap)
                         if (Time.unscaledTime - _xpTickAt > .15f) { _xpTickAt = Time.unscaledTime; Sounds.Play("ButtonOver", "ButtonClick"); }
                     }
                     break;

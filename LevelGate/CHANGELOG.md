@@ -40,6 +40,15 @@ Versions are **MAJOR.MINOR.PATCH**:
 
 ## LevelGate Progression (BepInEx plugin, separate DLL)
 
+### 0.9.36
+- **Centre picture crisper:**
+  - It's shown at an exact whole-pixel size (never enlarged, shrunk to fit when bigger) and snapped onto the screen's pixel grid.
+  - A picture landing between pixels had every pixel blended with its neighbour, which looked like medium quality even at full resolution.
+  - Kept copies also use a -0.5 mip bias, so shrinking them to fit the stage doesn't soften them.
+  - The 0.9.35 log shows every item now comes back at the same size each visit. The game's own icon renderer tops out around 700×350 px (weapons ~690 px wide, pistols 301 px tall), which is as big as a game-drawn picture gets.
+- **Armor class** for armor, armored rigs and helmets: the item's own class, else the best of its default plates / armor parts (read from its preset, once per item). LevelGate is untouched.
+- **XP animation:** the "+N ITEMS" float over unlocking cards is removed.
+
 ### 0.9.35
 - **Fix: sharp (High) pictures dropping to medium after clicking around.**
   - The centre picture's render size was measured on the picture itself. Since 0.9.32 it shrinks small items to their real size (no stretching), so after any of those the next item was asked for smaller. The log shows the same rifle at 4x, then 3x, then 2x, each kept and shown again later.

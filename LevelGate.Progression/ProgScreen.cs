@@ -1716,21 +1716,40 @@ namespace LevelGate.Progression
         private static float _featPx;
 
         /// <summary>
-        /// The centre picture never stretched a little past its real pixels (the game draws some items smaller than asked):
-        /// up to 1.6× too small it's shown at its own size, sharp; far smaller (a stand-in) it still fills the box.
+        /// The centre picture at an exact whole-pixel size (never enlarged past its real pixels; shrunk to fit the stage when
+        /// bigger), then snapped onto the screen's pixel grid a frame later: a picture landing between pixels had every pixel
+        /// blended with its neighbour — the "medium quality" look even at full resolution. Far smaller stand-ins still fill.
         /// </summary>
         private static void FitFeat(Sprite sp)
         {
             var rt = _featPic.rectTransform;
             rt.anchorMin = Vector2.zero; rt.anchorMax = Vector2.one; rt.offsetMin = new Vector2(40, 40); rt.offsetMax = new Vector2(-40, -40);
+            _featSnap = 0;
             if (sp == null || !(rt.parent is RectTransform parent)) return;
             float sf = _featPic.canvas != null && _featPic.canvas.scaleFactor > 0 ? _featPic.canvas.scaleFactor : 1f;
             var box = parent.rect.size - new Vector2(80, 80);
             float fit = Mathf.Min(box.x * sf / sp.rect.width, box.y * sf / sp.rect.height);
-            if (fit <= 1.02f || fit > 1.6f) return;
+            if (fit > 1.6f) return;
+            float scale = Mathf.Min(fit, 1f);
             rt.anchorMin = rt.anchorMax = new Vector2(.5f, .5f);
-            rt.sizeDelta = new Vector2(sp.rect.width, sp.rect.height) / sf;
+            rt.sizeDelta = new Vector2(Mathf.Round(sp.rect.width * scale), Mathf.Round(sp.rect.height * scale)) / sf;
             rt.anchoredPosition = Vector2.zero;
+            _featSnap = 2; // snapped once the layout has placed it
+        }
+
+        private static int _featSnap;
+
+        /// <summary>Moves the centre picture so its corner sits exactly on a screen pixel.</summary>
+        private static void SnapFeat()
+        {
+            if (_featSnap <= 0 || _featPic == null) return;
+            if (--_featSnap > 0) return;
+            var rt = _featPic.rectTransform;
+            var corners = new Vector3[4];
+            rt.GetWorldCorners(corners); // an overlay canvas: world units are screen pixels
+            float sf = _featPic.canvas != null && _featPic.canvas.scaleFactor > 0 ? _featPic.canvas.scaleFactor : 1f;
+            var off = new Vector2(corners[0].x - Mathf.Round(corners[0].x), corners[0].y - Mathf.Round(corners[0].y));
+            rt.anchoredPosition -= off / sf;
         }
 
         /// <summary>
@@ -1877,6 +1896,7 @@ namespace LevelGate.Progression
                 bool more = _listScroll.content.rect.height > _listScroll.viewport.rect.height + 1 && _listScroll.verticalNormalizedPosition > .01f;
                 if (_listFade.enabled != more) _listFade.enabled = more;
             }
+            SnapFeat();
             RunIconRequests();
             if (now > _watchCardsAt) { _watchCardsAt = now + 1f; foreach (var c in _cards) c.Watch(); }
             Prefetch();
