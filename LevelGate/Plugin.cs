@@ -27,7 +27,7 @@ namespace LevelGate
     {
         public const string PluginGuid = "com.yourname.levelgate";
         public const string PluginName = "LevelGate";
-        public const string PluginVersion = "1.6.0";
+        public const string PluginVersion = "1.6.1";
 
         internal static ManualLogSource Log;
         internal static ConfigEntry<KeyboardShortcut> ToggleMenuKey;
@@ -2795,7 +2795,8 @@ namespace LevelGate
                 var grid = AccessTools.TypeByName("EFT.UI.DragAndDrop.GridItemView");
                 var enter = grid == null ? null : AccessTools.GetDeclaredMethods(grid).FirstOrDefault(m => m.Name == "OnPointerEnter" && m.GetParameters().Length == 1);
                 var exit = grid == null ? null : AccessTools.GetDeclaredMethods(grid).FirstOrDefault(m => m.Name == "OnPointerExit" && m.GetParameters().Length == 1);
-                if (enter != null) { harmony.Patch(enter, postfix: new HarmonyMethod(typeof(TooltipLayoutPatch), nameof(OnEnter))); hover = true; }
+                // prefix: the game shows the tooltip inside OnPointerEnter, so the item has to be known before it runs
+                if (enter != null) { harmony.Patch(enter, prefix: new HarmonyMethod(typeof(TooltipLayoutPatch), nameof(OnEnter)) { priority = Priority.First }); hover = true; }
                 if (exit != null) harmony.Patch(exit, postfix: new HarmonyMethod(typeof(TooltipLayoutPatch), nameof(OnExit)));
                 LevelGatePlugin.Log.LogInfo($"LevelGate: tooltip layout hooked: {show.DeclaringType?.Name}.Show + {setTexts} SetText{(hover ? " + GridItemView hover" : "")}.");
             }
@@ -2847,6 +2848,17 @@ namespace LevelGate
                     foreach (var kv in ItemRenameShared.ShownNames)
                         if (kv.Value.Tpl == _hoveredTpl && (key == null || kv.Key.Length > key.Length) && text.IndexOf(kv.Key, StringComparison.Ordinal) >= 0)
                         { key = kv.Key; info = kv.Value; }
+                    // or its plain game name (the name may not have gone through the rename yet)
+                    if (key == null && !ItemRenameShared.PlainNames.ContainsKey(_hoveredTpl))
+                    {
+                        try { EFT.LocalizationExtensions.Localized(_hoveredTpl + " Name", ""); } catch { } // fills PlainNames / ShownNames
+                        foreach (var kv in ItemRenameShared.ShownNames)
+                            if (kv.Value.Tpl == _hoveredTpl && (key == null || kv.Key.Length > key.Length) && text.IndexOf(kv.Key, StringComparison.Ordinal) >= 0)
+                            { key = kv.Key; info = kv.Value; }
+                    }
+                    if (key == null && ItemRenameShared.PlainNames.TryGetValue(_hoveredTpl, out var plainName) && !string.IsNullOrEmpty(plainName)
+                        && text.IndexOf(plainName, StringComparison.Ordinal) >= 0)
+                    { key = plainName; info = (_hoveredTpl, 0); }
                     if (key != null) at = text.IndexOf(key, StringComparison.Ordinal);
                 }
                 if (at < 0) return;

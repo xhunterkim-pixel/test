@@ -948,6 +948,8 @@ public class CustomTradersMod(
                     new JsonObject { ["StackObjectsCount"] = Math.Max(1, r.Count) });
                 var items = new JsonArray();
                 foreach (var node in tree) items.Add(node);
+                // SPT makes all reward items Found in Raid; CustomTradersRewardFir undoes it for these.
+                if (!r.FoundInRaid) CustomTradersRewardFir.NotFoundInRaid.Add(id);
                 return new JsonObject
                 {
                     ["id"] = id,
