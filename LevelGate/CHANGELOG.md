@@ -40,6 +40,11 @@ Versions are **MAJOR.MINOR.PATCH**:
 
 ## LevelGate Progression (BepInEx plugin, separate DLL)
 
+### 0.9.25
+- 0.9.24 play-test: the loading screen took 2–8 s (20 pictures). Every sharp picture was drawn and kept at the size asked for, including when flipping levels fast.
+- High: weapons on the level cards may be drawn bigger too (same stash repair on close as the centre picture).
+- Play-test log: each centre picture logs its real pixels vs its size on screen ("1.00x (sharp)" or "1.40x STRETCHED (soft)"), to find where the game draws an item smaller than asked for.
+
 ### 0.9.24
 - **Fix: High quality only held for the first level you looked at.** Flipping levels while a sharp picture was still being drawn dropped it: it was never kept, and coming back showed the stash-size stand-in (looked like Medium).
   - Pictures still being drawn for a level or page you left are now collected in the background and kept.

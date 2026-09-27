@@ -1198,7 +1198,15 @@ namespace LevelGate.Progression
         private static readonly Queue<(string Tpl, int Scale)> _prefetchQueue = new Queue<(string, int)>();
 
         /// <summary>Card pictures (and their pre-loading) share one scale per item: about 120 px on the long side.</summary>
-        private static int CardScaleOf(string tpl) => Perf || ProgData.GroupOf(tpl) == "Weapons" ? 1 : GameItems.CardScale(tpl, 120);
+        // weapons only on High (like the centre picture: High redraws the stash's weapons at stash size after closing)
+        private static int CardScaleOf(string tpl)
+        {
+            bool weapon = ProgData.GroupOf(tpl) == "Weapons";
+            if (Perf || (weapon && !ProgressionPlugin.High)) return 1;
+            int scale = GameItems.CardScale(tpl, 120);
+            if (weapon && scale > 1) _sharpWeaponShown = true; // weapons get repaired on close
+            return scale;
+        }
 
         /// <summary>Every picture these pages show bigger than stash size: each level's centre item and its card pictures.</summary>
         private static List<(string Tpl, int Scale)> PictureJobs(IEnumerable<int> pages)
@@ -1447,7 +1455,7 @@ namespace LevelGate.Progression
             if (it.Group == "Weapons" && featScale > 1) _sharpWeaponShown = true; // weapons get repaired on close
             _featScale = featScale;
             var kept = GameItems.CopyOf(it.Tpl, featScale);
-            if (kept != null) { _featIcon = null; _featPic.sprite = kept; _featPic.enabled = true; _featShort.gameObject.SetActive(false); }
+            if (kept != null) { _featIcon = null; _featPic.sprite = kept; _featPic.enabled = true; _featShort.gameObject.SetActive(false); LogSharpness(kept, "kept"); }
             else if (!_loading) _featIcon = GameItems.IconOf(GameItems.ItemOf(it.Tpl), featScale);
             MarkSelectedTile();
         }
@@ -1467,6 +1475,20 @@ namespace LevelGate.Progression
             return featScale;
         }
         private static float _featPx;
+
+        /// <summary>
+        /// Play-test: how sharp the centre picture really is — its pixels vs the size it's shown at on screen.
+        /// Over 1.0x = stretched (soft); the game caps some items' renders below what was asked for.
+        /// </summary>
+        private static void LogSharpness(Sprite sp, string how)
+        {
+            if (sp == null || !L.Verbose) return;
+            var r = _featPic.rectTransform.rect;
+            float scale = _featPic.canvas != null ? _featPic.canvas.scaleFactor : 1f;
+            float fit = Mathf.Min(r.width * scale / sp.rect.width, r.height * scale / sp.rect.height); // preserve aspect
+            L.Debug($"centre picture ({how}) {_featTpl}: {sp.rect.width:0}x{sp.rect.height:0} px shown at {sp.rect.width * fit:0}x{sp.rect.height * fit:0} on screen = " +
+                    $"{fit:0.00}x{(fit > 1.05f ? " STRETCHED (soft)" : " (sharp)")} at {_featScale}x");
+        }
 
         private static void MarkSelectedTile()
         {
@@ -1626,6 +1648,7 @@ namespace LevelGate.Progression
                     {
                         _featIcon = null;
                         L.Debug($"big picture: {sp.rect.width:0}x{sp.rect.height:0} px (asked the game for {_featScale}x)");
+                        LogSharpness(sp, "new");
                     }
                 }
             }
