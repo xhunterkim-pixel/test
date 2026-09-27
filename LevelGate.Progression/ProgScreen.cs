@@ -1865,7 +1865,8 @@ namespace LevelGate.Progression
             var facts = GameItems.Facts(it.Tpl);
             var majorKeys = new[] { "Damage", "Penetration", "Armor class", "Resource", "Energy", "Hydration", "Fire rate", "Ergonomics", "Recoil" };
             var majors = facts.Where(f => majorKeys.Contains(f.Label)).ToList();
-            var minors = new[] { "Weight", "Size", "Caliber" }.Select(k => facts.FirstOrDefault(f => f.Label == k)).Where(f => f.Label != null)
+            facts.RemoveAll(f => f.Label == "Size"); // removed on request: not needed here
+            var minors = new[] { "Weight", "Caliber" }.Select(k => facts.FirstOrDefault(f => f.Label == k)).Where(f => f.Label != null)
                 .Concat(facts.Where(f => !majorKeys.Contains(f.Label) && f.Label != "Weight" && f.Label != "Size" && f.Label != "Caliber")).ToList();
             // one grid of equal columns for every row (3, or more only if there are more big stats): the big stats never get
             // squeezed ("600 rpm" ran into ERGONOMICS at 4 columns); extra small stats wrap onto another line

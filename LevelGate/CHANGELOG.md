@@ -40,6 +40,9 @@ Versions are **MAJOR.MINOR.PATCH**:
 
 ## LevelGate Progression (BepInEx plugin, separate DLL)
 
+### 0.9.48
+- The right panel no longer shows the item's SIZE (grid cells).
+
 ### 0.9.47
 - **Three more background patterns, all animated**: **Marble** (broad mirrored marbling with faint scan lines, the bands slowly flow), **Pixels** (an LED wall of small squares with soft bands of light rolling across) and **Terrain** (a 3D look: ridge lines over rolling hills, nearer ridges hiding the ones behind, flying slowly forward). Neutral white like the others; PatternMotion sets their speed.
 - **Pattern = Random**: a different pattern each time you open the screen (never the same one twice in a row).
