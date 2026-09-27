@@ -168,6 +168,12 @@ namespace LevelGate.Progression
             else Refl.Set(c, "color", color);
         }
 
+        public static void SetSize(Component c, float size)
+        {
+            if (c is Text t) t.fontSize = Mathf.RoundToInt(size);
+            else Refl.Set(c, "fontSize", size);
+        }
+
         public static void SetWrap(Component c, bool wrap)
         {
             if (c is Text t) t.horizontalOverflow = wrap ? HorizontalWrapMode.Wrap : HorizontalWrapMode.Overflow;

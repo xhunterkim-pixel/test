@@ -23,12 +23,13 @@ namespace LevelGate.Progression
         // our labels → the game's attribute ids, most likely first
         private static readonly Dictionary<string, string[]> Ids = new Dictionary<string, string[]>
         {
-            { "Damage", new[] { "Damage" } },
-            { "Penetration", new[] { "PenetrationPower", "Penetration", "ArmorPenetration" } },
+            { "Damage", new[] { "MaxAmmoDamage", "Damage" } },
+            { "Penetration", new[] { "AmmoPenetrationPower", "PenetrationPower", "Penetration" } },
             { "Armor class", new[] { "ArmorClass" } },
+            { "Size", new[] { "Size", "ContainerSize" } },
             { "Resource", new[] { "MaxResource", "Resource", "MaxHpResource", "HpResource", "Usages" } },
-            { "Energy", new[] { "EnergyChange", "Energy", "EnergyRate" } },
-            { "Hydration", new[] { "HydrationChange", "Hydration", "HydrationRate" } },
+            { "Energy", new[] { "EnergyChange", "Energy", "FoodResource" } },
+            { "Hydration", new[] { "HydrationChange", "Hydration", "FoodResource" } },
             { "Fire rate", new[] { "FireRate", "Firerate" } },
             { "Ergonomics", new[] { "Ergonomics" } },
             { "Recoil", new[] { "RecoilUp", "VerticalRecoil", "Recoil" } },
@@ -40,7 +41,7 @@ namespace LevelGate.Progression
             { "Capacity", new[] { "ContainerSize", "Capacity", "GridSize" } },
             { "Movement", new[] { "ChangeMovementSpeed", "MovementSpeed", "SpeedPenalty" } },
             { "Turning", new[] { "ChangeTurningSpeed", "TurningSpeed", "MouseSensitivity", "MousePenalty" } },
-            { "Ergo penalty", new[] { "ChangeWeaponErgonomics", "WeaponErgonomics", "ErgonomicsPenalty" } },
+            { "Ergo penalty", new[] { "ChangeWeaponErgonomics", "Ergonomics" } },
         };
 
         public static Sprite Of(string label)

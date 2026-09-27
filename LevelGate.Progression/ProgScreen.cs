@@ -105,6 +105,7 @@ namespace LevelGate.Progression
             try
             {
                 if (!_built || _canvas == null) { _built = false; Build(); }
+                PickRandomPattern();
                 ProgData.Invalidate(); // names / categories again (the game may have finished loading them since)
                 int player = ProgData.PlayerLevel();
                 int seen = SeenState.Level;
@@ -394,9 +395,13 @@ namespace LevelGate.Progression
 
         private static bool _xpNextHover;
 
+        /// <summary>The level the screen treats as yours: the XP animation's / an F12 preview's level while one shows it,
+        /// else your real one (the requirement box said "40 / 44 · 4 levels away" under a previewed CURRENT LEVEL 44).</summary>
+        private static int Me => _xpCardLevel > 0 ? _xpCardLevel : ProgData.PlayerLevel();
+
         private static void UpdateXpNext()
         {
-            int player = ProgData.PlayerLevel();
+            int player = Me;
             int nextCount = player > 0 && player < ProgData.MaxLevel ? ProgData.CountAt(player + 1) : -1;
             string body = $"Next level {player + 1}: <color=#d5d9d6>{nextCount}</color> item{(nextCount == 1 ? "" : "s")}  ›";
             Ui.SetText(_xpNext, nextCount < 0 ? "" : _xpNextHover ? $"<color=#d5d9d6><u>{body}</u></color>" : body);
@@ -470,7 +475,7 @@ namespace LevelGate.Progression
             _content = Ui.Rect(viewport, "Content", new Vector2(0, 1), new Vector2(1, 1), Vector2.zero, Vector2.zero);
             _content.pivot = new Vector2(.5f, 1);
             var vl = _content.gameObject.AddComponent<VerticalLayoutGroup>();
-            vl.spacing = S4; // between sections
+            vl.spacing = S3; // between sections
             vl.childControlHeight = true; vl.childControlWidth = true; vl.childForceExpandHeight = false; vl.childForceExpandWidth = true;
             vl.padding = new RectOffset(0, (int)S2, (int)S2, (int)S4);
             _content.gameObject.AddComponent<ContentSizeFitter>().verticalFit = ContentSizeFitter.FitMode.PreferredSize;
@@ -621,6 +626,24 @@ namespace LevelGate.Progression
         /// The surface texture from F12 > Graphics: Scratches (grime / scratches on the panels and pictures, and the dot grid)
         /// and Vignette, as multiples of their built-in strength. Live: changed in F12, it updates at once.
         /// </summary>
+        private static BackgroundPattern _randomPattern = BackgroundPattern.Dots;
+        private static readonly System.Random _rng = new System.Random();
+
+        /// <summary>F12 Pattern = Random: a different pattern (never the same twice in a row) each time the screen opens.</summary>
+        private static void PickRandomPattern()
+        {
+            if (ProgressionPlugin.Pattern?.Value != BackgroundPattern.Random) return;
+            var all = ((BackgroundPattern[])Enum.GetValues(typeof(BackgroundPattern))).Where(p => p != BackgroundPattern.Random && p != _randomPattern).ToArray();
+            _randomPattern = all[_rng.Next(all.Length)];
+            L.Debug($"background pattern (random): {_randomPattern}");
+            ApplyLook();
+        }
+
+        public static void PatternChanged()
+        {
+            if (ProgressionPlugin.Pattern?.Value == BackgroundPattern.Random) PickRandomPattern(); else ApplyLook();
+        }
+
         public static void ApplyLook()
         {
             float sc = ProgressionPlugin.Scratches?.Value ?? 1f, vg = ProgressionPlugin.Vignette?.Value ?? 1f;
@@ -629,9 +652,11 @@ namespace LevelGate.Progression
             {
                 // the background pattern (F12 > Graphics > Pattern): the dots tile; the line patterns cover the screen once
                 var pat = ProgressionPlugin.Pattern?.Value ?? BackgroundPattern.Dots;
+                if (pat == BackgroundPattern.Random) pat = _randomPattern;
                 if (pat == BackgroundPattern.Dots) { BgPattern.Use(_dotGrid, null); _dotGrid.sprite = Ui.DotGrid(); _dotGrid.type = Image.Type.Tiled; _dotGrid.enabled = true; }
                 else BgPattern.Use(_dotGrid, pat.ToString()); // worked out off the main thread; shows once ready, moves while open
-                float basis = pat == BackgroundPattern.Dots ? .035f : pat == BackgroundPattern.Streaks ? .035f : .045f;
+                float basis = pat == BackgroundPattern.Dots || pat == BackgroundPattern.Streaks ? .035f
+                    : pat == BackgroundPattern.Marble ? .03f : pat == BackgroundPattern.Pixels ? .04f : pat == BackgroundPattern.Terrain ? .055f : .045f;
                 _dotGrid.color = new Color(1, 1, 1, Mathf.Clamp01(basis * sc));
             }
             if (_vignette != null) _vignette.color = new Color(0, 0, 0, Mathf.Clamp01(.14f * vg));
@@ -729,22 +754,49 @@ namespace LevelGate.Progression
             var hl = head.gameObject.AddComponent<HorizontalLayoutGroup>();
             hl.spacing = 5; hl.childAlignment = TextAnchor.MiddleLeft;
             hl.childControlWidth = hl.childControlHeight = true; hl.childForceExpandWidth = hl.childForceExpandHeight = false;
-            StatIcon(head, label, 13);
-            var l = FlowText(head, "Label", TCaps, Dim, false, Caps);
+            if (label.Length > 0) StatIcon(head, label, 16);
+            var l = FlowText(head, "Label", TCaps, Grey, false, Caps);
             Ui.SetText(l, label.ToUpperInvariant());
             var v = FlowText(cell, "Value", major ? THero : TStrong, Text, major, 0);
             Ui.SetText(v, value);
+            // a meter under the number, like the bars in the game's inspect window (a scale per stat)
+            if (major && MeterOf(label, value) is float frac)
+            {
+                var m = Ui.Rect(cell, "Meter", Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
+                var mle = m.gameObject.AddComponent<LayoutElement>();
+                mle.minHeight = mle.preferredHeight = 3;
+                Ui.Img(m, Ui.Hex("#1f272a"));
+                Ui.Img(Ui.Rect(m, "Fill", Vector2.zero, new Vector2(Mathf.Clamp(frac, .03f, 1f), 1), Vector2.zero, Vector2.zero), Ui.Hex("#9aa3a6"));
+            }
+        }
+
+        /// <summary>How full a stat's meter is (0..1), or null for stats without one.</summary>
+        private static float? MeterOf(string label, string value)
+        {
+            var m = System.Text.RegularExpressions.Regex.Match(value ?? "", @"^[+-]?\d+(\.\d+)?");
+            if (!m.Success || !float.TryParse(m.Value, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out float n)) return null;
+            switch (label)
+            {
+                case "Fire rate": return n / 1200f;
+                case "Ergonomics": return n / 100f;
+                case "Recoil": return n / 400f;
+                case "Armor class": return n / 6f;
+                case "Penetration": return n / 70f;
+                case "Damage": return n / 200f;
+                default: return null;
+            }
         }
 
         /// <summary>The game's own icon for a stat (as in its inspect window), or nothing when it has none.</summary>
         private static void StatIcon(RectTransform parent, string label, float size)
         {
-            var sp = StatIcons.Of(label);
-            if (sp == null) return;
+            // the space is kept even without an icon, so every label starts at the same place
             var rt = Ui.Rect(parent, "Icon", Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
             var le = rt.gameObject.AddComponent<LayoutElement>();
             le.minWidth = le.preferredWidth = le.minHeight = le.preferredHeight = size;
-            var img = Ui.Img(rt, Ui.Hex("#8d9699"), sp);
+            var sp = StatIcons.Of(label);
+            if (sp == null) return;
+            var img = Ui.Img(rt, Grey, sp);
             img.preserveAspect = true;
         }
 
@@ -756,21 +808,23 @@ namespace LevelGate.Progression
         {
             var cell = Ui.Rect(row, label.Length > 0 ? label : "Empty", Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
             var le = cell.gameObject.AddComponent<LayoutElement>();
-            le.minWidth = 0; le.preferredWidth = 0; le.flexibleWidth = 1; le.minHeight = le.preferredHeight = 26;
+            le.minWidth = 0; le.preferredWidth = 0; le.flexibleWidth = 1; le.minHeight = le.preferredHeight = 28;
             if (label.Length == 0) return;
             Ui.Img(cell, Ui.Hex("#0b1012", .75f));
             Ui.Img(Ui.Rect(cell, "Edge", Vector2.zero, new Vector2(1, 0), Vector2.zero, new Vector2(0, 1)), Ui.Hex("#2b3438", .7f));
             var hl = cell.gameObject.AddComponent<HorizontalLayoutGroup>();
             hl.padding = new RectOffset(7, 8, 0, 0); hl.spacing = 6; hl.childAlignment = TextAnchor.MiddleLeft;
             hl.childControlWidth = hl.childControlHeight = true; hl.childForceExpandWidth = hl.childForceExpandHeight = false;
-            StatIcon(cell, label, 14);
-            var l = FlowText(cell, "Label", TCaps - 1, Dim, false, 1);
+            StatIcon(cell, label, 15);
+            var l = FlowText(cell, "Label", TCaps - 1, Grey, false, 1);
             Ui.SetText(l, label.ToUpperInvariant());
             var lle = ((Component)l).gameObject.AddComponent<LayoutElement>();
             lle.flexibleWidth = 1; lle.minWidth = 0;
             var vgo = new GameObject("Value", typeof(RectTransform));
             vgo.transform.SetParent(cell, false);
-            Ui.AddText(vgo, value, TBody, Text, TextAnchor.MiddleRight, false, 0);
+            // units a little smaller, never tiny ("3.2 kg" read as "32")
+            string shown = System.Text.RegularExpressions.Regex.Replace(value ?? "", @"<size=\d+%>", "<size=85%>");
+            Ui.AddText(vgo, shown, TBody, Text, TextAnchor.MiddleRight, false, 0);
         }
 
         private static void BuildBottom(RectTransform bottom)
@@ -1120,7 +1174,7 @@ namespace LevelGate.Progression
         {
             // Arena page bar: a page is lit once every level on it is unlocked; the page you're looking at stands
             // 4 px taller (lit or not), so you always see where you are
-            int player = ProgData.PlayerLevel();
+            int player = Me;
             for (int i = 0; i < _segments.Count; i++)
             {
                 bool cur = i == _page;
@@ -1158,7 +1212,7 @@ namespace LevelGate.Progression
             if (!XpAnimating) _newViewed.Add(level); // looked at: its card's NEW goes (its items keep theirs until clicked)
             float t0 = Time.realtimeSinceStartup;
             var items = ProgData.ItemsAt(level);
-            int player = ProgData.PlayerLevel();
+            int player = Me;
 
             SetMood(player > 0 && level > player);
             UpdateXp();
@@ -1196,6 +1250,8 @@ namespace LevelGate.Progression
             // three or fewer: three bigger tiles across (at 4 across, 3 items left most of the panel empty)
             if (compact && items.Count <= 3 && cols > 3) { cols = 3; cell = Mathf.Floor((width - (cols - 1) * S2) / cols); }
             _tileCell = cell;
+            // inside a category's framed box (1 px frame + 6 px each side) the same columns, a little narrower
+            float boxCell = Mathf.Floor((width - 2 * (BoxPad + 1) - (cols - 1) * S2) / cols);
             if (compact)
             {
                 var grid = Ui.Rect(_content, "Grid", Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
@@ -1212,43 +1268,48 @@ namespace LevelGate.Progression
             {
                 var section = Ui.Rect(_content, "Cat_" + g.Key, Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
                 var sl = section.gameObject.AddComponent<VerticalLayoutGroup>();
-                sl.spacing = S2; sl.childControlHeight = true; sl.childControlWidth = true; sl.childForceExpandHeight = false; sl.childForceExpandWidth = true;
+                sl.spacing = 0; sl.childControlHeight = true; sl.childControlWidth = true; sl.childForceExpandHeight = false; sl.childForceExpandWidth = true;
 
-                // section header like the game's slot titles (EARPIECE ›, HEADWEAR ›): a grey tab with caps and a chevron,
-                // sitting on a hairline; clicking it folds the category away (› ) or opens it again (⌄), kept while the screen is up
+                // like the game's slot / container titles (EARPIECE ›, TACTICAL RIG ⌄): one full-width grey tab, bold caps on
+                // the left, count and chevron on the right, the tiles in a framed box attached under it. Click: fold / open.
                 var head = Ui.Rect(section, "Head", Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
-                head.gameObject.AddComponent<LayoutElement>().preferredHeight = 24;
-                var headHit = Ui.Img(head, new Color(0, 0, 0, 0), null, true);
-                Ui.Img(Ui.Rect(head, "Line", Vector2.zero, new Vector2(1, 0), Vector2.zero, new Vector2(0, 1)), Ui.Hex("#3a4346", .8f));
-                var tab = Ui.Rect(head, "Tab", Vector2.zero, new Vector2(0, 1), Vector2.zero, Vector2.zero);
-                tab.pivot = new Vector2(0, .5f);
-                var tabFace = Ui.Img(tab, Ui.Hex("#262d30", .95f));
-                var tabTop = Ui.Img(Ui.Rect(tab, "Top", new Vector2(0, 1), Vector2.one, new Vector2(0, -1), Vector2.zero), Ui.Hex("#3e484c"));
-                tabTop.gameObject.AddComponent<LayoutElement>().ignoreLayout = true;
-                var bar = Ui.Img(Ui.Rect(tab, "Bar", Vector2.zero, new Vector2(0, 1), Vector2.zero, new Vector2(2, 0)), Ui.Hex(g.Color, .9f));
-                bar.gameObject.AddComponent<LayoutElement>().ignoreLayout = true;
-                var thl = tab.gameObject.AddComponent<HorizontalLayoutGroup>();
-                thl.padding = new RectOffset(10, 8, 0, 0); thl.spacing = 10; thl.childAlignment = TextAnchor.MiddleLeft;
-                thl.childControlWidth = thl.childControlHeight = true; thl.childForceExpandWidth = thl.childForceExpandHeight = false;
-                tab.gameObject.AddComponent<ContentSizeFitter>().horizontalFit = ContentSizeFitter.FitMode.PreferredSize;
-                var tabText = FlowText(tab, "Name", TCaps, Ui.Hex("#c3c9cb"), true, 1);
-                Ui.SetText(tabText, $"{g.Name.ToUpperInvariant()}  <color=#7d8588>{list.Count}{(list.Count > max ? $" · showing {max}" : "")}</color>");
-                var chev = Ui.Rect(tab, "Chevron", Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
-                var cle = chev.gameObject.AddComponent<LayoutElement>();
-                cle.minWidth = cle.preferredWidth = 12; cle.minHeight = cle.preferredHeight = 14;
-                var chevText = Ui.Label(chev, "Text", "›", TStrong + 2, Ui.Hex("#9aa2a5"), TextAnchor.MiddleCenter, false);
+                head.gameObject.AddComponent<LayoutElement>().preferredHeight = 26;
+                var tabFace = Ui.Img(head, Ui.Hex("#232a2d", .97f), null, true);
+                Ui.Img(Ui.Rect(head, "Top", new Vector2(0, 1), Vector2.one, new Vector2(0, -1), Vector2.zero), Ui.Hex("#3f494d"));
+                Ui.Img(Ui.Rect(head, "Shade", Vector2.zero, new Vector2(1, .5f), Vector2.zero, Vector2.zero), new Color(0, 0, 0, .18f));
+                Ui.Label(Ui.Rect(head, "Name", Vector2.zero, Vector2.one, new Vector2(10, 0), new Vector2(-90, 0)), "Text",
+                    g.Name.ToUpperInvariant(), TCaps + 1, Ui.Hex("#d0d5d7"), TextAnchor.MiddleLeft, true, 1);
+                Ui.Label(Ui.Rect(head, "Count", new Vector2(1, 0), Vector2.one, new Vector2(-150, 0), new Vector2(-28, 0)), "Text",
+                    list.Count > max ? $"{max} of {list.Count}" : list.Count.ToString(), TCaps, Ui.Hex("#7d8588"), TextAnchor.MiddleRight, false, 1);
+                var chev = Ui.Rect(head, "Chevron", new Vector2(1, .5f), new Vector2(1, .5f), new Vector2(-22, -8), new Vector2(-8, 8));
+                var chevText = Ui.Label(chev, "Text", "›", TStrong + 3, Ui.Hex("#aab2b5"), TextAnchor.MiddleCenter, false);
 
-                var grid = Ui.Rect(section, "Grid", Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
+                // the box: a 1 px frame, a darker inside, 6 px in from it
+                var body = Ui.Rect(section, "Box", Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
+                Ui.Img(body, Ui.Hex("#2b3438", .9f));
+                var boxIn = Ui.Img(Ui.Fill(body, "In", 1), Ui.Hex("#0a0e10", .7f));
+                boxIn.gameObject.AddComponent<LayoutElement>().ignoreLayout = true;
+                var bl = body.gameObject.AddComponent<VerticalLayoutGroup>();
+                bl.padding = new RectOffset(BoxPad + 1, BoxPad + 1, BoxPad + 1, BoxPad + 1); bl.childControlHeight = true; bl.childControlWidth = true;
+                bl.childForceExpandHeight = false; bl.childForceExpandWidth = true;
+                var grid = Ui.Rect(body, "Grid", Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
+                var gl = grid.gameObject.AddComponent<GridLayoutGroup>();
+                gl.cellSize = new Vector2(boxCell, Mathf.Round(boxCell * .78f) + TileLabel); // 4:3 thumbnails
+                gl.spacing = new Vector2(S2, S2);
+                gl.startCorner = GridLayoutGroup.Corner.UpperLeft;
+                gl.constraint = GridLayoutGroup.Constraint.FixedColumnCount;
+                gl.constraintCount = cols;
+
                 string catKey = g.Key;
                 void ShowFolded()
                 {
                     bool folded = _foldedCats.Contains(catKey);
-                    grid.gameObject.SetActive(!folded);
+                    body.gameObject.SetActive(!folded);
                     chev.localRotation = Quaternion.Euler(0, 0, folded ? 0 : -90); // › folded, pointing down while open
                 }
                 ShowFolded();
                 var hb = head.gameObject.AddComponent<Button>();
-                hb.targetGraphic = headHit; hb.transition = Selectable.Transition.None;
+                hb.targetGraphic = tabFace; hb.transition = Selectable.Transition.None;
                 hb.onClick.AddListener(() =>
                 {
                     if (!_foldedCats.Remove(catKey)) _foldedCats.Add(catKey);
@@ -1256,18 +1317,11 @@ namespace LevelGate.Progression
                     ShowFolded();
                     L.Debug($"category {catKey} {(_foldedCats.Contains(catKey) ? "folded" : "opened")}");
                 });
-                HoverHook.Add(headHit, on =>
+                HoverHook.Add(tabFace, on =>
                 {
-                    FadeTo(tabFace, on ? Ui.Hex("#323a3e", .95f) : Ui.Hex("#262d30", .95f));
-                    FadeTo(chevText as Graphic, on ? Text : Ui.Hex("#9aa2a5"));
+                    FadeTo(tabFace, on ? Ui.Hex("#2d3538", .97f) : Ui.Hex("#232a2d", .97f));
+                    FadeTo(chevText as Graphic, on ? Text : Ui.Hex("#aab2b5"));
                 });
-
-                var gl = grid.gameObject.AddComponent<GridLayoutGroup>();
-                gl.cellSize = new Vector2(cell, Mathf.Round(cell * .78f) + TileLabel); // 4:3 thumbnails
-                gl.spacing = new Vector2(S2, S2);
-                gl.startCorner = GridLayoutGroup.Corner.UpperLeft;
-                gl.constraint = GridLayoutGroup.Constraint.FixedColumnCount;
-                gl.constraintCount = cols;
                 foreach (var it in list.Take(max)) Tile(grid, it, level <= player || player <= 0, dupes.Contains(it.Short), n++);
             }
             if (groups.Count == 0)
@@ -1286,6 +1340,7 @@ namespace LevelGate.Progression
 
         private static readonly HashSet<string> _foldedCats = new HashSet<string>(); // categories folded away (click their title)
 
+        private const int BoxPad = 6;        // a category box's inner padding
         private const float TileMin = 118;   // smallest tile width before a column is dropped
         private const float TileLabel = 34;  // name area under the thumbnail (two lines of 12 px)
 
@@ -1800,11 +1855,12 @@ namespace LevelGate.Progression
                 return;
             }
             var g = ProgData.Groups.FirstOrDefault(x => x.Key == it.Group);
-            int player = ProgData.PlayerLevel();
+            int player = Me;
             bool met = player <= 0 || it.Level <= player;
             Ui.SetText(_featShort, it.Short);
             Ui.SetText(_featType, (g.Name ?? "Item").ToUpperInvariant());
             Ui.SetText(_featName, it.Name);
+            Ui.SetSize(_featName, it.Name.Length > 34 ? TTitle - 2 : it.Name.Length > 26 ? TTitle : THero); // long names: smaller, not a lone word on line 2
             // stats: damage / penetration / armor class / resource big; weight / size / caliber small (nothing invented, nothing dropped)
             var facts = GameItems.Facts(it.Tpl);
             var majorKeys = new[] { "Damage", "Penetration", "Armor class", "Resource", "Energy", "Hydration", "Fire rate", "Ergonomics", "Recoil" };
@@ -1837,8 +1893,10 @@ namespace LevelGate.Progression
             _featBand.SetActive(false); // removed on request: the requirement on the right says it
             if (lockedHere) Ui.SetText(_featBandText, $"UNLOCKS AT LEVEL {it.Level}  ·  {it.Level - player} LEVEL{(it.Level - player == 1 ? "" : "S")} AWAY");
             Ui.SetText(_featReq, $"Reach level {it.Level}");
-            Ui.SetText(_featReqValue, player > 0 ? (met ? $"{Mathf.Min(player, it.Level)} / {it.Level}" : $"<color={Red}>{Mathf.Min(player, it.Level)} / {it.Level}</color>") : "");
-            Ui.SetText(_featStatus, player <= 0 ? "" : it.Level == player ? "<color=#e0562f>CURRENT LEVEL</color>" : met ? "UNLOCKED" : $"{it.Level - player} LEVEL{(it.Level - player == 1 ? "" : "S")} AWAY");
+            // said once each: the level to reach (left), how far that is (right, the one red), the XP under it
+            int away = it.Level - player;
+            Ui.SetText(_featReqValue, player > 0 && !met ? $"<color={Red}>{away} level{(away == 1 ? "" : "s")} away</color>" : "");
+            Ui.SetText(_featStatus, player <= 0 ? "" : met ? "UNLOCKED" : "LOCKED");
             // unlocked: one quiet line ("✓ Unlocked at level 1"); locked: the full box, the one place that explains it
             bool full = player > 0 && !met;
             _reqHead.SetActive(full);
@@ -1853,7 +1911,7 @@ namespace LevelGate.Progression
                 Ui.SetText(_featReq, player <= 0 ? $"Unlocks at level {it.Level}" : it.Level == player ? "Unlocked at your current level" : $"Unlocked at level {it.Level}");
                 Ui.SetText(_featReqValue, "");
             }
-            string note = full ? (ProgData.XpTo(it.Level, out int xp) ? $"{Thousands(xp)} EXP to go  ·  Preview only" : "Preview only") : "";
+            string note = full ? (_xpCardLevel <= 0 && ProgData.XpTo(it.Level, out int xp) ? $"{Thousands(xp)} EXP to go" : "") : "";
             Ui.SetText(_featNote, note);
             _reqSize.minHeight = _reqSize.preferredHeight = full ? 84 : 28;
             FitDescription();

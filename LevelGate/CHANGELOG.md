@@ -40,6 +40,18 @@ Versions are **MAJOR.MINOR.PATCH**:
 
 ## LevelGate Progression (BepInEx plugin, separate DLL)
 
+### 0.9.47
+- **Three more background patterns, all animated**: **Marble** (broad mirrored marbling with faint scan lines, the bands slowly flow), **Pixels** (an LED wall of small squares with soft bands of light rolling across) and **Terrain** (a 3D look: ridge lines over rolling hills, nearer ridges hiding the ones behind, flying slowly forward). Neutral white like the others; PatternMotion sets their speed.
+- **Pattern = Random**: a different pattern each time you open the screen (never the same one twice in a row).
+- **Reward list like the game's containers**: each category is one full-width grey title tab (bold caps on the left, count and chevron on the right) with its items in a framed box attached under it; click the tab to fold / open it. The coloured side bars are gone.
+- **Right panel**:
+  - stat icons found for Damage, Penetration, Energy / Hydration and Ergo penalty too (the game's own ids: MaxAmmoDamage, AmmoPenetrationPower, FoodResource…); the icon space is kept even when a stat has none, so every label lines up;
+  - big stats: 16 px icons and a thin meter under the number, like the inspect window's bars (fire rate / 1200, ergonomics / 100, recoil / 400, armor class / 6…);
+  - small stat strips: taller, brighter labels, units no longer tiny ("3.2 kg" read as "32");
+  - the requirement box says it once: "Reach level 44 · 4 levels away" and the EXP to go under it (no more 40 / 44 + LEVELS AWAY + Preview only);
+  - it now agrees with the header during an F12 preview / the XP animation (it used your real level under a previewed CURRENT LEVEL);
+  - long item names are a size smaller so they don't wrap into a lone word.
+
 ### 0.9.46
 - **Stat icons** in the right panel: every stat shows the game's own icon from its inspect window (fire rate, ergonomics, recoil, caliber, effective distance, weight, armor class…), found by name at runtime; a stat the game has no icon for just shows without one. The log lists what was found ("stat icons: …", "stat icon 'Caliber': …").
 - **Small stats laid out like the inspect window**: dark strips with icon + CAPS label on the left and the value on the right, two to a line in even columns (they used to be a 3/4-column grid that didn't line up with the big stats above).
