@@ -84,6 +84,7 @@ namespace LevelGate.Progression
             var s = sheets[index];
             if (s.Sprites != null || s.Failed) return s.Failed ? null : s;
             var t0 = Time.realtimeSinceStartup;
+            L.Step("emblem load " + s.File);
             try
             {
                 var path = Path.Combine(Folder, s.File);

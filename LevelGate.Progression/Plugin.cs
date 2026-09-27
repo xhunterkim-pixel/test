@@ -25,7 +25,7 @@ namespace LevelGate.Progression
         public const string Guid = "com.kkyangg.levelgate.progression";
         public const string Name = "LevelGate Progression";
         // MAJOR.MINOR.PATCH — see CHANGELOG.md
-        public const string Version = "0.9.1";
+        public const string Version = "0.9.2";
 
         internal static ProgressionPlugin Instance;
         internal static ConfigEntry<KeyboardShortcut> OpenKey;
@@ -136,10 +136,35 @@ namespace LevelGate.Progression
         private static readonly System.Collections.Generic.HashSet<string> _once = new System.Collections.Generic.HashSet<string>();
 
         public static bool Verbose => ProgressionPlugin.VerboseLog?.Value ?? true;
-        public static void Info(string s) => Source?.LogInfo("[Progression] " + s);
-        public static void Debug(string s) { if (Verbose) Source?.LogInfo("[Progression] (debug) " + s); }
-        public static void Warn(string s) => Source?.LogWarning("[Progression] " + s);
-        public static void Error(string where, Exception e) => Source?.LogError($"[Progression] error in {where}: {e}");
+        public static void Info(string s) { Source?.LogInfo("[Progression] " + s); File("info ", s); }
+        public static void Debug(string s) { if (Verbose) { Source?.LogInfo("[Progression] (debug) " + s); File("debug", s); } }
+        public static void Warn(string s) { Source?.LogWarning("[Progression] " + s); File("WARN ", s); }
+        public static void Error(string where, Exception e) { Source?.LogError($"[Progression] error in {where}: {e}"); File("ERROR", where + ": " + e); }
+
+        // Progression.log next to the plugin, written to disk line by line: BepInEx's own log is buffered, so
+        // after a game crash its last lines are missing — this file still shows the last step that ran.
+        private static System.IO.StreamWriter _file;
+        private static bool _fileTried;
+
+        /// <summary>A step marker that only goes to Progression.log (for finding where a crash happened).</summary>
+        public static void Step(string s) => File("step ", s);
+
+        private static void File(string kind, string s)
+        {
+            try
+            {
+                if (_file == null)
+                {
+                    if (_fileTried) return;
+                    _fileTried = true;
+                    var dir = System.IO.Path.GetDirectoryName(typeof(L).Assembly.Location) ?? ".";
+                    _file = new System.IO.StreamWriter(System.IO.Path.Combine(dir, "Progression.log"), false) { AutoFlush = true };
+                    _file.WriteLine($"LevelGate Progression {ProgressionPlugin.Version} — {DateTime.Now:yyyy-MM-dd HH:mm:ss}");
+                }
+                _file.WriteLine($"{DateTime.Now:HH:mm:ss.fff} {kind} {s}");
+            }
+            catch { }
+        }
         /// <summary>Same error from a per-frame place: written once, not every frame.</summary>
         public static void ErrorOnce(string where, Exception e)
         {

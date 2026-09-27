@@ -84,6 +84,7 @@ namespace LevelGate.Progression
 
         public static void Open(string why)
         {
+            L.Step("Open " + why);
             try
             {
                 if (!_built || _canvas == null) { _built = false; Build(); }
@@ -120,6 +121,7 @@ namespace LevelGate.Progression
 
         private static void Build()
         {
+            L.Step("Build");
             float t0 = Time.realtimeSinceStartup;
             _segments.Clear(); _segmentNums.Clear(); _hits.Clear(); _icons.Clear(); _cardIcons.Clear();
             _canvas = new GameObject("LevelGateProgressionCanvas", typeof(RectTransform));
@@ -236,6 +238,7 @@ namespace LevelGate.Progression
         /// <summary>Arena-style player block over the centre panel: [61] ▕████░░░░▏ 25 / 1 000 EXP · Next level reward: 2 ◆</summary>
         private static void BuildXp(RectTransform top)
         {
+            L.Step("BuildXp");
             var xp = Ui.Rect(top, "Xp", new Vector2(.34f, 1), new Vector2(.74f, 1), new Vector2(16, -106), new Vector2(-8, -12));
             var sq = Ui.Rect(xp, "Level", new Vector2(0, .5f), new Vector2(0, .5f), new Vector2(0, -40), new Vector2(80, 40));
             _xpSquare = Ui.Img(sq, Ui.Hex("#e0562f"), Ui.CutCorner());
@@ -266,6 +269,7 @@ namespace LevelGate.Progression
 
         private static void UpdateXp()
         {
+            L.Step("UpdateXp");
             if (_xpLevel == null) return;
             int player = ProgData.PlayerLevel();
             Ui.SetText(_xpLevel, player > 0 ? player.ToString() : "?");
@@ -508,6 +512,7 @@ namespace LevelGate.Progression
         /// <summary>levelAfter: the level to pick on the new page (0 = its first level).</summary>
         private static void ShowPage(int page, int dir, int levelAfter = 0)
         {
+            L.Step($"ShowPage {page}");
             int want = page;
             page = Mathf.Clamp(page, 0, Pages - 1);
             bool changed = page != _page;
@@ -549,6 +554,7 @@ namespace LevelGate.Progression
 
         private static void ShowLevel(int level)
         {
+            L.Step("ShowLevel " + level);
             level = Mathf.Clamp(level, 1, ProgData.MaxLevel);
             int page = (level - 1) / PerPage;
             _level = level;
@@ -654,6 +660,7 @@ namespace LevelGate.Progression
         /// <summary>The item in the centre and its details on the right.</summary>
         private static void Feature(ProgItem it)
         {
+            L.Step("Feature " + it?.Tpl);
             _featTpl = it?.Tpl;
             _featPic.enabled = false;
             _featShort.gameObject.SetActive(it != null);
@@ -947,6 +954,7 @@ namespace LevelGate.Progression
 
             public void Show(int level)
             {
+                L.Step("card " + level);
                 _level = level;
                 bool exists = level <= ProgData.MaxLevel;
                 _body.gameObject.SetActive(exists);

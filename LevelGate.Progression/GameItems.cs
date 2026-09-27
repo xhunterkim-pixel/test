@@ -107,7 +107,7 @@ namespace LevelGate.Progression
             for (int i = 1; i < ps.Length; i++)
                 args[i] = ps[i].ParameterType == typeof(int) && ps[i].Name.IndexOf("scale", StringComparison.OrdinalIgnoreCase) >= 0 ? scale
                     // a bigger picture has to be drawn again, not taken from the stash-size cache
-                    : ps[i].ParameterType == typeof(bool) && ps[i].Name.IndexOf("forced", StringComparison.OrdinalIgnoreCase) >= 0 ? (object)(forced ?? scale >= 2)
+                    : ps[i].ParameterType == typeof(bool) && ps[i].Name.IndexOf("forced", StringComparison.OrdinalIgnoreCase) >= 0 ? (object)(forced ?? scale >= 3)
                     : ps[i].HasDefaultValue ? ps[i].DefaultValue : ps[i].ParameterType == typeof(int) ? (object)1 : false;
             return m.Invoke(null, args);
         }
@@ -189,6 +189,7 @@ namespace LevelGate.Progression
                 try
                 {
                     if (scale != 1) _scaled.Add(item);
+                    L.Step($"icon: {Refl.Get(item, "TemplateId") ?? item.GetType().Name} at {scale}x");
                     return CallIcon(_loadIcon, item, scale);
                 }
                 catch (Exception e) { L.ErrorOnce("icon loader", e); return null; }
@@ -200,6 +201,7 @@ namespace LevelGate.Progression
             {
                 try
                 {
+                    L.Step($"icon: trying {m.DeclaringType.Name}.{m.Name} on {Refl.Get(item, "TemplateId") ?? item.GetType().Name}");
                     var icon = CallIcon(m, item);
                     if (icon == null) { L.Debug($"icon loader {m.DeclaringType.Name}.{m.Name}: returned nothing"); continue; }
                     _loadIcon = m;
@@ -226,6 +228,7 @@ namespace LevelGate.Progression
             var t0 = DateTime.Now;
             foreach (var item in _scaled)
             {
+                L.Step($"icon: back to 1x {Refl.Get(item, "TemplateId") ?? item.GetType().Name}");
                 try { CallIcon(_loadIcon, item, 1, true); n++; }
                 catch (Exception e) { L.ErrorOnce("restoring an icon to stash size", e); }
             }

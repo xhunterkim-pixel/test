@@ -439,46 +439,56 @@ namespace LevelGate.Progression
             return 0;
         }
 
-        /// <summary>Last resort: walks the session's objects (a few levels deep) for a list whose member name has "ExpTable" in it.</summary>
-        private static IEnumerable FindTable(object root)
+        /// <summary>Last resort, by types only (no walking through live objects): finds the class that has the ExpTable
+        /// list, then the classes that hold it (up to 3 steps), and reads it from whichever of those the game keeps as a Singleton.</summary>
+        private static IEnumerable FindTable(object session)
         {
             var t0 = DateTime.Now;
-            var seen = new HashSet<object>(new RefEq());
-            var queue = new Queue<(object o, string path, int depth)>();
-            queue.Enqueue((root, "Session", 0));
-            int visited = 0;
-            while (queue.Count > 0 && visited < 20000)
-            {
-                var (o, path, depth) = queue.Dequeue();
-                if (o == null || !seen.Add(o)) continue;
-                visited++;
-                var type = o.GetType();
-                for (var t = type; t != null && t != typeof(object); t = t.BaseType)
-                    foreach (var f in t.GetFields(Refl.All | BindingFlags.DeclaredOnly))
-                    {
-                        if (f.IsStatic) continue;
-                        var ft = f.FieldType;
-                        if (ft.IsPrimitive || ft.IsEnum || ft == typeof(string) || typeof(Delegate).IsAssignableFrom(ft) || typeof(UnityEngine.Object).IsAssignableFrom(ft) || ft.IsPointer) continue;
-                        object v;
-                        try { v = f.GetValue(o); } catch { continue; }
-                        if (v == null) continue;
-                        if (f.Name.IndexOf("ExpTable", StringComparison.OrdinalIgnoreCase) >= 0 && v is IEnumerable list && !(v is string))
-                        {
-                            L.Info($"experience table found at {path}.{f.Name} ({type.FullName}; {visited} objects searched, {(DateTime.Now - t0).TotalMilliseconds:0} ms)");
-                            return list;
-                        }
-                        if (depth < 7 && !(v is IEnumerable) && !ft.IsValueType) queue.Enqueue((v, path + "." + f.Name, depth + 1));
-                    }
-            }
-            L.Info($"experience table: not found in the session's objects ({visited} searched, {(DateTime.Now - t0).TotalMilliseconds:0} ms)");
-            // log where the game keeps it, to fix this by name next time
             try
             {
-                var holders = _appType.Assembly.GetTypes().Where(t => t.GetFields(Refl.All).Any(f => f.Name.IndexOf("ExpTable", StringComparison.OrdinalIgnoreCase) >= 0)
-                    || t.GetProperties(Refl.All).Any(p => p.Name.IndexOf("ExpTable", StringComparison.OrdinalIgnoreCase) >= 0)).Select(t => t.FullName).Take(10).ToArray();
-                L.Info("experience table: types with an ExpTable member: " + (holders.Length == 0 ? "none" : string.Join(", ", holders)));
+                L.Step("experience table: type search");
+                Type[] types;
+                try { types = _appType.Assembly.GetTypes(); } catch (ReflectionTypeLoadException e) { types = e.Types.Where(x => x != null).ToArray(); }
+                MemberInfo TableMember(Type t) => (MemberInfo)t.GetFields(Refl.All).FirstOrDefault(f => !f.IsStatic && f.Name.IndexOf("ExpTable", StringComparison.OrdinalIgnoreCase) >= 0)
+                    ?? t.GetProperties(Refl.All).FirstOrDefault(p => p.Name.IndexOf("ExpTable", StringComparison.OrdinalIgnoreCase) >= 0 && p.GetIndexParameters().Length == 0);
+                var holders = types.Where(t => !t.IsGenericTypeDefinition && TableMember(t) != null).ToList();
+                L.Info("experience table: classes with an ExpTable: " + (holders.Count == 0 ? "none" : string.Join(", ", holders.Select(t => t.FullName + "." + TableMember(t).Name).ToArray())));
+                var singleton = AccessTools.TypeByName("Comfort.Common.Singleton`1");
+                // chains: holder <- owner <- owner … ; each step is (type, member names from the top down)
+                var level = holders.Select(h => (type: h, path: new List<string> { TableMember(h).Name })).ToList();
+                for (int step = 0; step < 4 && level.Count > 0; step++)
+                {
+                    var next = new List<(Type type, List<string> path)>();
+                    foreach (var (type, path) in level)
+                    {
+                        object inst = null;
+                        if (singleton != null && !type.IsValueType)
+                            try { inst = singleton.MakeGenericType(type).GetProperty("Instance", Refl.All)?.GetValue(null, null); } catch { }
+                        if (inst != null)
+                        {
+                            object v = inst;
+                            foreach (var m in path) v = Refl.Get(v, m);
+                            if (v is IEnumerable list && !(v is string))
+                            {
+                                L.Info($"experience table found: Singleton<{type.FullName}>.{string.Join(".", path.ToArray())} ({(DateTime.Now - t0).TotalMilliseconds:0} ms)");
+                                return list;
+                            }
+                        }
+                        if (step == 3) continue;
+                        foreach (var owner in types)
+                        {
+                            if (owner.IsGenericTypeDefinition || owner.IsEnum || owner.IsInterface) continue;
+                            FieldInfo[] fs;
+                            try { fs = owner.GetFields(Refl.All); } catch { continue; }
+                            foreach (var f in fs)
+                                if (!f.IsStatic && f.FieldType == type) next.Add((owner, new List<string> { f.Name }.Concat(path).ToList()));
+                        }
+                    }
+                    level = next.Take(50).ToList();
+                }
             }
-            catch (Exception e) { L.Debug("type scan: " + e.GetBaseException().Message); }
+            catch (Exception e) { L.ErrorOnce("searching for the experience table", e); }
+            L.Info($"experience table: not found ({(DateTime.Now - t0).TotalMilliseconds:0} ms)");
             return null;
         }
 

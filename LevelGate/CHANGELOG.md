@@ -40,6 +40,14 @@ Versions are **MAJOR.MINOR.PATCH**:
 
 ## LevelGate Progression (BepInEx plugin, separate DLL)
 
+### 0.9.2
+- **Fix: game crash when opening the screen.** The two risky pieces added in 0.8.0 are gone:
+  - The XP search no longer walks through the game session's live objects. It now looks by class only and reads the table from the class the game keeps as a Singleton.
+  - Card pictures at 2x are no longer force-redrawn; only the big centre picture is, as in 0.7.0.
+- **New `Progression.log` next to the DLL:**
+  - It's written to disk line by line, including step markers (open, page, card, level, icon, emblem).
+  - After a crash, its last line shows exactly what was running. BepInEx's own log is buffered and loses those lines.
+
 ### 0.9.1
 - **Emblems:** replaced with your updated set.
   - A new animated emblem for 46–50 (Blacklisted).
