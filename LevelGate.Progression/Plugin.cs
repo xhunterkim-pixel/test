@@ -25,7 +25,7 @@ namespace LevelGate.Progression
         public const string Guid = "com.kkyangg.levelgate.progression";
         public const string Name = "LevelGate Progression";
         // MAJOR.MINOR.PATCH — see CHANGELOG.md
-        public const string Version = "0.9.13";
+        public const string Version = "0.9.14";
 
         internal static ProgressionPlugin Instance;
         internal static ConfigEntry<KeyboardShortcut> OpenKey;
@@ -133,7 +133,7 @@ namespace LevelGate.Progression
         }
 
         /// <summary>Is a text box (search, chat…) focused? Then letter keys are typing, not shortcuts.</summary>
-        private static bool Typing()
+        internal static bool Typing()
         {
             var go = UnityEngine.EventSystems.EventSystem.current?.currentSelectedGameObject;
             return go != null && go.GetComponents<Component>().Any(c => c != null && c.GetType().Name.Contains("InputField"));

@@ -40,6 +40,18 @@ Versions are **MAJOR.MINOR.PATCH**:
 
 ## LevelGate Progression (BepInEx plugin, separate DLL)
 
+### 0.9.14
+- **A / D move level by level** (like ← →), not while typing. They're shown as keycaps under the ‹ › arrows.
+- **Weapon stats:** fire rate, ergonomics and recoil are the big numbers for weapons; effective range sits with weight / size / caliber. All read from the weapon's template.
+- **Requirement:**
+  - Unlocked items get one quiet line, "✓ Unlocked at level 1".
+  - Locked items keep the full box, now with a neutral border and a red edge on the left only, plus "… EXP to go · Preview only".
+- **Fix: the reward list opened scrolled down**, with the first section's header out of view. The old tiles left the layout only at the end of the frame, so the new list was laid out under them for one frame; now they leave straight away, and the list is put back to the top.
+- **Small levels (8 items or fewer):** one grid, with the category as a small label on each tile, instead of a one-tile section per category.
+- **Tooltip** stays inside the screen.
+- **SPT version label:** hidden while the screen is open, back on close.
+- **Cards:** the page's rank emblem is 32 px (was 24). Locked card pictures show at 65% (was 50%), readable.
+
 ### 0.9.13
 - **Red glow:** fades out on both axes (no hard edge) and is gone before the card row.
 - **Screen height:** reaches down to the game's menu bar. The bottom margin is now 26; an old saved 68 is migrated.

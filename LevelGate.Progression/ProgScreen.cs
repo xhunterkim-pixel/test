@@ -506,6 +506,9 @@ namespace LevelGate.Progression
         }
 
         private static LayoutElement _reqSize, _descSize;
+        private static Image _reqBg, _reqRed;
+        private static GameObject _reqHead;
+        private static RectTransform _reqRow;
         private static RectTransform _info, _descView;
 
         /// <summary>The description takes the height it needs (up to what's left, then it scrolls), so INSPECT follows the text.</summary>
@@ -531,10 +534,13 @@ namespace LevelGate.Progression
             _reqSize.minHeight = _reqSize.preferredHeight = 64;
             _reqEdge = Ui.Img(req, Border);
             var reqIn = Ui.Fill(req, "In", 1);
-            Ui.Img(reqIn, Ui.Hex("#0b0f11", .9f));
-            Ui.Label(Ui.Rect(reqIn, "Head", new Vector2(0, 1), Vector2.one, new Vector2(S4, -26), new Vector2(-S4, -S2)), "Text", "REQUIREMENT", TCaps, Grey, TextAnchor.MiddleLeft, false, Caps);
+            _reqBg = Ui.Img(reqIn, Ui.Hex("#0b0f11", .9f));
+            // locked: a red edge on the left only (the red count is the signal; no red rectangle)
+            _reqRed = Ui.Img(Ui.Rect(req, "RedEdge", Vector2.zero, new Vector2(0, 1), Vector2.zero, new Vector2(2, 0)), Ui.Hex(Red, .8f));
+            _reqHead = Ui.Label(Ui.Rect(reqIn, "Head", new Vector2(0, 1), Vector2.one, new Vector2(S4, -26), new Vector2(-S4, -S2)), "Text", "REQUIREMENT", TCaps, Grey, TextAnchor.MiddleLeft, false, Caps).gameObject;
             _featStatus = Ui.Label(Ui.Rect(reqIn, "State", new Vector2(0, 1), Vector2.one, new Vector2(S4, -26), new Vector2(-S4, -S2)), "Text", "", TCaps, Grey, TextAnchor.MiddleRight, false, Caps);
             var row = Ui.Rect(reqIn, "Row", new Vector2(0, 1), Vector2.one, new Vector2(S4, -54), new Vector2(-S4, -30));
+            _reqRow = row;
             var box = Ui.Rect(row, "Box", new Vector2(0, .5f), new Vector2(0, .5f), new Vector2(0, -8), new Vector2(16, 8));
             Ui.Img(box, Grey);
             Ui.Img(Ui.Fill(box, "In", 1), Ui.Hex("#10161a"));
@@ -545,6 +551,7 @@ namespace LevelGate.Progression
         }
 
         private static ScrollRect _listScroll;
+        private static int _scrollTopFrames;
         private static Image _listFade;
 
         /// <summary>A thin 2 px scroll thumb on the right edge, shown only when the content is taller than its view.</summary>
@@ -616,6 +623,9 @@ namespace LevelGate.Progression
         {
             _prev = Arrow(bottom, "Prev", "‹", 0, () => ShowPage(_page - 1, -1));
             _next = Arrow(bottom, "Next", "›", 1, () => ShowPage(_page + 1, 1));
+            // A / D move one level (like ← →): shown as keycaps under the arrows, like Q / E at the page bar
+            LevelKey(_prev.GetComponent<RectTransform>(), "A", () => { ShowLevel(_level - 1); Sounds.Click(); });
+            LevelKey(_next.GetComponent<RectTransform>(), "D", () => { ShowLevel(_level + 1); Sounds.Click(); });
 
             // cards share the panels' left/right guides (the slots' inner 8 px sit on the margin); arrows live outside, in the margin
             var cards = Ui.Rect(bottom, "Cards", Vector2.zero, Vector2.one, new Vector2(Margin - Gutter / 2, 78), new Vector2(-Margin + Gutter / 2, -S3));
@@ -683,6 +693,17 @@ namespace LevelGate.Progression
             });
         }
 
+        private static void LevelKey(RectTransform arrow, string key, Action click)
+        {
+            var rt = Ui.Rect(arrow, "Key" + key, new Vector2(.5f, .5f), new Vector2(.5f, .5f), new Vector2(-12, -60), new Vector2(12, -36));
+            Ui.Img(rt, Ui.Hex("#5a6468"));
+            var img = Ui.Img(Ui.Fill(rt, "In", 2), Ui.Hex("#161c1f"), null, true);
+            Ui.Label(rt, "Text", key, TCaps, Ui.Hex("#c3ccd0"), TextAnchor.MiddleCenter, true);
+            var b = rt.gameObject.AddComponent<Button>();
+            b.targetGraphic = img;
+            b.onClick.AddListener(() => click());
+        }
+
         private static void KeyBox(RectTransform parent, string key, float side, Action click)
         {
             // a small keycap, centred on the segments: grey 2 px rim, dark face, bold letter
@@ -733,15 +754,42 @@ namespace LevelGate.Progression
                     _menuAlpha = _menuGroup.alpha; _menuRaycasts = _menuGroup.blocksRaycasts;
                     _menuGroup.alpha = 0; _menuGroup.blocksRaycasts = false;
                     L.Debug("main menu hidden");
+                    VersionLabel(false);
                 }
                 else if (_menuGroup != null)
                 {
                     _menuGroup.alpha = _menuAlpha; _menuGroup.blocksRaycasts = _menuRaycasts;
                     _menuGroup = null;
                     L.Debug("main menu shown again");
+                    VersionLabel(true);
                 }
             }
             catch (Exception e) { L.ErrorOnce("hiding the main menu", e); }
+        }
+
+        private static Graphic _versionLabel;
+
+        /// <summary>The "SPT 4.1.6 – … | PvE" corner label draws over the screen now that it reaches the menu bar:
+        /// hidden while open (just the text switched off), back on close.</summary>
+        private static void VersionLabel(bool show)
+        {
+            try
+            {
+                if (_versionLabel == null && !show)
+                {
+                    var types = new List<Type> { typeof(Text) };
+                    if (Ui.TmpType != null) types.Add(Ui.TmpType);
+                    foreach (var t in types)
+                    {
+                        foreach (var o in UnityEngine.Object.FindObjectsOfType(t))
+                            if (o is Graphic g && g.isActiveAndEnabled && Refl.Get(g, "text") is string txt && txt.StartsWith("SPT ") && txt.Contains("|"))
+                            { _versionLabel = g; L.Debug("version label: " + MenuHook.Path(g.transform)); break; }
+                        if (_versionLabel != null) break;
+                    }
+                }
+                if (_versionLabel != null) _versionLabel.enabled = show;
+            }
+            catch (Exception e) { L.ErrorOnce("version label", e); }
         }
 
         // ---------------------------------------------------------------- the game's windows
@@ -864,7 +912,10 @@ namespace LevelGate.Progression
             string st = player <= 0 ? count : level == player ? $"{count}  ·  <color=#e0562f>CURRENT</color>" : level == player + 1 ? $"{count}  ·  NEXT" : count;
             Ui.SetText(_listState, st);
 
-            foreach (Transform ch in _content) UnityEngine.Object.Destroy(ch.gameObject);
+            // old tiles out of the layout right away (Destroy only happens at the end of the frame, and for that frame the
+            // new list was laid out under them — it opened scrolled down), and back to the top once it's built
+            foreach (Transform ch in _content) { ch.gameObject.SetActive(false); UnityEngine.Object.Destroy(ch.gameObject); }
+            _scrollTopFrames = 2;
             _tiles.Clear();
             _tileViews.Clear();
             ShowTip(null);
@@ -880,7 +931,22 @@ namespace LevelGate.Progression
             float cell = Mathf.Floor((width - (cols - 1) * S2) / cols);
             // names that collide at this level (e.g. three "Stich Profi Ches…") show their full name instead
             var dupes = new HashSet<string>(items.GroupBy(x => x.Short).Where(x => x.Count() > 1).Select(x => x.Key));
-            foreach (var (g, list) in groups)
+            // small levels (a handful of items over several categories): one grid, the category as a label on each tile,
+            // instead of a one-tile section per category (a single column with the panel ¾ empty)
+            bool compact = items.Count <= 8 && groups.Count > 1;
+            if (compact)
+            {
+                var grid = Ui.Rect(_content, "Grid", Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
+                var gl = grid.gameObject.AddComponent<GridLayoutGroup>();
+                gl.cellSize = new Vector2(cell, cell + TileLabel);
+                gl.spacing = new Vector2(S2, S2);
+                gl.startCorner = GridLayoutGroup.Corner.UpperLeft;
+                gl.constraint = GridLayoutGroup.Constraint.FixedColumnCount;
+                gl.constraintCount = cols;
+                foreach (var (g, list) in groups)
+                    foreach (var it in list) Tile(grid, it, level <= player || player <= 0, dupes.Contains(it.Short), n++, g);
+            }
+            else foreach (var (g, list) in groups)
             {
                 var section = Ui.Rect(_content, "Cat_" + g.Key, Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
                 var sl = section.gameObject.AddComponent<VerticalLayoutGroup>();
@@ -932,7 +998,7 @@ namespace LevelGate.Progression
         private static int _newFrom; // your level when you last opened the screen: rewards above it (up to yours) are new
 
         /// <summary>An inventory-style tile: thin frame, dark lit surface, big centred thumbnail, the name under it.</summary>
-        private static void Tile(RectTransform grid, ProgItem it, bool reached, bool fullName, int index)
+        private static void Tile(RectTransform grid, ProgItem it, bool reached, bool fullName, int index, (string Key, string Name, string Color, string[] Ids)? category = null)
         {
             var rt = Ui.Rect(grid, "Tile", Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
             var group = rt.gameObject.AddComponent<CanvasGroup>();
@@ -958,10 +1024,17 @@ namespace LevelGate.Progression
                 fullName ? it.Name : it.Short, TCaps, Grey, TextAnchor.MiddleLeft, false, 0, true);
             Ui.SetWrap(v.Name, true);
             Refl.Set(v.Name, "lineSpacing", -8f);
-            // newly reached since you last opened the screen: a small restrained tag
+            // compact list: the category on the tile itself (its colour bar + small caps), top-left
+            if (category is var cat && cat.HasValue)
+            {
+                Ui.Img(Ui.Rect(inner, "CatBar", new Vector2(0, 1), new Vector2(0, 1), new Vector2(S2, -S2 - 10), new Vector2(S2 + 2, -S2)), Ui.Hex(cat.Value.Color, .85f));
+                Ui.Label(Ui.Rect(inner, "Cat", new Vector2(0, 1), Vector2.one, new Vector2(S2 + 2 + S1, -S2 - 12), new Vector2(-S2, -S2 + 2)), "Text",
+                    cat.Value.Name.ToUpperInvariant(), 10, Grey, TextAnchor.MiddleLeft, false, 1, true);
+            }
+            // newly reached since you last opened the screen: a small restrained tag (top-right)
             if (_newFrom > 0 && reached && it.Level > _newFrom)
             {
-                var tag = Ui.Rect(inner, "New", new Vector2(0, 1), new Vector2(0, 1), new Vector2(S1, -S1 - 14), new Vector2(S1 + 30, -S1));
+                var tag = Ui.Rect(inner, "New", new Vector2(1, 1), new Vector2(1, 1), new Vector2(-S1 - 30, -S1 - 14), new Vector2(-S1, -S1));
                 Ui.Img(tag, Ui.Hex(Orange, .9f));
                 Ui.Label(tag, "Text", "NEW", 10, Ui.Hex("#1a1210"), TextAnchor.MiddleCenter, true, 1);
             }
@@ -1012,6 +1085,14 @@ namespace LevelGate.Progression
             var r = rt.rect;
             _tip.position = rt.TransformPoint(new Vector3(r.center.x, r.yMax, 0));
             _tip.anchoredPosition += new Vector2(0, S1);
+            // keep it inside the screen
+            if (_tip.parent is RectTransform layer)
+            {
+                float half = layer.rect.width / 2 - S2, w2 = _tip.sizeDelta.x / 2;
+                var ap = _tip.anchoredPosition;
+                ap.x = Mathf.Clamp(ap.x, -half + w2, half - w2);
+                _tip.anchoredPosition = ap;
+            }
             _tip.SetAsLastSibling();
             _tip.gameObject.SetActive(true);
         }
@@ -1133,7 +1214,7 @@ namespace LevelGate.Progression
             Ui.SetText(_featName, it.Name);
             // stats: damage / penetration / armor class / resource big; weight / size / caliber small (nothing invented, nothing dropped)
             var facts = GameItems.Facts(it.Tpl);
-            var majorKeys = new[] { "Damage", "Penetration", "Armor class", "Resource" };
+            var majorKeys = new[] { "Damage", "Penetration", "Armor class", "Resource", "Fire rate", "Ergonomics", "Recoil" };
             var majors = facts.Where(f => majorKeys.Contains(f.Label)).ToList();
             var minors = new[] { "Weight", "Size", "Caliber" }.Select(k => facts.FirstOrDefault(f => f.Label == k)).Where(f => f.Label != null)
                 .Concat(facts.Where(f => !majorKeys.Contains(f.Label) && f.Label != "Weight" && f.Label != "Size" && f.Label != "Caliber")).ToList();
@@ -1152,15 +1233,23 @@ namespace LevelGate.Progression
             Ui.SetText(_featReq, $"Reach level {it.Level}");
             Ui.SetText(_featReqValue, player > 0 ? (met ? $"{Mathf.Min(player, it.Level)} / {it.Level}" : $"<color={Red}>{Mathf.Min(player, it.Level)} / {it.Level}</color>") : "");
             Ui.SetText(_featStatus, player <= 0 ? "" : it.Level == player ? "<color=#e0562f>CURRENT LEVEL</color>" : met ? "UNLOCKED" : $"{it.Level - player} LEVEL{(it.Level - player == 1 ? "" : "S")} AWAY");
-            _reqEdge.color = met ? Border : Ui.Hex(Red, .55f);
-            // locked: how much XP is left, and that this is a preview
-            string note = "";
-            if (!met)
+            // unlocked: one quiet line ("✓ Unlocked at level 1"); locked: the full box, the one place that explains it
+            bool full = player > 0 && !met;
+            _reqHead.SetActive(full);
+            _featStatus.gameObject.SetActive(full);
+            _reqEdge.color = full ? Border : new Color(0, 0, 0, 0);
+            _reqBg.color = full ? Ui.Hex("#0b0f11", .9f) : new Color(0, 0, 0, 0);
+            _reqRed.enabled = full;
+            _reqRow.offsetMin = new Vector2(full ? S4 : 0, full ? -54 : -26);
+            _reqRow.offsetMax = new Vector2(full ? -S4 : 0, full ? -30 : -2);
+            if (!full)
             {
-                note = ProgData.XpTo(it.Level, out int xp) ? $"{Thousands(xp)} EXP to go  ·  preview only" : "Preview only";
+                Ui.SetText(_featReq, player <= 0 ? $"Unlocks at level {it.Level}" : it.Level == player ? "Unlocked at your current level" : $"Unlocked at level {it.Level}");
+                Ui.SetText(_featReqValue, "");
             }
+            string note = full ? (ProgData.XpTo(it.Level, out int xp) ? $"{Thousands(xp)} EXP to go  ·  Preview only" : "Preview only") : "";
             Ui.SetText(_featNote, note);
-            _reqSize.minHeight = _reqSize.preferredHeight = note == "" ? 64 : 84;
+            _reqSize.minHeight = _reqSize.preferredHeight = full ? 84 : 28;
             FitDescription();
             _featLock.enabled = player > 0 && it.Level > player;
             // sized to the preview on screen: enough real pixels for its size at this resolution (performance mode: half)
@@ -1260,8 +1349,10 @@ namespace LevelGate.Progression
             bool windowRecently = window || Time.unscaledTime - _windowSeenAt < .3f;
             if (!windowRecently)
             {
-                if (input.GetKeyDown(KeyCode.RightArrow)) { ShowLevel(_level + 1); Sounds.Click(); }
-                else if (input.GetKeyDown(KeyCode.LeftArrow)) { ShowLevel(_level - 1); Sounds.Click(); }
+                bool typing = ProgressionPlugin.Typing();
+                if (typing) { }
+                else if (input.GetKeyDown(KeyCode.RightArrow) || input.GetKeyDown(KeyCode.D)) { ShowLevel(_level + 1); Sounds.Click(); }
+                else if (input.GetKeyDown(KeyCode.LeftArrow) || input.GetKeyDown(KeyCode.A)) { ShowLevel(_level - 1); Sounds.Click(); }
                 else if (input.GetKeyDown(KeyCode.E) || input.GetKeyDown(KeyCode.PageDown)) ShowPage(_page + 1, 1);
                 else if (input.GetKeyDown(KeyCode.Q) || input.GetKeyDown(KeyCode.PageUp)) ShowPage(_page - 1, -1);
                 else if (input.GetKeyDown(KeyCode.Home)) ShowLevel(1);
@@ -1288,6 +1379,7 @@ namespace LevelGate.Progression
                     _cards[i].Animate(1 - Mathf.Pow(1 - t, 3), _cardsDir);
                 }
             RunFades();
+            if (_scrollTopFrames > 0 && _listScroll != null) { _scrollTopFrames--; _listScroll.StopMovement(); _listScroll.verticalNormalizedPosition = 1; }
             if (_listFade != null && _listScroll != null)
             {
                 bool more = _listScroll.content.rect.height > _listScroll.viewport.rect.height + 1 && _listScroll.verticalNormalizedPosition > .01f;
@@ -1465,7 +1557,7 @@ namespace LevelGate.Progression
                 // one spacing unit (Pad) everywhere: card edge → badge, badge → title, header → pictures, pictures → bottom row
                 // (the badge's diamond is ~B wide corner to corner, so its box sits exactly Pad from the edges)
                 // the rank stays quiet: a small emblem and small caps (the level itself is the card's header)
-                const float Pad = S3, B = 24, Head = Pad + B + S2, Foot = 32;
+                const float Pad = S3, B = 32, Head = Pad + B + S2, Foot = 32;
                 _badge = new Badge(inner, new Vector2(0, 1), new Vector2(Pad + B / 2, -(Pad + B / 2)), B);
                 _tier = Ui.Label(Ui.Rect(inner, "Tier", new Vector2(0, 1), Vector2.one, new Vector2(Pad + B + S2, -(Pad + B)), new Vector2(-Pad, -Pad)), "Text", "", TCaps, Grey, TextAnchor.MiddleLeft, false, Caps);
                 // selected: a 2 px light bar along the top edge (shape, not only colour)
@@ -1578,7 +1670,7 @@ namespace LevelGate.Progression
                 // future levels step back (unless picked or under the mouse)
                 _baseAlpha = (ProgData.CountAt(_level) == 0 ? .55f : 1f) * (locked && !sel && !_hover ? .85f : 1f);
                 // the pictures carry the weight: full only on the viewing / current card (or under the mouse)
-                float pa = sel || current || _hover ? 1f : locked ? .5f : .7f;
+                float pa = sel || current || _hover ? 1f : locked ? .65f : .8f;
                 foreach (var pic in _pics) FadeTo(pic, new Color(1, 1, 1, pa));
                 _group.alpha = _baseAlpha;
             }

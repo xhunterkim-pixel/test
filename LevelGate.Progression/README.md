@@ -1,4 +1,4 @@
-# LevelGate Progression (0.9.13, test build)
+# LevelGate Progression (0.9.14, test build)
 
 A Call of Duty style **Progression** screen inside Tarkov's main menu. It adds a
 **PROGRESSION** button to the menu bar next to Character, Trading, Flea Market and the rest.
@@ -12,7 +12,7 @@ A Call of Duty style **Progression** screen inside Tarkov's main menu. It adds a
   and its details on the right (category, name, key stats, weight / size / caliber, description, requirement, INSPECT).
   - Left-click an item to show it big; right-click (RMB) to inspect it. Hover a tile for its full name.
 - **Controls:**
-  - ← → change the level by one.
+  - ← → or A / D change the level by one.
   - Q / E, the arrows, the mouse wheel over the cards or the page dots change the page.
   - Home / End jump to level 1 or 79.
   - P or Esc closes the screen.
