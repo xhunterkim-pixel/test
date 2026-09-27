@@ -27,7 +27,7 @@ namespace LevelGate
     {
         public const string PluginGuid = "com.yourname.levelgate";
         public const string PluginName = "LevelGate";
-        public const string PluginVersion = "1.7.0";
+        public const string PluginVersion = "1.6.3";
 
         internal static ManualLogSource Log;
         internal static ConfigEntry<KeyboardShortcut> ToggleMenuKey;
@@ -37,7 +37,6 @@ namespace LevelGate
         internal static ConfigEntry<bool> LabelShowLevel;
         internal static ConfigEntry<bool> TooltipLayout;
         internal static ConfigEntry<bool> TooltipDebug;
-        internal static ConfigEntry<bool> ShortNameLabel;
         internal static ConfigEntry<string> LockedColor;
         internal static ConfigEntry<string> UnlockedColor;
         internal static ConfigEntry<string> SemiLockedColor;
@@ -91,8 +90,6 @@ namespace LevelGate
                 "Label for magazines holding rounds above your level.");
             LabelBrackets = Config.Bind("Labels", "UseBrackets", true,
                 "Wrap the label in [ ] (e.g. turn off for just  X  or  ✓).");
-            ShortNameLabel = Config.Bind("Labels", "LabelShortNames", false,
-                "Also put the label on the short name shown in grid cells (e.g. [LOCKED]). Off: grid cells keep the game's short name — the red striped background already shows the item is locked.");
             LabelShowLevel = Config.Bind("Labels", "ShowLevelInFullName", true,
                 "Add ' - Lvl X' to the label in the full item name.");
             TooltipDebug = Config.Bind("Debug", "TooltipLog", true,
@@ -3040,7 +3037,7 @@ namespace LevelGate
                     string resolved = EFT.LocalizationExtensions.Localized(realKey, "");
                     bool shortName = realKey.EndsWith(" ShortName", StringComparison.Ordinal);
                     result = shortName
-                        ? ((LevelGatePlugin.ShortNameLabel?.Value ?? false) ? LabelStyle.Short(LevelGatePlugin.SemiLockedLabel, resolved) : resolved)
+                        ? LabelStyle.Short(LevelGatePlugin.SemiLockedLabel, resolved)
                         : LabelStyle.Full(LevelGatePlugin.SemiLockedLabel, semiLevel, resolved);
                     if (!shortName && realKey.EndsWith(" Name", StringComparison.Ordinal))
                     {
@@ -3074,7 +3071,7 @@ namespace LevelGate
                 {
                     result = showLevel
                         ? LabelStyle.Full(LevelGatePlugin.LockedLabel, required, result)
-                        : ((LevelGatePlugin.ShortNameLabel?.Value ?? false) ? LabelStyle.Short(LevelGatePlugin.LockedLabel, result) : result);
+                        : LabelStyle.Short(LevelGatePlugin.LockedLabel, result);
                     if (showLevel) ShownNames[result] = (templateId, 0);
                     return;
                 }

@@ -68,7 +68,17 @@ namespace LevelGate.Progression
             if (ProgScreen.IsOpen && _bar != null && UnityInput.Current.GetMouseButtonDown(0)) ClickedElsewhereOnBar();
 
             if (_barType == null || !ProgressionPlugin.InjectButton.Value) return;
-            if (_button != null) return;
+            if (_button != null)
+            {
+                // the game greys tabs out at times (e.g. while loading); ours must come back with the others
+                if (Time.realtimeSinceStartup >= _nextTry)
+                {
+                    _nextTry = Time.realtimeSinceStartup + 1.5f;
+                    var real = _candidates.FirstOrDefault(t => t != null && t.name != "LevelGateProgressionButton");
+                    if (real == null || Usable(real)) Enable(_button, "check");
+                }
+                return;
+            }
             if (Time.realtimeSinceStartup < _nextTry) return;
             _nextTry = Time.realtimeSinceStartup + 1.5f;
             if (_bar == null)
@@ -110,6 +120,12 @@ namespace LevelGate.Progression
             L.Info($"menu buttons found: {string.Join(" | ", _candidates.Select(t => $"{t.name}{(t.gameObject.activeSelf ? "" : " (hidden)")} [{string.Join(",", t.GetComponents<Component>().Where(x => x != null).Select(x => x.GetType().Name).ToArray())}]").ToArray())}");
 
             var template = PickTemplate();
+            // at start-up every tab is greyed out until the profile is loaded; a copy made then stays greyed out
+            if (!Usable(template))
+            {
+                if (_waitLogged++ % 10 == 0) L.Debug($"'{template.name}' is still greyed out ({why}) — waiting until the game enables its tabs before copying it");
+                return;
+            }
             L.Info($"copying menu button '{Path(template)}' ({why})");
             try
             {
@@ -127,6 +143,7 @@ namespace LevelGate.Progression
                 clone.transform.SetParent(template.parent, false);
                 clone.transform.SetSiblingIndex(template.GetSiblingIndex() + 1);
                 UnityEngine.Object.Destroy(holder);
+                Enable(clone, "just added");
                 var layout = template.parent.GetComponent<LayoutGroup>();
                 if (layout == null && clone.transform is RectTransform crt && template is RectTransform trt)
                 {
@@ -138,6 +155,38 @@ namespace LevelGate.Progression
                 L.Info("PROGRESSION button added to the menu bar.");
             }
             catch (Exception e) { L.Error("adding the menu button", e); _button = null; }
+        }
+
+        private static int _waitLogged;
+
+        /// <summary>Is this tab enabled (its Toggle interactable, no CanvasGroup above it switching it off)?</summary>
+        private static bool Usable(Transform tab)
+        {
+            var toggle = tab.GetComponentInChildren<Toggle>(true);
+            if (toggle != null && !toggle.interactable) return false;
+            foreach (var g in tab.GetComponentsInParent<CanvasGroup>(true))
+                if (!g.interactable || !g.blocksRaycasts || g.alpha < .6f) return false;
+            return true;
+        }
+
+        /// <summary>Makes sure our copy is enabled and clickable (logs what it had to change).</summary>
+        private static void Enable(GameObject clone, string why)
+        {
+            var fixes = new List<string>();
+            foreach (var g in clone.GetComponentsInChildren<CanvasGroup>(true))
+            {
+                if (!g.interactable || !g.blocksRaycasts || g.alpha < 1f) fixes.Add($"CanvasGroup on '{g.name}' (alpha {g.alpha:0.00}, interactable {g.interactable}, raycasts {g.blocksRaycasts})");
+                g.alpha = 1f; g.interactable = true; g.blocksRaycasts = true; g.ignoreParentGroups = false;
+            }
+            foreach (var t in clone.GetComponentsInChildren<Toggle>(true))
+            {
+                if (!t.interactable) fixes.Add($"Toggle on '{t.name}' not interactable");
+                if (!t.enabled) fixes.Add($"Toggle on '{t.name}' disabled");
+                t.interactable = true; t.enabled = true;
+            }
+            foreach (var gr in clone.GetComponentsInChildren<Graphic>(true))
+                if (gr.GetComponent<Toggle>() != null && !gr.raycastTarget) { gr.raycastTarget = true; fixes.Add($"raycast on '{gr.name}'"); }
+            if (fixes.Count > 0) L.Info($"PROGRESSION tab re-enabled ({why}): " + string.Join("; ", fixes.ToArray()));
         }
 
         private static void FindCandidates()
@@ -177,7 +226,7 @@ namespace LevelGate.Progression
         private static void Neutralize(GameObject clone)
         {
             foreach (Transform ch in clone.transform.Cast<Transform>().ToList())
-                if (ch.name.StartsWith("NewInformation")) { UnityEngine.Object.Destroy(ch.gameObject); L.Debug($"  removed '{ch.name}' (counters)"); }
+                if (ch.name.StartsWith("NewInformation")) { UnityEngine.Object.DestroyImmediate(ch.gameObject); L.Debug($"  removed '{ch.name}' (counters)"); }
             foreach (var c in clone.GetComponentsInChildren<Component>(true))
             {
                 if (c == null) continue;
