@@ -85,7 +85,8 @@ function apply(snap) {
   S.undo = []; S.redo = [];
   applyItems(snap);
   $('#folder').textContent = S.configFile || 'Pick BepInEx\\plugins\\LevelGate\\config\\level_requirements.json (Browse…)';
-  $('#appVersion').textContent = 'v' + (S.version || '1.0.0');
+  $('#appVersion').textContent = 'v' + (S.version || '1.0.0') + (snap.levelGateVersion ? ` · Level Gate ${snap.levelGateVersion}` : '');
+  $('#appVersion').title = `Level & Item Editor v${S.version || '1.0.0'}${snap.levelGateVersion ? ` · LevelGate plugin v${snap.levelGateVersion} (next to the config)` : ''}\nVersions go MAJOR.MINOR.PATCH: MAJOR = files / settings change, MINOR = new features, PATCH = fixes.`;
   status(!S.configFile ? 'LevelGate\'s config wasn\'t found — click Browse… and pick SPT\\BepInEx\\plugins\\LevelGate\\config\\level_requirements.json.'
     : snap.notInGame ? '⚠ This file isn\'t inside an SPT folder, so the game never reads it — Browse… to SPT\\BepInEx\\plugins\\LevelGate\\config\\level_requirements.json.'
     : `Loaded ${S.saved.size} level limit(s).`);
@@ -108,6 +109,7 @@ function applyItems(snap) {
 
 function restoreUi() {
   const u = S.ui;
+  if (typeof progRestore === "function") progRestore();
   if (u.cat) S.cat = u.cat;
   if (u.filter) S.filter = u.filter;
   if (u.sort) S.sort = u.sort;
@@ -260,6 +262,8 @@ function catCounts(cat) {
 
 function renderNav() {
   document.querySelectorAll('#pagebar .tab').forEach(t => t.classList.toggle('on', t.dataset.arg === S.tab));
+  document.body.classList.toggle('prog-mode', S.tab === 'prog');
+  if (S.tab === 'prog') return;
   if (S.tab === 'stats') { statsNav(); return; }
   $('#navModsBtn').hidden = false;
   const entry = (key, name, color) => {
@@ -286,7 +290,9 @@ function catColor(cat) {
 
 function renderHeader() {
   const mods = S.page === 'mods';
-  if (S.tab === 'stats') {
+  if (S.tab === 'prog') {
+    $('#headerSub').textContent = `${fmt(S.levels.size)} limited items · Levels 1–${MAX_LEVEL} · ← → level · Q / E page`;
+  } else if (S.tab === 'stats') {
     const ids = statIds('all');
     $('#headerSub').textContent = `${fmt(ids.length)} meds, stims & food · ${Object.keys(S.statEdits).length} edited by you` +
       (S.statSources.length ? ` · also changed by: ${S.statSources.join(', ')}` : '');
@@ -371,6 +377,7 @@ function renderPage(keepScroll = true) {
   const page = $('#page');
   const top = page.scrollTop;
   if (S.page === 'mods') { page.innerHTML = modsPage(); if (!keepScroll) page.scrollTop = 0; return; }
+  if (S.tab === 'prog') { page.innerHTML = progPage(); page.scrollTop = 0; return; }
   if (S.tab === 'stats') { page.innerHTML = statsPage(); page.scrollTop = keepScroll ? top : 0; return; }
   const list = S.shown = shownItems();
   S.sortStale = false;
@@ -397,6 +404,7 @@ function renderDetails() {
   const d = $('#details');
   const picked = [...S.picked];
   if (S.page === 'mods') { $('#detailsTitle').textContent = 'Mods'; d.innerHTML = modsHelp(); return; }
+  if (S.tab === 'prog') return;
   if (S.tab === 'stats') { statsDetails(); return; }
   if (picked.length > 1) { $('#detailsTitle').textContent = `${picked.length} Items Picked`; d.innerHTML = overall() + multiDetails(picked) + tagCard(picked); return; }
   if (!S.sel) {
@@ -933,6 +941,7 @@ document.addEventListener('keydown', e => {
   if (ctrl && k.toLowerCase() === 's') { e.preventDefault(); ACT.save(); return; }
   if (ctrl && k.toLowerCase() === 'f') { e.preventDefault(); searchOpen(true); $('#search').focus(); $('#search').select(); return; }
   if (typing) return;
+  if (S.tab === 'prog') return; // prog.js has its own keys
   const inLevel = !!e.target.dataset?.lvl;
   if (ctrl && k.toLowerCase() === 'z' && !inLevel) { e.preventDefault(); undo(e.shiftKey); return; }
   if (ctrl && k.toLowerCase() === 'y' && !inLevel) { e.preventDefault(); undo(true); return; }

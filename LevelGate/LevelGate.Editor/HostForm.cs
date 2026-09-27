@@ -19,7 +19,9 @@ public sealed class HostForm : Form
     private const string AppHost = "app.local";
     private const string FilesHost = "files.local";
 
-    public const string Version = "1.0.0";
+    // MAJOR.MINOR.PATCH — MAJOR: files / settings change so older copies can't read them,
+    // MINOR: new features, PATCH: fixes only. See ..\CHANGELOG.md.
+    public const string Version = "1.1.0";
     public const string AppTitle = "Level & Item Editor";
 
     private readonly WebView2 _web = new() { Dock = DockStyle.Fill, DefaultBackgroundColor = Color.Black };
@@ -164,6 +166,31 @@ public sealed class HostForm : Form
     /// <summary>The SPT folder above the config file (where the game and its item database are).</summary>
     private string? SptRoot() => SptRootOf(_configFile);
 
+    /// <summary>Version of the LevelGate.dll next to the config (…\LevelGate\config\ -> …\LevelGate\LevelGate.dll), read from its [BepInPlugin] attribute.</summary>
+    private static string? LevelGateVersion(string? configFile)
+    {
+        try
+        {
+            var dir = Path.GetDirectoryName(Path.GetDirectoryName(configFile ?? "") ?? "");
+            var dll = string.IsNullOrEmpty(dir) ? null : Path.Combine(dir, "LevelGate.dll");
+            if (dll == null || !File.Exists(dll)) return null;
+            var bytes = File.ReadAllBytes(dll);
+            var name = System.Text.Encoding.UTF8.GetBytes("LevelGate");
+            for (int at = 1; at <= bytes.Length - name.Length; at++)
+            {
+                if (bytes[at - 1] != name.Length || !bytes.AsSpan(at, name.Length).SequenceEqual(name)) continue;
+                int p = at + name.Length;
+                if (p >= bytes.Length) break;
+                int len = bytes[p];
+                if (len == 0 || len > 20 || p + 1 + len > bytes.Length) continue;
+                var v = System.Text.Encoding.UTF8.GetString(bytes, p + 1, len);
+                if (System.Text.RegularExpressions.Regex.IsMatch(v, @"^\d+(\.\d+){1,3}$")) return v;
+            }
+        }
+        catch { }
+        return null;
+    }
+
     private static readonly JsonDocumentOptions Lenient = new() { CommentHandling = JsonCommentHandling.Skip, AllowTrailingCommas = true };
 
     private JsonObject ReadConfig()
@@ -196,6 +223,7 @@ public sealed class HostForm : Form
             ["items"] = null,
             ["itemsStatus"] = "",
             ["version"] = Version,
+            ["levelGateVersion"] = LevelGateVersion(configFile),
         };
         if (string.IsNullOrWhiteSpace(configFile) || !Directory.Exists(Path.GetDirectoryName(configFile))) return result;
 
