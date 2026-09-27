@@ -180,6 +180,34 @@ namespace LevelGate.Progression
         private static Sprite _dotGrid, _cutTR, _tabIcon, _tick, _cornerGlow;
 
         /// <summary>A glow from the right edge that also fades out toward the bottom (no hard edge anywhere). White: tint it.</summary>
+        private static Sprite _hexSpinner;
+
+        /// <summary>A hexagon ring in three parts (like the game's loading mark), white on transparent, 128 px.</summary>
+        public static Sprite HexSpinner()
+        {
+            if (_hexSpinner != null) return _hexSpinner;
+            const int n = 128;
+            var tex = new Texture2D(n, n, TextureFormat.RGBA32, true) { wrapMode = TextureWrapMode.Clamp, filterMode = FilterMode.Trilinear };
+            var px = new Color32[n * n];
+            for (int y = 0; y < n; y++)
+                for (int x = 0; x < n; x++)
+                {
+                    float u = (x + .5f) / n * 2 - 1, v = (y + .5f) / n * 2 - 1;
+                    float ax = Mathf.Abs(u), ay = Mathf.Abs(v);
+                    float d = Mathf.Max(ax, ax * .5f + ay * .866f); // pointy-top hexagon "radius"
+                    float ring = Mathf.Clamp01((d - .58f) / .02f) * Mathf.Clamp01((.86f - d) / .02f);
+                    // three gaps, 120° apart, cut at a slant (the blades look like they interlock)
+                    float ang = (Mathf.Atan2(v, u) * Mathf.Rad2Deg + 360f + (d - .58f) * 60f) % 120f;
+                    float gap = Mathf.Clamp01((ang - 8f) / 2f) * Mathf.Clamp01((118f - ang) / 2f);
+                    byte a = (byte)(255 * ring * gap);
+                    px[y * n + x] = new Color32(255, 255, 255, a);
+                }
+            tex.SetPixels32(px);
+            tex.Apply(true, true);
+            _hexSpinner = Sprite.Create(tex, new Rect(0, 0, n, n), new Vector2(.5f, .5f));
+            return _hexSpinner;
+        }
+
         public static Sprite CornerGlow()
         {
             if (_cornerGlow != null) return _cornerGlow;

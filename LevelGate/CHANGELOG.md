@@ -40,6 +40,26 @@ Versions are **MAJOR.MINOR.PATCH**:
 
 ## LevelGate Progression (BepInEx plugin, separate DLL)
 
+### 0.9.33
+- **Fix (major): the game's main menu could stay invisible and unclickable** (HIDEOUT, TRADING, the PROGRESSION shortcut: nothing responded).
+  - The screen hides the main menu while open and saved its state to restore on close. Opening an already-open screen (the log shows 8 shortcut clicks in a row) saved the hidden state as the one to restore, so every close afterwards restored a dead menu.
+  - Separately, a close while the game had the menu switched off (changing screens) couldn't find it by name, so it was never restored.
+  - Now:
+    - opening an open screen does nothing;
+    - the menu is kept by reference and always restored to fully shown and clickable;
+    - while the screen is closed, a check once a second shows the main menu again if it's ever found hidden (logged as a warning).
+- **Loading screen like the game's:** black, the game's own loading mark in the middle when it can be found (copied with its animation, its scripts stripped), and a quiet "LOADING n / total" bottom-left. The candidates are logged. If none is found, a hex mark stand-in turns slowly.
+  - It now also loads the opening level's list pictures and the rank emblem sheets of the pages around, so nothing pops in after it.
+- **Level cards:** a picture that hasn't arrived 3 s after its card was shown is asked for again at stash size (logged).
+- **UI:**
+  - The preview stage is landscape (1.3:1), with a spotlight, a floor line and a shadow under the item.
+  - List tiles have 4:3 thumbnails. Names without a short name in the game's locale drop their type words ("… assault rifle").
+  - The first card's rank emblem is smaller and sits above the same picture box as every other card, so all pictures line up.
+  - Card headers use one 1 px rule each side instead of dotted runs.
+  - The small stats use one row of 4 when there are 4 (no orphan EFF. RANGE row).
+  - "‹ BACK TO LEVEL 40" (bottom-left) appears while you browse another page; Home goes to your level too.
+  - The red corner glow is calmer. The EFT logo is removed. The PROGRESSION title moved down to line up with the emblem.
+
 ### 0.9.32
 - **XP animation (from the animation reviews):**
   - **A click no longer skips everything:** it acts like a Space tap (next moment), is ignored for the first 0.8 s, and ignores the click that closes F12 (the 0.9.31 log shows two previews lost to it within a second).

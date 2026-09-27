@@ -308,7 +308,32 @@ namespace LevelGate.Progression
         {
             var s = Localize(tpl + " ShortName");
             s = string.IsNullOrEmpty(s) || s == tpl + " ShortName" ? "" : LevelGateLabel.Replace(s, "");
-            return string.IsNullOrEmpty(s) ? NameOf(tpl) : s;
+            if (!string.IsNullOrEmpty(s)) return s;
+            if (_noShort++ < 5) L.Debug($"no short name for {tpl} — shortened from its full name");
+            return Shorten(NameOf(tpl));
+        }
+
+        private static int _noShort;
+
+        // what the type already says on the tile (its category label) doesn't need repeating in the name
+        private static readonly string[] _typeWords =
+        {
+            " bolt-action sniper rifle", " bolt-action rifle", " sniper rifle", " marksman rifle", " assault rifle", " assault carbine",
+            " carbine", " submachine gun", " machine pistol", " machine gun", " light machine gun", " pump-action shotgun", " shotgun",
+            " pistol", " revolver", " grenade launcher", " armored rig", " plate carrier", " body armor", " bulletproof helmet",
+            " helmet", " backpack", " stimulant injector", " injector", " armband",
+        };
+
+        /// <summary>A full name without its type words ("SIG MCX .300 Blackout assault rifle" → "SIG MCX .300 Blackout").</summary>
+        private static string Shorten(string name)
+        {
+            if (string.IsNullOrEmpty(name)) return name;
+            foreach (var w in _typeWords)
+            {
+                int i = name.IndexOf(w, StringComparison.OrdinalIgnoreCase);
+                if (i > 3) { name = (name.Substring(0, i) + name.Substring(i + w.Length)).Trim(); break; }
+            }
+            return name;
         }
 
         // ---------------------------------------------------------------- the player

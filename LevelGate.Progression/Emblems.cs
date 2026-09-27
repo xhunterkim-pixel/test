@@ -103,6 +103,9 @@ namespace LevelGate.Progression
             catch (Exception e) { s.Failed = true; L.Error("loading emblem " + s.File, e); return null; }
         }
 
+        /// <summary>Loads a level's emblem sheet now (the loading screen does this, so no emblem pops in afterwards).</summary>
+        public static void Preload(int level) { if (Available) Load(IndexOf(level)); }
+
         /// <summary>Shows the level's emblem on this image and keeps it playing. False if there's no emblem for it.</summary>
         public static bool Show(Image img, int level)
         {
