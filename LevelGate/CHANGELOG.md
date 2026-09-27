@@ -40,6 +40,9 @@ Versions are **MAJOR.MINOR.PATCH**:
 
 ## LevelGate Progression (BepInEx plugin, separate DLL)
 
+### 0.9.43
+- **[HOME] BACK TO LEVEL X** (bottom-left) shows whenever you're looking at a level that isn't yours, on any page, and is hidden on your own level. It used to be always there and dimmed on your page.
+
 ### 0.9.42
 - **[HOME] BACK TO LEVEL 40**, bottom-left: the mirror of PERFORMANCE MODE bottom-right. Same row, same small caps, left-aligned with the card strip's edge, with a HOME keycap (the Home key does the same).
   - Always there, so both sides balance. It's readable while you browse another page and dimmed on your own page.

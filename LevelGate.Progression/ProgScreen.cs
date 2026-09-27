@@ -834,6 +834,23 @@ namespace LevelGate.Progression
                 ShowLevel(Mathf.Min(p, ProgData.MaxLevel));
             });
             HoverHook.Add(rt, on => { _homeHover = on; PaintHome(); if (on && _homeAway) Sounds.Play("ButtonOver"); });
+            _homeBtn = rt.gameObject;
+            _homeBtn.SetActive(false);
+        }
+
+        private static GameObject _homeBtn;
+
+        /// <summary>Shown while you look at any level that isn't yours (hidden on your own level).</summary>
+        private static void RefreshHome()
+        {
+            if (_homeBtn == null) return;
+            int player = _xpCardLevel > 0 ? _xpCardLevel : ProgData.PlayerLevel();
+            int mine = Mathf.Min(player, ProgData.MaxLevel);
+            _homeAway = player > 0 && _level != mine;
+            if (_homeBtn.activeSelf != _homeAway) _homeBtn.SetActive(_homeAway);
+            if (!_homeAway) return;
+            Ui.SetText(_homeText, $"BACK TO LEVEL {mine}");
+            PaintHome();
         }
 
         private static void PaintHome()
@@ -1072,12 +1089,7 @@ namespace LevelGate.Progression
             }
             // YOU: an orange mark over your own page, so you can find your way back while browsing
             int mine = player > 0 ? (Mathf.Min(player, ProgData.MaxLevel) - 1) / PerPage : -1;
-            if (_homeText != null && player > 0)
-            {
-                _homeAway = _page != mine;
-                Ui.SetText(_homeText, $"BACK TO LEVEL {Mathf.Min(player, ProgData.MaxLevel)}");
-                PaintHome();
-            }
+            RefreshHome();
 
 
         }
@@ -1868,6 +1880,7 @@ namespace LevelGate.Progression
 
         private static void UpdateSelection()
         {
+            RefreshHome();
             if (_prev != null) { _prev.interactable = _level > 1; _next.interactable = _level < ProgData.MaxLevel; }
             int player = _xpCardLevel > 0 ? _xpCardLevel : ProgData.PlayerLevel(); // the XP animation walks the cards up
             foreach (var c in _cards) c.Mark(_level, player);
