@@ -274,7 +274,7 @@ namespace LevelGate.Progression
         private static bool _localizedTried;
         private static readonly Regex LevelGateLabel = new Regex(@"^\s*\[[^\]]*\]\s*", RegexOptions.Compiled);
 
-        private static string Localize(string key)
+        internal static string Localize(string key)
         {
             if (!_localizedTried)
             {

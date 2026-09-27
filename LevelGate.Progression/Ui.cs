@@ -177,7 +177,24 @@ namespace LevelGate.Progression
 
         private static Sprite _white, _vgrad, _hgrad, _radial, _dots, _cut, _lock, _vignette;
         private static Sprite[] _grime;
-        private static Sprite _dotGrid, _cutTR, _tabIcon, _tick;
+        private static Sprite _dotGrid, _cutTR, _tabIcon, _tick, _cornerGlow;
+
+        /// <summary>A glow from the right edge that also fades out toward the bottom (no hard edge anywhere). White: tint it.</summary>
+        public static Sprite CornerGlow()
+        {
+            if (_cornerGlow != null) return _cornerGlow;
+            const int w = 128, h = 64;
+            var tex = new Texture2D(w, h, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Clamp };
+            for (int y = 0; y < h; y++)
+                for (int x = 0; x < w; x++)
+                {
+                    float fx = Mathf.Pow(x / (w - 1f), 2.2f);                       // strongest at the right edge
+                    float fy = Mathf.SmoothStep(0, 1, Mathf.InverseLerp(.25f, .85f, y / (h - 1f))); // gone before the bottom
+                    tex.SetPixel(x, y, new Color(1, 1, 1, fx * fy));
+                }
+            tex.Apply();
+            return _cornerGlow = Sprite.Create(tex, new Rect(0, 0, w, h), new Vector2(.5f, .5f));
+        }
 
         /// <summary>A check mark (white, tint it), anti-aliased.</summary>
         public static Sprite Tick()

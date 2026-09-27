@@ -117,7 +117,7 @@ namespace LevelGate.Progression
                 Sounds.Open();
                 _frames = 0; _frameTime = 0; _frameLogAt = Time.unscaledTime + 5;
                 ShowPage(_page, 0);
-                ShowLevel(_level);
+                ShowLevel(_level, true);
             }
             catch (Exception e) { L.Error("opening the screen", e); }
         }
@@ -128,7 +128,7 @@ namespace LevelGate.Progression
             if (_perfCheck != null) _perfCheck.enabled = Perf;
             if (!IsOpen) return;
             ShowPage(_page, 0);
-            ShowLevel(_level);
+            ShowLevel(_level, true);
         }
 
         public static void Close(string why)
@@ -193,7 +193,7 @@ namespace LevelGate.Progression
             // it always glows a little and flares up while the picked level is still locked
             _bloom.Clear(); _panelFrames.Clear();
             // kept to the top half (right side), so it doesn't pull the eye to the level cards in the bottom corner
-            _bloom.Add(Ui.Img(Ui.Rect(root, "Bloom", new Vector2(.25f, .34f), Vector2.one, Vector2.zero, Vector2.zero), new Color(0, 0, 0, 0), Ui.HorizontalFade()));
+            _bloom.Add(Ui.Img(Ui.Rect(root, "Bloom", new Vector2(.25f, 0), Vector2.one, Vector2.zero, Vector2.zero), new Color(0, 0, 0, 0), Ui.CornerGlow()));
             _bloom.Add(Ui.Img(Ui.Box(root, "BloomCore", new Vector2(1, .66f), Vector2.zero, new Vector2(1200, 1300)), new Color(0, 0, 0, 0), Ui.Radial()));
             _mood = -1; // forces the first ApplyMood to paint
 
@@ -213,10 +213,20 @@ namespace LevelGate.Progression
             Ui.Img(vig, new Color(0, 0, 0, .14f), Ui.Vignette()).raycastTarget = false;
             _fade = root.gameObject.AddComponent<CanvasGroup>();
 
+            // hover tooltip (full item names, setting hints): its own layer, over everything
+            var tipLayer = Ui.Rect(root, "TooltipLayer", Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
+            SubCanvas(tipLayer);
+            _tip = Ui.Rect(tipLayer, "Tooltip", new Vector2(.5f, .5f), new Vector2(.5f, .5f), Vector2.zero, Vector2.zero);
+            _tip.pivot = new Vector2(.5f, 0);
+            Ui.Img(_tip, Ui.Hex("#56636a")).raycastTarget = false;
+            Ui.Img(Ui.Fill(_tip, "In", 1), Ui.Hex("#0b0f11", .97f)).raycastTarget = false;
+            _tipText = Ui.Label(Ui.Fill(_tip, "Text", 0), "Text", "", TBody, Text, TextAnchor.MiddleCenter, false);
+            _tip.gameObject.SetActive(false);
+
             if (!_changedHooked)
             {
                 _changedHooked = true;
-                ProgData.Changed += () => { if (IsOpen) { L.Debug("level list changed — redrawing"); ShowPage(_page, 0); ShowLevel(_level); } };
+                ProgData.Changed += () => { if (IsOpen) { L.Debug("level list changed — redrawing"); ShowPage(_page, 0); ShowLevel(_level, true); } };
             }
             _built = true;
             L.Info($"screen built in {(Time.realtimeSinceStartup - t0) * 1000:0} ms");
@@ -284,13 +294,15 @@ namespace LevelGate.Progression
             _headBadge.Set(lv);
             var tier = TierOf(lv);
             int index = Array.IndexOf(Tiers, tier) + 1;
-            Ui.SetText(_headRank, player > 0 ? tier.Name : "Progression");
+            // rank name, then overall progress quietly after it: how many of the limited items you can use
+            int total = ProgData.Levels.Count, owned = player > 0 ? ProgData.Levels.Values.Count(v => v <= player) : 0;
+            Ui.SetText(_headRank, player <= 0 ? "Progression" : total > 0 ? $"{tier.Name}  <size={TBody}><color=#7d8588>·  {Thousands(owned)} / {Thousands(total)} items unlocked</color></size>" : tier.Name);
             var next = Tiers.FirstOrDefault(t => t.From > lv);
             Ui.SetText(_headNext, player <= 0 ? "" : next.Name == null ? $"Rank {index} of {Tiers.Length}  ·  top rank"
                 : $"Rank {index} of {Tiers.Length}  ·  next: {next.Name} (level {next.From})");
         }
 
-        private static Component _xpLevel, _xpText, _xpNext, _xpTotal;
+        private static Component _xpLevel, _xpText, _xpNext;
         private static RectTransform _xpFill;
         private static Image _xpSquare;
         private static RectTransform _xpTag;
@@ -302,7 +314,6 @@ namespace LevelGate.Progression
             var xp = Ui.Rect(top, "Xp", new Vector2(.34f, 1), new Vector2(.74f, 1), new Vector2(Gutter / 2, -(S3 + 80)), new Vector2(-Gutter / 2, -S3));
             // "CURRENT LEVEL" heads the block, directly over the level square it names; the overall unlock count sits opposite
             Ui.Label(Ui.Rect(xp, "CurrentLabel", new Vector2(0, 1), new Vector2(1, 1), new Vector2(0, -14), Vector2.zero), "Text", "CURRENT LEVEL", TCaps, Grey, TextAnchor.MiddleLeft, false, Caps);
-            _xpTotal = Ui.Label(Ui.Rect(xp, "Unlocked", new Vector2(0, 1), new Vector2(1, 1), new Vector2(0, -14), Vector2.zero), "Text", "", TCaps, Grey, TextAnchor.MiddleRight, false, Caps);
             var sq = Ui.Rect(xp, "Level", new Vector2(0, 1), new Vector2(0, 1), new Vector2(0, -80), new Vector2(64, -18));
             _xpSquare = Ui.Img(sq, Ui.Hex("#e0562f"), Ui.CutCorner());
             _xpLevel = Ui.Label(sq, "Text", "", TLevel, Color.white, TextAnchor.MiddleCenter, true);
@@ -336,7 +347,7 @@ namespace LevelGate.Progression
         {
             int player = ProgData.PlayerLevel();
             int nextCount = player > 0 && player < ProgData.MaxLevel ? ProgData.CountAt(player + 1) : -1;
-            string body = $"Next level {player + 1}: <color=#d5d9d6>{nextCount}</color> unlock{(nextCount == 1 ? "" : "s")}  ›";
+            string body = $"Next level {player + 1}: <color=#d5d9d6>{nextCount}</color> item{(nextCount == 1 ? "" : "s")}  ›";
             Ui.SetText(_xpNext, nextCount < 0 ? "" : _xpNextHover ? $"<color=#d5d9d6><u>{body}</u></color>" : body);
         }
 
@@ -375,9 +386,7 @@ namespace LevelGate.Progression
             _xpFill.anchorMax = new Vector2(frac, 1);
             UpdateXpNext();
             UpdateHeader(player);
-            // overall progress: how many of the limited items you can use
-            int total = ProgData.Levels.Count, owned = player > 0 ? ProgData.Levels.Values.Count(v => v <= player) : 0;
-            Ui.SetText(_xpTotal, total > 0 && player > 0 ? $"{Thousands(owned)} / {Thousands(total)} ITEMS UNLOCKED" : "");
+
         }
 
         private static Component _listState;
@@ -416,13 +425,6 @@ namespace LevelGate.Progression
             _listFade.raycastTarget = false;
             _listScroll = scroll;
 
-            // hover tooltip with the full item name (drawn over everything in the top half)
-            _tip = Ui.Rect(top, "Tooltip", new Vector2(.5f, .5f), new Vector2(.5f, .5f), Vector2.zero, Vector2.zero);
-            _tip.pivot = new Vector2(.5f, 0);
-            Ui.Img(_tip, Ui.Hex("#56636a"));
-            Ui.Img(Ui.Fill(_tip, "In", 1), Ui.Hex("#0b0f11", .97f));
-            _tipText = Ui.Label(Ui.Fill(_tip, "Text", 0), "Text", "", TBody, Text, TextAnchor.MiddleCenter, false);
-            _tip.gameObject.SetActive(false);
         }
 
         private static void BuildFeatured(RectTransform top)
@@ -434,8 +436,7 @@ namespace LevelGate.Progression
             var fit = picBox.gameObject.AddComponent<AspectRatioFitter>();
             fit.aspectMode = AspectRatioFitter.AspectMode.FitInParent;
             fit.aspectRatio = 1;
-            Ui.Img(picBox, Ui.Hex("#2a3134"));
-            var picFace = Ui.Fill(picBox, "Face", 1);
+            var picFace = Ui.Fill(picBox, "Face", 0); // no frame of its own (the panel is the frame): the lit face is the hero
             Ui.Img(picFace, Face);
             // lighting only: a soft key light from above and a centre glow, so the item sits on a lit surface
             Ui.Img(Ui.Rect(picFace, "KeyLight", new Vector2(0, .45f), Vector2.one, Vector2.zero, Vector2.zero), new Color(1, 1, 1, .03f), Ui.VerticalFade());
@@ -453,8 +454,9 @@ namespace LevelGate.Progression
             // right: the selected reward's details, laid out in content order (nothing at fixed heights, so long names
             // and descriptions push the rest down instead of overlapping)
             var side = Panel(top, "Details", new Vector2(.74f, 0), new Vector2(1, 1), new Vector2(Gutter / 2, S4), new Vector2(-Margin, -PanelTop));
-            const float bottomStack = S4 + 40 + S4; // just the INSPECT row: everything else follows the content
-            var info = Ui.Rect(side, "Info", Vector2.zero, Vector2.one, new Vector2(PanelPad, bottomStack), new Vector2(-PanelPad, -PanelPad));
+            // everything in one content flow, INSPECT included: it sits right under the description instead of at the bottom
+            var info = Ui.Rect(side, "Info", Vector2.zero, Vector2.one, new Vector2(PanelPad, PanelPad), new Vector2(-PanelPad, -PanelPad));
+            _info = info;
             var vl = info.gameObject.AddComponent<VerticalLayoutGroup>();
             vl.spacing = S2; vl.childControlHeight = true; vl.childControlWidth = true; vl.childForceExpandHeight = false; vl.childForceExpandWidth = true;
 
@@ -468,7 +470,8 @@ namespace LevelGate.Progression
             // the game's description: scrolls when it's longer than the space left
             var descView = Ui.Rect(info, "Description", Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
             var dle = descView.gameObject.AddComponent<LayoutElement>();
-            dle.flexibleHeight = 1; dle.minHeight = 48;
+            dle.flexibleHeight = 1; dle.minHeight = 0;
+            _descSize = dle; _descView = descView;
             _descScroll = descView.gameObject.AddComponent<ScrollRect>();
             _descScroll.horizontal = false; _descScroll.scrollSensitivity = 30; _descScroll.movementType = ScrollRect.MovementType.Clamped;
             var dvp = Ui.Fill(descView, "Viewport");
@@ -485,7 +488,11 @@ namespace LevelGate.Progression
             AddScrollCue(_descScroll, descView);
 
             // INSPECT, full width, with its right-click shortcut as a keycap inside it (like Q / E)
-            var btn = Ui.Rect(side, "Inspect", new Vector2(0, 0), new Vector2(1, 0), new Vector2(PanelPad, S4), new Vector2(-PanelPad, S4 + 40));
+            var gap = Ui.Rect(info, "Gap", Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
+            gap.gameObject.AddComponent<LayoutElement>().minHeight = S2; // + the group's 8 = 16 above INSPECT
+            var btn = Ui.Rect(info, "Inspect", Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
+            var ble = btn.gameObject.AddComponent<LayoutElement>();
+            ble.minHeight = ble.preferredHeight = 40;
             var bimg = Ui.Img(btn, Ui.Hex("#34464c"), null, true);
             Ui.Label(btn, "Text", "INSPECT", TStrong, Text, TextAnchor.MiddleCenter, false, 1);
             var cap = Ui.Rect(btn, "Key", new Vector2(1, .5f), new Vector2(1, .5f), new Vector2(-S3 - 38, -11), new Vector2(-S3, 11));
@@ -498,7 +505,21 @@ namespace LevelGate.Progression
             b.onClick.AddListener(() => { if (_featTpl != null) Inspect(_featTpl); });
         }
 
-        private static LayoutElement _reqSize;
+        private static LayoutElement _reqSize, _descSize;
+        private static RectTransform _info, _descView;
+
+        /// <summary>The description takes the height it needs (up to what's left, then it scrolls), so INSPECT follows the text.</summary>
+        private static void FitDescription()
+        {
+            if (_descSize == null) return;
+            _descSize.flexibleHeight = 1; _descSize.preferredHeight = -1;
+            LayoutRebuilder.ForceRebuildLayoutImmediate(_info);
+            float avail = _descView.rect.height;
+            float need = Refl.Get(_featDesc, "preferredHeight") is float h ? h : avail;
+            _descSize.flexibleHeight = 0;
+            _descSize.preferredHeight = Mathf.Min(need + S1, avail);
+            LayoutRebuilder.ForceRebuildLayoutImmediate(_info);
+        }
         private static Component _featNote;
 
         /// <summary>The one place that says whether a reward is yours: REQUIREMENT · state, "Reach level X  n / X",
@@ -511,16 +532,16 @@ namespace LevelGate.Progression
             _reqEdge = Ui.Img(req, Border);
             var reqIn = Ui.Fill(req, "In", 1);
             Ui.Img(reqIn, Ui.Hex("#0b0f11", .9f));
-            Ui.Label(Ui.Rect(reqIn, "Head", new Vector2(0, 1), Vector2.one, new Vector2(S3, -26), new Vector2(-S3, -S2)), "Text", "REQUIREMENT", TCaps, Grey, TextAnchor.MiddleLeft, false, Caps);
-            _featStatus = Ui.Label(Ui.Rect(reqIn, "State", new Vector2(0, 1), Vector2.one, new Vector2(S3, -26), new Vector2(-S3, -S2)), "Text", "", TCaps, Grey, TextAnchor.MiddleRight, false, Caps);
-            var row = Ui.Rect(reqIn, "Row", new Vector2(0, 1), Vector2.one, new Vector2(S3, -54), new Vector2(-S3, -30));
+            Ui.Label(Ui.Rect(reqIn, "Head", new Vector2(0, 1), Vector2.one, new Vector2(S4, -26), new Vector2(-S4, -S2)), "Text", "REQUIREMENT", TCaps, Grey, TextAnchor.MiddleLeft, false, Caps);
+            _featStatus = Ui.Label(Ui.Rect(reqIn, "State", new Vector2(0, 1), Vector2.one, new Vector2(S4, -26), new Vector2(-S4, -S2)), "Text", "", TCaps, Grey, TextAnchor.MiddleRight, false, Caps);
+            var row = Ui.Rect(reqIn, "Row", new Vector2(0, 1), Vector2.one, new Vector2(S4, -54), new Vector2(-S4, -30));
             var box = Ui.Rect(row, "Box", new Vector2(0, .5f), new Vector2(0, .5f), new Vector2(0, -8), new Vector2(16, 8));
             Ui.Img(box, Grey);
             Ui.Img(Ui.Fill(box, "In", 1), Ui.Hex("#10161a"));
             _featCheck = Ui.Img(Ui.Fill(box, "Check", -2), Ui.Hex(Green), Ui.Tick()); // a real tick, not a filled square
             _featReq = Ui.Label(Ui.Rect(row, "Text", Vector2.zero, Vector2.one, new Vector2(16 + S2, 0), Vector2.zero), "Text", "", TStrong, Text, TextAnchor.MiddleLeft, false);
             _featReqValue = Ui.Label(Ui.Rect(row, "Value", Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero), "Text", "", TStrong, Text, TextAnchor.MiddleRight, true);
-            _featNote = Ui.Label(Ui.Rect(reqIn, "Note", new Vector2(0, 1), Vector2.one, new Vector2(S3 + 16 + S2, -78), new Vector2(-S3, -58)), "Text", "", TBody, Grey, TextAnchor.MiddleLeft, false);
+            _featNote = Ui.Label(Ui.Rect(reqIn, "Note", new Vector2(0, 1), Vector2.one, new Vector2(S4 + 16 + S2, -78), new Vector2(-S4, -58)), "Text", "", TBody, Grey, TextAnchor.MiddleLeft, false);
         }
 
         private static ScrollRect _listScroll;
@@ -529,12 +550,16 @@ namespace LevelGate.Progression
         /// <summary>A thin 2 px scroll thumb on the right edge, shown only when the content is taller than its view.</summary>
         private static void AddScrollCue(ScrollRect scroll, RectTransform view)
         {
-            var bar = Ui.Rect(view, "ScrollCue", new Vector2(1, 0), Vector2.one, new Vector2(-2, 0), Vector2.zero);
+            // 12 px wide to grab, 2 px wide to see
+            var bar = Ui.Rect(view, "ScrollCue", new Vector2(1, 0), Vector2.one, new Vector2(-12, 0), Vector2.zero);
             var sb = bar.gameObject.AddComponent<Scrollbar>();
             sb.direction = Scrollbar.Direction.BottomToTop;
             var area = Ui.Fill(bar, "Area");
             var handle = Ui.Fill(area, "Handle");
-            var himg = Ui.Img(handle, Ui.Hex("#56636a", .9f), null, true);
+            var himg = Ui.Img(handle, new Color(0, 0, 0, 0), null, true);
+            var line = Ui.Img(Ui.Rect(handle, "Line", new Vector2(1, 0), Vector2.one, new Vector2(-2, 0), Vector2.zero), Ui.Hex("#56636a", .9f));
+            line.raycastTarget = false;
+            HoverHook.Add(handle, on => FadeTo(line, on ? Ui.Hex("#8a969b") : Ui.Hex("#56636a", .9f)));
             sb.handleRect = handle;
             sb.targetGraphic = himg;
             sb.transition = Selectable.Transition.None;
@@ -598,7 +623,7 @@ namespace LevelGate.Progression
             {
                 float a = i / (float)PerPage, b = (i + 1) / (float)PerPage;
                 var slot = Ui.Rect(cards, "Slot" + i, new Vector2(a, 0), new Vector2(b, 1), new Vector2(Gutter / 2, 0), new Vector2(-Gutter / 2, 0));
-                _cards[i] = new Card(slot);
+                _cards[i] = new Card(slot, i == 0);
             }
 
 
@@ -634,7 +659,7 @@ namespace LevelGate.Progression
         /// <summary>[ ] PERFORMANCE MODE — bottom-right on the page bar's line, quiet small caps like the other secondary labels.</summary>
         private static void PerfToggle(RectTransform bottom)
         {
-            var rt = Ui.Rect(bottom, "Perf", new Vector2(1, 0), new Vector2(1, 0), new Vector2(-Margin - 200, 14), new Vector2(-Margin, 14 + 24));
+            var rt = Ui.Rect(bottom, "Perf", new Vector2(1, 0), new Vector2(1, 0), new Vector2(-Margin - PanelPad - 200, 14), new Vector2(-Margin - PanelPad, 14 + 24));
             var hit = Ui.Img(rt, new Color(0, 0, 0, 0), null, true);
             var box = Ui.Rect(rt, "Box", new Vector2(1, .5f), new Vector2(1, .5f), new Vector2(-14, -7), new Vector2(0, 7));
             var edge = Ui.Img(box, Ui.Hex("#5a6468"));
@@ -651,7 +676,11 @@ namespace LevelGate.Progression
                 ProgressionPlugin.PerformanceMode.Value = !Perf; // the setting's change redraws the screen (Plugin: SettingChanged → Refresh)
                 L.Info("performance mode " + (Perf ? "on" : "off"));
             });
-            HoverHook.Add(rt, on => { FadeTo(label as Graphic, on ? Grey : Dim); FadeTo(edge, on ? HoverEdge : Ui.Hex("#5a6468")); });
+            HoverHook.Add(rt, on =>
+            {
+                FadeTo(label as Graphic, on ? Grey : Dim); FadeTo(edge, on ? HoverEdge : Ui.Hex("#5a6468"));
+                ShowTip(on ? rt : null, "Lighter pictures, still emblems, fewer items per category");
+            });
         }
 
         private static void KeyBox(RectTransform parent, string key, float side, Action click)
@@ -810,10 +839,13 @@ namespace LevelGate.Progression
             }
         }
 
-        private static void ShowLevel(int level)
+        private static int _shownLevel; // the level whose rewards the list shows right now (0 = none)
+
+        private static void ShowLevel(int level, bool force = false)
         {
             L.Step("ShowLevel " + level);
             level = Mathf.Clamp(level, 1, ProgData.MaxLevel);
+            if (!force && level == _shownLevel && (level - 1) / PerPage == _page) { _level = level; UpdateSelection(); return; } // already showing it
             int page = (level - 1) / PerPage;
             _level = level;
             if (page != _page) { ShowPage(page, page > _page ? 1 : -1, level); return; }
@@ -838,7 +870,7 @@ namespace LevelGate.Progression
             ShowTip(null);
             _icons.Clear(); DropRequests(_icons);
             _hits.RemoveAll(h => h.Rect == null || !h.Rect.IsChildOf(_bottom));
-            Feature(items.FirstOrDefault());
+            Feature(CardPicks(items).FirstOrDefault()); // opens on the item the level's card shows big (weapons first)
             int max = Mathf.Max(1, Perf ? Mathf.Min(12, ProgressionPlugin.MaxTilesPerCategory.Value) : ProgressionPlugin.MaxTilesPerCategory.Value), n = 0;
             // a fixed column count from the panel width (4 at 1080p), all tiles the same size, 8 px apart
             float width = _content.rect.width - S2;
@@ -877,6 +909,7 @@ namespace LevelGate.Progression
                 Ui.Label(empty, "Text", $"Nothing unlocks at level {level}\n<size=13><color=#7d8588>Set items to this level in the Level & Item Editor.</color></size>", TStrong, Text, TextAnchor.MiddleCenter, false);
             }
             _content.anchoredPosition = Vector2.zero;
+            _shownLevel = level;
             _tilesStart = Time.unscaledTime;
             UpdateSelection();
             L.Debug($"level {level}: {items.Count} item(s) in {groups.Count} categories, {n} tiles drawn in {(Time.realtimeSinceStartup - t0) * 1000:0} ms");
@@ -966,16 +999,18 @@ namespace LevelGate.Progression
         private static RectTransform _tip;
         private static Component _tipText;
 
-        private static void ShowTip(TileView v)
+        private static void ShowTip(TileView v) => ShowTip(v?.Rt, v?.Item.Name);
+
+        /// <summary>Shows text in the tooltip just above rt (null hides it).</summary>
+        private static void ShowTip(RectTransform rt, string name)
         {
             if (_tip == null) return;
-            if (v == null || v.Rt == null) { _tip.gameObject.SetActive(false); return; }
-            string name = v.Item.Name;
+            if (rt == null || string.IsNullOrEmpty(name)) { _tip.gameObject.SetActive(false); return; }
             Ui.SetText(_tipText, name);
             float w = Ui.PreferredWidth(_tipText, name) + S3 * 2;
             _tip.sizeDelta = new Vector2(Mathf.Min(w, 420), 26);
-            var r = v.Rt.rect;
-            _tip.position = v.Rt.TransformPoint(new Vector3(r.center.x, r.yMax, 0));
+            var r = rt.rect;
+            _tip.position = rt.TransformPoint(new Vector3(r.center.x, r.yMax, 0));
             _tip.anchoredPosition += new Vector2(0, S1);
             _tip.SetAsLastSibling();
             _tip.gameObject.SetActive(true);
@@ -1102,8 +1137,12 @@ namespace LevelGate.Progression
             var majors = facts.Where(f => majorKeys.Contains(f.Label)).ToList();
             var minors = new[] { "Weight", "Size", "Caliber" }.Select(k => facts.FirstOrDefault(f => f.Label == k)).Where(f => f.Label != null)
                 .Concat(facts.Where(f => !majorKeys.Contains(f.Label) && f.Label != "Weight" && f.Label != "Size" && f.Label != "Caliber")).ToList();
+            // one grid for both rows: the same number of equal columns (empty cells pad the shorter row), so values align
+            int cols = Mathf.Max(3, Mathf.Max(majors.Count, minors.Count));
             foreach (var f in majors) Stat(_majorRow, f.Label, f.Value, true);
+            for (int c = majors.Count; c < cols && majors.Count > 0; c++) Stat(_majorRow, "", "", true);
             foreach (var f in minors) Stat(_minorRow, f.Label, f.Value, false);
+            for (int c = minors.Count; c < cols && minors.Count > 0; c++) Stat(_minorRow, "", "", false);
             _majorRow.gameObject.SetActive(majors.Count > 0);
             _minorRow.gameObject.SetActive(minors.Count > 0);
             Ui.SetText(_featDesc, ProgData.DescriptionOf(it.Tpl));
@@ -1111,8 +1150,8 @@ namespace LevelGate.Progression
             // requirement: the primary (and only red) locked signal
             _featCheck.enabled = met;
             Ui.SetText(_featReq, $"Reach level {it.Level}");
-            Ui.SetText(_featReqValue, player > 0 ? $"<color={(met ? Green : Red)}>{Mathf.Min(player, it.Level)} / {it.Level}</color>" : "");
-            Ui.SetText(_featStatus, player <= 0 ? "" : it.Level == player ? "<color=#e0562f>CURRENT LEVEL</color>" : met ? $"<color={Green}>UNLOCKED</color>" : $"{it.Level - player} LEVEL{(it.Level - player == 1 ? "" : "S")} AWAY");
+            Ui.SetText(_featReqValue, player > 0 ? (met ? $"{Mathf.Min(player, it.Level)} / {it.Level}" : $"<color={Red}>{Mathf.Min(player, it.Level)} / {it.Level}</color>") : "");
+            Ui.SetText(_featStatus, player <= 0 ? "" : it.Level == player ? "<color=#e0562f>CURRENT LEVEL</color>" : met ? "UNLOCKED" : $"{it.Level - player} LEVEL{(it.Level - player == 1 ? "" : "S")} AWAY");
             _reqEdge.color = met ? Border : Ui.Hex(Red, .55f);
             // locked: how much XP is left, and that this is a preview
             string note = "";
@@ -1122,6 +1161,7 @@ namespace LevelGate.Progression
             }
             Ui.SetText(_featNote, note);
             _reqSize.minHeight = _reqSize.preferredHeight = note == "" ? 64 : 84;
+            FitDescription();
             _featLock.enabled = player > 0 && it.Level > player;
             // sized to the preview on screen: enough real pixels for its size at this resolution (performance mode: half)
             float px = Mathf.Max(_featPic.rectTransform.rect.width, _featPic.rectTransform.rect.height) * (_featPic.canvas != null ? _featPic.canvas.scaleFactor : 1f);
@@ -1267,7 +1307,7 @@ namespace LevelGate.Progression
                 ProgItem over = null;
                 foreach (var (rect, item) in _hits)
                     if (rect != null && rect.gameObject.activeInHierarchy && MenuHook.Contains(rect, mouse)) { over = item; break; }
-                if (input.GetMouseButtonDown(0) && over != null && over.Tpl != _featTpl) { Sounds.Play("MenuContextMenu", "ButtonClick"); Feature(over); }
+                if (input.GetMouseButtonDown(0) && over != null && over.Tpl != _featTpl && over.Level == _level) { Sounds.Play("MenuContextMenu", "ButtonClick"); Feature(over); }
                 if (input.GetMouseButtonDown(1))
                 {
                     L.Debug($"right-click at {mouse} over {(over == null ? "nothing" : over.Name + " (" + over.Tpl + ")")}");
@@ -1348,6 +1388,8 @@ namespace LevelGate.Progression
 
             private readonly Image _emblem;
 
+            public bool Visible { set { if (_root.gameObject.activeSelf != value) _root.gameObject.SetActive(value); } }
+
             public void Set(int level, bool dim = false)
             {
                 var tier = TierOf(level);
@@ -1377,6 +1419,7 @@ namespace LevelGate.Progression
             private readonly DottedLine _headL, _headR;
             private readonly Component _head, _count, _state, _tier;
             private readonly Image[] _pics = new Image[3];
+            private readonly ProgItem[] _picItems = new ProgItem[3];
             private readonly Component[] _picNames = new Component[3];
             private readonly RectTransform[] _picRects = new RectTransform[3];
             private readonly Badge _badge;
@@ -1396,8 +1439,12 @@ namespace LevelGate.Progression
                 return sq;
             }
 
-            public Card(RectTransform slot)
+            private readonly bool _first;
+
+            /// <summary>first: the page's first card — the only one that shows the rank emblem (one emblem per page).</summary>
+            public Card(RectTransform slot, bool first)
             {
+                _first = first;
                 _body = Ui.Fill(slot, "Card");
                 _group = _body.gameObject.AddComponent<CanvasGroup>();
                 // |------ Level 6 ------|  dots bright by the label, fading out toward the ticks at the card's edges (Arena)
@@ -1418,7 +1465,7 @@ namespace LevelGate.Progression
                 // one spacing unit (Pad) everywhere: card edge → badge, badge → title, header → pictures, pictures → bottom row
                 // (the badge's diamond is ~B wide corner to corner, so its box sits exactly Pad from the edges)
                 // the rank stays quiet: a small emblem and small caps (the level itself is the card's header)
-                const float Pad = S3, B = 36, Head = Pad + B + S2, Foot = 32;
+                const float Pad = S3, B = 24, Head = Pad + B + S2, Foot = 32;
                 _badge = new Badge(inner, new Vector2(0, 1), new Vector2(Pad + B / 2, -(Pad + B / 2)), B);
                 _tier = Ui.Label(Ui.Rect(inner, "Tier", new Vector2(0, 1), Vector2.one, new Vector2(Pad + B + S2, -(Pad + B)), new Vector2(-Pad, -Pad)), "Text", "", TCaps, Grey, TextAnchor.MiddleLeft, false, Caps);
                 // selected: a 2 px light bar along the top edge (shape, not only colour)
@@ -1434,7 +1481,13 @@ namespace LevelGate.Progression
                 {
                     // Arena item preview: thin frame, dark face, the item, a soft dark fade around the edges, lock bottom-right
                     var picSlot = _picRects[i];
-                    Ui.Img(picSlot, Ui.Hex("#2a3134"));
+                    var edge = Ui.Img(picSlot, Ui.Hex("#2a3134"), null, true);
+                    int k = i;
+                    HoverHook.Add(edge, on =>
+                    {
+                        FadeTo(edge, on ? HoverEdge : Ui.Hex("#2a3134"));
+                        ShowTip(on ? _picRects[k] : null, on && _picItems[k] != null ? _picItems[k].Name : null);
+                    });
                     var face = Ui.Fill(picSlot, "Face", 2);
                     Ui.Img(face, Ui.Hex("#0f1315"));
                     Ui.Img(Ui.Fill(face, "Light"), new Color(1, 1, 1, .05f), Ui.Radial());
@@ -1467,13 +1520,15 @@ namespace LevelGate.Progression
                 var items = ProgData.ItemsAt(level);
                 var picks = CardPicks(items);
                 Ui.SetText(_head, "LEVEL " + level);
+                // one emblem per page: on its first card, with the rank's name (the header shows yours)
                 _badge.Set(level, items.Count == 0);
-                var tier = TierOf(level);
-                Ui.SetText(_tier, level == tier.From ? tier.Name : ""); // only where a rank starts
-                Ui.SetText(_count, items.Count == 0 ? "No unlocks" : $"{items.Count} unlock{(items.Count == 1 ? "" : "s")}"); // the total (was a separate "+N")
+                _badge.Visible = _first;
+                Ui.SetText(_tier, _first ? TierOf(level).Name : "");
+                Ui.SetText(_count, items.Count == 0 ? "No items" : $"{items.Count} item{(items.Count == 1 ? "" : "s")}");
                 for (int i = 0; i < 3; i++)
                 {
                     var it = i < picks.Count ? picks[i] : null;
+                    _picItems[i] = it;
                     _picRects[i].gameObject.SetActive(it != null);
                     _pics[i].enabled = false;
                     if (it == null) continue;
@@ -1496,7 +1551,7 @@ namespace LevelGate.Progression
                 FadeTo(_frame, sel ? Select : _hover ? HoverEdge : Border);
                 _top.enabled = sel;
                 FadeTo(_bg, sel ? Ui.Hex("#172024", .96f) : _hover ? Ui.Hex("#141b1e", .94f) : locked ? Ui.Hex("#0b0e10", .96f) : Ui.Hex("#11171a", .92f));
-                _glow.color = current ? Ui.Hex(Orange, .16f) : new Color(0, 0, 0, 0);
+                _glow.color = new Color(0, 0, 0, 0); // the orange header is enough for the current level
                 Ui.SetColor(_tier, locked ? Dim : Grey);
                 Ui.SetColor(_count, sel || current ? Text : Grey); // counts stay readable, only the viewing / current one is bright
                 var head = current ? Ui.Hex(Orange) : sel ? Text : locked ? Dim : Grey;

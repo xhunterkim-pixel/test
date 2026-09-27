@@ -25,7 +25,7 @@ namespace LevelGate.Progression
         public const string Guid = "com.kkyangg.levelgate.progression";
         public const string Name = "LevelGate Progression";
         // MAJOR.MINOR.PATCH — see CHANGELOG.md
-        public const string Version = "0.9.12";
+        public const string Version = "0.9.13";
 
         internal static ProgressionPlugin Instance;
         internal static ConfigEntry<KeyboardShortcut> OpenKey;
@@ -63,7 +63,8 @@ namespace LevelGate.Progression
                 "Which menu button to copy the look of (part of its object name, e.g. 'Handbook'). Empty = pick one by itself; the log lists the names it found.");
             ButtonLabel = Config.Bind("Menu Button", "Label", "PROGRESSION", "Text on the menu button.");
             TopMargin = Config.Bind("Screen", "TopMargin", 0f, "Space left free at the top of the screen (1920x1080 pixels).");
-            BottomMargin = Config.Bind("Screen", "BottomMargin", 68f, "Space left free at the bottom, so the menu bar stays clickable (1920x1080 pixels).");
+            BottomMargin = Config.Bind("Screen", "BottomMargin", 26f, "Space left free at the bottom, so the game's menu bar (Main menu, Character, Traders…) stays visible and clickable (1920x1080 pixels).");
+            if (Mathf.Abs(BottomMargin.Value - 68f) < .01f) { BottomMargin.Value = 26f; } // old default: the screen now reaches down to the menu bar
             SortOrder = Config.Bind("Screen", "SortOrder", 100, "Drawing order of the screen (higher = on top of more of the game's menus).");
             MaxTilesPerCategory = Config.Bind("Screen", "MaxTilesPerCategory", 60, "Items shown per category for one level (the rest are counted).");
             TileSize = Config.Bind("Screen", "TileSize", 92f, "Height of an item tile (the width is a bit more). Smaller = more items fit.");

@@ -40,6 +40,27 @@ Versions are **MAJOR.MINOR.PATCH**:
 
 ## LevelGate Progression (BepInEx plugin, separate DLL)
 
+### 0.9.13
+- **Red glow:** fades out on both axes (no hard edge) and is gone before the card row.
+- **Screen height:** reaches down to the game's menu bar. The bottom margin is now 26; an old saved 68 is migrated.
+- **Clicking a level:**
+  - Opens on the item its card shows big (weapons first), not the first item in data order.
+  - Clicking the level you're already viewing no longer rebuilds all its tiles (about 55 ms and a burst of slow frames each click).
+  - A click on another level's card picture just opens that level (no two-step pick).
+- **One emblem per page:** only the page's first card shows the rank emblem and name, in a slimmer header row.
+- **Wording:** "items" everywhere ("147 items", "Next level 3: 13 items ›").
+- **Header:** "167 / 903 items unlocked" moved off the XP bar and onto the rank line.
+- **Card pictures:** hover edge plus a full-name tooltip, like the tiles. The tooltip is on its own top layer.
+- **Stats:** both rows share one grid of equal columns (empty cells pad the shorter row). Calibers read ".366 TKM", "5.56x45 NATO", "12.7x55"… (the game's own name when it has one).
+- **Right panel:**
+  - INSPECT follows the content (the description takes only the height it needs, then scrolls), so there's no dead zone.
+  - Requirement box: only the tick is green, with 16 px padding.
+- **Preview:** no frame of its own inside the panel's frame.
+- **Small items:**
+  - No orange corner glow on the current card.
+  - The performance checkbox sits on the right panel's guide and has a hover hint.
+  - The scroll thumb is 2 px to see, 12 px to grab.
+
 ### 0.9.12 — audit fixes
 - **Page bar:**
   - Pages are labelled by their level range ("1–5", "6–10"…), not page numbers that read like levels. On narrow screens only the current range shows.

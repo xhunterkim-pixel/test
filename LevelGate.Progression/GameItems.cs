@@ -465,11 +465,29 @@ namespace LevelGate.Progression
                 if (Num("Damage") is int dmg && dmg > 0) list.Add(("Damage", dmg.ToString()));
                 if (Num("PenetrationPower") is int pen && pen > 0) list.Add(("Penetration", pen.ToString()));
                 if (Num("ArmorClass", "armorClass") is int ac && ac > 0) list.Add(("Armor class", ac.ToString()));
-                if (Num("ammoCaliber", "AmmoCaliber", "Caliber", "caliber") is string cal && cal.Length > 0) list.Add(("Caliber", cal.Replace("Caliber", "")));
+                if (Num("ammoCaliber", "AmmoCaliber", "Caliber", "caliber") is string cal && cal.Length > 0) list.Add(("Caliber", CaliberName(cal)));
                 if (Num("MaxHpResource") is int hp && hp > 0) list.Add(("Resource", hp.ToString()));
             }
             catch (Exception e) { L.ErrorOnce("item facts", e); }
             return list;
+        }
+
+        /// <summary>"Caliber366TKM" → the game's own name if it has one, else a readable form: ".366 TKM", "5.56x45 NATO", "9x19 PARA".</summary>
+        public static string CaliberName(string raw)
+        {
+            var loc = ProgData.Localize(raw);
+            if (!string.IsNullOrEmpty(loc) && loc != raw && !loc.StartsWith("Caliber")) return loc;
+            var s = raw.Replace("Caliber", "");
+            // calibers whose first number is a decimal the id drops the dot from (12.7, 9.3, 6.8, 8.6, 5.7, 4.6)
+            foreach (var (id, real) in new[] { ("127x", "12.7x"), ("93x", "9.3x"), ("68x", "6.8x"), ("86x", "8.6x"), ("57x", "5.7x"), ("46x", "4.6x") })
+                if (s.StartsWith(id)) { var rest = s.Substring(id.Length); var mm = System.Text.RegularExpressions.Regex.Match(rest, @"^(\d+)(.*)$"); return mm.Success ? $"{real}{mm.Groups[1]} {mm.Groups[2]}".Trim() : real + rest; }
+            var m = System.Text.RegularExpressions.Regex.Match(s, @"^(\d)(\d{2})x(\d+)(.*)$");                   // 556x45NATO → 5.56x45 NATO
+            if (m.Success) return $"{m.Groups[1]}.{m.Groups[2]}x{m.Groups[3]} {m.Groups[4]}".Trim();
+            m = System.Text.RegularExpressions.Regex.Match(s, @"^(\d{3})([A-Za-z].*)$");                            // 366TKM → .366 TKM
+            if (m.Success) return $".{m.Groups[1]} {m.Groups[2]}";
+            m = System.Text.RegularExpressions.Regex.Match(s, @"^(\d+x\d+)(.*)$");                                // 9x19PARA → 9x19 PARA
+            if (m.Success) return $"{m.Groups[1]} {m.Groups[2]}".Trim();
+            return s;
         }
 
         public static void Inspect(string tpl)
