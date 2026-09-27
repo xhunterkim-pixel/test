@@ -105,11 +105,64 @@ namespace LevelGate.Progression
         private static string _pendingOpen;
         private static float _pendingAt;
 
+        // ---- when Progression must stay out of the way: deploying to a raid, in a raid, loading…
+        // screens it can be opened from (it goes back to the main menu first); everything else — raid side / location
+        // selection, matchmaking, "time has come", countdown, the raid itself, post-raid screens — blocks it
+        private static readonly HashSet<string> OpenFrom = new HashSet<string> { "MainMenu", "Inventory", "Trader", "FleaMarket", "Handbook", "Messenger", "Hideout", "Settings" };
+        private static PropertyInfo _worldInstantiated;
+        private static bool _worldTried;
+
+        /// <summary>In a raid: the game world exists (also while the in-raid Esc menu shows the main menu).</summary>
+        public static bool InRaid()
+        {
+            try
+            {
+                if (!_worldTried)
+                {
+                    _worldTried = true;
+                    var gw = AccessTools.TypeByName("EFT.GameWorld");
+                    _worldInstantiated = gw == null ? null : AccessTools.TypeByName("Comfort.Common.Singleton`1")?.MakeGenericType(gw).GetProperty("Instantiated", BindingFlags.Public | BindingFlags.Static);
+                    L.Info(_worldInstantiated != null ? "raid check: Singleton<EFT.GameWorld>.Instantiated" : "raid check: GameWorld not found — only the screen type is used");
+                }
+                return _worldInstantiated != null && _worldInstantiated.GetValue(null, null) is bool b && b;
+            }
+            catch (Exception e) { L.ErrorOnce("raid check", e); return false; }
+        }
+
+        /// <summary>True while Progression must not open (and its tab / shortcut are greyed out or hidden).</summary>
+        public static bool Blocked(out string why)
+        {
+            why = null;
+            if (InRaid()) why = "in raid";
+            else if (!string.IsNullOrEmpty(CurrentScreen) && !OpenFrom.Contains(CurrentScreen)) why = "on " + CurrentScreen;
+            return why != null;
+        }
+
+        public static bool Blocked() => Blocked(out _);
+
+        private static bool _blockedShown;
+        private static float _blockCheckAt;
+
+        /// <summary>Greys our tab out (not clickable) while blocked, like the game's own tabs during deployment.</summary>
+        private static void ApplyBlocked()
+        {
+            if (_button == null || Time.realtimeSinceStartup < _blockCheckAt) return;
+            _blockCheckAt = Time.realtimeSinceStartup + .25f;
+            bool blocked = Blocked(out var why);
+            if (blocked == _blockedShown) return;
+            _blockedShown = blocked;
+            var g = _button.GetComponent<CanvasGroup>() ?? _button.AddComponent<CanvasGroup>();
+            g.alpha = blocked ? .35f : 1f; g.interactable = !blocked; g.blocksRaycasts = !blocked;
+            L.Info(blocked ? $"PROGRESSION tab disabled ({why})" : "PROGRESSION tab enabled again");
+            if (blocked && ProgScreen.IsOpen) ProgScreen.Close("blocked: " + why);
+            if (!blocked) Enable(_button, "unblocked");
+        }
+
         /// <summary>Opening from another game screen (Character, Traders…): first go back to the main menu like the
         /// MAIN MENU button does, then open — otherwise that screen stays up under ours. True if it is doing that.</summary>
         public static bool GoToMainMenuThen(string why)
         {
-            if (string.IsNullOrEmpty(CurrentScreen) || CurrentScreen == "MainMenu" || _bar == null) return false;
+            if (string.IsNullOrEmpty(CurrentScreen) || CurrentScreen == "MainMenu" || _bar == null || Blocked()) return false;
             try
             {
                 var btn = _bar.GetComponentsInChildren<Transform>(true).FirstOrDefault(t => t.name == "MainMenuButton");
@@ -139,6 +192,7 @@ namespace LevelGate.Progression
                 ProgScreen.Open(why + ", after going back to the main menu");
             }
             HookScreenChanges();
+            ApplyBlocked();
             // the screen closes when the menu bar goes away (raid, loading screen…)
             if (ProgScreen.IsOpen && _bar != null && !_bar.gameObject.activeInHierarchy) ProgScreen.Close("menu bar hidden");
             if (ProgScreen.IsOpen && _bar != null && UnityInput.Current.GetMouseButtonDown(0)) ClickedElsewhereOnBar();
@@ -151,7 +205,7 @@ namespace LevelGate.Progression
                 {
                     _nextTry = Time.realtimeSinceStartup + 1.5f;
                     var real = _candidates.FirstOrDefault(t => t != null && t.name != "LevelGateProgressionButton");
-                    if (real == null || Usable(real)) Enable(_button, "check");
+                    if ((real == null || Usable(real)) && !Blocked()) Enable(_button, "check");
                 }
                 return;
             }

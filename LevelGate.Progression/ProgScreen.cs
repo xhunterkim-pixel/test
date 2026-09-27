@@ -76,6 +76,7 @@ namespace LevelGate.Progression
         private static object _featIcon;
         private static int _featScale;
         private static bool _sharpWeaponShown;
+        private static float _lastWeaponRepair = -1000f;
         // bottom
         private static readonly Card[] _cards = new Card[PerPage];
         private static readonly List<Image> _segments = new List<Image>();
@@ -98,6 +99,7 @@ namespace LevelGate.Progression
         public static void Open(string why)
         {
             L.Step("Open " + why);
+            if (!IsOpen && MenuHook.Blocked(out var blockedWhy)) { L.Info($"not opening ({why}): {blockedWhy}"); return; }
             if (!IsOpen && MenuHook.GoToMainMenuThen(why)) return;
             try
             {
@@ -150,8 +152,10 @@ namespace LevelGate.Progression
             MenuHook.SetOn(false);
             HideMenu(false);
             GameItems.RestoreIcons(); // the big renders replaced the stash's cached icons: put them back
-            if (_sharpWeaponShown && GameItems.RepairLeft == 0)
+            // at most every 10 minutes: each pass asks the game to redraw ~160 weapons, which it does in the background
+            if (_sharpWeaponShown && GameItems.RepairLeft == 0 && Time.unscaledTime - _lastWeaponRepair > 600f)
             {
+                _lastWeaponRepair = Time.unscaledTime;
                 // sharp weapon pictures can leak onto other stash weapons: redraw every level-list weapon at stash size
                 var weapons = ProgData.Levels.Keys.Where(t => ProgData.GroupOf(t) == "Weapons").ToList();
                 L.Info($"sharp weapon previews were shown: redrawing {weapons.Count} weapon icon(s) at stash size");
@@ -1379,7 +1383,7 @@ namespace LevelGate.Progression
 
         public static void Tick()
         {
-            if (_restoreAgainAt > 0 && Time.unscaledTime > _restoreAgainAt && !IsOpen) { _restoreAgainAt = -1; GameItems.RestoreIcons(); }
+            if (_restoreAgainAt > 0 && Time.unscaledTime > _restoreAgainAt && !IsOpen && !MenuHook.Blocked()) { _restoreAgainAt = -1; GameItems.RestoreIcons(); }
             if (!IsOpen) return;
             if (!_xpKnown && ProgData.HasExpTable) { _xpKnown = true; UpdateXp(); } // the SPT server's answer came in
             if (_fade != null && _fade.alpha < 1)

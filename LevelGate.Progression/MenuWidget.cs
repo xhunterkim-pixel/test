@@ -65,6 +65,10 @@ namespace LevelGate.Progression
                 var menu = GameObject.Find("Common UI/Common UI/MenuScreen");
                 if (menu == null || !menu.activeInHierarchy) return;
                 if (_root == null) Build(menu.transform);
+                // not in a raid's Esc menu (or while deploying): nothing to open there
+                bool blocked = MenuHook.Blocked();
+                if (_root.activeSelf == blocked) { _root.SetActive(!blocked); L.Debug(blocked ? "main menu shortcut hidden (raid / deploying)" : "main menu shortcut shown"); }
+                if (blocked) return;
                 Refresh();
             }
             catch (Exception e) { L.ErrorOnce("main menu shortcut", e); }

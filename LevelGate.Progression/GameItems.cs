@@ -370,6 +370,7 @@ namespace LevelGate.Progression
         public static void RepairTick()
         {
             if (_repair.Count == 0 || _loadIcon == null) return;
+            if (MenuHook.Blocked()) return; // never while deploying / in a raid: the game needs its render time
             var t0 = Time.realtimeSinceStartup;
             while (_repair.Count > 0 && Time.realtimeSinceStartup - t0 < .012f)
             {

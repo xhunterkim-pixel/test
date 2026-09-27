@@ -40,6 +40,15 @@ Versions are **MAJOR.MINOR.PATCH**:
 
 ## LevelGate Progression (BepInEx plugin, separate DLL)
 
+### 0.9.20
+- **Fix: Progression could be opened while deploying to a raid.** Clicking the tab on the deploying screen ("TimeHasCome") made the plugin go back to the main menu, which could break the raid load.
+  - The PROGRESSION tab is now greyed out and not clickable (and P does nothing) everywhere except the main menu, inventory, traders, flea market, handbook, messenger, hideout and settings. That covers raid side / location selection, matchmaking, deploying, countdown, the raid and post-raid screens.
+  - In a raid the game world is detected, so the in-raid Esc menu counts too.
+  - An open screen closes when this kicks in, and every change is logged.
+- **The main-menu shortcut** is hidden in the in-raid Esc menu and while deploying.
+- **No background icon work during deployment or a raid:** the stash-size restore and redraw passes wait until you're back in the menus.
+- **SharpWeaponPreview's weapon redraw** (~160 icons) now runs at most every 10 minutes (it ran on every close). The option says it can cost performance.
+
 ### 0.9.19
 - **New option `Screen > SharpWeaponPreview`** (F12, off by default):
   - Weapons get the extra-sharp render in the centre picture again.
