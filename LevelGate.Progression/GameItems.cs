@@ -361,11 +361,33 @@ namespace LevelGate.Progression
         public static int RepairTotal;
         private static bool _repairPaused;
 
-        public static void RepairAll(IEnumerable<string> tpls)
+        private static readonly HashSet<string> _repairQueued = new HashSet<string>();
+        private static bool _announce;
+        private static int _announcedAt;
+
+        /// <summary>Queues items to be drawn again at stash size. announce: progress + "done" shown on screen (Toast).</summary>
+        public static void RepairAll(IEnumerable<string> tpls, bool announce = false)
         {
-            foreach (var t in tpls) _repair.Enqueue(t);
-            RepairTotal = _repair.Count;
-            L.Info($"items: redrawing {RepairTotal} icons at stash size");
+            if (_repair.Count == 0) { RepairTotal = 0; _repairQueued.Clear(); }
+            int added = 0;
+            foreach (var t in tpls) if (t != null && _repairQueued.Add(t)) { _repair.Enqueue(t); added++; }
+            RepairTotal += added;
+            _announce |= announce;
+            L.Info($"items: redrawing {added} icons at stash size ({_repair.Count} queued)");
+            if (_announce) Toast.Show(_repair.Count == 0 ? "Item icons refreshed" : $"Refreshing item icons…  0 / {RepairTotal}");
+        }
+
+        /// <summary>Items this session drew bigger than stash size (their stash icons are the ones worth redrawing).</summary>
+        public static List<string> ScaledTpls() => _scaled.Select(i => Refl.Get(i, "TemplateId")?.ToString()).Where(t => t != null).Distinct().ToList();
+
+        /// <summary>Forgets every bigger picture we kept, so the screen asks the game for fresh ones (new graphics quality).</summary>
+        public static int ClearCopies()
+        {
+            int n = 0;
+            foreach (var sp in _copies.Values) if (sp != null) { UnityEngine.Object.Destroy(sp.texture); n++; }
+            _copies.Clear(); _copyOrder.Clear(); _pending.Clear();
+            L.Info($"items: {n} kept picture(s) cleared");
+            return n;
         }
 
         public static void RepairTick()
@@ -376,6 +398,7 @@ namespace LevelGate.Progression
             if (!MenuHook.QuietMenu())
             {
                 if (!_repairPaused) { _repairPaused = true; L.Info($"items: icon redraw paused ({_repair.Count} left) — continues on the main menu"); }
+                if (_announce && !ProgScreen.IsOpen) Toast.Show($"Refreshing item icons: paused ({RepairTotal - _repair.Count} / {RepairTotal}) — continues on the main menu", 1f);
                 return;
             }
             if (_repairPaused) { _repairPaused = false; L.Info($"items: icon redraw continues ({_repair.Count} left)"); }
@@ -387,8 +410,15 @@ namespace LevelGate.Progression
                 if (item == null) continue;
                 try { CallIcon(_loadIcon, item, 1, true); } catch (Exception e) { L.ErrorOnce("redrawing an icon", e); }
             }
-            if (_repair.Count > 0 && _repair.Count % 100 == 0) L.Debug($"items: icon redraw {RepairTotal - _repair.Count} / {RepairTotal}");
-            if (_repair.Count == 0) L.Info($"items: {RepairTotal} icons redrawn at stash size");
+            int done = RepairTotal - _repair.Count;
+            if (_repair.Count > 0 && _repair.Count % 100 == 0) L.Debug($"items: icon redraw {done} / {RepairTotal}");
+            if (_announce && _repair.Count > 0 && done - _announcedAt >= 10) { _announcedAt = done; Toast.Show($"Refreshing item icons…  {done} / {RepairTotal}", 2f); }
+            if (_repair.Count == 0)
+            {
+                L.Info($"items: {RepairTotal} icons redrawn at stash size");
+                if (_announce) Toast.Show($"Item icons refreshed  ✓  ({RepairTotal})", 4f);
+                _announce = false; _announcedAt = 0; _repairQueued.Clear();
+            }
         }
 
         public static Sprite SpriteOf(object icon)

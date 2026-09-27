@@ -40,6 +40,13 @@ Versions are **MAJOR.MINOR.PATCH**:
 
 ## LevelGate Progression (BepInEx plugin, separate DLL)
 
+### 0.9.23
+- **Fix: changing Graphics > Quality now redraws the pictures.** The screen's kept pictures were only keyed by size, and FixStashIcons only redrew stash icons, so going back up to High could keep showing old pictures with no sign that anything happened.
+  - Changing Quality clears the screen's kept pictures, asks for fresh ones, and redraws the stash icons of items that were drawn bigger.
+  - FixStashIcons is now **RefreshIcons**: it clears the screen's pictures too and redraws every level-list item's stash icon.
+  - A message at the top of the screen shows "Refreshing item icons… n / total", "paused — continues on the main menu", and "Item icons refreshed ✓".
+- **Header:** the first line is "{Rank} · next: {Rank} (level N)", and the second is "Page X of 16 · owned / total items unlocked" (it said "Rank X of 16").
+
 ### 0.9.22
 - **F12 menu cleaned up into three sections:** 1. General, 2. Graphics, 3. Advanced.
   - General: open key, menu bar button, main-menu shortcut, hide main menu, blur.

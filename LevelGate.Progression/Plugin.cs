@@ -25,7 +25,7 @@ namespace LevelGate.Progression
         public const string Guid = "com.kkyangg.levelgate.progression";
         public const string Name = "LevelGate Progression";
         // MAJOR.MINOR.PATCH — see CHANGELOG.md
-        public const string Version = "0.9.22";
+        public const string Version = "0.9.23";
 
         internal static ProgressionPlugin Instance;
         internal static ConfigEntry<KeyboardShortcut> OpenKey;
@@ -47,7 +47,7 @@ namespace LevelGate.Progression
         internal static ConfigEntry<bool> BlurBackground;
         internal static ConfigEntry<GraphicsQuality> Quality;
         internal static ConfigEntry<bool> MenuShortcut;
-        internal static ConfigEntry<bool> FixStashIcons;
+        internal static ConfigEntry<bool> RefreshIcons;
         internal static ConfigEntry<int> LastSeenLevel;
 
         private void Awake()
@@ -56,7 +56,7 @@ namespace LevelGate.Progression
             L.Source = Logger;
 
             // F12 (Configuration Manager): three sections, sorted by their number. Order = top to bottom within one.
-            const string G = "1. General", Gfx = "2. Graphics", A = "3. Advanced";
+            const string G = "1. General", A = "3. Advanced";
             OpenKey = Config.Bind(G, "OpenScreenKey", new KeyboardShortcut(KeyCode.P), Desc(
                 "Opens / closes the Progression screen in the main menu (not while typing in a text box).", 100));
             InjectButton = Config.Bind(G, "MenuBarButton", true, Desc(
@@ -73,15 +73,21 @@ namespace LevelGate.Progression
                 "Medium: sharp item pictures; weapons drawn at stash size.\n" +
                 "High: weapons drawn extra sharp too. The game can carry big weapon pictures over to weapons in your stash, so every level-list weapon " +
                 "(~160) is redrawn at stash size in the background after you close the screen (main menu only, never in a raid, at most every 10 minutes).", 100));
-            Quality.SettingChanged += (_, __) => { L.Info($"graphics quality: {Quality.Value}"); ProgScreen.Refresh(); };
-            FixStashIcons = Config.Bind(Gfx, "FixStashIcons", false, Desc(
-                "Tick once to redraw every level-list item's icon at stash size (use it if a stash icon ever looks too big). It turns itself off again. " +
-                "Takes a minute on the main menu; the stash shows loading icons meanwhile.", 90));
-            FixStashIcons.SettingChanged += (_, __) =>
+            Quality.SettingChanged += (_, __) =>
             {
-                if (!FixStashIcons.Value) return;
-                FixStashIcons.Value = false;
-                if (GameItems.RepairLeft == 0) GameItems.RepairAll(ProgData.Levels.Keys.ToList());
+                L.Info($"graphics quality: {Quality.Value}");
+                RefreshPictures(false);
+                Toast.Show($"Graphics: {Quality.Value} — pictures redrawn");
+            };
+            RefreshIcons = Config.Bind(Gfx, "RefreshIcons", false, Desc(
+                "Tick once to redraw every item picture: the Progression screen's own pictures are thrown away and drawn again, " +
+                "and every level-list item's stash icon is redrawn at stash size (use it if a stash icon ever looks too big). It turns itself off again. " +
+                "A message at the top of the screen shows the progress and says when it's done (about a minute, on the main menu).", 90));
+            RefreshIcons.SettingChanged += (_, __) =>
+            {
+                if (!RefreshIcons.Value) return;
+                RefreshIcons.Value = false;
+                RefreshPictures(true);
             };
 
             ButtonLabel = Config.Bind(A, "ButtonLabel", "PROGRESSION", Desc("Text on the menu bar button.", 100));
@@ -138,6 +144,23 @@ namespace LevelGate.Progression
         /// knows as "orphaned" entries: carry them over to the new names once, so nobody loses their settings
         /// (or their last seen level, which would bring back an old NEW tag).
         /// </summary>
+        /// <summary>
+        /// New graphics quality or RefreshIcons: the screen's kept pictures are thrown away and asked for again, and stash
+        /// icons are redrawn at stash size in the background (main menu only). all = every level-list item; else only the
+        /// ones this session drew bigger.
+        /// </summary>
+        internal static void RefreshPictures(bool all)
+        {
+            GameItems.ClearCopies();
+            ProgScreen.ForgetPictures();
+            ProgScreen.Refresh();
+            var tpls = all ? ProgData.Levels.Keys.ToList() : GameItems.ScaledTpls();
+            if (tpls.Count > 0) GameItems.RepairAll(tpls, all);
+            else if (all) Toast.Show("Item icons refreshed");
+        }
+
+        private const string Gfx = "2. Graphics";
+
         private void MigrateOldSettings()
         {
             try
@@ -179,6 +202,7 @@ namespace LevelGate.Progression
                 Move(DumpKey, "Debug", "DumpKey");
                 Move(OpenKey, "General", "OpenScreenKey"); // same place; only here in case the file lists it as an orphan
                 Take("Screen", "FixStashIcons");
+                Take(Gfx, "FixStashIcons"); // 0.9.22 name
                 // PerformanceMode + SharpWeaponPreview became one Graphics > Quality
                 bool perf = string.Equals(Take("Screen", "PerformanceMode"), "true", StringComparison.OrdinalIgnoreCase);
                 bool sharp = string.Equals(Take("Screen", "SharpWeaponPreview"), "true", StringComparison.OrdinalIgnoreCase);
@@ -211,6 +235,7 @@ namespace LevelGate.Progression
                 ProgScreen.Tick();
                 MenuWidget.Tick();
                 GameItems.RepairTick();
+                Toast.Tick();
             }
             catch (Exception e) { L.ErrorOnce("update", e); }
         }

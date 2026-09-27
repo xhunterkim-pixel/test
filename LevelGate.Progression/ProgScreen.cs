@@ -327,12 +327,12 @@ namespace LevelGate.Progression
             _headBadge.Set(lv);
             var tier = TierOf(lv);
             int index = Array.IndexOf(Tiers, tier) + 1;
-            // rank name, then overall progress quietly after it: how many of the limited items you can use
+            // rank name + the next rank on the first line; page and overall progress (limited items you can use) under it
             int total = ProgData.Levels.Count, owned = player > 0 ? ProgData.Levels.Values.Count(v => v <= player) : 0;
-            Ui.SetText(_headRank, player <= 0 ? "Progression" : total > 0 ? $"{tier.Name}  <size={TBody}><color=#7d8588>·  {Thousands(owned)} / {Thousands(total)} items unlocked</color></size>" : tier.Name);
             var next = Tiers.FirstOrDefault(t => t.From > lv);
-            Ui.SetText(_headNext, player <= 0 ? "" : next.Name == null ? $"Rank {index} of {Tiers.Length}  ·  top rank"
-                : $"Rank {index} of {Tiers.Length}  ·  next: {next.Name} (level {next.From})");
+            string after = next.Name == null ? "top rank" : $"next: {next.Name} (level {next.From})";
+            Ui.SetText(_headRank, player <= 0 ? "Progression" : $"{tier.Name}  <size={TBody}><color=#7d8588>·  {after}</color></size>");
+            Ui.SetText(_headNext, player <= 0 ? "" : $"Page {index} of {Tiers.Length}" + (total > 0 ? $"  ·  {Thousands(owned)} / {Thousands(total)} items unlocked" : ""));
         }
 
         private static Component _xpLevel, _xpText, _xpNext;
@@ -1180,6 +1180,8 @@ namespace LevelGate.Progression
         // drawn ahead (one per frame at most), so Q / E show them straight away.
         private static readonly List<(object Icon, string Tpl)> _prefetching = new List<(object, string)>();
         private static readonly HashSet<string> _prefetchAsked = new HashSet<string>();
+        /// <summary>Pictures are asked for again from scratch (the kept ones were cleared).</summary>
+        public static void ForgetPictures() { _prefetchAsked.Clear(); _prefetching.Clear(); }
         private static int _prefetchPage = -1;
         private static readonly Queue<string> _prefetchQueue = new Queue<string>();
 
