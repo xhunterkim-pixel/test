@@ -40,6 +40,10 @@ Versions are **MAJOR.MINOR.PATCH**:
 
 ## LevelGate Progression (BepInEx plugin, separate DLL)
 
+### 0.4.1
+- **Camera turn:** the menu's 3D background turns smoothly to the side while the screen is open, like the game does for Character / Traders, and turns back on close. Screen > CameraTurnDegrees (default -75, to the left; 0 = off). It also works with MoxoPixel Menu Overhaul's camera.
+- **Blur:** a blur effect on that camera, if the game has one, is switched on while open (Screen > BlurBackground).
+
 ### 0.4.0
 - **Inside the game's UI:** the screen now sits right after the main menu screen, so the game's windows (inspect) open on top of it. The setting Screen > InsideGameUi switches back to the old on-top canvas.
 - **Main menu hidden:** ESCAPE FROM TARKOV, CHARACTER, TRADING, EXIT and the beta warning fade out while the screen is open, like the battle pass (Screen > HideMainMenu).

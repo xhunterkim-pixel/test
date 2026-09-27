@@ -78,6 +78,7 @@ namespace LevelGate.Progression
                 _canvas.SetActive(true);
                 MenuHook.SetOn(true);
                 HideMenu(true);
+                MenuCamera.Turn(true);
                 Sounds.Open();
                 _frames = 0; _frameTime = 0; _frameLogAt = Time.unscaledTime + 5;
                 ShowPage(_page, 0);
@@ -92,7 +93,9 @@ namespace LevelGate.Progression
             _canvas.SetActive(false);
             MenuHook.SetOn(false);
             HideMenu(false);
-            if (why != "game screen changed" && !why.StartsWith("game screen")) Sounds.Click();
+            bool gameSwitching = why.StartsWith("game screen");
+            MenuCamera.Turn(false, instant: gameSwitching); // the game moves the camera itself when it switches screens
+            if (!gameSwitching) Sounds.Click();
             L.Info($"screen closed ({why})");
         }
 

@@ -25,7 +25,7 @@ namespace LevelGate.Progression
         public const string Guid = "com.kkyangg.levelgate.progression";
         public const string Name = "LevelGate Progression";
         // MAJOR.MINOR.PATCH — see CHANGELOG.md
-        public const string Version = "0.4.0";
+        public const string Version = "0.4.1";
 
         internal static ProgressionPlugin Instance;
         internal static ConfigEntry<KeyboardShortcut> OpenKey;
@@ -43,6 +43,8 @@ namespace LevelGate.Progression
         internal static ConfigEntry<bool> EmbedInGameUi;
         internal static ConfigEntry<bool> HideMainMenu;
         internal static ConfigEntry<float> Opacity;
+        internal static ConfigEntry<float> CameraTurn;
+        internal static ConfigEntry<bool> BlurBackground;
 
         private void Awake()
         {
@@ -64,6 +66,10 @@ namespace LevelGate.Progression
             EmbedInGameUi = Config.Bind("Screen", "InsideGameUi", true,
                 "Put the screen inside the game's own UI (right after the main menu), so the game's windows (inspect…) open on top of it. Off: its own canvas over everything.");
             Opacity = Config.Bind("Screen", "Opacity", .85f, new ConfigDescription("How solid the screen's background is (lower = more of the game's menu background shows through, like the battle pass).", new AcceptableValueRange<float>(.3f, 1f)));
+            CameraTurn = Config.Bind("Screen", "CameraTurnDegrees", -75f, new ConfigDescription(
+                "How far the menu's 3D background turns while the screen is open, like the game does for Character / Traders (negative = to the left, positive = right, 0 = off).",
+                new AcceptableValueRange<float>(-150f, 150f)));
+            BlurBackground = Config.Bind("Screen", "BlurBackground", true, "Switch on a blur effect on the background camera while open (if the game's camera has one).");
             HideMainMenu = Config.Bind("Screen", "HideMainMenu", true, "Fade out the main menu (ESCAPE FROM TARKOV, CHARACTER, TRADING, EXIT…) while the screen is open.");
             FreeItemsAtLevel1 = Config.Bind("Screen", "CountFreeItemsAtLevel1", false,
                 "Count items without a limit as level 1 unlocks (that's most of the game's items).");
@@ -81,6 +87,11 @@ namespace LevelGate.Progression
             }
             catch (Exception e) { L.Error("startup", e); }
             L.Info($"{Name} started. Open key: {OpenKey.Value}, dump key: {DumpKey.Value}, menu button: {(InjectButton.Value ? "on" : "off")}.");
+        }
+
+        private void LateUpdate()
+        {
+            try { MenuCamera.LateTick(); } catch (Exception e) { L.ErrorOnce("late update", e); }
         }
 
         private void Update()
