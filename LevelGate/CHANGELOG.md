@@ -40,11 +40,15 @@ Versions are **MAJOR.MINOR.PATCH**:
 
 ## LevelGate Progression (BepInEx plugin, separate DLL)
 
+### 0.9.1
+- **Ringleader emblem (levels 56–60):** added. It's made from three still pictures (calm, snarl, roar) that cross-fade in a loop, so it moves like the others.
+- **Versioning:** smaller steps from here on (0.9.x patches); 1.0.0 is kept for the finished screen.
+
 ### 0.9.0
 - **New rank titles:** Scavenger, Drifter, Trespasser, Stranger, Contractor, Operator, Outlaw, Renegade, Insurgent, Blacklisted, Wanted Man, Ringleader, War Chief, Ghost, Myth and Legend of Tarkov, one per 5 levels (76–79 for the last).
 - **New emblems, one per rank:**
   - `emblems.txt` now says which levels each emblem is for (its last two columns).
-  - A level with no emblem of its own uses the closest lower one. 56–60 (Ringleader) has no file yet, so it uses 51–55's until `emblem_56-60.png` is added.
+  - A level with no emblem of its own uses the closest lower one.
 - **Install:** the old emblem01–19 files aren't used anymore; delete the old `emblems` folder before copying the new one in.
 
 ### 0.8.0
