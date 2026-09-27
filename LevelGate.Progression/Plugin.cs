@@ -25,7 +25,7 @@ namespace LevelGate.Progression
         public const string Guid = "com.kkyangg.levelgate.progression";
         public const string Name = "LevelGate Progression";
         // MAJOR.MINOR.PATCH — see CHANGELOG.md
-        public const string Version = "0.9.43";
+        public const string Version = "0.9.44";
 
         internal static ProgressionPlugin Instance;
         internal static ConfigEntry<KeyboardShortcut> OpenKey;
@@ -53,6 +53,7 @@ namespace LevelGate.Progression
         internal static ConfigEntry<float> SoundVolume;
         internal static ConfigEntry<bool> GameSounds;
         internal static ConfigEntry<float> Scratches, Vignette, RedGlow;
+        internal static ConfigEntry<BackgroundPattern> Pattern;
         internal static ConfigEntry<int> PreviewLevels;
         internal static ConfigEntry<bool> PreviewLevelUp, PreviewRank, PreviewUnlock;
         internal static ConfigEntry<int> ShownXp;
@@ -99,6 +100,10 @@ namespace LevelGate.Progression
                 85, new AcceptableValueRange<float>(0f, 5f)));
             Vignette = Config.Bind(Gfx, "Vignette", 1f, Desc("How dark the screen's corners are (1 = the original, 0 = none).", 84, new AcceptableValueRange<float>(0f, 3f)));
             RedGlow = Config.Bind(Gfx, "RedGlow", 1.1f, Desc("How strong the red glow in the top-right is (1 = the original, 0 = none).", 83, new AcceptableValueRange<float>(0f, 3f)));
+            Pattern = Config.Bind(Gfx, "Pattern", BackgroundPattern.Dots, Desc(
+                "The faint pattern behind the screen: Dots (the grid of dots), Streaks (vertical streaks), Contours (long wavy lines), Topo (busy topographic lines). Its strength follows Scratches.",
+                86));
+            Pattern.SettingChanged += (_, __) => ProgScreen.ApplyLook();
             Scratches.SettingChanged += (_, __) => ProgScreen.ApplyLook();
             Vignette.SettingChanged += (_, __) => ProgScreen.ApplyLook();
             RedGlow.SettingChanged += (_, __) => ProgScreen.ApplyLook();
@@ -388,4 +393,6 @@ namespace LevelGate.Progression
     }
 
     public enum GraphicsQuality { Low, Medium, High }
+
+    public enum BackgroundPattern { Dots, Streaks, Contours, Topo }
 }

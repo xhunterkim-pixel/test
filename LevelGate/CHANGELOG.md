@@ -40,6 +40,9 @@ Versions are **MAJOR.MINOR.PATCH**:
 
 ## LevelGate Progression (BepInEx plugin, separate DLL)
 
+### 0.9.44
+- **2. Graphics > Pattern** (F12): pick the faint background behind the screen: **Dots** (the old grid, default), **Streaks** (vertical grain lines), **Contours** (smooth wavy lines) or **Topo** (busier topographic lines). Drawn in code, no colour; its strength follows the Scratches slider. Each pattern is drawn once the first time you pick it (a fraction of a second) and kept.
+
 ### 0.9.43
 - **[HOME] BACK TO LEVEL X** (bottom-left) shows whenever you're looking at a level that isn't yours, on any page, and is hidden on your own level. It used to be always there and dimmed on your page.
 

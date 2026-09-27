@@ -625,7 +625,15 @@ namespace LevelGate.Progression
         {
             float sc = ProgressionPlugin.Scratches?.Value ?? 1f, vg = ProgressionPlugin.Vignette?.Value ?? 1f;
             foreach (var (img, a) in Ui.Grits) if (img != null) { var c = img.color; c.a = Mathf.Clamp01(a * sc); img.color = c; }
-            if (_dotGrid != null) _dotGrid.color = new Color(1, 1, 1, Mathf.Clamp01(.035f * sc));
+            if (_dotGrid != null)
+            {
+                // the background pattern (F12 > Graphics > Pattern): the dots tile; the line patterns cover the screen once
+                var pat = ProgressionPlugin.Pattern?.Value ?? BackgroundPattern.Dots;
+                if (pat == BackgroundPattern.Dots) { _dotGrid.sprite = Ui.DotGrid(); _dotGrid.type = Image.Type.Tiled; }
+                else { _dotGrid.sprite = Ui.Pattern(pat.ToString()); _dotGrid.type = Image.Type.Simple; _dotGrid.preserveAspect = false; }
+                float basis = pat == BackgroundPattern.Dots ? .035f : pat == BackgroundPattern.Streaks ? .035f : .045f;
+                _dotGrid.color = new Color(1, 1, 1, Mathf.Clamp01(basis * sc));
+            }
             if (_vignette != null) _vignette.color = new Color(0, 0, 0, Mathf.Clamp01(.14f * vg));
             _mood = -1; // repaint the glow next frame
         }
