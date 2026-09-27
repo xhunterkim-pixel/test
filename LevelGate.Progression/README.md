@@ -1,4 +1,4 @@
-# LevelGate Progression (0.9.30, test build)
+# LevelGate Progression (0.9.31, test build)
 
 A Call of Duty style **Progression** screen inside Tarkov's main menu. It adds a
 **PROGRESSION** button to the menu bar next to Character, Trading, Flea Market and the rest.
@@ -33,12 +33,13 @@ Everything it does is written to `BepInEx\LogOutput.log` in lines starting with 
 **Ctrl+F10** writes a full report to the log. Send that log.
 
 Settings are in `BepInEx\config\com.kkyangg.levelgate.progression.cfg` (or the F12 menu):
-- **1. General**: OpenScreenKey (P), MenuBarButton, MainMenuShortcut, HideMainMenu, SoundVolume (level-up / new-rank sounds), BlurBackground.
+- **1. General**: OpenScreenKey (P), MenuBarButton, MainMenuShortcut, HideMainMenu, SoundVolume (level-up / new-rank sounds), UseGameSounds, BlurBackground.
 - **2. Graphics > Quality**:
   - Low: lighter pictures and still emblems, for slower PCs (same as the PERFORMANCE MODE box bottom-right on the screen).
   - Medium (default): sharp item pictures; weapons at stash size.
   - High: extra-sharp weapons too (every level-list weapon is redrawn at stash size after the screen closes, since the game can carry big weapon pictures over to stash weapons).
-- **2. Graphics > XpAnimation** (on by default): after you gain XP, the next open plays it out in beats: the XP bar and level ups, then a new rank emblem, then the new levels' cards unlocking, then your new level is selected. Click or Space skips.
+- **2. Graphics > XpAnimation** (on by default): after you gain XP, the next open plays it out in beats: the XP bar and level ups, then a new rank emblem, then the new levels' cards unlocking, then your new level is selected. Space: tap = next moment (next level up, the rank, the cards, the end), hold = next part. Click skips it all.
 - **2. Graphics > RefreshIcons**: tick once to redraw every item picture (the screen's own and the stash icons). A message at the top of the screen shows the progress and when it's done. Changing Quality does this by itself for the pictures it affects.
 - The first open of a menu visit shows a short LOADING PROGRESSION screen while the pictures of your page and the pages next to it are drawn. Going into a raid lets them go (memory); the next open loads them again.
+- **4. Preview**: PlayLevelUp / PlayNextRank / PlayUnlock (with Levels) play the XP animation with made-up numbers. Nothing real changes; closing the screen brings your real level back.
 - **3. Advanced**: button label / look, margins, tile size, opacity, camera turn, draw order, logging. Settings from 0.9.21 and older are carried over automatically.

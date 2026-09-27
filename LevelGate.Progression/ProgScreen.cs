@@ -159,6 +159,7 @@ namespace LevelGate.Progression
             L.Info($"logging: {L.CostLines - _sLogLines} line(s) took {logMs:0.0} ms while open ({logMs / 10 / open:0.00}% of the time); " +
                    $"since start {L.CostLines} line(s), {L.CostMs:0} ms ({L.CostMs / 10 / Math.Max(1, Time.realtimeSinceStartup):0.000}% of play time); verbose {(L.Verbose ? "on" : "off")}");
             FinishXpAnim("screen closed");
+            EndPreview();
             if (_newFrom > 0) L.Info($"NEW: cleared ({_newClicked.Count} item(s) clicked, {_newViewed.Count} level(s) looked at)");
             _newFrom = 0; _newClicked.Clear(); _newViewed.Clear();
             _canvas.SetActive(false);
@@ -399,7 +400,7 @@ namespace LevelGate.Progression
         private static void UpdateXp()
         {
             L.Step("UpdateXp");
-            if (_xpLevel == null || XpAnimating) return; // the XP animation draws the block itself
+            if (_xpLevel == null || XpAnimating || _simLevel > 0) return; // the XP animation / a preview draws the block itself
             int player = ProgData.PlayerLevel();
             bool known = ProgData.LevelExp(out int have, out int need);
             ShowXpState(player, have, need, known);
@@ -1825,7 +1826,10 @@ namespace LevelGate.Progression
                 // up in 0.08 s, out over 0.7 s
                 float a = t < .08f ? t / .08f : Mathf.Clamp01(1 - (t - .08f) / .7f);
                 _flash.color = new Color(.88f, .34f, .18f, .5f * a);
-                if (t > .8f) _flash.enabled = false;
+                // and a small punch: up to 104% and back in 0.3 s
+                float sc = 1 + .04f * Mathf.Sin(Mathf.Clamp01(t / .3f) * Mathf.PI);
+                _body.localScale = new Vector3(sc, sc, 1);
+                if (t > .8f) { _flash.enabled = false; _body.localScale = Vector3.one; }
             }
             private readonly DottedLine _headL, _headR;
             private readonly Component _head, _count, _state, _tier, _empty;
@@ -1884,7 +1888,12 @@ namespace LevelGate.Progression
                 _top.enabled = false;
                 // one big picture (the level's top category) and two small square ones stacked beside it
                 // the pictures sit in the area between header and footer; each is kept square
-                var pics = Ui.Rect(inner, "Pics", Vector2.zero, Vector2.one, new Vector2(Pad, Foot), new Vector2(-Pad, -Head));
+                // the page's first card keeps a row for its rank emblem; the others centre their pictures (same size) instead of
+                // leaving that row empty over them
+                float mid = (Head + Foot) / 2;
+                var pics = _first
+                    ? Ui.Rect(inner, "Pics", Vector2.zero, Vector2.one, new Vector2(Pad, Foot), new Vector2(-Pad, -Head))
+                    : Ui.Rect(inner, "Pics", Vector2.zero, Vector2.one, new Vector2(Pad, mid), new Vector2(-Pad, -mid));
                 // the big one is landscape (fills its column): weapons are wide — in a square they came out tiny
                 _picRects[0] = Square(pics, "Pic0", new Vector2(0, 0), new Vector2(.64f, 1), Vector2.zero, new Vector2(-S1, 0), 1.9f);
                 _picRects[1] = Square(pics, "Pic1", new Vector2(.64f, .5f), new Vector2(1, 1), new Vector2(S1, S1 / 2), Vector2.zero);

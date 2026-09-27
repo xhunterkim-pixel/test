@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using BepInEx;
 using UnityEngine;
 using UnityEngine.UI;
@@ -23,7 +24,7 @@ namespace LevelGate.Progression
     /// </summary>
     internal static partial class ProgScreen
     {
-        private enum StepKind { Fill, Rush, LevelUp, Pause, Rank, Page, Unlock, Land }
+        private enum StepKind { Fill, LevelUp, Pause, Rank, Page, Unlock, Land }
 
         private struct XpStep
         {
@@ -54,7 +55,7 @@ namespace LevelGate.Progression
         private static void PrepareXpAnim()
         {
             _xpPending = _xpRunning = false;
-            _xpCardLevel = 0;
+            _xpCardLevel = 0; _xpSim = false; _simLevel = 0;
             ResetXpVisuals();
             int now = ProgData.TotalExp(), shown = SeenState.Xp;
             if (now < 0 || shown < 0 || !ProgData.HasExpTable) return; // not known yet: next time (the baseline stays)
@@ -129,8 +130,8 @@ namespace LevelGate.Progression
             }
 
             // ---- 2. RANK (only when it changed): Emblemup.mp3 starts, its build-up warms the emblem, the swap lands on
-            // its peak (1.45 s), the settle runs to ~2.35 s — then 1 s of stillness before the cards
-            if (TierOf(lb).Name != TierOf(la).Name) Add(StepKind.Rank, RankLead + 1.1f + 1f, lb);
+            // its peak (1.45 s), the settle runs to ~2.35 s — then 1.3 s of stillness before the cards
+            if (TierOf(lb).Name != TierOf(la).Name) Add(StepKind.Rank, RankLead + 1.1f + 1.3f, lb); // settles, then 1.3 s before the cards
 
             // ---- 3. UNLOCK: the new levels' cards, left to right, page by page
             int firstShown = la + 1; // every new level's card, page by page
@@ -155,7 +156,7 @@ namespace LevelGate.Progression
 
         private static void PlayLevelUp()
         {
-            if (!Sfx.Play("levelup")) Sounds.Play("QuestCompleted", "QuestFinished", "TradeOperationComplete", "ButtonClick");
+            if (Sfx.UseGame || !Sfx.Play("levelup")) Sounds.Play("QuestCompleted", "QuestFinished", "TradeOperationComplete", "ButtonClick");
         }
 
         /// <summary>Runs the animation (every frame while open). True while it plays: the screen's own keys wait.</summary>
@@ -167,17 +168,36 @@ namespace LevelGate.Progression
             if (_xpPending)
             {
                 if (Time.unscaledTime - _openedAt < .45f) return true; // the screen fades in first
-                _xpPending = false; _xpRunning = true; _xpStep = 0; _xpT = 0;
+                if (_xpSim && ProgressionPlugin.ConfigWindowOpen()) return true; // a preview from F12: waits until F12 is closed
+                _xpPending = false; _xpRunning = true; _xpStep = 0; _xpT = 0; _xpEntered = -1; _spaceDown = -1;
                 ShowGain(true);
-                L.Info($"xp: animation started (~{TotalDur():0.0} s)");
+                L.Info($"xp: {(_xpSim ? "preview" : "animation")} started (~{TotalDur():0.0} s)");
             }
             if (!_xpRunning) { FadeGain(); return false; }
             if (input.GetKeyDown(KeyCode.Escape)) { Close("Escape"); return true; }
-            if (input.GetMouseButtonDown(0) || input.GetKeyDown(KeyCode.Space)) { FinishXpAnim("skipped"); return true; }
+            if (input.GetMouseButtonDown(0)) { FinishXpAnim("skipped"); return true; }
+            // Space: tap = the next moment (the next level up, the rank, the cards, the end); hold = on to the next part
+            if (input.GetKeyDown(KeyCode.Space)) { _spaceDown = Time.unscaledTime; _spaceHeld = false; }
+            if (_spaceDown >= 0 && !_spaceHeld && input.GetKey(KeyCode.Space) && Time.unscaledTime - _spaceDown >= .35f) { _spaceHeld = true; SkipAhead(true); }
+            if (_spaceDown >= 0 && input.GetKeyUp(KeyCode.Space)) { if (!_spaceHeld) SkipAhead(false); _spaceDown = -1; }
+            if (!_xpRunning) return true;
             if (_xpStep >= _xpSteps.Count) { FinishXpAnim("done"); return false; }
             var st = _xpSteps[_xpStep];
-            bool enter = _xpT == 0;
+            bool enter = _xpEntered != _xpStep;
+            _xpEntered = _xpStep;
             _xpT += dt;
+            StepFrame(st, enter, false);
+            if (_xpT >= st.Dur) { _xpStep++; _xpT = 0; }
+            return true;
+        }
+
+        private static int _xpEntered = -1;
+        private static float _spaceDown = -1;
+        private static bool _spaceHeld;
+
+        /// <summary>One frame of a step (quiet: skipped past — its end state without the show: no sound, pop or flash).</summary>
+        private static void StepFrame(XpStep st, bool enter, bool quiet)
+        {
             float k = Mathf.Clamp01(_xpT / Mathf.Max(.01f, st.Dur));
             switch (st.Kind)
             {
@@ -185,37 +205,30 @@ namespace LevelGate.Progression
                 {
                     if (enter) _xpCued = false;
                     // a fill into a level up starts its sound so the peak lands on the pop
-                    if (st.Loud && !_xpCued && st.Dur - _xpT <= Sfx.LevelUpPeak) { _xpCued = true; PlayLevelUp(); }
-                    bool intoLevelUp = _xpStep + 1 < _xpSteps.Count && (_xpSteps[_xpStep + 1].Kind == StepKind.LevelUp || _xpSteps[_xpStep + 1].Kind == StepKind.Rush);
-                    // into a level up: accelerates into it (the sound's swell) · the last one: slows into place
-                    float e = intoLevelUp ? k * (.6f + .4f * k) : 1 - Mathf.Pow(1 - k, 3); // into a level up: steady, leaning in a little
+                    if (!quiet && st.Loud && !_xpCued && !Sfx.UseGame && st.Dur - _xpT <= Sfx.LevelUpPeak) { _xpCued = true; PlayLevelUp(); }
+                    bool intoLevelUp = _xpStep + 1 < _xpSteps.Count && _xpSteps[_xpStep + 1].Kind == StepKind.LevelUp;
+                    float e = intoLevelUp ? k * (.6f + .4f * k) : 1 - Mathf.Pow(1 - k, 3); // into a level up: steady, leaning in · the last: slows into place
                     float frac = Mathf.Lerp(st.From, st.To, e);
                     if (ProgData.ExpInLevel(0, st.Level, out _, out int need)) ShowXpState(st.Level, Mathf.RoundToInt(frac * need), need, true);
                     _xpFill.anchorMax = new Vector2(frac, 1);
+                    if (!quiet) BarFx(st.From, frac);
                     PlaceGain();
                     break;
                 }
-                case StepKind.Rush:
-                    if (!enter) break;
-                    // quick level ticks: the number steps up with a small bump, no sound, no caption
-                    if (ProgData.ExpInLevel(0, st.Level, out _, out int rn)) ShowXpState(st.Level, 0, rn, true);
-                    _xpBump = 0;
-                    UpdateHeader(st.Level, _xpLa);
-                    break;
                 case StepKind.LevelUp:
                     if (!enter) break;
                     ProgData.ExpInLevel(0, st.Level, out _, out int n2);
                     ShowXpState(st.Level, 0, Mathf.Max(1, n2), n2 > 0);
-                    _xpPop = 0;
-                    Ui.SetText(_xpCaption, $"<color={Orange}>LEVEL UP</color>");
+                    if (!quiet) { _xpPop = 0; Ui.SetText(_xpCaption, $"<color={Orange}>LEVEL UP</color>"); if (Sfx.UseGame) PlayLevelUp(); }
                     UpdateHeader(st.Level, _xpLa); // the unlocked count climbs; the rank waits for its own beat
-                    L.Debug($"xp: level up → {st.Level}");
+                    if (!quiet) L.Debug($"xp: level up → {st.Level}");
                     break;
                 case StepKind.Rank:
+                    if (quiet) { EndRank(); break; }
                     if (enter)
                     {
                         _xpRankSwapped = false;
-                        if (!Sfx.Play("emblemup")) _xpRankFallback = true;
+                        if (Sfx.UseGame || !Sfx.Play("emblemup")) _xpRankFallback = true; // game sound: plays at the swap
                         L.Info($"xp: new rank {TierOf(st.Level).Name}");
                     }
                     if (_xpRankPop < 0 && _xpT >= RankLead && !_xpRankSwapped)
@@ -233,18 +246,25 @@ namespace LevelGate.Progression
                     }
                     // the swap happens while the emblem is smallest (see AnimatePops); the rank name fades across it
                     if (!_xpRankSwapped && _xpRankPop >= .2f) { _xpRankSwapped = true; UpdateHeader(_xpLb, _xpLb); }
-                    if (_xpRankPop >= 0) HeadText().alpha = _xpRankPop < .2f ? 1 - _xpRankPop / .2f : Mathf.Clamp01((_xpRankPop - .2f) / .35f);
+                    if (_xpRankPop >= 0)
+                    {
+                        var ht = HeadText();
+                        float inT = Mathf.Clamp01((_xpRankPop - .2f) / .45f);
+                        ht.alpha = _xpRankPop < .2f ? 1 - _xpRankPop / .2f : inT;
+                        // the new name rises 8 px into place as it fades in
+                        ((RectTransform)ht.transform).anchoredPosition = new Vector2(0, _xpRankPop < .2f ? 0 : -8f * (1 - (1 - Mathf.Pow(1 - inT, 3))));
+                    }
                     break;
                 case StepKind.Page:
                     if (!enter) break;
                     _xpPaging = true;
-                    try { ShowPage(st.Level, 1); } finally { _xpPaging = false; }
+                    try { ShowPage(st.Level, quiet ? 0 : 1); } finally { _xpPaging = false; }
                     break;
                 case StepKind.Unlock:
                     if (!enter) break;
                     _xpCardLevel = st.Level;
                     UpdateSelection();
-                    if (st.Dur > 0)
+                    if (!quiet && st.Dur > 0)
                     {
                         foreach (var c in _cards) if (c.Level == st.Level) c.Flash();
                         if (Time.unscaledTime - _xpTickAt > .15f) { _xpTickAt = Time.unscaledTime; Sounds.Play("ButtonOver", "ButtonClick"); }
@@ -252,14 +272,102 @@ namespace LevelGate.Progression
                     break;
                 case StepKind.Land:
                     if (!enter) break;
-                    _xpCardLevel = 0;
-                    if ((st.Level - 1) / PerPage != _page) { _xpPaging = true; try { ShowPage((st.Level - 1) / PerPage, 1); } finally { _xpPaging = false; } }
-                    Sounds.Click();
+                    _xpCardLevel = _xpSim ? st.Level : 0; // a preview keeps showing its level until the screen closes
+                    if ((st.Level - 1) / PerPage != _page) { _xpPaging = true; try { ShowPage((st.Level - 1) / PerPage, quiet ? 0 : 1); } finally { _xpPaging = false; } }
+                    if (!quiet) Sounds.Click();
                     ShowLevel(st.Level, true);
                     break;
             }
-            if (k >= 1) { _xpStep++; _xpT = 0; }
-            return true;
+        }
+
+        // the bar while it fills: the part just earned glows lighter with a bright leading edge; when the fill stops it melts
+        // into the normal orange (so the eye can follow it going up)
+        private static Image _barGhost, _barHead;
+        private static float _barFxAt = -10;
+
+        private static void BarFx(float from, float to)
+        {
+            if (_barGhost == null)
+            {
+                var track = (RectTransform)_xpFill.parent;
+                var g = Ui.Rect(track, "Earned", Vector2.zero, new Vector2(0, 1), new Vector2(2, 2), new Vector2(0, -2));
+                _barGhost = Ui.Img(g, new Color(1, 1, 1, 0));
+                var h = Ui.Rect(track, "Edge", new Vector2(0, 0), new Vector2(0, 1), new Vector2(-14, -6), new Vector2(10, 6));
+                _barHead = Ui.Img(h, new Color(1, 1, 1, 0), Ui.Radial());
+                _barGhost.raycastTarget = _barHead.raycastTarget = false;
+            }
+            var gr = _barGhost.rectTransform;
+            gr.anchorMin = new Vector2(Mathf.Min(from, to), 0); gr.anchorMax = new Vector2(to, 1);
+            var hr = _barHead.rectTransform;
+            hr.anchorMin = new Vector2(to, 0); hr.anchorMax = new Vector2(to, 1);
+            _barGhost.color = Color.Lerp(Ui.Hex(Orange), Color.white, .55f);
+            _barHead.color = new Color(1f, .93f, .85f, .95f);
+            _barFxAt = Time.unscaledTime;
+        }
+
+        private static void FadeBarFx()
+        {
+            if (_barGhost == null || _barFxAt < 0) return;
+            float t = Time.unscaledTime - _barFxAt;
+            if (t < .05f) return; // still filling
+            float a = Mathf.Clamp01(1 - (t - .05f) / .45f);
+            _barGhost.color = Color.Lerp(Ui.Hex(Orange, 0), Color.Lerp(Ui.Hex(Orange), Color.white, .55f), a);
+            _barHead.color = new Color(1f, .93f, .85f, .95f * a);
+            if (a <= 0) _barFxAt = -10;
+        }
+
+        /// <summary>The rank beat's end state (skipped into or past it).</summary>
+        private static void EndRank()
+        {
+            _xpRankPop = -1; _xpRankSwapped = true;
+            UpdateHeader(_xpLb, _xpLb);
+            if (_headBadge != null) _headBadge.Root.localScale = Vector3.one;
+            if (_xpRankGlow != null) _xpRankGlow.color = new Color(0, 0, 0, 0);
+            if (_headTextGroup != null) { _headTextGroup.alpha = 1; ((RectTransform)_headTextGroup.transform).anchoredPosition = Vector2.zero; }
+            if (_rankRing != null) _rankRing.color = new Color(0, 0, 0, 0);
+        }
+
+        /// <summary>
+        /// Space. Tap: on to the next moment — the next level up (arriving just as its sound starts, so the peak still lands on
+        /// the pop), then the rank, the cards, the end. Hold: on to the next part (levels → rank → cards → end).
+        /// Everything skipped past gets its end state quietly; the sound playing is stopped so nothing stacks.
+        /// </summary>
+        private static void SkipAhead(bool part)
+        {
+            int target = -1; float targetT = 0;
+            bool rankSeen = false, cardsSeen = false;
+            for (int i = _xpStep; i < _xpSteps.Count && target < 0; i++)
+            {
+                var s = _xpSteps[i];
+                float at = -1;
+                if (s.Kind == StepKind.Rank && !rankSeen) { rankSeen = true; at = 0; }
+                else if ((s.Kind == StepKind.Unlock || s.Kind == StepKind.Page) && !cardsSeen) { cardsSeen = true; at = 0; }
+                else if (s.Kind == StepKind.Land) at = 0;
+                else if (!part && s.Kind == StepKind.Fill && s.Loud) at = Mathf.Max(0, s.Dur - Sfx.LevelUpPeak);
+                if (s.Kind == StepKind.Unlock || s.Kind == StepKind.Page) cardsSeen = true;
+                if (at < 0) continue;
+                if (i == _xpStep && at <= _xpT + .01f) continue; // already there or past it
+                // the cards beat as a whole: inside it, a tap goes to the end
+                if (i == _xpStep && (s.Kind == StepKind.Unlock || s.Kind == StepKind.Page)) continue;
+                target = i; targetT = at;
+            }
+            if (target < 0) { FinishXpAnim("skipped"); return; }
+            Sfx.Stop();
+            // everything before the target: its end state, quietly
+            while (_xpStep < target)
+            {
+                var s = _xpSteps[_xpStep];
+                bool enter = _xpEntered != _xpStep;
+                _xpEntered = _xpStep;
+                _xpT = s.Dur;
+                StepFrame(s, enter, true);
+                _xpStep++; _xpT = 0;
+            }
+            _xpT = targetT; // its enter runs next frame (a level up's fill: the sound starts right then)
+            _xpPop = -1;
+            if (_xpSquare != null) { _xpSquare.rectTransform.localScale = Vector3.one; _xpSquare.color = Ui.Hex(Orange); }
+            if (_xpCaption != null) Ui.SetText(_xpCaption, "CURRENT LEVEL");
+            L.Debug($"xp: Space {(part ? "(held)" : "")} → step {target} ({_xpSteps[target].Kind}{(_xpSteps[target].Level > 0 ? " " + _xpSteps[target].Level : "")})");
         }
 
         private static bool _xpCued, _xpRankFallback;
@@ -316,7 +424,8 @@ namespace LevelGate.Progression
                 // the glow gathered during the sound's build-up swells to full at the swap, then fades
                 float a = t < .2f ? Mathf.Lerp(.22f, .6f, t / .2f) : .6f * Mathf.Clamp01(1 - (t - .2f) / .9f);
                 if (glow != null) glow.color = new Color(1f, .45f, .2f, a);
-                if (t >= 1.1f) { _xpRankPop = -1; _headBadge.Root.localScale = Vector3.one; if (glow != null) glow.color = new Color(0, 0, 0, 0); }
+                if (t >= .2f) RankRing(t - .2f);
+                if (t >= 1.1f) { _xpRankPop = -1; _headBadge.Root.localScale = Vector3.one; if (glow != null) glow.color = new Color(0, 0, 0, 0); if (_rankRing != null) _rankRing.color = new Color(0, 0, 0, 0); }
             }
             if (_xpBump >= 0 && _xpPop < 0)
             {
@@ -326,10 +435,31 @@ namespace LevelGate.Progression
                 if (_xpBump >= .14f) { _xpBump = -1; _xpSquare.rectTransform.localScale = Vector3.one; }
             }
                         if (_cards != null) foreach (var c in _cards) c.TickFlash();
+            FadeBarFx();
         }
 
         private static float EaseIn(float x) => x * x;
         private static float EaseOutBack(float x) { const float c = 1.7f; x -= 1; return 1 + (c + 1) * x * x * x + c * x * x; }
+
+        private static Image _rankRing;
+
+        /// <summary>A soft ring that bursts out of the emblem at the swap (grows 1× → 2.6× while it fades).</summary>
+        private static void RankRing(float t)
+        {
+            if (_headBadge == null) return;
+            if (_rankRing == null)
+            {
+                var badge = _headBadge.Root;
+                var rt = Ui.Box(badge.parent, "RankRing", badge.anchorMin, badge.anchoredPosition, badge.sizeDelta * 1.3f);
+                rt.SetSiblingIndex(badge.GetSiblingIndex());
+                _rankRing = Ui.Img(rt, new Color(0, 0, 0, 0), Ui.Radial());
+                _rankRing.raycastTarget = false;
+            }
+            float u = Mathf.Clamp01(t / .7f);
+            float sc = 1 + 1.6f * (1 - Mathf.Pow(1 - u, 3));
+            _rankRing.rectTransform.localScale = new Vector3(sc, sc, 1);
+            _rankRing.color = new Color(1f, .6f, .35f, .45f * (1 - u) * (1 - u));
+        }
 
         private static Image RankGlow()
         {
@@ -384,6 +514,100 @@ namespace LevelGate.Progression
             ShowXpState(level, have, need, known);
         }
 
+        // ---------------------------------------------------------------- preview (F12 > 4. Preview): nothing real changes
+
+        private static bool _xpSim;
+        /// <summary>The level a preview left on screen (0: none); the real state comes back when the screen closes.</summary>
+        private static int _simLevel;
+        private static int _simXp;
+
+        /// <summary>
+        /// Plays the animation with made-up numbers: "levels" (n level ups), "rank" (up to the next rank), "unlock" (the next n
+        /// levels' cards). Never touches the profile, the saved XP or the NEW state; closing the screen brings the real one back.
+        /// </summary>
+        public static void Preview(string kind, int n)
+        {
+            try
+            {
+                if (!IsOpen) Open("preview");
+                if (!IsOpen) { Toast.Show("Open the main menu first — previews play on the Progression screen"); return; }
+                if (!ProgData.HasExpTable) { Toast.Show("Preview: the XP table isn't loaded yet"); return; }
+                // a real animation waiting to play stays unshown (it plays on the next open)
+                _xpPending = _xpRunning = false; _xpSteps.Clear(); Sfx.Stop(); ResetXpVisuals();
+                int max = ProgData.MaxLevel;
+                int la = _simLevel > 0 ? _simLevel : ProgData.PlayerLevel();
+                int from = _simLevel > 0 ? _simXp : ProgData.TotalExp();
+                if (la <= 0 || from < 0) return;
+                ProgData.ExpInLevel(from, la, out int have, out int need);
+                float frac = need > 0 ? Mathf.Clamp01(have / (float)need) : 0;
+                int lb = la;
+                if (kind == "rank")
+                {
+                    var next = Tiers.FirstOrDefault(t => t.From > la);
+                    if (next.Name == null) { Toast.Show("Preview: already at the top rank"); return; }
+                    lb = next.From;
+                }
+                else lb = la + Mathf.Max(1, n);
+                lb = Mathf.Min(lb, max);
+                if (lb <= la) { Toast.Show("Preview: already at the last level"); return; }
+                int to = ProgData.ExpAtLevel(lb) + (ProgData.ExpInLevel(ProgData.ExpAtLevel(lb), lb, out _, out int nb) ? Mathf.RoundToInt(frac * nb) : 0);
+                _xpSim = true;
+                _xpFrom = from; _xpTo = to; _xpLa = la; _xpLb = lb;
+                if (kind == "unlock")
+                {
+                    // the cards beat only: the next n levels unlock
+                    _xpSteps.Clear();
+                    int page = (la - 1) / PerPage;
+                    for (int l = la + 1; l <= lb; l++)
+                    {
+                        int p = (l - 1) / PerPage;
+                        if (p != page) { Add(StepKind.Page, .55f, p); page = p; }
+                        Add(StepKind.Unlock, lb - la <= 5 ? .34f : .24f, l);
+                    }
+                    Add(StepKind.Pause, .45f);
+                    Add(StepKind.Land, .1f, lb);
+                }
+                else BuildXpSteps(from, to, la, lb);
+                // start from the preview's "before": its level, page and XP
+                _xpCardLevel = la;
+                if ((la - 1) / PerPage != _page) ShowPage((la - 1) / PerPage, 0);
+                _level = la;
+                UpdateSelection();
+                ShowXpAt(from, la);
+                UpdateHeader(la, la);
+                _xpPending = true;
+                _openedAt = Mathf.Min(_openedAt, Time.unscaledTime - 1); // no fade-in wait
+                L.Info($"preview: {kind} — level {la} → {lb} ({from} → {to} XP, made up; nothing is saved); {_xpSteps.Count} step(s), ~{TotalDur():0.0} s");
+                if (ProgressionPlugin.ConfigWindowOpen()) Toast.Show("Preview ready — close F12 to watch it");
+            }
+            catch (Exception e) { L.Error("preview", e); }
+        }
+
+        private static void FinishPreview(string why)
+        {
+            if (why != "done") Sfx.Stop();
+            EndRank();
+            ResetXpVisuals();
+            _simLevel = _xpLb; _simXp = _xpTo;
+            if (why == "screen closed") { EndPreview(); return; }
+            // stays on screen as the preview left it (until the screen closes)
+            _xpCardLevel = _xpLb;
+            ShowXpAt(_xpTo, _xpLb);
+            UpdateHeader(_xpLb, _xpLb);
+            int page = (_xpLb - 1) / PerPage;
+            if (page != _page) { _xpPaging = true; try { ShowPage(page, 0); } finally { _xpPaging = false; } }
+            ShowLevel(_xpLb, true);
+            L.Info($"preview: {why}; showing level {_xpLb} until the screen closes (nothing saved)");
+        }
+
+        /// <summary>Back to the real state (the screen closed).</summary>
+        private static void EndPreview()
+        {
+            if (!_xpSim && _simLevel == 0) return;
+            _xpSim = false; _simLevel = 0; _simXp = 0; _xpCardLevel = 0;
+            L.Info("preview: ended — back to your real level / XP");
+        }
+
         /// <summary>Jumps to the end state and remembers the XP as shown. Safe to call any time.</summary>
         private static void FinishXpAnim(string why)
         {
@@ -391,6 +615,7 @@ namespace LevelGate.Progression
             bool leveled = _xpLb > _xpLa;
             _xpPending = _xpRunning = false;
             _xpSteps.Clear();
+            if (_xpSim) { FinishPreview(why); return; }
             _xpCardLevel = 0;
             SeenState.Xp = _xpTo;
             if (_headTextGroup != null) _headTextGroup.alpha = 1;

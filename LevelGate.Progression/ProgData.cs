@@ -413,6 +413,13 @@ namespace LevelGate.Progression
             catch (Exception e) { L.ErrorOnce("xp to level", e); return false; }
         }
 
+        /// <summary>Total experience at the start of a level (0 if unknown).</summary>
+        public static int ExpAtLevel(int level)
+        {
+            var table = ExpTable();
+            return table == null || level < 1 || level > table.Length ? 0 : table[level - 1];
+        }
+
         /// <summary>The level a total experience amount reaches (0 if the table is unknown).</summary>
         public static int LevelOfExp(int exp)
         {

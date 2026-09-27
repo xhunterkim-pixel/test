@@ -40,6 +40,23 @@ Versions are **MAJOR.MINOR.PATCH**:
 
 ## LevelGate Progression (BepInEx plugin, separate DLL)
 
+### 0.9.31
+- **Space during the XP animation:**
+  - Tap: on to the next moment (the next level up, arriving as its sound starts so the peak still lands on the pop; then the rank, the cards, the end).
+  - Hold (0.35 s): on to the next part (levels → rank → cards → end).
+  - Everything skipped past gets its end state quietly, and the playing sound is stopped first, so sounds never stack. A mouse click still skips it all.
+- **F12 > 4. Preview** (nothing real changes): Levels (1–40), PlayLevelUp, PlayNextRank, PlayUnlock.
+  - Plays on the Progression screen (opens it if needed) and starts once F12 is closed; the next preview continues from where the last left off.
+  - Your XP, level, saved state and NEW tags are never touched; closing the screen brings the real state back.
+- **General > UseGameSounds:** the game's UI sounds instead of the mp3s (played on the pop / the swap).
+- **Sounds 30% louder** (from the originals ×3.25 with a limiter: level up peaks at -10.1 dB, new rank at -1.5 dB).
+- **Timing and feel:**
+  - 0.3 s more after the emblem settles before the cards (1.3 s).
+  - XP bar: the part just earned glows lighter with a bright leading edge while it fills, then melts into the orange.
+  - Emblem: a soft ring bursts out at the swap, and the new rank name rises 8 px into place as it fades in.
+  - Cards: each unlocking card punches to 104% with its flash.
+- **Level cards:** cards 2–5 (no rank emblem row) centre their pictures between header and footer instead of leaving an empty row above them. The first card is unchanged.
+
 ### 0.9.30
 - **Every level up plays in full:** no more rushing through the first ones (5 → 23 jumped to 19 in 3 s without sound).
   - Each level: the bar fills in 0.7 s, Levelup.mp3 peaks on the pop, a short hold, then the next level (~1.25 s a level).

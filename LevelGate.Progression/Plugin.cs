@@ -25,7 +25,7 @@ namespace LevelGate.Progression
         public const string Guid = "com.kkyangg.levelgate.progression";
         public const string Name = "LevelGate Progression";
         // MAJOR.MINOR.PATCH — see CHANGELOG.md
-        public const string Version = "0.9.30";
+        public const string Version = "0.9.31";
 
         internal static ProgressionPlugin Instance;
         internal static ConfigEntry<KeyboardShortcut> OpenKey;
@@ -51,6 +51,9 @@ namespace LevelGate.Progression
         internal static ConfigEntry<int> LastSeenLevel;
         internal static ConfigEntry<bool> XpAnimation;
         internal static ConfigEntry<float> SoundVolume;
+        internal static ConfigEntry<bool> GameSounds;
+        internal static ConfigEntry<int> PreviewLevels;
+        internal static ConfigEntry<bool> PreviewLevelUp, PreviewRank, PreviewUnlock;
         internal static ConfigEntry<int> ShownXp;
         internal static ConfigEntry<string> ProfileState;
 
@@ -71,6 +74,8 @@ namespace LevelGate.Progression
                 "Fade out the main menu (ESCAPE FROM TARKOV, CHARACTER, TRADING, EXIT…) while the screen is open.", 70));
             SoundVolume = Config.Bind(G, "SoundVolume", .8f, Desc(
                 "Volume of the level-up and new-rank sounds (sounds folder). 0 = off.", 55, new AcceptableValueRange<float>(0f, 1f)));
+            GameSounds = Config.Bind(G, "UseGameSounds", false, Desc(
+                "Level up / new rank: the game's own UI sounds instead of the plugin's (sounds folder). SoundVolume doesn't apply to them.", 54));
             BlurBackground = Config.Bind(G, "BlurBackground", true, Desc(
                 "Blur the menu's 3D background while the screen is open (if the game's camera has a blur effect).", 60));
 
@@ -98,6 +103,26 @@ namespace LevelGate.Progression
                 RefreshIcons.Value = false;
                 RefreshPictures(true);
             };
+
+            // 4. Preview: plays the XP animation with made-up numbers — nothing real changes (closing the screen brings yours back)
+            const string P = "4. Preview";
+            PreviewLevels = Config.Bind(P, "Levels", 1, Desc("How many levels the preview buttons below play.", 100, new AcceptableValueRange<int>(1, 40)));
+            PreviewLevelUp = Config.Bind(P, "PlayLevelUp", false, Desc(
+                "Tick: plays level ups (the Levels above) on the Progression screen, as after a raid. Only a preview: your XP, level and NEW tags don't change; closing the screen brings them back. Starts when F12 closes.", 90));
+            PreviewRank = Config.Bind(P, "PlayNextRank", false, Desc(
+                "Tick: plays the level ups up to the next rank, with the new emblem. Only a preview (nothing changes).", 80));
+            PreviewUnlock = Config.Bind(P, "PlayUnlock", false, Desc(
+                "Tick: plays only the cards unlocking for the next levels (the Levels above). Only a preview (nothing changes).", 70));
+            void Button(ConfigEntry<bool> e, string kind)
+            {
+                e.SettingChanged += (_, __) =>
+                {
+                    if (!e.Value) return;
+                    e.Value = false;
+                    ProgScreen.Preview(kind, PreviewLevels.Value);
+                };
+            }
+            Button(PreviewLevelUp, "levels"); Button(PreviewRank, "rank"); Button(PreviewUnlock, "unlock");
 
             ButtonLabel = Config.Bind(A, "ButtonLabel", "PROGRESSION", Desc("Text on the menu bar button.", 100));
             ButtonTemplate = Config.Bind(A, "CopyButton", "", Desc(
@@ -173,6 +198,17 @@ namespace LevelGate.Progression
         }
 
         private const string Gfx = "2. Graphics";
+
+        /// <summary>Is the F12 settings window (BepInEx Configuration Manager) open? A preview waits until it's closed.</summary>
+        internal static bool ConfigWindowOpen()
+        {
+            try
+            {
+                if (!BepInEx.Bootstrap.Chainloader.PluginInfos.TryGetValue("com.bepis.bepinex.configurationmanager", out var info) || info?.Instance == null) return false;
+                return Refl.Get(info.Instance, "DisplayingWindow") is bool b && b;
+            }
+            catch { return false; }
+        }
 
         private void MigrateOldSettings()
         {

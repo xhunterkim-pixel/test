@@ -63,6 +63,9 @@ namespace LevelGate.Progression
             }
         }
 
+        /// <summary>F12 > General > GameSounds: the game's own UI sounds instead of the mp3s (played on the pop / the swap).</summary>
+        public static bool UseGame => ProgressionPlugin.GameSounds?.Value ?? false;
+
         public static void Stop() { if (_source != null) _source.Stop(); }
 
         /// <summary>Plays one of our sounds; false if it isn't loaded (the caller can fall back).</summary>
