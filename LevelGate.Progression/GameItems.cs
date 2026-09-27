@@ -260,11 +260,36 @@ namespace LevelGate.Progression
         {
             try
             {
+                // the whole item as the stash shows it: a weapon preset with its stock, barrel… (its template alone is just the
+                // receiver: an SA58 read as 2×1 instead of 5×2 — wrong size shown, and big renders asked for at the wrong scale)
+                var m = item == null ? null : AccessTools.Method(item.GetType(), "CalculateCellSize", Type.EmptyTypes);
+                if (m != null)
+                {
+                    var size = m.Invoke(item, null);
+                    if (Refl.Get(size, "X") is int x && Refl.Get(size, "Y") is int y && x > 0 && y > 0) return (x, y);
+                }
+            }
+            catch (Exception e) { L.ErrorOnce("item cell size", e); }
+            try
+            {
                 var t = Refl.Get(item, "Template");
                 int w = Refl.Get(t, "Width") is int a ? a : 1, h = Refl.Get(t, "Height") is int b ? b : 1;
                 return (Mathf.Max(1, w), Mathf.Max(1, h));
             }
             catch { return (1, 1); }
+        }
+
+        /// <summary>The whole item's weight (a weapon preset with its parts), or null.</summary>
+        public static float? WeightOf(object item)
+        {
+            try
+            {
+                var m = item == null ? null : AccessTools.Method(item.GetType(), "GetSingleItemTotalWeight", Type.EmptyTypes);
+                if (m != null && m.Invoke(item, null) is float kg && kg > 0) return kg;
+                if (Refl.Get(item, "TotalWeight") is float tw && tw > 0) return tw;
+            }
+            catch (Exception e) { L.ErrorOnce("item weight", e); }
+            return null;
         }
 
         /// <summary>The render scale that gives about targetPx on the item's long side (so a 1×1 box of ammo gets as many
@@ -499,9 +524,9 @@ namespace LevelGate.Progression
                 var t = Refl.Get(item, "Template");
                 if (t == null) return list;
                 object Num(params string[] names) { foreach (var n in names) { var v = Refl.Get(t, n); if (v != null && !(v is string s && s.Length == 0)) return v; } return null; }
-                var w = Num("Width"); var h = Num("Height");
-                if (w != null && h != null) list.Add(("Size", $"{w} × {h}"));
-                if (Num("Weight") is float kg) list.Add(("Weight", $"{kg:0.###} kg"));
+                var (cw, ch) = CellsOf(item); // the whole item (weapons: the preset, not just its receiver)
+                list.Add(("Size", $"{cw} × {ch}"));
+                if ((WeightOf(item) ?? (Num("Weight") as float?)) is float kg) list.Add(("Weight", $"{kg:0.###} kg"));
                 if (Num("Damage") is int dmg && dmg > 0) list.Add(("Damage", dmg.ToString()));
                 if (Num("PenetrationPower") is int pen && pen > 0) list.Add(("Penetration", pen.ToString()));
                 if (Num("ArmorClass", "armorClass") is int ac && ac > 0) list.Add(("Armor class", ac.ToString()));

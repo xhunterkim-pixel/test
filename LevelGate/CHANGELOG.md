@@ -40,6 +40,12 @@ Versions are **MAJOR.MINOR.PATCH**:
 
 ## LevelGate Progression (BepInEx plugin, separate DLL)
 
+### 0.9.26
+- **Fix: weapon size and weight were the receiver's, not the whole gun's** (DS Arms SA58 showed 2 × 1 and 1.46 kg). Size and weight now come from the assembled weapon (the preset the game shows in the stash).
+  - The same size also sets how big the game is asked to draw a weapon, so the renders are asked for at the right scale.
+- **Level cards: the big picture is landscape** (fills its column) instead of a small square. Weapons are wide, and in the square they came out tiny.
+- **Level cards: pictures on future levels are less dimmed** (85% instead of 65%; other cards 90%). Dark weapons on levels ahead were hard to make out.
+
 ### 0.9.25
 - 0.9.24 play-test: the loading screen took 2–8 s (20 pictures). Every sharp picture was drawn and kept at the size asked for, including when flipping levels fast.
 - High: weapons on the level cards may be drawn bigger too (same stash repair on close as the centre picture).

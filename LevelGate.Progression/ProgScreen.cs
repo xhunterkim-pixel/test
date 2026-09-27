@@ -1757,13 +1757,13 @@ namespace LevelGate.Progression
             private int _picked, _player;
 
             /// <summary>A square picture slot, as big as fits in the given area (so icons keep their shape at any screen size).</summary>
-            private static RectTransform Square(RectTransform parent, string name, Vector2 aMin, Vector2 aMax, Vector2 oMin, Vector2 oMax)
+            private static RectTransform Square(RectTransform parent, string name, Vector2 aMin, Vector2 aMax, Vector2 oMin, Vector2 oMax, float aspect = 1)
             {
                 var area = Ui.Rect(parent, name, aMin, aMax, oMin, oMax);
                 var sq = Ui.Fill(area, "Square");
                 var fit = sq.gameObject.AddComponent<AspectRatioFitter>();
                 fit.aspectMode = AspectRatioFitter.AspectMode.FitInParent;
-                fit.aspectRatio = 1;
+                fit.aspectRatio = aspect;
                 return sq;
             }
 
@@ -1799,10 +1799,11 @@ namespace LevelGate.Progression
                 // selected: a 2 px light bar along the top edge (shape, not only colour)
                 _top = Ui.Img(Ui.Rect(inner, "Top", new Vector2(0, 1), Vector2.one, new Vector2(0, -2), Vector2.zero), Select);
                 _top.enabled = false;
-                // one big square picture (the level's top category) and two small ones stacked beside it
+                // one big picture (the level's top category) and two small square ones stacked beside it
                 // the pictures sit in the area between header and footer; each is kept square
                 var pics = Ui.Rect(inner, "Pics", Vector2.zero, Vector2.one, new Vector2(Pad, Foot), new Vector2(-Pad, -Head));
-                _picRects[0] = Square(pics, "Pic0", new Vector2(0, 0), new Vector2(.64f, 1), Vector2.zero, new Vector2(-S1, 0));
+                // the big one is landscape (fills its column): weapons are wide — in a square they came out tiny
+                _picRects[0] = Square(pics, "Pic0", new Vector2(0, 0), new Vector2(.64f, 1), Vector2.zero, new Vector2(-S1, 0), 1.9f);
                 _picRects[1] = Square(pics, "Pic1", new Vector2(.64f, .5f), new Vector2(1, 1), new Vector2(S1, S1 / 2), Vector2.zero);
                 _picRects[2] = Square(pics, "Pic2", new Vector2(.64f, 0), new Vector2(1, .5f), new Vector2(S1, 0), new Vector2(0, -S1 / 2));
                 for (int i = 0; i < 3; i++)
@@ -1919,7 +1920,7 @@ namespace LevelGate.Progression
                 // future levels step back (unless picked or under the mouse)
                 _baseAlpha = locked && !sel && !_hover && !empty ? .85f : 1f;
                 // the pictures carry the weight: full only on the viewing / current card (or under the mouse)
-                float pa = sel || current || _hover ? 1f : locked ? .65f : .8f;
+                float pa = sel || current || _hover ? 1f : locked ? .85f : .9f; // .65 made future levels' items hard to make out
                 foreach (var pic in _pics) FadeTo(pic, new Color(1, 1, 1, pa));
                 _group.alpha = _baseAlpha;
             }
