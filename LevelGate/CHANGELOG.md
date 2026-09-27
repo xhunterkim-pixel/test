@@ -40,6 +40,14 @@ Versions are **MAJOR.MINOR.PATCH**:
 
 ## LevelGate Progression (BepInEx plugin, separate DLL)
 
+### 0.9.29
+- **Own sounds, and the animation is timed to them.** `sounds\levelup.mp3` (1.46 s, peaks at 0.45 s) and `sounds\emblemup.mp3` (4.28 s, build-up, peaks at 1.45 s) are loaded at start. General > SoundVolume sets their volume. If a file is missing, a game sound is used instead.
+  - **Every** full level up plays Levelup.mp3, started so its peak lands on the number's pop. Consecutive level ups are ~1 s apart, so peaks don't collide. After the last one: the sound plays out, then 0.4 s, then the next beat.
+  - More than 5 level ups: the first ones rush past (the number ticks up with a small bump, no sound, ~1.6 s at most) and the last 5 get the full treatment. 0.9.28 played 8 pops in ~3 s with the sound twice, which didn't match.
+  - **Rank:** Emblemup.mp3 starts; during its build-up the emblem draws in slightly and a faint glow gathers. The shrink-swap-overshoot (unchanged) lands the swap on the sound's peak, and the glow swells to full there. The cards start 1 s after the emblem settles, while the sound's tail fades under them.
+  - Skipping or closing stops the sound.
+- **NEW tags:** an item's NEW goes once you click it (the item shown first too); a level card's NEW goes once you've looked at that level; all of them go when you leave the screen.
+
 ### 0.9.28
 - **The XP animation is now four beats, each landing before the next, with ~1 s of stillness between:**
   1. **Earn:** the "+N" chip slides in; the bar fills; each level up pops the number and restarts the bar.

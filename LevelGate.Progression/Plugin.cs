@@ -25,7 +25,7 @@ namespace LevelGate.Progression
         public const string Guid = "com.kkyangg.levelgate.progression";
         public const string Name = "LevelGate Progression";
         // MAJOR.MINOR.PATCH — see CHANGELOG.md
-        public const string Version = "0.9.28";
+        public const string Version = "0.9.29";
 
         internal static ProgressionPlugin Instance;
         internal static ConfigEntry<KeyboardShortcut> OpenKey;
@@ -50,6 +50,7 @@ namespace LevelGate.Progression
         internal static ConfigEntry<bool> RefreshIcons;
         internal static ConfigEntry<int> LastSeenLevel;
         internal static ConfigEntry<bool> XpAnimation;
+        internal static ConfigEntry<float> SoundVolume;
         internal static ConfigEntry<int> ShownXp;
 
         private void Awake()
@@ -67,6 +68,8 @@ namespace LevelGate.Progression
                 "A PROGRESSION block in the main menu's bottom-left corner (like the game's EXPANSIONS one) that opens the screen.", 80));
             HideMainMenu = Config.Bind(G, "HideMainMenu", true, Desc(
                 "Fade out the main menu (ESCAPE FROM TARKOV, CHARACTER, TRADING, EXIT…) while the screen is open.", 70));
+            SoundVolume = Config.Bind(G, "SoundVolume", .8f, Desc(
+                "Volume of the level-up and new-rank sounds (sounds folder). 0 = off.", 55, new AcceptableValueRange<float>(0f, 1f)));
             BlurBackground = Config.Bind(G, "BlurBackground", true, Desc(
                 "Blur the menu's 3D background while the screen is open (if the game's camera has a blur effect).", 60));
 
@@ -131,6 +134,7 @@ namespace LevelGate.Progression
             try
             {
                 ProgData.Init();
+                Sfx.Load();
                 var harmony = new Harmony(Guid);
                 MenuHook.Apply(harmony);
             }
@@ -242,6 +246,7 @@ namespace LevelGate.Progression
                 MenuWidget.Tick();
                 GameItems.RepairTick();
                 Toast.Tick();
+                Sfx.Tick();
             }
             catch (Exception e) { L.ErrorOnce("update", e); }
         }

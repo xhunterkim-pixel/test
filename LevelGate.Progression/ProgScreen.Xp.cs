@@ -23,7 +23,7 @@ namespace LevelGate.Progression
     /// </summary>
     internal static partial class ProgScreen
     {
-        private enum StepKind { Fill, LevelUp, Pause, Rank, Page, Unlock, Land }
+        private enum StepKind { Fill, Rush, LevelUp, Pause, Rank, Page, Unlock, Land }
 
         private struct XpStep
         {
@@ -31,13 +31,13 @@ namespace LevelGate.Progression
             public int Level;        // Fill: level being filled · LevelUp / Unlock / Land: that level · Rank: the new rank's level · Page: page
             public float From, To;   // Fill: bar 0..1
             public float Dur;
-            public bool Loud;        // LevelUp: plays the sound
+            public bool Loud;        // Fill: starts the level-up sound so its peak lands on the next level up
         }
 
         private static readonly List<XpStep> _xpSteps = new List<XpStep>();
         private static bool _xpPending, _xpRunning;
         private static int _xpFrom, _xpTo, _xpStep, _xpLa, _xpLb;
-        private static float _xpT, _xpPop = -1, _xpRankPop = -1, _xpSoundAt = -10, _xpTickAt = -10;
+        private static float _xpT, _xpPop = -1, _xpRankPop = -1, _xpTickAt = -10;
         private static bool _xpRankSwapped;
         private static Component _xpGain;
         private static Image _xpRankGlow;
@@ -110,49 +110,71 @@ namespace LevelGate.Progression
                 Add(StepKind.Fill, Mathf.Clamp(.5f + (fb - fa) * 1.2f, .6f, 1.6f), la, fa, fb);
                 return;
             }
-            // a whole level's fill: slower for a few, quicker for many — and it speeds up as it goes (a ramp, not a metronome)
-            float full = Mathf.Clamp(1.1f / Mathf.Sqrt(levels), .14f, .8f);
-            float pop = levels > 5 ? .16f : .38f;
-            Add(StepKind.Fill, Mathf.Max(.25f, full * 1.2f * (1 - fa) + .1f), la, fa, 1);
-            for (int l = la + 1; l <= lb; l++)
+            // Every level up gets its sound, and the sound's peak (0.45 s in) lands on the number's pop: the bar's fill
+            // starts the sound 0.45 s before it's full. Levels follow each other ~1 s apart, so no two peaks collide.
+            // More than 5: the first ones rush past (the number ticks up, no sound), the last 5 get the full treatment.
+            const int Full = 5;
+            int rush = Mathf.Max(0, levels - Full);
+            int l0 = la;
+            if (rush > 0)
             {
-                int i = l - la;
-                bool loud = i == 1 || l == lb; // the first and the last level up are heard
-                Add(StepKind.LevelUp, l == lb ? .45f : pop, l, loud: loud);
-                if (l < lb) Add(StepKind.Fill, full * Mathf.Lerp(1f, .45f, i / (float)levels), l, 0, 1);
-                else if (fb > 0) Add(StepKind.Fill, Mathf.Clamp(.35f + fb * .9f, .35f, 1.2f), l, 0, fb);
+                Add(StepKind.Fill, Mathf.Max(.3f, .45f * (1 - fa)), la, fa, 1);
+                float each = Mathf.Clamp(1.6f / rush, .07f, .16f); // the whole rush: ~1.6 s at most
+                for (int l = la + 1; l <= la + rush; l++)
+                {
+                    Add(StepKind.Rush, each * .35f, l);
+                    Add(StepKind.Fill, each * .65f, l, 0, 1);
+                }
+                l0 = la + rush;
+                fa = 0;
             }
-            // the bar beat stays within ~5 s however many levels
-            float bar = TotalDur();
-            if (bar > 5f)
-                for (int i = 0; i < _xpSteps.Count; i++) { var s = _xpSteps[i]; s.Dur = Mathf.Max(.07f, s.Dur * 5f / bar); _xpSteps[i] = s; }
+            // the first full level's fill (long enough to carry the sound's run-up)
+            Add(StepKind.Fill, Mathf.Max(Sfx.LevelUpPeak + .1f, .9f * (1 - fa)), l0, fa, 1, loud: true);
+            for (int l = l0 + 1; l <= lb; l++)
+            {
+                bool last = l == lb;
+                Add(StepKind.LevelUp, .55f, l);
+                if (!last) Add(StepKind.Fill, .5f, l, 0, 1, loud: true);
+                else
+                {
+                    float fill = fb > 0 ? Mathf.Clamp(.35f + fb * .8f, .35f, 1.1f) : 0;
+                    if (fill > 0) Add(StepKind.Fill, fill, l, 0, fb);
+                    // the sound plays out, then a short breath (0.4 s) before the next beat
+                    float rest = Sfx.LevelUpLength - Sfx.LevelUpPeak - .55f - fill;
+                    Add(StepKind.Pause, Mathf.Max(0, rest) + .4f);
+                }
+            }
 
-            // ---- 2. RANK (only when it changed)
-            Add(StepKind.Pause, 1f);
-            if (TierOf(lb).Name != TierOf(la).Name)
-            {
-                Add(StepKind.Rank, 1.1f, lb);
-                Add(StepKind.Pause, 1f);
-            }
+            // ---- 2. RANK (only when it changed): Emblemup.mp3 starts, its build-up warms the emblem, the swap lands on
+            // its peak (1.45 s), the settle runs to ~2.35 s — then 1 s of stillness before the cards
+            if (TierOf(lb).Name != TierOf(la).Name) Add(StepKind.Rank, RankLead + 1.1f + 1f, lb);
 
             // ---- 3. UNLOCK: the new levels' cards, left to right, page by page (at most the last two pages)
             int firstShown = la + 1;
             int lastPage = (lb - 1) / PerPage;
             if (lastPage - (firstShown - 1) / PerPage > 1) firstShown = (lastPage - 1) * PerPage + 1;
             int shownCount = lb - firstShown + 1;
-            float each = shownCount <= 5 ? .34f : .24f;
+            float eachCard = shownCount <= 5 ? .34f : .24f;
             int page = (la - 1) / PerPage;
             if (firstShown > la + 1) Add(StepKind.Unlock, 0, firstShown - 1); // the skipped ones, silently (off screen)
             for (int l = firstShown; l <= lb; l++)
             {
                 int p = (l - 1) / PerPage;
                 if (p != page) { Add(StepKind.Page, .55f, p); page = p; }
-                Add(StepKind.Unlock, each, l);
+                Add(StepKind.Unlock, eachCard, l);
             }
 
             // ---- 4. LAND
             Add(StepKind.Pause, .45f);
             Add(StepKind.Land, .1f, lb);
+        }
+
+        /// <summary>From the emblem sound's start to the moment the emblem starts to shrink (its swap then lands on the peak).</summary>
+        private const float RankLead = Sfx.EmblemPeak - .2f;
+
+        private static void PlayLevelUp()
+        {
+            if (!Sfx.Play("levelup")) Sounds.Play("QuestCompleted", "QuestFinished", "TradeOperationComplete", "ButtonClick");
         }
 
         /// <summary>Runs the animation (every frame while open). True while it plays: the screen's own keys wait.</summary>
@@ -166,7 +188,7 @@ namespace LevelGate.Progression
                 if (Time.unscaledTime - _openedAt < .45f) return true; // the screen fades in first
                 _xpPending = false; _xpRunning = true; _xpStep = 0; _xpT = 0;
                 ShowGain(true);
-                L.Info("xp: animation started");
+                L.Info($"xp: animation started (~{TotalDur():0.0} s)");
             }
             if (!_xpRunning) { FadeGain(); return false; }
             if (input.GetKeyDown(KeyCode.Escape)) { Close("Escape"); return true; }
@@ -180,35 +202,57 @@ namespace LevelGate.Progression
             {
                 case StepKind.Fill:
                 {
-                    // the first fill eases in, the last one slows into place, the ones between run straight through
-                    bool lastFill = _xpStep + 1 >= _xpSteps.Count || _xpSteps[_xpStep + 1].Kind != StepKind.LevelUp;
-                    float e = lastFill ? 1 - Mathf.Pow(1 - k, 3) : (_xpStep == 0 ? k * k : k);
+                    if (enter) _xpCued = false;
+                    // a fill into a level up starts its sound so the peak lands on the pop
+                    if (st.Loud && !_xpCued && st.Dur - _xpT <= Sfx.LevelUpPeak) { _xpCued = true; PlayLevelUp(); }
+                    bool intoLevelUp = _xpStep + 1 < _xpSteps.Count && (_xpSteps[_xpStep + 1].Kind == StepKind.LevelUp || _xpSteps[_xpStep + 1].Kind == StepKind.Rush);
+                    // into a level up: accelerates into it (the sound's swell) · the last one: slows into place
+                    float e = intoLevelUp ? (st.Loud ? k * k : k) : 1 - Mathf.Pow(1 - k, 3);
                     float frac = Mathf.Lerp(st.From, st.To, e);
                     if (ProgData.ExpInLevel(0, st.Level, out _, out int need)) ShowXpState(st.Level, Mathf.RoundToInt(frac * need), need, true);
                     _xpFill.anchorMax = new Vector2(frac, 1);
                     PlaceGain();
                     break;
                 }
+                case StepKind.Rush:
+                    if (!enter) break;
+                    // quick level ticks: the number steps up with a small bump, no sound, no caption
+                    if (ProgData.ExpInLevel(0, st.Level, out _, out int rn)) ShowXpState(st.Level, 0, rn, true);
+                    _xpBump = 0;
+                    UpdateHeader(st.Level, _xpLa);
+                    break;
                 case StepKind.LevelUp:
                     if (!enter) break;
                     ProgData.ExpInLevel(0, st.Level, out _, out int n2);
                     ShowXpState(st.Level, 0, Mathf.Max(1, n2), n2 > 0);
                     _xpPop = 0;
                     Ui.SetText(_xpCaption, $"<color={Orange}>LEVEL UP</color>");
-                    if (st.Loud && Time.unscaledTime - _xpSoundAt > .6f) { _xpSoundAt = Time.unscaledTime; Sounds.Play("QuestCompleted", "QuestFinished", "TradeOperationComplete", "ButtonClick"); }
                     UpdateHeader(st.Level, _xpLa); // the unlocked count climbs; the rank waits for its own beat
                     L.Debug($"xp: level up → {st.Level}");
                     break;
                 case StepKind.Rank:
                     if (enter)
                     {
-                        _xpRankPop = 0; _xpRankSwapped = false;
-                        Sounds.Play("InsuranceInsured", "DeathmatchWin", "MenuDropdownSelect", "ButtonClick");
+                        _xpRankSwapped = false;
+                        if (!Sfx.Play("emblemup")) _xpRankFallback = true;
                         L.Info($"xp: new rank {TierOf(st.Level).Name}");
                     }
-                    // the swap happens while the emblem is smallest (see AnimatePops); the rank name fades across
+                    if (_xpRankPop < 0 && _xpT >= RankLead && !_xpRankSwapped)
+                    {
+                        _xpRankPop = 0;
+                        if (_xpRankFallback) { _xpRankFallback = false; Sounds.Play("InsuranceInsured", "DeathmatchWin", "MenuDropdownSelect", "ButtonClick"); }
+                    }
+                    // the build-up: the emblem draws in a little and a faint glow gathers behind it
+                    if (_xpT < RankLead)
+                    {
+                        float u = _xpT / RankLead;
+                        _headBadge.Root.localScale = Vector3.one * (1 - .05f * u * u);
+                        var glow = RankGlow();
+                        if (glow != null) glow.color = new Color(1f, .45f, .2f, .22f * u * u);
+                    }
+                    // the swap happens while the emblem is smallest (see AnimatePops); the rank name fades across it
                     if (!_xpRankSwapped && _xpRankPop >= .2f) { _xpRankSwapped = true; UpdateHeader(_xpLb, _xpLb); }
-                    HeadText().alpha = k < .2f ? 1 - k / .2f : Mathf.Clamp01((k - .2f) / .35f);
+                    if (_xpRankPop >= 0) HeadText().alpha = _xpRankPop < .2f ? 1 - _xpRankPop / .2f : Mathf.Clamp01((_xpRankPop - .2f) / .35f);
                     break;
                 case StepKind.Page:
                     if (!enter) break;
@@ -236,6 +280,9 @@ namespace LevelGate.Progression
             if (k >= 1) { _xpStep++; _xpT = 0; }
             return true;
         }
+
+        private static bool _xpCued, _xpRankFallback;
+        private static float _xpBump = -1;
 
         private static CanvasGroup HeadText()
         {
@@ -285,11 +332,19 @@ namespace LevelGate.Progression
                 else s = 1;
                 _headBadge.Root.localScale = new Vector3(s, s, 1);
                 var glow = RankGlow();
-                float g = t < .2f ? 0 : Mathf.Clamp01(1 - (t - .2f) / .9f);
-                if (glow != null) glow.color = new Color(1f, .45f, .2f, .6f * g * Mathf.Clamp01((t - .2f) / .12f));
+                // the glow gathered during the sound's build-up swells to full at the swap, then fades
+                float a = t < .2f ? Mathf.Lerp(.22f, .6f, t / .2f) : .6f * Mathf.Clamp01(1 - (t - .2f) / .9f);
+                if (glow != null) glow.color = new Color(1f, .45f, .2f, a);
                 if (t >= 1.1f) { _xpRankPop = -1; _headBadge.Root.localScale = Vector3.one; if (glow != null) glow.color = new Color(0, 0, 0, 0); }
             }
-            if (_cards != null) foreach (var c in _cards) c.TickFlash();
+            if (_xpBump >= 0 && _xpPop < 0)
+            {
+                _xpBump += dt;
+                float b = 1 + .1f * Mathf.Sin(Mathf.Clamp01(_xpBump / .14f) * Mathf.PI);
+                _xpSquare.rectTransform.localScale = new Vector3(b, b, 1);
+                if (_xpBump >= .14f) { _xpBump = -1; _xpSquare.rectTransform.localScale = Vector3.one; }
+            }
+                        if (_cards != null) foreach (var c in _cards) c.TickFlash();
         }
 
         private static float EaseIn(float x) => x * x;
@@ -358,7 +413,10 @@ namespace LevelGate.Progression
             _xpCardLevel = 0;
             ProgressionPlugin.ShownXp.Value = _xpTo;
             if (_headTextGroup != null) _headTextGroup.alpha = 1;
-            if (_xpRankPop >= 0) { _xpRankPop = -1; if (_headBadge != null) _headBadge.Root.localScale = Vector3.one; if (_xpRankGlow != null) _xpRankGlow.color = new Color(0, 0, 0, 0); }
+            _xpRankPop = -1;
+            if (_headBadge != null) _headBadge.Root.localScale = Vector3.one;
+            if (_xpRankGlow != null) _xpRankGlow.color = new Color(0, 0, 0, 0);
+            if (why != "done") Sfx.Stop(); // skipped / closed: the sound stops with it
             UpdateXp();
             if (leveled)
             {

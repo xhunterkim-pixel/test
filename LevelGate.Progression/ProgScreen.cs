@@ -159,6 +159,8 @@ namespace LevelGate.Progression
             L.Info($"logging: {L.CostLines - _sLogLines} line(s) took {logMs:0.0} ms while open ({logMs / 10 / open:0.00}% of the time); " +
                    $"since start {L.CostLines} line(s), {L.CostMs:0} ms ({L.CostMs / 10 / Math.Max(1, Time.realtimeSinceStartup):0.000}% of play time); verbose {(L.Verbose ? "on" : "off")}");
             FinishXpAnim("screen closed");
+            if (_newFrom > 0) L.Info($"NEW: cleared ({_newClicked.Count} item(s) clicked, {_newViewed.Count} level(s) looked at)");
+            _newFrom = 0; _newClicked.Clear(); _newViewed.Clear();
             _canvas.SetActive(false);
             MenuHook.SetOn(false);
             HideMenu(false);
@@ -952,6 +954,7 @@ namespace LevelGate.Progression
             int page = (level - 1) / PerPage;
             _level = level;
             if (page != _page) { ShowPage(page, page > _page ? 1 : -1, level); return; }
+            if (!XpAnimating) _newViewed.Add(level); // looked at: its card's NEW goes (its items keep theirs until clicked)
             float t0 = Time.realtimeSinceStartup;
             var items = ProgData.ItemsAt(level);
             int player = ProgData.PlayerLevel();
@@ -1051,6 +1054,18 @@ namespace LevelGate.Progression
             public Image Frame, Face, Top, Pic;
             public Component Name;
             public bool Locked, Hover;
+            public GameObject NewTag;
+        }
+
+        // NEW tags: an item's goes away once you click it, a level card's once you've looked at that level; all of them when
+        // the screen closes (the last seen level is already yours by then)
+        private static readonly HashSet<string> _newClicked = new HashSet<string>();
+        private static readonly HashSet<int> _newViewed = new HashSet<int>();
+
+        private static void ClickedNew(ProgItem it)
+        {
+            if (it == null || !_newClicked.Add(it.Tpl)) return;
+            if (_tileViews.TryGetValue(it.Tpl, out var v) && v.NewTag != null) { UnityEngine.Object.Destroy(v.NewTag); v.NewTag = null; L.Debug($"NEW: {it.Name} seen"); }
         }
 
         private static readonly Dictionary<string, TileView> _tileViews = new Dictionary<string, TileView>();
@@ -1091,9 +1106,10 @@ namespace LevelGate.Progression
                     cat.Value.Name.ToUpperInvariant(), 10, Grey, TextAnchor.MiddleLeft, false, 1, true);
             }
             // newly reached since you last opened the screen: a small restrained tag (top-right)
-            if (_newFrom > 0 && reached && it.Level > _newFrom)
+            if (_newFrom > 0 && reached && it.Level > _newFrom && !_newClicked.Contains(it.Tpl))
             {
                 var tag = Ui.Rect(inner, "New", new Vector2(1, 1), new Vector2(1, 1), new Vector2(-S1 - 30, -S1 - 14), new Vector2(-S1, -S1));
+                v.NewTag = tag.gameObject;
                 Ui.Img(tag, Ui.Hex(Orange, .9f));
                 Ui.Label(tag, "Text", "NEW", 10, Ui.Hex("#1a1210"), TextAnchor.MiddleCenter, true, 1);
             }
@@ -1669,7 +1685,11 @@ namespace LevelGate.Progression
                 ProgItem over = null;
                 foreach (var (rect, item) in _hits)
                     if (rect != null && rect.gameObject.activeInHierarchy && MenuHook.Contains(rect, mouse)) { over = item; break; }
-                if (input.GetMouseButtonDown(0) && over != null && over.Tpl != _featTpl && over.Level == _level) { Sounds.Play("MenuContextMenu", "ButtonClick"); Feature(over); }
+                if (input.GetMouseButtonDown(0) && over != null && over.Level == _level)
+                {
+                    ClickedNew(over); // its NEW tag goes (the item shown first can be clicked for that too)
+                    if (over.Tpl != _featTpl) { Sounds.Play("MenuContextMenu", "ButtonClick"); Feature(over); }
+                }
                 if (input.GetMouseButtonDown(1))
                 {
                     L.Debug($"right-click at {mouse} over {(over == null ? "nothing" : over.Name + " (" + over.Tpl + ")")}");
@@ -1955,7 +1975,7 @@ namespace LevelGate.Progression
                 _picked = picked; _player = player;
                 bool sel = _level == picked, current = player > 0 && _level == player;
                 bool locked = player > 0 && _level > player, reached = player > 0 && _level <= player;
-                bool fresh = reached && !current && _newFrom > 0 && _level > _newFrom;
+                bool fresh = reached && !current && _newFrom > 0 && _level > _newFrom && !_newViewed.Contains(_level);
                 FadeTo(_frame, sel ? Select : _hover ? HoverEdge : Border);
                 _top.enabled = sel;
                 FadeTo(_bg, sel ? Ui.Hex("#172024", .96f) : _hover ? Ui.Hex("#141b1e", .94f) : locked ? Ui.Hex("#0b0e10", .96f) : Ui.Hex("#11171a", .92f));
