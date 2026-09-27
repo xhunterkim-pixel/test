@@ -175,7 +175,37 @@ namespace LevelGate.Progression
 
         // ---------------------------------------------------------------- generated pictures
 
-        private static Sprite _diamond, _white, _vgrad, _hgrad, _radial, _dots;
+        private static Sprite _diamond, _white, _vgrad, _hgrad, _radial, _dots, _cut;
+
+        /// <summary>A square with its bottom-right corner cut off at 45° (the Arena level box).</summary>
+        public static Sprite CutCorner()
+        {
+            if (_cut != null) return _cut;
+            const int n = 128, cut = 30;
+            var tex = new Texture2D(n, n, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Clamp };
+            for (int y = 0; y < n; y++)
+                for (int x = 0; x < n; x++)
+                {
+                    // distance past the diagonal x - y = n - cut (texture y grows upward: bottom-right is x high, y low)
+                    float d = (x + .5f) - (y + .5f) - (n - cut);
+                    tex.SetPixel(x, y, new Color(1, 1, 1, Mathf.Clamp01(.5f - d / 1.414f)));
+                }
+            tex.Apply();
+            return _cut = Sprite.Create(tex, new Rect(0, 0, n, n), new Vector2(.5f, .5f));
+        }
+
+        /// <summary>How wide this text would be in the label (TextMeshPro GetPreferredValues, or the legacy Text's).</summary>
+        public static float PreferredWidth(Component c, string text)
+        {
+            try
+            {
+                if (c is Text t) { var old = t.text; t.text = text; var w = t.preferredWidth; t.text = old; return w; }
+                var m = c.GetType().GetMethod("GetPreferredValues", new[] { typeof(string) });
+                if (m?.Invoke(c, new object[] { text }) is Vector2 v) return v.x;
+            }
+            catch { }
+            return text.Length * 12;
+        }
 
         /// <summary>See-through on the left, white on the right, eased so the glow hugs the right edge — tint it for bloom.</summary>
         public static Sprite HorizontalFade()

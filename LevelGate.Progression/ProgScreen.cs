@@ -230,13 +230,14 @@ namespace LevelGate.Progression
         private static Component _xpLevel, _xpText, _xpNext;
         private static RectTransform _xpFill;
         private static Image _xpSquare;
+        private static RectTransform _xpTag;
 
         /// <summary>Arena-style player block over the centre panel: [61] ▕████░░░░▏ 25 / 1 000 EXP · Next level reward: 2 ◆</summary>
         private static void BuildXp(RectTransform top)
         {
             var xp = Ui.Rect(top, "Xp", new Vector2(.34f, 1), new Vector2(.74f, 1), new Vector2(16, -106), new Vector2(-8, -12));
             var sq = Ui.Rect(xp, "Level", new Vector2(0, .5f), new Vector2(0, .5f), new Vector2(0, -40), new Vector2(80, 40));
-            _xpSquare = Ui.Img(sq, Ui.Hex("#e0562f"));
+            _xpSquare = Ui.Img(sq, Ui.Hex("#e0562f"), Ui.CutCorner());
             _xpLevel = Ui.Label(sq, "Text", "", 32, Color.white, TextAnchor.MiddleCenter, true);
             var right = Ui.Rect(xp, "Right", Vector2.zero, Vector2.one, new Vector2(96, 0), Vector2.zero);
             // the bar: dark frame, thin grey edge, orange fill
@@ -246,7 +247,11 @@ namespace LevelGate.Progression
             Ui.Img(barIn, Ui.Hex("#15191b"));
             _xpFill = Ui.Rect(barIn, "Fill", Vector2.zero, new Vector2(0, 1), new Vector2(2, 2), new Vector2(0, -2));
             Ui.Img(_xpFill, Ui.Hex("#e0562f"));
-            _xpText = Ui.Label(Ui.Rect(right, "Exp", new Vector2(0, 1), new Vector2(1, 1), new Vector2(0, -60), new Vector2(0, -30)), "Text", "", 24, Ui.Hex("#b9c0c3"), TextAnchor.MiddleLeft, true, 1);
+            _xpText = Ui.Label(Ui.Rect(right, "Exp", new Vector2(0, 1), new Vector2(1, 1), new Vector2(0, -62), new Vector2(0, -30)), "Text", "", 26, Ui.Hex("#b9c0c3"), TextAnchor.MiddleLeft, true, 1);
+            // the orange EXP tag right after the numbers (moved to the text's end whenever it changes)
+            _xpTag = Ui.Rect(right, "ExpTag", new Vector2(0, 1), new Vector2(0, 1), new Vector2(0, -55), new Vector2(40, -37));
+            Ui.Img(_xpTag, Ui.Hex("#e0562f"));
+            Ui.Label(_xpTag, "Text", "EXP", 12, Ui.Hex("#1a1210"), TextAnchor.MiddleCenter, true, 1);
             var next = Ui.Rect(right, "Next", new Vector2(0, 1), new Vector2(1, 1), new Vector2(0, -88), new Vector2(0, -62));
             _xpNext = Ui.Label(next, "Text", "", 15, Grey, TextAnchor.MiddleLeft, false, 1);
             var hit = Ui.Img(next, new Color(0, 0, 0, 0), null, true);
@@ -268,9 +273,16 @@ namespace LevelGate.Progression
             if (ProgData.LevelExp(out int have, out int need))
             {
                 frac = Mathf.Clamp01(have / (float)need);
-                Ui.SetText(_xpText, $"<color=#8d9599>{Thousands(have)}</color> / {Thousands(need)}  <size=13><color=#e0562f>EXP</color></size>");
+                // your XP / needed XP, bold: yours a shade softer, the target bright (Arena)
+                string text = $"<color=#b9c0c3>{Thousands(have)}</color><color=#6f777a>/</color><color=#eef2f3>{Thousands(need)}</color>";
+                Ui.SetText(_xpText, text);
+                float w = Ui.PreferredWidth(_xpText, text);
+                _xpTag.gameObject.SetActive(true);
+                _xpTag.offsetMin = new Vector2(w + 12, _xpTag.offsetMin.y);
+                _xpTag.offsetMax = new Vector2(w + 12 + 40, _xpTag.offsetMax.y);
             }
-            else Ui.SetText(_xpText, player >= ProgData.MaxLevel && player > 0 ? "<color=#e0562f>MAX LEVEL</color>" : "<color=#8d9599>experience unknown</color>");
+            else _xpTag.gameObject.SetActive(false);
+            if (frac == 0 && !_xpTag.gameObject.activeSelf) Ui.SetText(_xpText, player >= ProgData.MaxLevel && player > 0 ? "<color=#e0562f>MAX LEVEL</color>" : "<color=#8d9599>experience unknown</color>");
             _xpFill.anchorMax = new Vector2(frac, 1);
             int nextCount = player > 0 && player < ProgData.MaxLevel ? ProgData.CountAt(player + 1) : -1;
             Ui.SetText(_xpNext, nextCount < 0 ? "" : $"Next level reward:  <b><color=#e0562f>{nextCount}</color></b> unlock{(nextCount == 1 ? "" : "s")}  <color=#4f575a>·  level {player + 1}</color>");
@@ -370,7 +382,7 @@ namespace LevelGate.Progression
             for (int i = 0; i < Pages; i++)
             {
                 int page = i;
-                var seg = Ui.Rect(bar, "Seg" + i, new Vector2(0, 1), new Vector2(0, 1), new Vector2(x0 + i * w + 2, -20), new Vector2(x0 + (i + 1) * w - 2, -12));
+                var seg = Ui.Rect(bar, "Seg" + i, new Vector2(0, 1), new Vector2(0, 1), new Vector2(x0 + i * w + 2, -22), new Vector2(x0 + (i + 1) * w - 2, -12));
                 var img = Ui.Img(seg, Ui.Hex("#2c3336"), null, true);
                 var hit = Ui.Rect(bar, "Hit" + i, new Vector2(0, 0), new Vector2(0, 1), new Vector2(x0 + i * w, 0), new Vector2(x0 + (i + 1) * w, 0));
                 var hitImg = Ui.Img(hit, new Color(0, 0, 0, 0), null, true);
@@ -378,16 +390,20 @@ namespace LevelGate.Progression
                 btn.targetGraphic = hitImg;
                 btn.onClick.AddListener(() => ShowPage(page, page > _page ? 1 : -1));
                 _segments.Add(img);
+                // thin divider between the page numbers, like Arena
+                if (i > 0) Ui.Img(Ui.Rect(bar, "Div" + i, new Vector2(0, 0), new Vector2(0, 0), new Vector2(x0 + i * w - 1, 4), new Vector2(x0 + i * w + 1, 22)), Ui.Hex("#3a4245"));
                 _segmentNums.Add(Ui.Label(Ui.Rect(bar, "Num" + i, new Vector2(0, 0), new Vector2(0, 0), new Vector2(x0 + i * w, 0), new Vector2(x0 + (i + 1) * w, 24)), "Text", (i + 1).ToString(), 15, Dim, TextAnchor.MiddleCenter, false));
             }
         }
 
         private static void KeyBox(RectTransform parent, string key, float side, Action click)
         {
-            var rt = Ui.Rect(parent, "Key" + key, new Vector2(side, 1), new Vector2(side, 1), new Vector2(side == 0 ? 6 : -30, -30), new Vector2(side == 0 ? 30 : -6, -6));
-            Ui.Img(rt, Border);
-            var img = Ui.Img(Ui.Fill(rt, "In", 2), Ui.Hex("#141a1d"), null, true);
-            Ui.Label(rt, "Text", key, 14, Grey, TextAnchor.MiddleCenter, false);
+            // a small keycap, centred on the segments: grey 2 px rim, dark face, bold letter
+            var rt = Ui.Rect(parent, "Key" + key, new Vector2(side, 1), new Vector2(side, 1), new Vector2(side == 0 ? 4 : -30, -30), new Vector2(side == 0 ? 30 : -4, -4));
+            Ui.Img(rt, Ui.Hex("#5a6468"));
+            var img = Ui.Img(Ui.Fill(rt, "In", 2), Ui.Hex("#161c1f"), null, true);
+            Ui.Img(Ui.Rect(rt, "Shine", new Vector2(0, 1), Vector2.one, new Vector2(2, -4), new Vector2(-2, -2)), new Color(1, 1, 1, .08f));
+            Ui.Label(rt, "Text", key, 15, Ui.Hex("#c3ccd0"), TextAnchor.MiddleCenter, true);
             var b = rt.gameObject.AddComponent<Button>();
             b.targetGraphic = img;
             b.onClick.AddListener(() => click());
@@ -513,16 +529,20 @@ namespace LevelGate.Progression
 
         private static void UpdatePageBar()
         {
+            // Arena page bar: a page is lit once every level on it is unlocked; the page you're looking at stands
+            // 4 px taller (lit or not), so you always see where you are
             int player = ProgData.PlayerLevel();
-            int playerPage = player > 0 ? (player - 1) / PerPage : -1;
             for (int i = 0; i < _segments.Count; i++)
             {
-                bool cur = i == _page, reached = i <= playerPage;
-                _segments[i].color = cur ? Accent : reached ? Ui.Hex("#9aa6a2") : Ui.Hex("#2c3336");
+                bool cur = i == _page;
+                int last = Mathf.Min(ProgData.MaxLevel, (i + 1) * PerPage);
+                bool done = player > 0 && last <= player;
+                _segments[i].color = done ? (cur ? Ui.Hex("#e8eef0") : Ui.Hex("#b4bec2")) : (cur ? Ui.Hex("#3a4346") : Ui.Hex("#262d30"));
                 var rt = _segments[i].rectTransform;
-                rt.offsetMin = new Vector2(rt.offsetMin.x, cur ? -24 : -20);
+                rt.offsetMin = new Vector2(rt.offsetMin.x, -22);
                 rt.offsetMax = new Vector2(rt.offsetMax.x, cur ? -8 : -12);
-                Ui.SetColor(_segmentNums[i], cur ? Text : reached ? Grey : Dim);
+                Ui.SetColor(_segmentNums[i], cur ? (done ? Color.white : Grey) : done ? Ui.Hex("#b4bec2") : Dim);
+                Ui.SetText(_segmentNums[i], cur ? $"<b>{i + 1}</b>" : (i + 1).ToString());
             }
         }
 

@@ -56,6 +56,14 @@ Versions are **MAJOR.MINOR.PATCH**:
   - The picked card gets an Arena-style orange border and corner glow.
 - **Level headers:** evenly spaced dashes (drawn as a mesh instead of a stretched sprite), bright by the label and fading out to an end tick. Your current level is orange.
 - **Borders:** 3 px on panels and cards (were 1), 2 px on small boxes.
+- **Page bar (Arena):**
+  - A page lights up once every level on it is unlocked.
+  - The page you're looking at stands 4 px taller whether it's lit or not, and its number is bold.
+  - Thin dividers sit between the page numbers.
+  - Q and E are proper keycaps now.
+- **XP block:**
+  - The level box has its bottom-right corner cut, like Arena.
+  - XP reads bold "your XP / needed XP", with an orange EXP tag right after the numbers.
 
 ### 0.6.0
 - **Ranks:** a new rank title every 5 levels, from Scavenger (1–5) to Legend of Tarkov (76–79), each with its own badge colour.
