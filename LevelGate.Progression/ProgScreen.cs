@@ -758,6 +758,43 @@ namespace LevelGate.Progression
             }
         }
 
+        // Pre-loading: while nothing else is loading, the card pictures of the page before and after the current one are
+        // drawn ahead (one per frame at most), so Q / E show them straight away.
+        private static readonly List<(object Icon, string Tpl)> _prefetching = new List<(object, string)>();
+        private static readonly HashSet<string> _prefetchAsked = new HashSet<string>();
+        private static int _prefetchPage = -1;
+        private static readonly Queue<string> _prefetchQueue = new Queue<string>();
+
+        private static void Prefetch()
+        {
+            int scale = Perf ? 1 : 2;
+            // pictures asked for earlier: take them once drawn (bigger ones become our own copy)
+            for (int i = _prefetching.Count - 1; i >= 0; i--)
+            {
+                var (icon, tpl) = _prefetching[i];
+                if (icon == null || GameItems.TakeSprite(icon, tpl) != null) _prefetching.RemoveAt(i);
+            }
+            if (_iconRequests.Count > 0 || _prefetching.Count > 2) return; // the current page first
+            if (_prefetchPage != _page)
+            {
+                _prefetchPage = _page;
+                _prefetchQueue.Clear();
+                foreach (var p in new[] { _page + 1, _page - 1 })
+                {
+                    if (p < 0 || p >= Pages) continue;
+                    for (int level = p * PerPage + 1; level <= Mathf.Min(ProgData.MaxLevel, (p + 1) * PerPage); level++)
+                        foreach (var it in CardPicks(ProgData.ItemsAt(level))) _prefetchQueue.Enqueue(it.Tpl);
+                }
+            }
+            while (_prefetchQueue.Count > 0)
+            {
+                var tpl = _prefetchQueue.Dequeue();
+                if (!_prefetchAsked.Add(tpl + "@" + scale) || (scale != 1 && GameItems.CopyOf(tpl, scale) != null)) continue;
+                _prefetching.Add((GameItems.IconOf(GameItems.ItemOf(tpl), scale), tpl));
+                break; // one per frame
+            }
+        }
+
         private static void ShowIcons(List<(object Icon, Image Pic, Component Placeholder, string Tpl)> list)
         {
             for (int i = list.Count - 1; i >= 0; i--)
@@ -905,6 +942,7 @@ namespace LevelGate.Progression
                     _cards[i].Animate(1 - Mathf.Pow(1 - t, 3), _cardsDir);
                 }
             RunIconRequests();
+            Prefetch();
             ShowIcons(_icons);
             ShowIcons(_cardIcons);
             ApplyMood(Time.unscaledDeltaTime);
@@ -1115,7 +1153,7 @@ namespace LevelGate.Progression
                     _picRects[i].gameObject.SetActive(it != null);
                     _pics[i].enabled = false;
                     if (it == null) continue;
-                    Ui.SetText(_picNames[i], it.Short);
+                    Ui.SetText(_picNames[i], ""); // no name flashing in while the picture loads (the pages around are pre-loaded)
                     _picNames[i].gameObject.SetActive(true);
                     RequestIcon(_cardIcons, it.Tpl, Perf ? 1 : 2, _pics[i], _picNames[i]);
                     _hits.Add((_picRects[i], it));

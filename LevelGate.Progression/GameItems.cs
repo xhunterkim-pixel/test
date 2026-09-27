@@ -264,7 +264,7 @@ namespace LevelGate.Progression
             var key = tpl + "@" + p.Scale;
             _copies[key] = copy;
             _copyOrder.Enqueue(key);
-            while (_copyOrder.Count > 40)
+            while (_copyOrder.Count > 90) // the pages around the current one are kept ready too
             {
                 var old = _copyOrder.Dequeue();
                 if (_copies.TryGetValue(old, out var o) && o != null && old != key) { UnityEngine.Object.Destroy(o.texture); _copies.Remove(old); }

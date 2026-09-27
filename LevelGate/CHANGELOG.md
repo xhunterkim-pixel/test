@@ -40,6 +40,12 @@ Versions are **MAJOR.MINOR.PATCH**:
 
 ## LevelGate Progression (BepInEx plugin, separate DLL)
 
+### 0.9.8
+- **Q / E load instantly:**
+  - Once the current page's pictures are done, the card pictures of the previous and next page are drawn ahead, at most one per frame.
+  - Paging uses those pictures right away. Up to 90 big copies are kept (was 40).
+- **No names flashing in** the card picture slots while a picture loads.
+
 ### 0.9.7
 - **Opening from another screen** (Character, Traders…): the game first goes back to the main menu, as the MAIN MENU button does, and then Progression opens. Before, the other screen stayed open underneath.
 - **Big-icon copies actually work now.** The copy failed on the game's fractional sprite sizes (e.g. 293.85 px wide), so the game's enlarged icon was used instead.
