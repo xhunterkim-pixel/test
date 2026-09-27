@@ -40,6 +40,12 @@ Versions are **MAJOR.MINOR.PATCH**:
 
 ## LevelGate Progression (BepInEx plugin, separate DLL)
 
+### 0.9.34
+- **Header lined up:** the emblem and the three lines beside it are 8 px lower. The emblem's bottom now meets the level square's, and "Page X of 16" sits on the same line as "Next level …".
+- **Removed:** the summary banner after the XP animation (it didn't fit the game) and the orange YOU mark over the page bar.
+- **List tiles (compact list):** the picture starts under the category label; a helmet covered HEADWEAR.
+- **Loading screen:** the game's own loader is found by its path (Preloader UI/Preloader UI/Loader, as 0.9.33 picked) instead of scanning every object, which cost ~230 ms on the first open. The scan is only a fallback now.
+
 ### 0.9.33
 - **Fix (major): the game's main menu could stay invisible and unclickable** (HIDEOUT, TRADING, the PROGRESSION shortcut: nothing responded).
   - The screen hides the main menu while open and saved its state to restore on close. Opening an already-open screen (the log shows 8 shortcut clicks in a row) saved the hidden state as the one to restore, so every close afterwards restored a dead menu.

@@ -313,11 +313,13 @@ namespace LevelGate.Progression
         {
             // left: who you are — your rank emblem, "PROGRESSION" as a quiet page label, your rank name, how far to the next rank
             const float badge = 72;
-            _headBadge = new Badge(top, new Vector2(0, 1), new Vector2(Margin + badge / 2, -(S3 + badge / 2)), badge);
+            // 8 px lower than before: the emblem's bottom meets the level square's, the last line meets "Next level …"
+            const float drop = 8;
+            _headBadge = new Badge(top, new Vector2(0, 1), new Vector2(Margin + badge / 2, -(S3 + drop + badge / 2)), badge);
             float x = Margin + badge + S3;
-            Ui.Label(Ui.Rect(top, "Page", new Vector2(0, 1), new Vector2(.34f, 1), new Vector2(x, -50), new Vector2(-Gutter, -S3 - 2)), "Text", "PROGRESSION", TTitle, Grey, TextAnchor.UpperLeft, false, 1);
-            _headRank = Ui.Label(Ui.Rect(top, "Rank", new Vector2(0, 1), new Vector2(.34f, 1), new Vector2(x, -66), new Vector2(-Gutter, -46)), "Text", "", TStrong, Text, TextAnchor.MiddleLeft, false);
-            _headNext = Ui.Label(Ui.Rect(top, "NextRank", new Vector2(0, 1), new Vector2(.34f, 1), new Vector2(x, -86), new Vector2(-Gutter, -66)), "Text", "", TBody, Grey, TextAnchor.MiddleLeft, false);
+            Ui.Label(Ui.Rect(top, "Page", new Vector2(0, 1), new Vector2(.34f, 1), new Vector2(x, -50 - drop), new Vector2(-Gutter, -S3 - 2 - drop)), "Text", "PROGRESSION", TTitle, Grey, TextAnchor.UpperLeft, false, 1);
+            _headRank = Ui.Label(Ui.Rect(top, "Rank", new Vector2(0, 1), new Vector2(.34f, 1), new Vector2(x, -66 - drop), new Vector2(-Gutter, -46 - drop)), "Text", "", TStrong, Text, TextAnchor.MiddleLeft, false);
+            _headNext = Ui.Label(Ui.Rect(top, "NextRank", new Vector2(0, 1), new Vector2(.34f, 1), new Vector2(x, -86 - drop), new Vector2(-Gutter, -66 - drop)), "Text", "", TBody, Grey, TextAnchor.MiddleLeft, false);
 
             BuildXp(top);
 
@@ -1031,21 +1033,9 @@ namespace LevelGate.Progression
                 if (_backBtn.activeSelf != away) _backBtn.SetActive(away);
                 if (away) Ui.SetText(_backText, $"‹  BACK TO LEVEL {Mathf.Min(player, ProgData.MaxLevel)}");
             }
-            if (mine >= 0 && mine < _segments.Count)
-            {
-                var seg = _segments[mine].rectTransform;
-                if (_youMark == null)
-                {
-                    _youMark = Ui.Img(Ui.Rect(seg.parent, "You", Vector2.zero, Vector2.zero, Vector2.zero, Vector2.zero), Ui.Hex(Orange));
-                    _youMark.raycastTarget = false;
-                }
-                var ym = _youMark.rectTransform;
-                ym.anchorMin = new Vector2(seg.anchorMin.x, 1); ym.anchorMax = new Vector2(seg.anchorMax.x, 1);
-                ym.offsetMin = new Vector2(seg.offsetMin.x, -4); ym.offsetMax = new Vector2(seg.offsetMax.x, -1);
-            }
+
         }
 
-        private static Image _youMark;
 
         private static int _shownLevel; // the level whose rewards the list shows right now (0 = none)
 
@@ -1185,7 +1175,7 @@ namespace LevelGate.Progression
             var inner = Ui.Fill(rt, "Inner", 1);
             v.Face = Ui.Img(inner, Face);
             // thumbnail: a square on top, lit like the big preview; the icon uses ~80% of it
-            var thumb = Ui.Rect(inner, "Thumb", new Vector2(0, 0), Vector2.one, new Vector2(0, TileLabel - 1), Vector2.zero);
+            var thumb = Ui.Rect(inner, "Thumb", new Vector2(0, 0), Vector2.one, new Vector2(0, TileLabel - 1), new Vector2(0, category.HasValue ? -16 : 0));
             Ui.Img(Ui.Fill(thumb, "Light"), new Color(1, 1, 1, .05f), Ui.Radial());
             var placeholder = Ui.Label(Ui.Fill(thumb, "Placeholder", S2), "Text", "", TCaps, Dim, TextAnchor.MiddleCenter, false, 0, true);
             v.Pic = Ui.Img(Ui.Fill(thumb, "Icon", 0), Color.white);
@@ -1430,6 +1420,9 @@ namespace LevelGate.Progression
             try
             {
                 string PathOf(Transform t) { var p = t.name; while (t.parent != null) { t = t.parent; p = t.name + "/" + p; } return p; }
+                // by name under the game's Preloader UI (found even while the loader itself is switched off)
+                var known = GameObject.Find("Preloader UI")?.transform.Find("Preloader UI/Loader");
+                if (known is RectTransform krt && known.GetComponentInChildren<Image>(true) != null) return CopyLoader(krt, parent, "Preloader UI/Preloader UI/Loader");
                 bool Named(string n) => n.IndexOf("loader", StringComparison.OrdinalIgnoreCase) >= 0 || n.IndexOf("spinner", StringComparison.OrdinalIgnoreCase) >= 0
                                         || n.IndexOf("loading", StringComparison.OrdinalIgnoreCase) >= 0;
                 var found = Resources.FindObjectsOfTypeAll<RectTransform>()
@@ -1446,11 +1439,20 @@ namespace LevelGate.Progression
                                                         + (c.Rt.name.IndexOf("spinner", StringComparison.OrdinalIgnoreCase) >= 0 || c.Rt.name.IndexOf("loader", StringComparison.OrdinalIgnoreCase) >= 0 ? 1 : 0))
                                .FirstOrDefault();
                 if (pick.Rt == null) { L.Info("loading screen: the game's loading mark wasn't found — using a stand-in"); return null; }
+                return CopyLoader(pick.Rt, parent, pick.Path);
+            }
+            catch (Exception e) { L.Debug("loading screen: couldn't copy the game's loading mark: " + e.Message); return null; }
+        }
+
+        private static GameObject CopyLoader(RectTransform source, RectTransform parent, string path)
+        {
+            try
+            {
                 // copied under an inactive holder (none of its scripts wake up), stripped to images + animation, then shown
                 var holder = new GameObject("LoaderHolder", typeof(RectTransform));
                 holder.SetActive(false);
                 holder.transform.SetParent(parent, false);
-                var copy = UnityEngine.Object.Instantiate(pick.Rt.gameObject, holder.transform, false);
+                var copy = UnityEngine.Object.Instantiate(source.gameObject, holder.transform, false);
                 foreach (var mb in copy.GetComponentsInChildren<MonoBehaviour>(true))
                 {
                     if (mb is Graphic || mb is LayoutElement || mb is Mask || mb is RectMask2D || mb is CanvasScaler) continue;
@@ -1463,7 +1465,7 @@ namespace LevelGate.Progression
                 crt.anchoredPosition = Vector2.zero;
                 foreach (var g in copy.GetComponentsInChildren<Graphic>(true)) g.raycastTarget = false;
                 copy.SetActive(true);
-                L.Info($"loading screen: using the game's '{pick.Path}'");
+                L.Info($"loading screen: using the game's '{path}'");
                 return copy;
             }
             catch (Exception e) { L.Debug("loading screen: couldn't copy the game's loading mark: " + e.Message); return null; }

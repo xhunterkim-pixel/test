@@ -178,8 +178,7 @@ namespace LevelGate.Progression
 
             // ---- 4. SUMMARY, 5. LAND
             Add(StepKind.Pause, .35f);
-            Add(StepKind.Banner, 1.8f, lb);
-            Add(StepKind.Land, .45f, _xpLand);
+            Add(StepKind.Land, .45f, _xpLand); // (no summary banner: it didn't fit the game)
         }
 
         /// <summary>From the emblem sound's start to the moment the emblem starts to shrink (its swap then lands on the peak).</summary>
