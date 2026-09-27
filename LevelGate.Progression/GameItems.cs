@@ -98,12 +98,15 @@ namespace LevelGate.Progression
             return t.GetProperties(Refl.All).Any(p => p.PropertyType == typeof(Sprite)) || t.GetFields(Refl.All).Any(f => f.FieldType == typeof(Sprite));
         }
 
-        private static object CallIcon(MethodInfo m, object item)
+        /// <summary>scale: the game's scaleFactor (1 = stash size; 2–3 = a sharper render for big pictures).</summary>
+        private static object CallIcon(MethodInfo m, object item, int scale = 1)
         {
             var ps = m.GetParameters();
             var args = new object[ps.Length];
             args[0] = item;
-            for (int i = 1; i < ps.Length; i++) args[i] = ps[i].HasDefaultValue ? ps[i].DefaultValue : false;
+            for (int i = 1; i < ps.Length; i++)
+                args[i] = ps[i].ParameterType == typeof(int) && ps[i].Name.IndexOf("scale", StringComparison.OrdinalIgnoreCase) >= 0 ? scale
+                    : ps[i].HasDefaultValue ? ps[i].DefaultValue : ps[i].ParameterType == typeof(int) ? (object)1 : false;
             return m.Invoke(null, args);
         }
 
@@ -176,12 +179,12 @@ namespace LevelGate.Progression
         }
 
         /// <summary>The game's icon object for an item (its sprite may arrive a few frames later), or null.</summary>
-        public static object IconOf(object item)
+        public static object IconOf(object item, int scale = 1)
         {
             if (item == null) return null;
             if (_loadIcon != null)
             {
-                try { return CallIcon(_loadIcon, item); }
+                try { return CallIcon(_loadIcon, item, scale); }
                 catch (Exception e) { L.ErrorOnce("icon loader", e); return null; }
             }
             if (_iconPicked) return null;

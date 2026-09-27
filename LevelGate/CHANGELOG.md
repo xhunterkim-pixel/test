@@ -40,6 +40,17 @@ Versions are **MAJOR.MINOR.PATCH**:
 
 ## LevelGate Progression (BepInEx plugin, separate DLL)
 
+### 0.4.0
+- **Inside the game's UI:** the screen now sits right after the main menu screen, so the game's windows (inspect) open on top of it. The setting Screen > InsideGameUi switches back to the old on-top canvas.
+- **Main menu hidden:** ESCAPE FROM TARKOV, CHARACTER, TRADING, EXIT and the beta warning fade out while the screen is open, like the battle pass (Screen > HideMainMenu).
+- **Transparency:** Screen > Opacity (default 0.85) sets how solid the background is.
+- **Sounds:** the game's own UI sounds on open / close, level and page changes (GUISounds.PlayUISound).
+- **Sharper pictures:** the game renders item pictures at 2x for tiles and 3x for the featured picture (LoadItemIcon's scaleFactor), so they're no longer pixelated.
+- **Smaller tiles:** they now look like stash cells. Screen > TileSize (default 92) sets their size, so more items fit.
+- **Featured panel:** battle pass style, with a thin frame, the item name and grey labels (Unlocks at / Category / Status).
+- **Card icons fixed:** the level's tiles were clearing them.
+- **No pulsing badge.**
+
 ### 0.3.0
 - **Tab:** left of Character. The icon keeps the original icon size, which also fixes the extra width and spacing.
 - **P** opens and closes the screen (setting General > OpenScreenKey). It does nothing while you're typing in a text box or outside the main menu.

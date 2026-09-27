@@ -25,7 +25,7 @@ namespace LevelGate.Progression
         public const string Guid = "com.kkyangg.levelgate.progression";
         public const string Name = "LevelGate Progression";
         // MAJOR.MINOR.PATCH — see CHANGELOG.md
-        public const string Version = "0.3.0";
+        public const string Version = "0.4.0";
 
         internal static ProgressionPlugin Instance;
         internal static ConfigEntry<KeyboardShortcut> OpenKey;
@@ -39,6 +39,10 @@ namespace LevelGate.Progression
         internal static ConfigEntry<int> SortOrder;
         internal static ConfigEntry<int> MaxTilesPerCategory;
         internal static ConfigEntry<bool> FreeItemsAtLevel1;
+        internal static ConfigEntry<float> TileSize;
+        internal static ConfigEntry<bool> EmbedInGameUi;
+        internal static ConfigEntry<bool> HideMainMenu;
+        internal static ConfigEntry<float> Opacity;
 
         private void Awake()
         {
@@ -56,6 +60,11 @@ namespace LevelGate.Progression
             BottomMargin = Config.Bind("Screen", "BottomMargin", 68f, "Space left free at the bottom, so the menu bar stays clickable (1920x1080 pixels).");
             SortOrder = Config.Bind("Screen", "SortOrder", 100, "Drawing order of the screen (higher = on top of more of the game's menus).");
             MaxTilesPerCategory = Config.Bind("Screen", "MaxTilesPerCategory", 60, "Items shown per category for one level (the rest are counted).");
+            TileSize = Config.Bind("Screen", "TileSize", 92f, "Height of an item tile (the width is a bit more). Smaller = more items fit.");
+            EmbedInGameUi = Config.Bind("Screen", "InsideGameUi", true,
+                "Put the screen inside the game's own UI (right after the main menu), so the game's windows (inspect…) open on top of it. Off: its own canvas over everything.");
+            Opacity = Config.Bind("Screen", "Opacity", .85f, new ConfigDescription("How solid the screen's background is (lower = more of the game's menu background shows through, like the battle pass).", new AcceptableValueRange<float>(.3f, 1f)));
+            HideMainMenu = Config.Bind("Screen", "HideMainMenu", true, "Fade out the main menu (ESCAPE FROM TARKOV, CHARACTER, TRADING, EXIT…) while the screen is open.");
             FreeItemsAtLevel1 = Config.Bind("Screen", "CountFreeItemsAtLevel1", false,
                 "Count items without a limit as level 1 unlocks (that's most of the game's items).");
             VerboseLog = Config.Bind("Debug", "VerboseLog", true,
