@@ -1205,7 +1205,7 @@ function detailsAddons() {
   const max = Math.max(1, ...bands.map(x => x[2]));
   return ['Level Gate', `
     <div class="status" style="--c:${on ? 'var(--yellow)' : '#8a8a8a'}"><h3>${!lg.found ? 'Not Found' : on ? 'On' : 'Off'}<span class="grow"></span>${sw}</h3><div class="hint" style="margin:0">${explain}</div></div>
-    ${lg.found ? card('a-info', 'Found', `<div class="req">${lg.version ? `Version ${esc(lg.version)}\n` : ''}${lg.dll ? `Plugin: ${esc(lg.dll)}\n` : ''}${lg.config ? `Levels: ${esc(lg.config)}` : ''}</div>`) : ''}
+    ${lg.found ? card('a-info', 'Found', `<div class="req">${lg.version ? `Version ${esc(lg.version)}\n` : ''}${lg.dll ? `Plugin: ${esc(lg.dll)}\n` : ''}${lg.config ? `Levels: ${esc(lg.config)}` : ''}</div>${lg.others?.length ? ui.hint(`Also found (not used — no level list, or an older one):<br>${lg.others.map(esc).join('<br>')}`) : ''}`) : ''}
     ${levels.length ? card('a-bands', `Levels (${fmt(levels.length)} Items)`, `<div class="bands">${bands.map(([a, b, n]) => `<div class="band"><span>Lvl ${a}–${b}</span><div class="bar"><i style="width:${n / max * 100}%"></i></div><b>${n}</b></div>`).join('')}</div>`) : ''}`];
 }
 

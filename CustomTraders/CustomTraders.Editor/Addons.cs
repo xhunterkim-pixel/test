@@ -22,39 +22,40 @@ public static class Addons
     private static JsonObject ScanLevelGate(string? modFolder, string? pickedPath)
     {
         var result = new JsonObject { ["found"] = false };
-        string? dll = null, config = null;
         try
         {
-            // a file picked by hand wins
+            // Every Level Gate on the PC we can see (an SPT folder can hold more than one BepInEx,
+            // e.g. C:\SPT\BepInEx and C:\SPT\SPT_Runtime\BepInEx): the one with a config wins.
+            var found = new List<(string? Dll, string? Config)>();
             if (!string.IsNullOrEmpty(pickedPath) && File.Exists(pickedPath))
+                found.Add(pickedPath.EndsWith(".json", StringComparison.OrdinalIgnoreCase)
+                    ? (NearDll(pickedPath), pickedPath)
+                    : (pickedPath, ConfigNear(pickedPath)));
+            foreach (var root in SptRoots(modFolder, pickedPath))
             {
-                if (pickedPath.EndsWith(".json", StringComparison.OrdinalIgnoreCase)) config = pickedPath;
-                else dll = pickedPath;
+                var plugins = Path.Combine(root, "BepInEx", "plugins");
+                var dll = FindDll(plugins);
+                var cfg = dll != null ? ConfigNear(dll) : null;
+                cfg ??= new[] { Path.Combine(plugins, "LevelGate", "config", "level_requirements.json") }.FirstOrDefault(File.Exists);
+                if (dll != null || cfg != null) found.Add((dll ?? (cfg != null ? NearDll(cfg) : null), cfg));
             }
-            if (dll == null)
-                foreach (var root in SptRoots(modFolder, config ?? pickedPath))
-                {
-                    dll = FindDll(Path.Combine(root, "BepInEx", "plugins"));
-                    if (dll != null) break;
-                }
-            if (config == null && dll != null)
-            {
-                var dir = Path.GetDirectoryName(dll)!;
-                config = new[] { Path.Combine(dir, "config", "level_requirements.json"), Path.Combine(dir, "LevelGate", "config", "level_requirements.json") }.FirstOrDefault(File.Exists);
-            }
-            if (dll == null && config != null)
-            {
-                var dir = Path.GetDirectoryName(Path.GetDirectoryName(config)!)!;
-                var near = Path.Combine(dir, "LevelGate.dll");
-                if (File.Exists(near)) dll = near;
-            }
-            if (dll == null && config == null) return result;
+            found = found.DistinctBy(x => (x.Dll ?? "") + "|" + (x.Config ?? ""), StringComparer.OrdinalIgnoreCase).ToList();
+            if (found.Count == 0) return result;
+
+            var best = found
+                .OrderByDescending(x => x.Config != null)
+                .ThenByDescending(x => x.Config != null ? File.GetLastWriteTimeUtc(x.Config) : DateTime.MinValue)
+                .First();
+            var (bestDll, config) = best;
 
             result["found"] = true;
-            result["dll"] = dll;
+            result["dll"] = bestDll;
             result["config"] = config;
-            result["version"] = dll != null ? VersionOf(dll) : null;
-            if (config == null) { result["error"] = "Level Gate is installed, but its config\\level_requirements.json wasn't found (it's made the first time the game starts with Level Gate)."; return result; }
+            result["version"] = bestDll != null ? VersionOf(bestDll) : null;
+            var others = new JsonArray();
+            foreach (var x in found.Where(x => x != best)) others.Add(x.Dll ?? x.Config);
+            if (others.Count > 0) result["others"] = others;
+            if (config == null) { result["error"] = "Level Gate is installed, but its config\\level_requirements.json wasn't found (it's made the first time the game starts with Level Gate). Use Locate Level Gate… if it's somewhere else."; return result; }
             result["modified"] = File.GetLastWriteTimeUtc(config).Ticks;
             var items = new JsonObject();
             using (var doc = JsonDocument.Parse(File.ReadAllText(config), new JsonDocumentOptions { CommentHandling = JsonCommentHandling.Skip, AllowTrailingCommas = true }))
@@ -74,6 +75,21 @@ public static class Addons
             result["error"] = "Couldn't read Level Gate: " + e.Message;
         }
         return result;
+    }
+
+    /// <summary>config\level_requirements.json next to a LevelGate.dll.</summary>
+    private static string? ConfigNear(string dll)
+    {
+        var dir = Path.GetDirectoryName(dll)!;
+        return new[] { Path.Combine(dir, "config", "level_requirements.json"), Path.Combine(dir, "LevelGate", "config", "level_requirements.json") }.FirstOrDefault(File.Exists);
+    }
+
+    /// <summary>LevelGate.dll one folder above its config folder.</summary>
+    private static string? NearDll(string config)
+    {
+        var dir = Path.GetDirectoryName(Path.GetDirectoryName(config) ?? "") ?? "";
+        var dll = Path.Combine(dir, "LevelGate.dll");
+        return File.Exists(dll) ? dll : null;
     }
 
     /// <summary>SPT folders (the ones holding BepInEx): above the traders' mod folder or a picked file, then C:\SPT and the like.</summary>
@@ -121,8 +137,17 @@ public static class Addons
                 string? name = ReadSerString(bytes, ref p), version = ReadSerString(bytes, ref p);
                 if (name != null && version != null && System.Text.RegularExpressions.Regex.IsMatch(version, @"^\d+(\.\d+){1,3}$")) return version;
             }
+            // any plugin id: the name "LevelGate" followed by a version
+            var nameBytes = Encoding.UTF8.GetBytes("LevelGate");
+            for (int at = IndexOf(bytes, nameBytes, 0); at > 0; at = IndexOf(bytes, nameBytes, at + 1))
+            {
+                if (bytes[at - 1] != nameBytes.Length) continue;
+                int p = at + nameBytes.Length;
+                var version = ReadSerString(bytes, ref p);
+                if (version != null && System.Text.RegularExpressions.Regex.IsMatch(version, @"^\d+(\.\d+){1,3}$")) return version;
+            }
             var info = FileVersionInfo.GetVersionInfo(dll);
-            return string.IsNullOrEmpty(info.FileVersion) ? null : info.FileVersion;
+            return string.IsNullOrEmpty(info.FileVersion) || info.FileVersion == "1.0.0.0" ? null : info.FileVersion;
         }
         catch { return null; }
     }
