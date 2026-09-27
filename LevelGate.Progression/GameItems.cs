@@ -268,7 +268,7 @@ namespace LevelGate.Progression
         }
 
         /// <summary>The render scale that gives about targetPx on the item's long side (so a 1×1 box of ammo gets as many
-        /// real pixels as a rifle), clamped to 2–8x and to 2048 px.</summary>
+        /// real pixels as a rifle), clamped to 2–6x and to 2048 px.</summary>
         /// <summary>Card pictures: stash size when that's already big enough (rifles, backpacks), 2–3x for small items.</summary>
         public static int CardScale(string tpl, float targetPx)
         {
@@ -282,7 +282,7 @@ namespace LevelGate.Progression
             float basePx = PxPerCell * Mathf.Max(w, h);
             int scale = Mathf.CeilToInt(targetPx / basePx);
             scale = Mathf.Min(scale, Mathf.FloorToInt(2048f / basePx));
-            return Mathf.Clamp(scale, 2, 8);
+            return Mathf.Clamp(scale, 2, 6); // 8x was the heaviest request (one took 426 ms and still came back small)
         }
         private static readonly Dictionary<string, Sprite> _copies = new Dictionary<string, Sprite>();
         private static readonly Queue<string> _copyOrder = new Queue<string>();

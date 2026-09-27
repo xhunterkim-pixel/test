@@ -40,6 +40,17 @@ Versions are **MAJOR.MINOR.PATCH**:
 
 ## LevelGate Progression (BepInEx plugin, separate DLL)
 
+### 0.9.17 — play-test build
+- **Centre render capped at 6x** (was 8x). 8x was the heaviest request: one item took 426 ms and still came back small. 6x is still sharp at 1080p.
+- **Card-picture tooltips** show below the picture, so they don't cover the first card's rank label.
+- **Play-test logging** (in `Progression.log`; the previous game session's is kept as `Progression.prev.log`):
+  - At start: every setting.
+  - Profile changes, checked every 2 s: XP gained, and LEVEL UP from → to with how many items it unlocked.
+  - The main-menu NEW tag turning on or off, and why; the last-seen level updating when the screen opens.
+  - On open: level, XP into the level, total XP, the last seen level, and which levels / how many items are tagged NEW.
+  - On close: a session summary with time open, levels viewed, page changes, items selected, inspects, slow frames (worst) and performance mode.
+  - Every inspect, with the item's name.
+
 ### 0.9.16
 - **Empty levels** (nothing assigned in the level list): the card shows a quiet "NO NEW ITEMS" instead of empty boxes. There's no LOCKED state (nothing to unlock) and no extra fading.
 - **Single-item levels:** the picture is centred in the card instead of sitting in the left column next to an empty one.

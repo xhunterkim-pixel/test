@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
@@ -23,11 +24,38 @@ namespace LevelGate.Progression
 
         public static void Seen(int level)
         {
-            if (level > 0 && ProgressionPlugin.LastSeenLevel.Value != level) { ProgressionPlugin.LastSeenLevel.Value = level; _shownSeen = -1; }
+            if (level > 0 && ProgressionPlugin.LastSeenLevel.Value != level)
+            {
+                L.Info($"NEW: screen opened — last seen level {ProgressionPlugin.LastSeenLevel.Value} → {level} (main-menu NEW tag clears)");
+                ProgressionPlugin.LastSeenLevel.Value = level; _shownSeen = -1;
+            }
+        }
+
+        // play-test log: every change of the profile's level / XP (after a raid, a quest, …), checked every 2 s in the menu
+        private static int _watchLevel = -1, _watchExp = -1;
+        private static float _watchNext;
+
+        private static void WatchProfile()
+        {
+            if (Time.unscaledTime < _watchNext) return;
+            _watchNext = Time.unscaledTime + 2f;
+            int level = ProgData.PlayerLevel(), exp = ProgData.TotalExp();
+            if (level <= 0) return;
+            if (_watchLevel < 0) { _watchLevel = level; _watchExp = exp; L.Info($"profile: level {level}, {exp} total XP"); return; }
+            if (level == _watchLevel && exp == _watchExp) return;
+            string gained = exp >= 0 && _watchExp >= 0 ? $" (+{exp - _watchExp} XP)" : "";
+            if (level != _watchLevel)
+            {
+                int items = ProgData.Levels.Values.Count(v => v > _watchLevel && v <= level);
+                L.Info($"profile: LEVEL UP {_watchLevel} → {level}{gained}; {items} item(s) unlocked by it; last seen level {ProgressionPlugin.LastSeenLevel.Value}");
+            }
+            else L.Info($"profile: XP {_watchExp} → {exp}{gained}, still level {level}");
+            _watchLevel = level; _watchExp = exp;
         }
 
         public static void Tick()
         {
+            try { WatchProfile(); } catch (Exception e) { L.ErrorOnce("watching the profile", e); }
             if (Time.unscaledTime < _next) return;
             _next = Time.unscaledTime + .5f;
             try
@@ -92,7 +120,9 @@ namespace LevelGate.Progression
             if (level == _shownLevel && seen == _shownSeen && xp == _shownXp) return;
             _shownLevel = level; _shownSeen = seen; _shownXp = xp;
             Emblems.Show(_emblem, level);
-            _newTag.SetActive(level > seen);
+            bool isNew = level > seen;
+            if (_newTag.activeSelf != isNew) L.Info(isNew ? $"NEW: main-menu tag ON — level {level} > last seen {seen}" : $"NEW: main-menu tag off (level {level}, last seen {seen})");
+            _newTag.SetActive(isNew);
             Ui.SetText(_sub, $"Level {level}  ·  {ProgScreen.TierOf(level).Name}" + (xp != "" ? "   <color=#8a3a2c>|</color>   " + xp : ""));
         }
 

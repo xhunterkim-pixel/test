@@ -105,6 +105,11 @@ namespace LevelGate.Progression
                 int player = ProgData.PlayerLevel();
                 int seen = ProgressionPlugin.LastSeenLevel.Value;
                 _newFrom = seen > 0 && seen < player ? seen : 0;
+                _sLevels = _sItems = _sInspects = _sPages = _sSlow = 0; _sSlowMax = 0; _sOpenedAt = Time.unscaledTime;
+                int newItems = _newFrom > 0 ? ProgData.Levels.Values.Count(v => v > _newFrom && v <= player) : 0;
+                string xpNow = ProgData.LevelExp(out int xh, out int xn) ? $"{xh} / {xn} into level {player} (total {ProgData.TotalExp()})" : "XP unknown";
+                L.Info($"open: player level {player}, {xpNow}; last seen level {seen}" +
+                       (_newFrom > 0 ? $" → NEW: levels {_newFrom + 1}–{player}, {newItems} item(s) tagged NEW" : " → nothing new since last visit"));
                 MenuWidget.Seen(player); // the NEW tag on the main-menu shortcut goes away
                 L.Info($"screen open ({why}); player level {player}, {ProgData.Levels.Count} limited items; performance mode {(Perf ? "ON — emblems stand still, pictures drawn smaller" : "off")}");
                 if (player > 0 && _level == 1) { _level = Mathf.Clamp(player, 1, ProgData.MaxLevel); _page = (_level - 1) / PerPage; }
@@ -131,9 +136,15 @@ namespace LevelGate.Progression
             ShowLevel(_level, true);
         }
 
+        // what happened while the screen was open (written to the log on close, for play-testing)
+        private static int _sLevels, _sItems, _sInspects, _sPages, _sSlow;
+        private static float _sSlowMax, _sOpenedAt;
+
         public static void Close(string why)
         {
             if (!IsOpen) return;
+            L.Info($"session: open {Time.unscaledTime - _sOpenedAt:0} s — {_sLevels} level(s) viewed, {_sPages} page change(s), {_sItems} item(s) selected, {_sInspects} inspect(s); " +
+                   $"{_sSlow} slow frame(s){(_sSlow > 0 ? $", worst {_sSlowMax * 1000:0} ms" : "")}; performance mode {(Perf ? "on" : "off")}");
             _canvas.SetActive(false);
             MenuHook.SetOn(false);
             HideMenu(false);
@@ -810,6 +821,8 @@ namespace LevelGate.Progression
 
         private static void Inspect(string tpl)
         {
+            _sInspects++;
+            L.Info($"inspect {tpl} ({ProgData.NameOf(tpl)})");
             GameItems.Inspect(tpl); // the game's inspect window plays its own opening sound
             _windowLogAt = Time.unscaledTime + .6f;
         }
@@ -850,6 +863,7 @@ namespace LevelGate.Progression
             bool changed = page != _page;
             if (!changed && dir != 0) { L.Debug($"page {want + 1}: already at the {(want < 0 ? "first" : "last")} page"); return; }
             _page = page;
+            if (changed) _sPages++;
             if (changed && dir != 0) _level = levelAfter > 0 ? levelAfter : page * PerPage + 1;
             int first = page * PerPage + 1;
             L.Debug($"page {page + 1}/{Pages} (levels {first}–{Mathf.Min(ProgData.MaxLevel, first + PerPage - 1)}){(dir != 0 ? " slide " + (dir > 0 ? "right" : "left") : "")}");
@@ -979,6 +993,7 @@ namespace LevelGate.Progression
             }
             _content.anchoredPosition = Vector2.zero;
             _shownLevel = level;
+            _sLevels++;
             _tilesStart = Time.unscaledTime;
             UpdateSelection();
             L.Debug($"level {level}: {items.Count} item(s) in {groups.Count} categories, {n} tiles drawn in {(Time.realtimeSinceStartup - t0) * 1000:0} ms");
@@ -1078,7 +1093,10 @@ namespace LevelGate.Progression
         private static void ShowTip(TileView v) => ShowTip(v?.Rt, v?.Item.Name);
 
         /// <summary>Shows text in the tooltip just above rt (null hides it).</summary>
-        private static void ShowTip(RectTransform rt, string name)
+        private static void ShowTip(RectTransform rt, string name) => ShowTip(rt, name, false);
+
+        /// <summary>below: under the element instead of above it (card pictures: above would cover the rank label).</summary>
+        private static void ShowTip(RectTransform rt, string name, bool below)
         {
             if (_tip == null) return;
             if (rt == null || string.IsNullOrEmpty(name)) { _tip.gameObject.SetActive(false); return; }
@@ -1086,8 +1104,9 @@ namespace LevelGate.Progression
             float w = Ui.PreferredWidth(_tipText, name) + S3 * 2;
             _tip.sizeDelta = new Vector2(Mathf.Min(w, 420), 26);
             var r = rt.rect;
-            _tip.position = rt.TransformPoint(new Vector3(r.center.x, r.yMax, 0));
-            _tip.anchoredPosition += new Vector2(0, S1);
+            _tip.pivot = new Vector2(.5f, below ? 1 : 0);
+            _tip.position = rt.TransformPoint(new Vector3(r.center.x, below ? r.yMin : r.yMax, 0));
+            _tip.anchoredPosition += new Vector2(0, below ? -S1 : S1);
             // keep it inside the screen
             if (_tip.parent is RectTransform layer)
             {
@@ -1195,6 +1214,7 @@ namespace LevelGate.Progression
         private static void Feature(ProgItem it)
         {
             L.Step("Feature " + it?.Tpl);
+            if (it != null) _sItems++;
             _featTpl = it?.Tpl;
             _featPic.enabled = false;
             _featShort.gameObject.SetActive(it != null);
@@ -1436,7 +1456,11 @@ namespace LevelGate.Progression
             // how smooth it runs while open (every 5 s in the log)
             _frames++; _frameTime += Time.unscaledDeltaTime;
             // stutter finder: a slow frame is logged with the last step that ran before it
-            if (Time.unscaledDeltaTime > .06f && _frames > 2) L.Debug($"slow frame: {Time.unscaledDeltaTime * 1000:0} ms (after: {L.LastStep})");
+            if (Time.unscaledDeltaTime > .06f && _frames > 2)
+            {
+                _sSlow++; _sSlowMax = Mathf.Max(_sSlowMax, Time.unscaledDeltaTime);
+                L.Debug($"slow frame: {Time.unscaledDeltaTime * 1000:0} ms (after: {L.LastStep})");
+            }
             if (L.Verbose && now > _frameLogAt)
             {
                 L.Debug($"screen open: {_frames / Mathf.Max(.001f, _frameTime):0} fps, icons waiting {_icons.Count}");
@@ -1589,7 +1613,7 @@ namespace LevelGate.Progression
                     HoverHook.Add(edge, on =>
                     {
                         FadeTo(edge, on ? HoverEdge : Ui.Hex("#2a3134"));
-                        ShowTip(on ? _picRects[k] : null, on && _picItems[k] != null ? _picItems[k].Name : null);
+                        ShowTip(on ? _picRects[k] : null, on && _picItems[k] != null ? _picItems[k].Name : null, true);
                     });
                     var face = Ui.Fill(picSlot, "Face", 2);
                     Ui.Img(face, Ui.Hex("#0f1315"));

@@ -388,6 +388,9 @@ namespace LevelGate.Progression
             catch (Exception e) { L.ErrorOnce("level experience", e); return false; }
         }
 
+        /// <summary>The profile's total experience (-1 if unknown).</summary>
+        public static int TotalExp() => Refl.Get(Refl.Get(Profile(), "Info"), "Experience") is int exp ? exp : -1;
+
         /// <summary>XP still needed to reach a level (false if unknown or already there).</summary>
         public static bool XpTo(int level, out int xp)
         {

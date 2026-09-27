@@ -25,7 +25,7 @@ namespace LevelGate.Progression
         public const string Guid = "com.kkyangg.levelgate.progression";
         public const string Name = "LevelGate Progression";
         // MAJOR.MINOR.PATCH — see CHANGELOG.md
-        public const string Version = "0.9.16";
+        public const string Version = "0.9.17";
 
         internal static ProgressionPlugin Instance;
         internal static ConfigEntry<KeyboardShortcut> OpenKey;
@@ -97,6 +97,8 @@ namespace LevelGate.Progression
                 "Writes everything the plugin knows (menu bar objects, data, screen state) to the log.");
 
             L.Info($"{Name} {Version} starting. Unity {Application.unityVersion}, plugins folder: {Paths.PluginPath}");
+            // every setting, once (so a log says how the screen was configured)
+            L.Info("settings: " + string.Join(", ", Config.Keys.Select(k => $"{k.Section}.{k.Key}={Config[k].BoxedValue}").ToArray()));
             try
             {
                 ProgData.Init();
@@ -182,7 +184,10 @@ namespace LevelGate.Progression
                     if (_fileTried) return;
                     _fileTried = true;
                     var dir = System.IO.Path.GetDirectoryName(typeof(L).Assembly.Location) ?? ".";
-                    _file = new System.IO.StreamWriter(System.IO.Path.Combine(dir, "Progression.log"), false) { AutoFlush = true };
+                    var path = System.IO.Path.Combine(dir, "Progression.log");
+                    // the previous game session's log is kept as Progression.prev.log (a restart doesn't wipe it)
+                    try { if (System.IO.File.Exists(path)) System.IO.File.Copy(path, System.IO.Path.Combine(dir, "Progression.prev.log"), true); } catch { }
+                    _file = new System.IO.StreamWriter(path, false) { AutoFlush = true };
                     _file.WriteLine($"LevelGate Progression {ProgressionPlugin.Version} — {DateTime.Now:yyyy-MM-dd HH:mm:ss}");
                 }
                 _file.WriteLine($"{DateTime.Now:HH:mm:ss.fff} {kind} {s}");
