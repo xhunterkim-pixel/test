@@ -259,8 +259,8 @@ document.addEventListener('click', e => { if (suppressRowClick && e.target.close
 // =====================================================================
 
 const COLS = {
-  lg: [['item', 380, 160], ['cat', 140, 70], ['stats', 220, 70], ['notes', 170, 60], ['price', 100, 60], ['level', 110, 100]],
-  st: [['item', 360, 160], ['type', 130, 70], ['effects', 260, 80], ['notes', 200, 60], ['level', 110, 100]],
+  lg: [['item', 380, 160], ['cat', 140, 70], ['stats', 220, 70], ['notes', 170, 60], ['price', 150, 120], ['level', 110, 100]],
+  st: [['item', 360, 160], ['type', 130, 70], ['effects', 260, 80], ['notes', 200, 60], ['price', 150, 120], ['level', 110, 100]],
 };
 function colWeights(list) {
   const saved = S.ui.colf?.[list] || {};

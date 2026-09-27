@@ -133,7 +133,12 @@ const levelOf = id => S.levels.get(id);
 const isLimited = id => S.levels.has(id);
 /** Category, or the one you moved the item to (kept in the editor's own settings only). */
 const groupOf = it => { const moved = S.ui.catMove?.[it.i]; return moved && GROUP[moved] ? moved : GROUP[it.g] ? it.g : 'Other'; };
-const priceOf = it => it.f || it.h || 0;
+/** Flea or handbook price, picked with the toggle in the Price header (kept in the editor settings). */
+const fleaMode = () => S.ui.priceMode !== 'hb';
+const priceOf = it => (fleaMode() ? it.f : it.h) || 0;
+const priceCell = it => { const p = priceOf(it), other = fleaMode() ? it.h : it.f;
+  return `<div class="col num" title="${fleaMode() ? 'Flea' : 'Handbook'}: ${p ? fmt(p) + ' ₽' : 'none'} · ${fleaMode() ? 'Handbook' : 'Flea'}: ${other ? fmt(other) + ' ₽' : 'none'}">${p ? fmt(p) + ' ₽' : '—'}</div>`; };
+const priceToggle = () => `<button class="pmode" data-act="priceMode" title="Show flea or handbook (trader) prices — click to switch">${fleaMode() ? 'Flea' : 'Handbook'}</button>`;
 
 /** An item id from the config that isn't in the game's list or an imported mod. */
 function unknownItem(id) {
@@ -325,7 +330,6 @@ function rowHtml(it, n) {
     it.x ? `<span class="badge" style="--c:#9a9a9a" title="A dev / template item players don't normally get">HIDDEN</span>` : '',
     tagBadges(id),
   ].join('');
-  const price = priceOf(it);
   return `<div class="row ${id === S.sel ? 'sel' : ''} ${S.picked.has(id) ? 'picked' : ''} ${isChanged(id) ? 'changed' : ''}" data-row="${id}">
     <div class="idx">${n}</div>
     <div class="cell">${icon(it)}<div class="text"><div class="line1"><span class="title">${esc(it.n)}</span><span class="dirty" title="Changed — not saved yet">•</span><div class="badges">${badges}</div></div>
@@ -333,7 +337,7 @@ function rowHtml(it, n) {
     <div class="col"><i class="dot" style="--c:${g?.color || '#888'}"></i>${esc(g?.name || 'Other')}</div>
     <div class="col stats chips-col" title="${esc(statsShort(it))}">${statChips(it)}</div>
     ${noteCell(id)}
-    <div class="col num">${price ? fmt(price) + ' ₽' : '—'}</div>
+    ${priceCell(it)}
     ${levelCell(id)}
   </div>`;
 }
@@ -359,7 +363,7 @@ function listHead() {
   // [column key, title, sort key]
   const cols = [['', '#', 'custom'], ['item', 'Item', 'name'], ['cat', 'Category', 'cat'], ['stats', 'Stats', ''], ['notes', 'Notes', ''], ['price', 'Price', 'price'], ['level', 'Level', 'level']];
   return `<div class="list-head">${cols.map(([c, t, k]) => `<div>${c ? grip('lg', c) : ''}${k
-    ? `<span class="head-text sortable ${S.sort.key === k ? 'on' : ''}" data-act="sortBy" data-arg="${k}">${t}${S.sort.key === k && k !== 'custom' ? `<span class="sort-arrow">${S.sort.dir > 0 ? '▲' : '▼'}</span>` : ''}</span>`
+    ? `<span class="head-text sortable ${S.sort.key === k ? 'on' : ''}" data-act="sortBy" data-arg="${k}">${t}${S.sort.key === k && k !== 'custom' ? `<span class="sort-arrow">${S.sort.dir > 0 ? '▲' : '▼'}</span>` : ''}</span>${k === 'price' ? priceToggle() : ''}`
     : `<span class="head-text">${t}</span>`}</div>`).join('')}</div>`;
 }
 
@@ -470,11 +474,12 @@ function welcome() {
 
 /** Overall: how many items unlock at which levels. Always on top of the right panel; click a band to list only those. */
 function overall(open) {
-  const lv = [...S.levels.values()];
+  // only the category picked on the left (All Items = everything)
+  const lv = S.cat === 'all' ? [...S.levels.values()] : catItems(S.cat).map(it => levelOf(it.i)).filter(l => l !== undefined);
   const bands = [[1, 1], [2, 10], [11, 20], [21, 30], [31, 40], [41, MAX_LEVEL]];
   const max = Math.max(1, ...bands.map(([a, b]) => lv.filter(x => x >= a && x <= b).length));
   const folded = !open && S.ui.overallFolded;
-  return `<div class="card overall ${folded ? 'folded' : ''}"><h3 class="card-title" data-act="foldOverall"><span class="fold">▾</span>Overall <span class="muted small">${fmt(S.levels.size)} limited</span></h3>
+  return `<div class="card overall ${folded ? 'folded' : ''}"><h3 class="card-title" data-act="foldOverall"><span class="fold">▾</span>Overall${S.cat === 'all' ? '' : ` · ${esc(catName(S.cat))}`} <span class="muted small">${fmt(lv.length)} limited</span></h3>
       ${folded ? '' : `<div class="bars">${bands.map(([a, b]) => { const n = lv.filter(x => x >= a && x <= b).length; const on = S.band && S.band[0] === a && S.band[1] === b;
         return `<div class="bar-row ${on ? 'on' : ''}" data-act="band" data-arg="${a}-${b}" title="Show only items unlocking at these levels"><span>${a === b ? 'Lvl ' + a : `Lvl ${a}–${b}`}</span><div class="bar"><i style="width:${(n / max) * 100}%"></i></div><b>${n}</b></div>`; }).join('')}</div>`}
     </div>`;
@@ -523,6 +528,7 @@ const ACT = {
     S.limit = 300; renderPage(false); renderDetails();
   },
   resort() { renderPage(); },
+  priceMode() { S.ui.priceMode = fleaMode() ? 'hb' : 'flea'; saveUi(); renderPage(); },
   catMoveBack(id) { moveCategory([id], null); },
   foldOverall() { S.ui.overallFolded = !S.ui.overallFolded; saveUi(); renderDetails(); },
   cat(key) { S.page = 'items'; S.cat = key; S.limit = 300; S.picked = new Set(); saveUi(); renderAll(); $('#page').scrollTop = 0; },

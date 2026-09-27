@@ -23,7 +23,7 @@ const BUFF_NAME = Object.fromEntries(BUFFS);
 const SKILLS = ['Endurance', 'Strength', 'Vitality', 'Health', 'StressResistance', 'Metabolism', 'Immunity', 'Perception', 'Intellect', 'Attention',
   'Charisma', 'Memory', 'RecoilControl', 'Surgery', 'AimDrills', 'Throwing', 'CovertMovement', 'Search', 'Sniping', 'ProneMovement', 'LightVests', 'HeavyVests',
   'WeaponTreatment', 'TroubleShooting', 'MagDrills', 'FieldMedicine', 'FirstAid', 'Crafting', 'HideoutManagement'];
-const STAT_SORTS = [['custom', 'Custom Order'], ['name', 'Name'], ['type', 'Type'], ['level', 'Level'], ['edited', 'Edited First']];
+const STAT_SORTS = [['custom', 'Custom Order'], ['name', 'Name'], ['type', 'Type'], ['price', 'Price'], ['level', 'Level'], ['edited', 'Edited First']];
 const KEEP = ['medUseTime', 'MaxHpResource', 'hpResourceRate', 'foodUseTime', 'MaxResource', 'effects_health', 'effects_damage', 'buffName', 'effects_buffs'];
 
 const r2 = n => Math.round(n * 100) / 100;
@@ -251,6 +251,7 @@ function statsPage() {
     custom: customCmp('stats'),
     name: (a, b) => d * byName(a, b),
     type: (a, b) => d * (kindIx(a) - kindIx(b)) || byName(a, b),
+    price: (a, b) => d * (priceOf(a) - priceOf(b)) || byName(a, b),
     level: (a, b) => { const la = levelOf(a.i), lb = levelOf(b.i); if (la === undefined && lb === undefined) return byName(a, b); if (la === undefined) return 1; if (lb === undefined) return -1; return d * (la - lb) || byName(a, b); },
     edited: (a, b) => Number(!!S.statEdits[b.i]) - Number(!!S.statEdits[a.i]) || byName(a, b),
   }[S.statSort.key] || ((a, b) => byName(a, b));
@@ -270,13 +271,14 @@ function statsPage() {
       <div class="col"><i class="dot" style="--c:${k.color}"></i>${esc(k.name)}</div>
       <div class="col stats chips-col">${statChips(it)}</div>
       ${noteCell(id)}
+      ${priceCell(it)}
       ${levelCell(id)}
     </div>`;
   }).join('');
   return `<div class="toolbar sticky">${warn}
       <span class="muted small">${fmt(ids.length)} shown${S.picked.size > 1 ? ` · ${S.picked.size} picked` : ''} · Ctrl+drag to reorder · edits apply after restarting the SPT server${S.statSources.length ? ` · your edits win over ${esc(S.statSources.map(x => x.replace(/ \(.*/, '')).join(' and '))}` : ''}</span></div>
     ${tagBar(statIds(S.statCat))}
-    <div class="list st" data-cols="st" style="--cols:${colsCss('st')}"><div class="list-head">${head(['custom', '#'])}${head(['name', 'Item'], 'item')}${head(['type', 'Type'], 'type')}<div>${grip('st', 'effects')}<span class="head-text">Effects</span></div><div>${grip('st', 'notes')}<span class="head-text">Notes</span></div>${head(['level', 'Level'], 'level')}</div>${rows || `<div class="empty">${Object.keys(S.meds).length ? 'Nothing matches.' : 'No meds loaded — the stats come from the SPT database (pick the config inside your SPT folder).'}</div>`}</div>`;
+    <div class="list st" data-cols="st" style="--cols:${colsCss('st')}"><div class="list-head">${head(['custom', '#'])}${head(['name', 'Item'], 'item')}${head(['type', 'Type'], 'type')}<div>${grip('st', 'effects')}<span class="head-text">Effects</span></div><div>${grip('st', 'notes')}<span class="head-text">Notes</span></div>${head(['price', 'Price'], 'price').replace(/<\/div>$/, priceToggle() + '</div>')}${head(['level', 'Level'], 'level')}</div>${rows || `<div class="empty">${Object.keys(S.meds).length ? 'Nothing matches.' : 'No meds loaded — the stats come from the SPT database (pick the config inside your SPT folder).'}</div>`}</div>`;
 }
 
 // ---- the editor (right panel)
@@ -372,7 +374,7 @@ function afterStat(id) {
 
 Object.assign(ACT, {
   statSortBy(key) {
-    S.statSort = S.statSort.key === key && key !== 'custom' ? { key, dir: -S.statSort.dir } : { key, dir: key === 'edited' ? -1 : 1 };
+    S.statSort = S.statSort.key === key && key !== 'custom' ? { key, dir: -S.statSort.dir } : { key, dir: key === 'edited' || key === 'price' ? -1 : 1 };
     saveUi(); renderPage(); renderHeader();
   },
   statManyDefault() { const ids = [...S.picked].filter(x => S.meds[x]); ids.forEach(x => ACT.statResetDefault(x)); toast(`${ids.length} reset to Escape From Tarkov's values`); },
