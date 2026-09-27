@@ -54,7 +54,7 @@ namespace LevelGate.Progression
             catch (Exception e) { L.ErrorOnce("playing a sound", e); }
         }
 
-        public static void Open() => Play("MenuTabSwitch", "ButtonClick", "Click");
+        public static void Open() => Play("ButtonBottomBarClick", "ButtonClick", "Click");
         public static void Click() => Play("ButtonClick", "Click");
         public static void Page() => Play("MenuDropdownSelect", "ButtonClick", "Click");
     }

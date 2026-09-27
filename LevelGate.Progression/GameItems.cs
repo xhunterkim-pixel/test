@@ -106,6 +106,8 @@ namespace LevelGate.Progression
             args[0] = item;
             for (int i = 1; i < ps.Length; i++)
                 args[i] = ps[i].ParameterType == typeof(int) && ps[i].Name.IndexOf("scale", StringComparison.OrdinalIgnoreCase) >= 0 ? scale
+                    // a bigger picture has to be drawn again, not taken from the stash-size cache
+                    : ps[i].ParameterType == typeof(bool) && ps[i].Name.IndexOf("forced", StringComparison.OrdinalIgnoreCase) >= 0 ? (object)(scale > 1)
                     : ps[i].HasDefaultValue ? ps[i].DefaultValue : ps[i].ParameterType == typeof(int) ? (object)1 : false;
             return m.Invoke(null, args);
         }

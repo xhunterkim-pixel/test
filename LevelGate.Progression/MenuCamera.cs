@@ -98,7 +98,7 @@ namespace LevelGate.Progression
             {
                 if (on)
                 {
-                    _blur = _cam?.GetComponents<Behaviour>().FirstOrDefault(b => b != null && (b.GetType().Name.Contains("Blur") || b.GetType().Name.Contains("DepthOfField") || b.GetType().Name.Contains("Bokeh")));
+                    _blur = _cam?.GetComponents<Behaviour>().FirstOrDefault(b => b != null && (b.GetType().Name.Contains("Blur") || b.GetType().Name.Contains("DepthOfField") || b.GetType().Name.Contains("Bokeh")) && !b.GetType().Name.Contains("Motion")); // motion blur does nothing on a still camera
                     if (_blur == null) { L.Debug("camera: no blur effect on the background camera (the screen's own shade dims it instead)"); return; }
                     _blurWas = _blur.enabled;
                     _blur.enabled = true;

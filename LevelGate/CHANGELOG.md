@@ -40,6 +40,23 @@ Versions are **MAJOR.MINOR.PATCH**:
 
 ## LevelGate Progression (BepInEx plugin, separate DLL)
 
+### 0.5.0
+- **New layout** after the Tarkov and Arena battle passes:
+  - **header:** PROGRESSION plus the picked level on the left, your level (Arena-style square and bar) and the Tarkov logo on the right;
+  - **left panel "UNLOCKS":** the reward list;
+  - **centre:** the item big, with ITEM / CATEGORY / UNLOCKS AT in small grey;
+  - **right panel:** the item's details, a "Reach level X  2 / X" requirement (red until met) and an INSPECT button;
+  - **bottom:** cards under dotted "Level X" headers and a numbered page bar with Q / E.
+- **Colours and text:** muted, battle-pass-like colours and sentence-case text.
+- **Wording:** the level you're on says **Current level** (was UNLOCKED at the top and YOUR LEVEL on the card).
+- **Esc** only closes the screen when no game window (inspect…) is open; otherwise it's left to the window.
+- **Q** on the first page (and E on the last) no longer plays a slide that goes nowhere.
+- **Card pictures:** they are placed by fractions of the card, so they stay spaced at any size.
+- **Big picture:** it asks the game to draw it again at 3x (forcedGeneration) instead of reusing the stash-size picture. The log says the size it got.
+- **Blur:** the motion blur is no longer switched on (it does nothing on a still camera).
+- **Sounds:** the game's bottom-bar click on open, and the inspector sound on inspect.
+- **Log:** the inspect window's objects are logged once, to find the game's 3D item preview for the big picture.
+
 ### 0.4.1
 - **Camera turn:** the menu's 3D background turns smoothly to the side while the screen is open, like the game does for Character / Traders, and turns back on close. Screen > CameraTurnDegrees (default -75, to the left; 0 = off). It also works with MoxoPixel Menu Overhaul's camera.
 - **Blur:** a blur effect on that camera, if the game has one, is switched on while open (Screen > BlurBackground).
