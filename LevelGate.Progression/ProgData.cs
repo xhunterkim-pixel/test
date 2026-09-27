@@ -201,7 +201,7 @@ namespace LevelGate.Progression
                     parents[id] = p?.ToString()?.ToLowerInvariant() ?? "";
                 }
                 L.Info($"item templates: {parents.Count} from {from} (parent read from '{parentMember ?? "nothing!"}')");
-                if (parentMember == null) L.Warn("couldn't read item parents — every item will be listed under Other. Send the log with Debug > VerboseLog on.");
+                if (parentMember == null) L.Warn("couldn't read item parents — every item will be listed under Other. Send the log with Advanced > VerboseLog on.");
                 _parents = parents;
                 _byLevel = null;
                 return _parents;

@@ -40,6 +40,15 @@ Versions are **MAJOR.MINOR.PATCH**:
 
 ## LevelGate Progression (BepInEx plugin, separate DLL)
 
+### 0.9.22
+- **F12 menu cleaned up into three sections:** 1. General, 2. Graphics, 3. Advanced.
+  - General: open key, menu bar button, main-menu shortcut, hide main menu, blur.
+  - Graphics > Quality: Low (was PerformanceMode), Medium (default), High (was SharpWeaponPreview). Plus FixStashIcons.
+  - Advanced: label, copy button, margins, tile size, tiles per category, opacity, camera turn, sort order, inside game UI, free items at level 1, verbose log, dump key.
+  - Old settings (including the last seen level for the NEW tag) are carried over once from the old sections.
+  - The screen's PERFORMANCE MODE box sets Low; unticking it goes back to the previous quality.
+- **Logging cost is measured:** every session line is followed by "logging: N lines took X ms (Y% of the time)", plus the total since start.
+
 ### 0.9.21
 - **Fix (likely cause of a crash): background icon redraws ran during fast screen switching.** A 903-icon FixStashIcons pass was still forcing redraws while Inventory → Flea → Trader were switched quickly (each draws its own icons), and the game crashed natively.
   - Background redraws (FixStashIcons, the SharpWeaponPreview weapon repair, the second restore pass) now run only on the main menu itself: Progression closed, no screen change in the last 2 s, not deploying or in a raid. They pause otherwise and continue later.

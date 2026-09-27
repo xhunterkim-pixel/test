@@ -109,12 +109,13 @@ namespace LevelGate.Progression
                 int seen = ProgressionPlugin.LastSeenLevel.Value;
                 _newFrom = seen > 0 && seen < player ? seen : 0;
                 _sLevels = _sItems = _sInspects = _sPages = _sSlow = 0; _sSlowMax = 0; _sOpenedAt = Time.unscaledTime;
+                _sLogMs = L.CostMs; _sLogLines = L.CostLines;
                 int newItems = _newFrom > 0 ? ProgData.Levels.Values.Count(v => v > _newFrom && v <= player) : 0;
                 string xpNow = ProgData.LevelExp(out int xh, out int xn) ? $"{xh} / {xn} into level {player} (total {ProgData.TotalExp()})" : "XP unknown";
                 L.Info($"open: player level {player}, {xpNow}; last seen level {seen}" +
                        (_newFrom > 0 ? $" → NEW: levels {_newFrom + 1}–{player}, {newItems} item(s) tagged NEW" : " → nothing new since last visit"));
                 MenuWidget.Seen(player); // the NEW tag on the main-menu shortcut goes away
-                L.Info($"screen open ({why}); player level {player}, {ProgData.Levels.Count} limited items; performance mode {(Perf ? "ON — emblems stand still, pictures drawn smaller" : "off")}");
+                L.Info($"screen open ({why}); player level {player}, {ProgData.Levels.Count} limited items; graphics {ProgressionPlugin.Quality.Value}{(Perf ? " — emblems stand still, pictures drawn smaller" : "")}");
                 if (player > 0 && _level == 1) { _level = Mathf.Clamp(player, 1, ProgData.MaxLevel); _page = (_level - 1) / PerPage; }
                 _canvas.SetActive(true);
                 _openedAt = Time.unscaledTime;
@@ -142,12 +143,18 @@ namespace LevelGate.Progression
         // what happened while the screen was open (written to the log on close, for play-testing)
         private static int _sLevels, _sItems, _sInspects, _sPages, _sSlow;
         private static float _sSlowMax, _sOpenedAt;
+        private static double _sLogMs;
+        private static int _sLogLines;
 
         public static void Close(string why)
         {
             if (!IsOpen) return;
             L.Info($"session: open {Time.unscaledTime - _sOpenedAt:0} s — {_sLevels} level(s) viewed, {_sPages} page change(s), {_sItems} item(s) selected, {_sInspects} inspect(s); " +
-                   $"{_sSlow} slow frame(s){(_sSlow > 0 ? $", worst {_sSlowMax * 1000:0} ms" : "")}; performance mode {(Perf ? "on" : "off")}");
+                   $"{_sSlow} slow frame(s){(_sSlow > 0 ? $", worst {_sSlowMax * 1000:0} ms" : "")}; graphics {ProgressionPlugin.Quality.Value}");
+            // logging's own cost: share of the time the screen was open, and of the whole game so far
+            double open = Math.Max(.001, Time.unscaledTime - _sOpenedAt), logMs = L.CostMs - _sLogMs;
+            L.Info($"logging: {L.CostLines - _sLogLines} line(s) took {logMs:0.0} ms while open ({logMs / 10 / open:0.00}% of the time); " +
+                   $"since start {L.CostLines} line(s), {L.CostMs:0} ms ({L.CostMs / 10 / Math.Max(1, Time.realtimeSinceStartup):0.000}% of play time); verbose {(L.Verbose ? "on" : "off")}");
             _canvas.SetActive(false);
             MenuHook.SetOn(false);
             HideMenu(false);
@@ -204,7 +211,7 @@ namespace LevelGate.Progression
                 scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
                 scaler.referenceResolution = new Vector2(1920, 1080);
                 scaler.matchWidthOrHeight = 1f;
-                L.Info("screen on its own canvas on top " + (menu == null ? "(the game's MenuScreen wasn't found)" : "(Screen > InsideGameUi is off)"));
+                L.Info("screen on its own canvas on top " + (menu == null ? "(the game's MenuScreen wasn't found)" : "(Advanced > InsideGameUi is off)"));
             }
             _canvas.AddComponent<GraphicRaycaster>();
 
@@ -266,7 +273,7 @@ namespace LevelGate.Progression
 
         /// <summary>A panel like the battle pass ones: a 1 px frame around a dark see-through fill.</summary>
         private const float BorderWidth = 3;
-        private static bool Perf => ProgressionPlugin.PerformanceMode.Value;
+        private static bool Perf => ProgressionPlugin.Low;
         private const string Orange = "#e0562f";
 
         /// <summary>Category order for the three card pictures.</summary>
@@ -712,7 +719,9 @@ namespace LevelGate.Progression
             b.onClick.AddListener(() =>
             {
                 Sounds.Click();
-                ProgressionPlugin.PerformanceMode.Value = !Perf; // the setting's change redraws the screen (Plugin: SettingChanged → Refresh)
+                // = Graphics Low; unticking goes back to what it was before (Medium or High). The setting's change redraws the screen.
+                var q = ProgressionPlugin.Quality;
+                if (Perf) q.Value = _beforeLow; else { _beforeLow = q.Value; q.Value = GraphicsQuality.Low; }
                 L.Info("performance mode " + (Perf ? "on" : "off"));
             });
             HoverHook.Add(rt, on =>
@@ -721,6 +730,8 @@ namespace LevelGate.Progression
                 ShowTip(on ? rt : null, "Lighter pictures, still emblems, fewer items per category");
             });
         }
+
+        private static GraphicsQuality _beforeLow = GraphicsQuality.Medium;
 
         private static void LevelKey(RectTransform arrow, string key, Action click)
         {
@@ -1306,7 +1317,7 @@ namespace LevelGate.Progression
             // weapons: never a bigger render. The game's weapon icons can leak a big render onto OTHER weapons in the
             // stash (a VPO-215 came out huge after VPO-136 / VPO-209 were drawn big) — nothing we could put back.
             // They're 4–5 cells wide, so stash size is already ~256–320 px.
-            if (it.Group == "Weapons" && !ProgressionPlugin.SharpWeaponPreview.Value) featScale = 1;
+            if (it.Group == "Weapons" && !ProgressionPlugin.High) featScale = 1;
             else if (it.Group == "Weapons") _sharpWeaponShown = true; // weapons get repaired on close
             _featScale = featScale;
             var kept = GameItems.CopyOf(it.Tpl, featScale);

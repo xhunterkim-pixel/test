@@ -359,7 +359,7 @@ namespace LevelGate.Progression
             {
                 var hit = _candidates.FirstOrDefault(t => t.name.IndexOf(want, StringComparison.OrdinalIgnoreCase) >= 0);
                 if (hit != null) return hit;
-                L.Warn($"Menu Button > CopyButton '{want}' matches no button name — picking one by itself.");
+                L.Warn($"Advanced > CopyButton '{want}' matches no button name — picking one by itself.");
             }
             // the row holding the most tabs is the bar; take its last visible tab
             var row = _candidates.GroupBy(t => t.parent).OrderByDescending(g => g.Count()).First();
