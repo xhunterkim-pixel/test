@@ -93,6 +93,8 @@ namespace LevelGate.Progression
                 L.Info($"screen open ({why}); player level {player}, {ProgData.Levels.Count} limited items");
                 if (player > 0 && _level == 1) { _level = Mathf.Clamp(player, 1, ProgData.MaxLevel); _page = (_level - 1) / PerPage; }
                 _canvas.SetActive(true);
+                _openedAt = Time.unscaledTime;
+                if (_fade != null) _fade.alpha = 0;
                 MenuHook.SetOn(true);
                 HideMenu(true);
                 MenuCamera.Turn(true);
@@ -111,6 +113,7 @@ namespace LevelGate.Progression
             MenuHook.SetOn(false);
             HideMenu(false);
             GameItems.RestoreIcons(); // the big renders replaced the stash's cached icons: put them back
+            _restoreAgainAt = Time.unscaledTime + 2f; // and once more, for big renders that were still being drawn
             bool gameSwitching = why.StartsWith("game screen");
             MenuCamera.Turn(false, instant: gameSwitching); // the game moves the camera itself when it switches screens
             if (!gameSwitching) Sounds.Click();
@@ -173,6 +176,12 @@ namespace LevelGate.Progression
             SubCanvas(_bottom);
             BuildBottom(_bottom);
 
+            // vignette over everything (its own canvas, so it draws last), and the whole screen fades in on open
+            var vig = Ui.Rect(root, "Vignette", Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
+            SubCanvas(vig);
+            Ui.Img(vig, new Color(0, 0, 0, .7f), Ui.Vignette()).raycastTarget = false;
+            _fade = root.gameObject.AddComponent<CanvasGroup>();
+
             if (!_changedHooked)
             {
                 _changedHooked = true;
@@ -220,7 +229,7 @@ namespace LevelGate.Progression
         private static void BuildHeader(RectTransform top)
         {
             _headBadge = new Badge(top, new Vector2(0, 1), new Vector2(78, -58), 76);
-            Ui.Label(Ui.Rect(top, "Title", new Vector2(0, 1), new Vector2(.5f, 1), new Vector2(128, -58), new Vector2(0, -18)), "Text", "PROGRESSION", 34, Text, TextAnchor.MiddleLeft, true, 1);
+            Ui.Label(Ui.Rect(top, "Title", new Vector2(0, 1), new Vector2(.5f, 1), new Vector2(128, -58), new Vector2(0, -18)), "Text", "PROGRESSION", 34, Text, TextAnchor.MiddleLeft, false, 1);
             _headSub = Ui.Label(Ui.Rect(top, "Sub", new Vector2(0, 1), new Vector2(.5f, 1), new Vector2(130, -86), new Vector2(0, -60)), "Text", "", 16, Grey, TextAnchor.MiddleLeft, false, 1);
 
             BuildXp(top);
@@ -307,7 +316,7 @@ namespace LevelGate.Progression
         {
             // left third: the reward list
             var panel = Panel(top, "Unlocks", new Vector2(0, 0), new Vector2(.34f, 1), new Vector2(40, 18), new Vector2(0, -116));
-            _listTitle = Ui.Label(Ui.Rect(panel, "Title", new Vector2(0, 1), Vector2.one, new Vector2(18, -46), new Vector2(-18, -8)), "Text", "UNLOCKS", 22, Text, TextAnchor.MiddleLeft, true, 1);
+            _listTitle = Ui.Label(Ui.Rect(panel, "Title", new Vector2(0, 1), Vector2.one, new Vector2(18, -46), new Vector2(-18, -8)), "Text", "UNLOCKS", 26, Text, TextAnchor.MiddleLeft, false, .5f);
             _listCount = Ui.Label(Ui.Rect(panel, "Count", new Vector2(0, 1), Vector2.one, new Vector2(18, -46), new Vector2(-18, -8)), "Text", "", 15, Grey, TextAnchor.MiddleRight, false, 1);
             Ui.Img(Ui.Rect(panel, "Rule", new Vector2(0, 1), Vector2.one, new Vector2(0, -52), new Vector2(0, -51)), Border);
 
@@ -348,17 +357,18 @@ namespace LevelGate.Progression
             _featPic.enabled = false;
             _featShort = Ui.Label(Ui.Fill(picFace, "Short", 36), "Text", "", 34, Dim, TextAnchor.MiddleCenter, false, 1, true);
             Ui.EdgeFade(picFace, .14f, .55f);
+            Ui.Grit(picFace, 2, .11f); // worn edges, like the battle pass frames
             _featLock = Ui.Img(Ui.Rect(picFace, "Lock", new Vector2(1, 0), new Vector2(1, 0), new Vector2(-46, 12), new Vector2(-12, 46)), Ui.Hex("#aeb6b9", .85f), Ui.Lock());
             _featLock.enabled = false;
             // ITEM / CATEGORY / UNLOCKS AT: a label column and a value column, so the values line up
-            Ui.Label(Ui.Rect(stage, "MetaKeys", new Vector2(0, 0), new Vector2(0, 0), new Vector2(18, 14), new Vector2(128, 84)), "Text", "ITEM\nCATEGORY\nUNLOCKS AT", 14, Dim, TextAnchor.LowerLeft, true, 1);
-            _featMeta = Ui.Label(Ui.Rect(stage, "Meta", new Vector2(0, 0), new Vector2(1, 0), new Vector2(132, 14), new Vector2(-18, 84)), "Text", "", 14, Text, TextAnchor.LowerLeft, false, 1);
+            Ui.Label(Ui.Rect(stage, "MetaKeys", new Vector2(0, 0), new Vector2(0, 0), new Vector2(18, 14), new Vector2(128, 90)), "Text", "ITEM\nCATEGORY\nUNLOCKS AT", 15, Dim, TextAnchor.LowerLeft, false, 1);
+            _featMeta = Ui.Label(Ui.Rect(stage, "Meta", new Vector2(0, 0), new Vector2(1, 0), new Vector2(132, 14), new Vector2(-18, 90)), "Text", "", 15, Ui.Hex("#9aa2a5"), TextAnchor.LowerLeft, false, 1);
 
             // right: the item's details, like the battle pass reward panel
             var side = Panel(top, "Details", new Vector2(.74f, 0), new Vector2(1, 1), new Vector2(8, 18), new Vector2(-40, -116));
-            _featType = Ui.Label(Ui.Rect(side, "Type", new Vector2(0, 1), Vector2.one, new Vector2(18, -46), new Vector2(-18, -8)), "Text", "", 22, Text, TextAnchor.MiddleLeft, true, 1);
+            _featType = Ui.Label(Ui.Rect(side, "Type", new Vector2(0, 1), Vector2.one, new Vector2(18, -46), new Vector2(-18, -8)), "Text", "", 26, Text, TextAnchor.MiddleLeft, false, .5f);
             Ui.Img(Ui.Rect(side, "Rule", new Vector2(0, 1), Vector2.one, new Vector2(0, -52), new Vector2(0, -51)), Border);
-            _featName = Ui.Label(Ui.Rect(side, "Name", new Vector2(0, 1), Vector2.one, new Vector2(18, -120), new Vector2(-18, -64)), "Text", "", 19, Text, TextAnchor.UpperLeft, true, 0, true);
+            _featName = Ui.Label(Ui.Rect(side, "Name", new Vector2(0, 1), Vector2.one, new Vector2(18, -120), new Vector2(-18, -64)), "Text", "", 20, Text, TextAnchor.UpperLeft, false, 0, true);
             Ui.SetWrap(_featName, true);
             // requirement row: [ ] Reach level 6        2 / 6   (red while not met, like the Arena battle pass)
             var req = Ui.Rect(side, "Req", new Vector2(0, 1), Vector2.one, new Vector2(18, -160), new Vector2(-18, -130));
@@ -366,7 +376,7 @@ namespace LevelGate.Progression
             Ui.Img(box, Grey);
             Ui.Img(Ui.Fill(box, "In", 2), Ui.Hex("#10161a"));
             _featCheck = Ui.Img(Ui.Fill(box, "Check", 4), Ui.Hex(Green));
-            _featReq = Ui.Label(Ui.Rect(req, "Text", Vector2.zero, Vector2.one, new Vector2(26, 0), Vector2.zero), "Text", "", 17, Text, TextAnchor.MiddleLeft, true);
+            _featReq = Ui.Label(Ui.Rect(req, "Text", Vector2.zero, Vector2.one, new Vector2(26, 0), Vector2.zero), "Text", "", 18, Text, TextAnchor.MiddleLeft, false);
             _featReqValue = Ui.Label(Ui.Rect(req, "Value", Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero), "Text", "", 17, Text, TextAnchor.MiddleRight, true);
             _featStatus = Ui.Label(Ui.Rect(side, "Status", new Vector2(0, 1), Vector2.one, new Vector2(18, -196), new Vector2(-18, -168)), "Text", "", 15, Grey, TextAnchor.MiddleLeft, false);
             // details (size, weight, damage…) and the game's description: the space the requirement doesn't need
@@ -385,7 +395,7 @@ namespace LevelGate.Progression
             b.targetGraphic = bimg;
             var colors = b.colors; colors.highlightedColor = new Color(1.25f, 1.25f, 1.25f, 1f); b.colors = colors;
             b.onClick.AddListener(() => { if (_featTpl != null) Inspect(_featTpl); });
-            Ui.Label(Ui.Rect(side, "Hint", new Vector2(0, 0), new Vector2(1, 0), new Vector2(18, 14), new Vector2(-18, 38)), "Text", "or right-click any item", 13, Dim, TextAnchor.MiddleCenter, false);
+            Ui.Label(Ui.Rect(side, "Hint", new Vector2(0, 0), new Vector2(1, 0), new Vector2(18, 14), new Vector2(-18, 38)), "Text", "<i>or right-click any item</i>", 13, Dim, TextAnchor.MiddleCenter, false);
         }
 
         private static void BuildBottom(RectTransform bottom)
@@ -528,8 +538,7 @@ namespace LevelGate.Progression
 
         private static void Inspect(string tpl)
         {
-            Sounds.Play("MenuInspectorWindowOpen", "ButtonClick");
-            GameItems.Inspect(tpl);
+            GameItems.Inspect(tpl); // the game's inspect window plays its own opening sound
             _windowLogAt = Time.unscaledTime + .6f;
         }
 
@@ -576,7 +585,7 @@ namespace LevelGate.Progression
             _next.interactable = page < Pages - 1;
             UpdatePageBar();
             _hits.RemoveAll(h => h.Rect == null || h.Rect.IsChildOf(_bottom));
-            _cardIcons.Clear();
+            _cardIcons.Clear(); DropRequests(_cardIcons);
             for (int i = 0; i < PerPage; i++) _cards[i].Show(first + i);
             _cardsDir = dir;
             _cardsStart = dir != 0 ? Time.unscaledTime : -10;
@@ -630,7 +639,7 @@ namespace LevelGate.Progression
             foreach (Transform ch in _content) UnityEngine.Object.Destroy(ch.gameObject);
             _tiles.Clear();
             _tileFrames.Clear();
-            _icons.Clear();
+            _icons.Clear(); DropRequests(_icons);
             _hits.RemoveAll(h => h.Rect == null || !h.Rect.IsChildOf(_bottom));
             Feature(items.FirstOrDefault());
             int max = Mathf.Max(1, Perf ? Mathf.Min(12, ProgressionPlugin.MaxTilesPerCategory.Value) : ProgressionPlugin.MaxTilesPerCategory.Value), n = 0;
@@ -686,10 +695,39 @@ namespace LevelGate.Progression
             var pic = Ui.Img(Ui.Fill(slot, "Icon", 5), Color.white);
             pic.preserveAspect = true;
             pic.enabled = false;
-            _icons.Add((GameItems.IconOf(GameItems.ItemOf(it.Tpl), 1), pic, shortName, it.Tpl));
+            RequestIcon(_icons, it.Tpl, 1, pic, shortName);
             _hits.Add((rt, it));
             if (!reached) Ui.Img(Ui.Rect(slot, "Lock", new Vector2(1, 1), new Vector2(1, 1), new Vector2(-9, -9), new Vector2(-4, -4)), Ui.Hex(Red));
             _tiles.Add((group, inner, Mathf.Min(index, 40) * .012f));
+        }
+
+        // Icons the game hasn't drawn yet cost it 20-100 ms each, all in one frame when a big level opens (the stutter).
+        // So they are asked for a few per frame instead: the cards' first, then the list in order.
+        private static readonly List<(List<(object Icon, Image Pic, Component Placeholder, string Tpl)> Target, string Tpl, int Scale, Image Pic, Component Placeholder)> _iconRequests
+            = new List<(List<(object, Image, Component, string)>, string, int, Image, Component)>();
+
+        private static void RequestIcon(List<(object Icon, Image Pic, Component Placeholder, string Tpl)> target, string tpl, int scale, Image pic, Component placeholder)
+        {
+            // one already in the game's cache costs nothing: take it now
+            _iconRequests.Add((target, tpl, scale, pic, placeholder));
+        }
+
+        private static void DropRequests(List<(object Icon, Image Pic, Component Placeholder, string Tpl)> target) => _iconRequests.RemoveAll(r => r.Target == target);
+
+        private static void RunIconRequests()
+        {
+            if (_iconRequests.Count == 0) return;
+            int budget = Perf ? 2 : 4;
+            var t0 = Time.realtimeSinceStartup;
+            // cards first
+            _iconRequests.Sort((a, b) => (a.Target == _cardIcons ? 0 : 1).CompareTo(b.Target == _cardIcons ? 0 : 1));
+            while (_iconRequests.Count > 0 && budget-- > 0 && Time.realtimeSinceStartup - t0 < .025f)
+            {
+                var r = _iconRequests[0];
+                _iconRequests.RemoveAt(0);
+                if (r.Pic == null) continue;
+                r.Target.Add((GameItems.IconOf(GameItems.ItemOf(r.Tpl), r.Scale), r.Pic, r.Placeholder, r.Tpl));
+            }
         }
 
         private static void ShowIcons(List<(object Icon, Image Pic, Component Placeholder, string Tpl)> list)
@@ -782,9 +820,20 @@ namespace LevelGate.Progression
 
         // ---------------------------------------------------------------- every frame
 
+        private static float _restoreAgainAt = -1, _openedAt = -10;
+        private static CanvasGroup _fade;
+        private static bool _xpKnown;
+
         public static void Tick()
         {
+            if (_restoreAgainAt > 0 && Time.unscaledTime > _restoreAgainAt && !IsOpen) { _restoreAgainAt = -1; GameItems.RestoreIcons(); }
             if (!IsOpen) return;
+            if (!_xpKnown && ProgData.HasExpTable) { _xpKnown = true; UpdateXp(); } // the SPT server's answer came in
+            if (_fade != null && _fade.alpha < 1)
+            {
+                float f = Mathf.Clamp01((Time.unscaledTime - _openedAt) / .3f);
+                _fade.alpha = 1 - (1 - f) * (1 - f); // ease out
+            }
             var input = UnityInput.Current;
             bool window = GameWindowOpen();
             // the game may close its window on this same Esc before we look: a window seen a moment ago still owns the key
@@ -819,6 +868,7 @@ namespace LevelGate.Progression
                     float t = Mathf.Clamp01((now - _cardsStart - delay) / .38f);
                     _cards[i].Animate(1 - Mathf.Pow(1 - t, 3), _cardsDir);
                 }
+            RunIconRequests();
             ShowIcons(_icons);
             ShowIcons(_cardIcons);
             ApplyMood(Time.unscaledDeltaTime);
@@ -926,6 +976,8 @@ namespace LevelGate.Progression
         /// <summary>A level card like the Arena battle pass ones: a dotted "Level X" header above, three pictures,
         /// the unlock count and the state at the bottom. Everything is placed by fractions of the card, so it
         /// keeps its spacing at any size.</summary>
+        private static int _gritSeed;
+
         private sealed class Card
         {
             private readonly RectTransform _body;
@@ -994,6 +1046,7 @@ namespace LevelGate.Progression
                     _pics[i].preserveAspect = true;
                     _pics[i].enabled = false;
                     Ui.EdgeFade(face, .18f, .55f);
+                    Ui.Grit(face, _gritSeed++, .13f);
                     float ls = i == 0 ? 22 : 16;
                     _locks[i] = Ui.Img(Ui.Rect(face, "Lock", new Vector2(1, 0), new Vector2(1, 0), new Vector2(-ls - 6, 6), new Vector2(-6, ls + 6)), Ui.Hex("#aeb6b9", .85f), Ui.Lock());
                 }
@@ -1028,7 +1081,7 @@ namespace LevelGate.Progression
                     if (it == null) continue;
                     Ui.SetText(_picNames[i], it.Short);
                     _picNames[i].gameObject.SetActive(true);
-                    _cardIcons.Add((GameItems.IconOf(GameItems.ItemOf(it.Tpl), i == 0 && !Perf ? 2 : 1), _pics[i], _picNames[i], it.Tpl));
+                    RequestIcon(_cardIcons, it.Tpl, i == 0 && !Perf ? 2 : 1, _pics[i], _picNames[i]);
                     _hits.Add((_picRects[i], it));
                 }
                 Ui.SetText(_more, items.Count > 3 ? "+" + (items.Count - 3) : "");

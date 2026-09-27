@@ -40,6 +40,17 @@ Versions are **MAJOR.MINOR.PATCH**:
 
 ## LevelGate Progression (BepInEx plugin, separate DLL)
 
+### 0.9.4
+- **XP bar:** now reads the experience table from the SPT server (`/client/globals` → `exp_table`) in the background, since the game client has no class holding it by name. The bar fills in as soon as the answer arrives.
+- **Stutter:** icons the game hasn't drawn yet are requested a few per frame (cards first) instead of all at once. Performance mode halves the rate.
+- **Inspect:** only one sound now; the game's inspect window already plays its own.
+- **Stash icons:**
+  - Everything drawn bigger is redrawn at stash size on close, and again two seconds later for big renders that were still in progress.
+  - Icons already stuck big from older builds are in the game's on-disk icon cache: use "Clean temp files" in the SPT launcher once.
+- **EFT battle pass style:** regular-weight uppercase panel headings (UNLOCKS, item type, PROGRESSION), a regular item name and requirement, and an italic hint.
+- **Vignette:** darkens the screen's edges, and the whole screen fades in smoothly when opened.
+- **Grit:** smudges, grit and a few scratches on the item preview frames (cards and the big picture).
+
 ### 0.9.3
 - **Performance mode** (checkbox bottom-right, or `Screen > PerformanceMode` in the config):
   - The big picture and the cards' main pictures are drawn at normal size instead of extra sharp.

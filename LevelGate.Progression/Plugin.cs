@@ -25,7 +25,7 @@ namespace LevelGate.Progression
         public const string Guid = "com.kkyangg.levelgate.progression";
         public const string Name = "LevelGate Progression";
         // MAJOR.MINOR.PATCH — see CHANGELOG.md
-        public const string Version = "0.9.3";
+        public const string Version = "0.9.4";
 
         internal static ProgressionPlugin Instance;
         internal static ConfigEntry<KeyboardShortcut> OpenKey;
@@ -153,8 +153,11 @@ namespace LevelGate.Progression
         public static void Step(string s) { LastStep = s; File("step ", s); }
         public static string LastStep = "";
 
+        private static readonly object _fileLock = new object();
+
         private static void File(string kind, string s)
         {
+            lock (_fileLock)
             try
             {
                 if (_file == null)

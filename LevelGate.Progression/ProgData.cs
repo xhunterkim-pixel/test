@@ -394,7 +394,10 @@ namespace LevelGate.Progression
         /// <summary>Total experience needed for each level (index 0 = level 1), from the game's globals.</summary>
         private static int[] ExpTable()
         {
-            if (_expTable != null || _expTried) return _expTable;
+            if (_expTable != null) return _expTable;
+            // SPT: ask the server for the game's globals (they hold exp_table) — works whatever the client calls its classes
+            if (!_sptStarted) StartSptGlobals();
+            if (_sptHandler || _expTried) return _expTable;
             try
             {
                 // 1) the session's backend config: Session.BackEndConfig.Config.Experience.Level.ExpTable
@@ -426,6 +429,54 @@ namespace LevelGate.Progression
             }
             catch (Exception e) { _expTried = true; L.ErrorOnce("experience table", e); }
             return _expTable;
+        }
+
+        private static bool _sptStarted, _sptHandler;
+
+        public static bool HasExpTable => _expTable != null;
+
+        /// <summary>Reads exp_table from SPT's /client/globals on a background thread (the answer is a few MB).</summary>
+        private static void StartSptGlobals()
+        {
+            _sptStarted = true;
+            try
+            {
+                MethodInfo getJson = null;
+                foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
+                {
+                    var an = asm.GetName().Name;
+                    if (!(an.StartsWith("spt", StringComparison.OrdinalIgnoreCase) || an.StartsWith("aki", StringComparison.OrdinalIgnoreCase))) continue;
+                    Type[] types;
+                    try { types = asm.GetTypes(); } catch (ReflectionTypeLoadException e) { types = e.Types.Where(x => x != null).ToArray(); }
+                    var t = types.FirstOrDefault(x => x.Name == "RequestHandler");
+                    getJson = t?.GetMethods(BindingFlags.Public | BindingFlags.Static).FirstOrDefault(m => m.Name == "GetJson" && m.GetParameters().Length >= 1 && m.GetParameters()[0].ParameterType == typeof(string));
+                    if (getJson != null) break;
+                }
+                if (getJson == null) { L.Info("experience table: SPT RequestHandler.GetJson not found — trying the game's classes"); return; }
+                _sptHandler = true;
+                L.Info($"experience table: asking the SPT server ({getJson.DeclaringType.FullName}.GetJson /client/globals)");
+                var args = getJson.GetParameters().Select((p, i) => i == 0 ? (object)"/client/globals" : p.HasDefaultValue ? p.DefaultValue : null).ToArray();
+                System.Threading.ThreadPool.QueueUserWorkItem(_ =>
+                {
+                    var t0 = DateTime.Now;
+                    try
+                    {
+                        var json = getJson.Invoke(null, args) as string;
+                        int at = json?.IndexOf("\"exp_table\"", StringComparison.Ordinal) ?? -1;
+                        if (at < 0) { L.Info("experience table: the server's globals have no exp_table"); _sptHandler = false; return; }
+                        int end = json.IndexOf(']', at);
+                        var steps = Regex.Matches(json.Substring(at, end - at), "\"exp\"\\s*:\\s*(\\d+)").Cast<Match>().Select(m => int.Parse(m.Groups[1].Value)).ToList();
+                        if (steps.Count < 2) { L.Info("experience table: exp_table is empty"); _sptHandler = false; return; }
+                        var totals = new int[steps.Count];
+                        int sum = 0;
+                        for (int i = 0; i < steps.Count; i++) { totals[i] = sum; sum += steps[i]; }
+                        _expTable = totals;
+                        L.Info($"experience table: {totals.Length} levels from the SPT server (level 2 at {totals[1]} xp; {(DateTime.Now - t0).TotalMilliseconds:0} ms)");
+                    }
+                    catch (Exception e) { L.Error("reading exp_table from the SPT server", e.GetBaseException()); _sptHandler = false; }
+                });
+            }
+            catch (Exception e) { L.ErrorOnce("SPT globals", e); }
         }
 
         private static IEnumerable Rows(object cfg) => Refl.Get(Refl.Get(Refl.Get(cfg, "Experience"), "Level"), "ExpTable") as IEnumerable;

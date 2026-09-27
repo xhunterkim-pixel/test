@@ -175,7 +175,74 @@ namespace LevelGate.Progression
 
         // ---------------------------------------------------------------- generated pictures
 
-        private static Sprite _diamond, _white, _vgrad, _hgrad, _radial, _dots, _cut, _lock;
+        private static Sprite _diamond, _white, _vgrad, _hgrad, _radial, _dots, _cut, _lock, _vignette;
+        private static Sprite[] _grime;
+
+        /// <summary>Clear in the middle, darkening toward the edges and corners (tint it black).</summary>
+        public static Sprite Vignette()
+        {
+            if (_vignette != null) return _vignette;
+            const int n = 128;
+            var tex = new Texture2D(n, n, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Clamp };
+            for (int y = 0; y < n; y++)
+                for (int x = 0; x < n; x++)
+                {
+                    float dx = (x + .5f) / n * 2 - 1, dy = (y + .5f) / n * 2 - 1;
+                    float d = Mathf.Sqrt(dx * dx * .8f + dy * dy * 1.1f);
+                    float a = Mathf.SmoothStep(0, 1, Mathf.InverseLerp(.55f, 1.35f, d));
+                    tex.SetPixel(x, y, new Color(1, 1, 1, a));
+                }
+            tex.Apply();
+            return _vignette = Sprite.Create(tex, new Rect(0, 0, n, n), new Vector2(.5f, .5f));
+        }
+
+        /// <summary>Grit, smudges and a few scratches, mostly along the edges (a few variants; tint light grey, low alpha).</summary>
+        public static Sprite Grime(int variant)
+        {
+            if (_grime == null) _grime = new Sprite[4];
+            variant = Mathf.Abs(variant) % _grime.Length;
+            if (_grime[variant] != null) return _grime[variant];
+            const int n = 128;
+            var rnd = new System.Random(1234 + variant * 77);
+            float ox = (float)rnd.NextDouble() * 100, oy = (float)rnd.NextDouble() * 100;
+            var tex = new Texture2D(n, n, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Clamp };
+            var a = new float[n * n];
+            for (int y = 0; y < n; y++)
+                for (int x = 0; x < n; x++)
+                {
+                    float u = x / (float)n, v = y / (float)n;
+                    // how close to an edge (1 at the border, 0 in the middle)
+                    float edge = Mathf.Clamp01(1 - Mathf.Min(Mathf.Min(u, 1 - u), Mathf.Min(v, 1 - v)) / .22f);
+                    float big = Mathf.PerlinNoise(ox + u * 4, oy + v * 4), fine = Mathf.PerlinNoise(ox + u * 22, oy + v * 22);
+                    float smudge = Mathf.Clamp01((big - .5f) * 3.2f) * edge;
+                    float grit = fine > .72f ? (fine - .72f) * 3f * (.35f + edge) : 0;
+                    a[y * n + x] = Mathf.Clamp01(smudge * .8f + grit);
+                }
+            // a few thin scratches
+            for (int k = 0; k < 5; k++)
+            {
+                float x0 = (float)rnd.NextDouble() * n, y0 = (float)rnd.NextDouble() * n, ang = (float)rnd.NextDouble() * Mathf.PI, len = 10 + (float)rnd.NextDouble() * 26;
+                for (float t = 0; t < len; t += .5f)
+                {
+                    int x = (int)(x0 + Mathf.Cos(ang) * t), y = (int)(y0 + Mathf.Sin(ang) * t);
+                    if (x < 0 || y < 0 || x >= n || y >= n) break;
+                    a[y * n + x] = Mathf.Max(a[y * n + x], .55f * (1 - t / len));
+                }
+            }
+            for (int i = 0; i < a.Length; i++) tex.SetPixel(i % n, i / n, new Color(1, 1, 1, a[i]));
+            tex.Apply();
+            return _grime[variant] = Sprite.Create(tex, new Rect(0, 0, n, n), new Vector2(.5f, .5f));
+        }
+
+        /// <summary>Lays grit and smudges over a box (variant picks the pattern; rotated/flipped for variety).</summary>
+        public static void Grit(RectTransform box, int variant, float alpha = .13f)
+        {
+            var rt = Fill(box, "Grit");
+            rt.localEulerAngles = new Vector3(0, 0, 90 * ((variant / 4 + variant) % 4));
+            if ((variant / 2) % 2 == 1) rt.localScale = new Vector3(-1, 1, 1);
+            var img = Img(rt, new Color(.82f, .85f, .86f, alpha), Grime(variant));
+            img.raycastTarget = false;
+        }
 
         /// <summary>A small padlock (white, tint it), drawn with 4x supersampling for smooth edges.</summary>
         public static Sprite Lock()

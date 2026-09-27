@@ -224,15 +224,16 @@ namespace LevelGate.Progression
         public static void RestoreIcons()
         {
             if (_loadIcon == null || _scaled.Count == 0) return;
+            var items = _scaled.ToList();
             int n = 0;
             var t0 = DateTime.Now;
-            foreach (var item in _scaled)
+            foreach (var item in items)
             {
                 L.Step($"icon: back to 1x {Refl.Get(item, "TemplateId") ?? item.GetType().Name}");
                 try { CallIcon(_loadIcon, item, 1, true); n++; }
                 catch (Exception e) { L.ErrorOnce("restoring an icon to stash size", e); }
             }
-            _scaled.Clear();
+            // kept (not cleared): every item ever drawn bigger is put back on each close and on the second pass after it
             L.Info($"items: {n} icon(s) drawn again at stash size ({(DateTime.Now - t0).TotalMilliseconds:0} ms)");
         }
 
