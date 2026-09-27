@@ -1,0 +1,263 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Reflection;
+using System.Text;
+using BepInEx;
+using HarmonyLib;
+using UnityEngine;
+using UnityEngine.UI;
+
+namespace LevelGate.Progression
+{
+    /// <summary>
+    /// Puts a PROGRESSION button into the main menu bar (EFT.UI.MenuTaskBar): one of the
+    /// game's own buttons is copied (so it looks the same), its old behaviour switched
+    /// off, and a click opens the Progression screen. Every step is logged.
+    /// </summary>
+    internal static class MenuHook
+    {
+        private static Type _barType;
+        private static Component _bar;
+        private static GameObject _button;
+        private static float _nextTry;
+        private static int _tries;
+        private static bool _dumped;
+        private static readonly List<Transform> _candidates = new List<Transform>();
+
+        public static bool BarVisible => _bar != null && _bar.gameObject.activeInHierarchy;
+        public static RectTransform BarRect => _bar != null ? _bar.transform as RectTransform : null;
+        public static RectTransform ButtonRect => _button != null ? _button.transform as RectTransform : null;
+
+        public static void Apply(Harmony harmony)
+        {
+            _barType = AccessTools.TypeByName("EFT.UI.MenuTaskBar");
+            if (_barType == null) { L.Warn("EFT.UI.MenuTaskBar not found — no menu button (use the open key instead)."); return; }
+            L.Info("menu bar type: " + _barType.FullName);
+            L.Debug("MenuTaskBar methods: " + string.Join(", ", _barType.GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly).Select(m => m.Name).Distinct().ToArray()));
+            L.Debug("MenuTaskBar fields: " + string.Join(", ", _barType.GetFields(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly).Select(f => f.Name + ":" + f.FieldType.Name).ToArray()));
+            int patched = 0;
+            foreach (var m in _barType.GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly))
+            {
+                if (m.Name != "Awake" && m.Name != "Show" && m.Name != "Init" || m.IsAbstract || m.ContainsGenericParameters) continue;
+                try
+                {
+                    harmony.Patch(m, postfix: new HarmonyMethod(typeof(MenuHook).GetMethod(nameof(AfterShow), BindingFlags.Static | BindingFlags.NonPublic)));
+                    patched++;
+                    L.Debug($"hooked MenuTaskBar.{m.Name}({string.Join(", ", m.GetParameters().Select(p => p.ParameterType.Name).ToArray())})");
+                }
+                catch (Exception e) { L.Warn($"couldn't hook MenuTaskBar.{m.Name}: {e.GetBaseException().Message}"); }
+            }
+            L.Info($"menu bar: {patched} method(s) hooked; the bar is also looked for every 1.5 s until the button is in.");
+        }
+
+        private static void AfterShow(object __instance, MethodBase __originalMethod)
+        {
+            try
+            {
+                L.Debug($"MenuTaskBar.{__originalMethod?.Name} ran");
+                if (__instance is Component c) { _bar = c; TryInject("after MenuTaskBar." + __originalMethod?.Name); }
+            }
+            catch (Exception e) { L.ErrorOnce("MenuTaskBar hook", e); }
+        }
+
+        public static void Tick()
+        {
+            // the screen closes when the menu bar goes away (raid, loading screen…)
+            if (ProgScreen.IsOpen && _bar != null && !_bar.gameObject.activeInHierarchy) ProgScreen.Close("menu bar hidden");
+            if (ProgScreen.IsOpen && _bar != null && UnityInput.Current.GetMouseButtonDown(0)) ClickedElsewhereOnBar();
+
+            if (_barType == null || !ProgressionPlugin.InjectButton.Value) return;
+            if (_button != null) return;
+            if (Time.realtimeSinceStartup < _nextTry) return;
+            _nextTry = Time.realtimeSinceStartup + 1.5f;
+            if (_bar == null)
+            {
+                _bar = UnityEngine.Object.FindObjectOfType(_barType) as Component;
+                if (_bar == null) { if (++_tries % 20 == 1) L.Debug($"menu bar not in the scene yet (try {_tries})"); return; }
+                L.Info($"menu bar found in the scene: '{Path(_bar.transform)}'");
+            }
+            TryInject("timer");
+        }
+
+        /// <summary>A click on another menu bar button (Character, Trading…) closes the screen.</summary>
+        private static void ClickedElsewhereOnBar()
+        {
+            var mouse = (Vector2)UnityInput.Current.mousePosition;
+            var bar = BarRect;
+            if (bar == null || !Contains(bar, mouse)) return;
+            var own = ButtonRect;
+            if (own != null && Contains(own, mouse)) return;
+            ProgScreen.Close("another menu button clicked");
+        }
+
+        /// <summary>Is a screen point inside a rect — with the camera of the rect's canvas (the game's menus are drawn by a camera).</summary>
+        public static bool Contains(RectTransform rt, Vector2 screenPoint)
+        {
+            var canvas = rt.GetComponentInParent<Canvas>();
+            Camera cam = canvas != null && canvas.renderMode != RenderMode.ScreenSpaceOverlay ? canvas.rootCanvas.worldCamera : null;
+            return RectTransformUtility.RectangleContainsScreenPoint(rt, screenPoint, cam);
+        }
+
+        private static void TryInject(string why)
+        {
+            if (_button != null || _bar == null || !ProgressionPlugin.InjectButton.Value) return;
+            if (!_bar.gameObject.activeInHierarchy) { L.Debug($"menu bar not active yet ({why})"); return; }
+            if (!_dumped) { _dumped = true; L.Info("menu bar objects (for troubleshooting):\n" + Hierarchy(_bar.transform, 5)); }
+
+            FindCandidates();
+            if (_candidates.Count == 0) { L.Warn($"no buttons found in the menu bar ({why}) — trying again later. The object list is above."); return; }
+            L.Info($"menu buttons found: {string.Join(" | ", _candidates.Select(t => $"{t.name}{(t.gameObject.activeSelf ? "" : " (hidden)")} [{string.Join(",", t.GetComponents<Component>().Where(x => x != null).Select(x => x.GetType().Name).ToArray())}]").ToArray())}");
+
+            var template = PickTemplate();
+            L.Info($"copying menu button '{Path(template)}' ({why})");
+            try
+            {
+                // copied inside a hidden holder, so the game's button code doesn't start up on the copy before it's switched off
+                var holder = new GameObject("LevelGateProgressionHolder");
+                holder.SetActive(false);
+                holder.transform.SetParent(template.parent, false);
+                var clone = UnityEngine.Object.Instantiate(template.gameObject, holder.transform, false);
+                clone.name = "LevelGateProgressionButton";
+                clone.SetActive(true);
+                Neutralize(clone);
+                SetLabel(clone);
+                SetIcon(clone);
+                MakeClickable(clone);
+                clone.transform.SetParent(template.parent, false);
+                clone.transform.SetSiblingIndex(template.GetSiblingIndex() + 1);
+                UnityEngine.Object.Destroy(holder);
+                var layout = template.parent.GetComponent<LayoutGroup>();
+                if (layout == null && clone.transform is RectTransform crt && template is RectTransform trt)
+                {
+                    crt.anchoredPosition = trt.anchoredPosition + new Vector2(trt.rect.width + 6, 0);
+                    L.Info($"the button row has no layout group — placed the button by hand at {crt.anchoredPosition}");
+                }
+                else L.Debug("button row layout: " + (layout == null ? "none" : layout.GetType().Name));
+                _button = clone;
+                L.Info("PROGRESSION button added to the menu bar.");
+            }
+            catch (Exception e) { L.Error("adding the menu button", e); _button = null; }
+        }
+
+        private static void FindCandidates()
+        {
+            _candidates.Clear();
+            foreach (var t in _bar.GetComponentsInChildren<Transform>(true))
+            {
+                if (t == _bar.transform || t.name == "LevelGateProgressionButton") continue;
+                bool toggleLike = t.GetComponents<Component>().Any(c => c != null && (c is Toggle || c is Button || c.GetType().Name.Contains("Toggle") || c.GetType().Name.Contains("Button")));
+                if (!toggleLike) continue;
+                // only top-level buttons of the bar, not parts inside a button
+                bool insideAnother = _candidates.Any(p => t.IsChildOf(p));
+                if (!insideAnother) _candidates.Add(t);
+            }
+        }
+
+        private static Transform PickTemplate()
+        {
+            string want = ProgressionPlugin.ButtonTemplate.Value?.Trim();
+            if (!string.IsNullOrEmpty(want))
+            {
+                var hit = _candidates.FirstOrDefault(t => t.name.IndexOf(want, StringComparison.OrdinalIgnoreCase) >= 0);
+                if (hit != null) return hit;
+                L.Warn($"Menu Button > CopyButton '{want}' matches no button name — picking one by itself.");
+            }
+            // the row holding the most buttons is the bar; take its last visible button
+            var row = _candidates.GroupBy(t => t.parent).OrderByDescending(g => g.Count()).First();
+            L.Debug($"button row: '{Path(row.Key)}' with {row.Count()} buttons");
+            return row.LastOrDefault(t => t.gameObject.activeSelf) ?? row.Last();
+        }
+
+        /// <summary>Switches off the copied button's own behaviour (toggle group, localisation that would reset the text).</summary>
+        private static void Neutralize(GameObject clone)
+        {
+            foreach (var c in clone.GetComponentsInChildren<Component>(true))
+            {
+                if (c == null) continue;
+                string n = c.GetType().Name;
+                if (c is Toggle tg) { tg.group = null; tg.onValueChanged.RemoveAllListeners(); tg.isOn = false; tg.enabled = false; L.Debug($"  disabled Toggle on '{c.name}'"); continue; }
+                if (c is Button bt) { bt.onClick.RemoveAllListeners(); bt.enabled = false; L.Debug($"  disabled Button on '{c.name}'"); continue; }
+                if (c is Behaviour b && (n.Contains("Toggle") || n.Contains("Localiz") || n.Contains("Button") || n.Contains("Tooltip") || n.Contains("Notifier") || n.Contains("Hover")))
+                {
+                    b.enabled = false;
+                    L.Debug($"  disabled {n} on '{c.name}'");
+                }
+            }
+        }
+
+        private static void SetLabel(GameObject clone)
+        {
+            string label = ProgressionPlugin.ButtonLabel.Value;
+            int set = 0;
+            foreach (var c in clone.GetComponentsInChildren<Component>(true))
+            {
+                if (c == null) continue;
+                if (c is Text t) { L.Debug($"  label (Text) '{t.text}' -> '{label}' on '{c.name}'"); t.text = label; set++; continue; }
+                if (Ui.IsTmp(c))
+                {
+                    L.Debug($"  label (TMP {c.GetType().Name}) '{Refl.Get(c, "text")}' -> '{label}' on '{c.name}'");
+                    Refl.Set(c, "text", label);
+                    if (Ui.GameFont == null) { Ui.GameFont = Refl.Get(c, "font"); L.Info("game font for the screen: " + (Ui.GameFont as UnityEngine.Object)?.name); }
+                    set++;
+                }
+            }
+            if (set == 0) L.Warn("the copied button has no text to change — it keeps its old label.");
+        }
+
+        /// <summary>The copied button's icon becomes a small rank diamond.</summary>
+        private static void SetIcon(GameObject clone)
+        {
+            var icons = clone.GetComponentsInChildren<Image>(true).Where(i => i.name.IndexOf("icon", StringComparison.OrdinalIgnoreCase) >= 0).ToList();
+            L.Debug($"  icon images: {(icons.Count == 0 ? "none named *icon*" : string.Join(", ", icons.Select(i => i.name).ToArray()))}");
+            foreach (var img in icons) { img.sprite = Ui.DiamondSprite(); img.preserveAspect = true; }
+        }
+
+        private static void MakeClickable(GameObject clone)
+        {
+            var graphic = clone.GetComponent<Graphic>();
+            if (graphic == null)
+            {
+                var img = clone.AddComponent<Image>();
+                img.color = new Color(0, 0, 0, 0);
+                graphic = img;
+                L.Debug("  added a see-through Image so the button can be clicked");
+            }
+            graphic.raycastTarget = true;
+            var button = clone.AddComponent<Button>();
+            button.targetGraphic = graphic;
+            button.transition = Selectable.Transition.None;
+            button.onClick.AddListener(() => { L.Info("PROGRESSION button clicked"); ProgScreen.Toggle("menu button"); });
+        }
+
+        public static void Dump()
+        {
+            L.Info($"menu: bar type {(_barType == null ? "missing" : _barType.FullName)}, bar {(_bar == null ? "not found" : Path(_bar.transform) + (_bar.gameObject.activeInHierarchy ? " (visible)" : " (hidden)"))}, button {(_button == null ? "not added" : Path(_button.transform))}");
+            if (_bar != null) L.Info("menu bar objects:\n" + Hierarchy(_bar.transform, 6));
+        }
+
+        public static string Path(Transform t)
+        {
+            var parts = new List<string>();
+            for (; t != null; t = t.parent) parts.Insert(0, t.name);
+            return string.Join("/", parts.ToArray());
+        }
+
+        private static string Hierarchy(Transform root, int depth)
+        {
+            var sb = new StringBuilder();
+            void Walk(Transform t, int d)
+            {
+                var comps = t.GetComponents<Component>().Where(c => c != null && !(c is Transform)).Select(c => c.GetType().Name).ToArray();
+                string text = "";
+                foreach (var c in t.GetComponents<Component>())
+                    if (c != null && (c is Text || Ui.IsTmp(c))) text = $" text='{(c is Text tx ? tx.text : Refl.Get(c, "text"))}'";
+                sb.Append(new string(' ', d * 2)).Append(t.name).Append(t.gameObject.activeSelf ? "" : " (hidden)")
+                  .Append(" [").Append(string.Join(",", comps)).Append("]").Append(text).Append('\n');
+                if (d < depth) foreach (Transform ch in t) Walk(ch, d + 1);
+            }
+            Walk(root, 0);
+            return sb.ToString();
+        }
+    }
+}

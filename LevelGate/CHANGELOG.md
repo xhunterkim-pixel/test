@@ -20,6 +20,10 @@ Versions are **MAJOR.MINOR.PATCH**:
 
 ## Level Gate (BepInEx plugin)
 
+### 1.6.3
+- Tooltip: any `[LOCKED - Lvl N]` / `[LOCKED]` left in a rewritten tooltip is removed (also when Show Me The Money wraps the name in color tags).
+- Debug > TooltipLog (on for now): the first 80 tooltips of each game start are written to the log, before and after the rewrite.
+
 ### 1.6.2
 - Tooltip: the `[LOCKED - Lvl 40]` name prefix no longer stays in front of the "LOCKED - Name" header (it happened on guns, ammo, face gear… whenever only the plain name was matched).
 
@@ -33,3 +37,8 @@ Versions are **MAJOR.MINOR.PATCH**:
 
 ### 1.0.0
 - Applies the Item Stats edits (meds, stims, food) at server start.
+
+## LevelGate Progression (BepInEx plugin, separate DLL)
+
+### 0.1.0
+- First test build: a PROGRESSION button in the main menu bar and a Call of Duty style progression screen. It reads LevelGate's level list and logs a lot for troubleshooting.

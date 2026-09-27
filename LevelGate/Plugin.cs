@@ -27,7 +27,7 @@ namespace LevelGate
     {
         public const string PluginGuid = "com.yourname.levelgate";
         public const string PluginName = "LevelGate";
-        public const string PluginVersion = "1.6.2";
+        public const string PluginVersion = "1.6.3";
 
         internal static ManualLogSource Log;
         internal static ConfigEntry<KeyboardShortcut> ToggleMenuKey;
@@ -36,6 +36,7 @@ namespace LevelGate
         internal static ConfigEntry<bool> LabelBrackets;
         internal static ConfigEntry<bool> LabelShowLevel;
         internal static ConfigEntry<bool> TooltipLayout;
+        internal static ConfigEntry<bool> TooltipDebug;
         internal static ConfigEntry<string> LockedColor;
         internal static ConfigEntry<string> UnlockedColor;
         internal static ConfigEntry<string> SemiLockedColor;
@@ -91,6 +92,8 @@ namespace LevelGate
                 "Wrap the label in [ ] (e.g. turn off for just  X  or  ✓).");
             LabelShowLevel = Config.Bind("Labels", "ShowLevelInFullName", true,
                 "Add ' - Lvl X' to the label in the full item name.");
+            TooltipDebug = Config.Bind("Debug", "TooltipLog", true,
+                "Write the first 80 item tooltips of each game start to the BepInEx log (text before / after LevelGate's rewrite) — for tracking down tooltip problems. Switch off once it's sorted.");
             TooltipLayout = Config.Bind("Labels", "TooltipTwoLines", true,
                 "Hover tooltip: 'LOCKED - Bandages' / 'Unlocks At Level X' (unlocked items: just the name / 'Unlocked At Level X'; level in yellow), above other mods' lines (e.g. Show Me The Money prices).");
 
@@ -2824,11 +2827,49 @@ namespace LevelGate
             }
         }
 
+        private static int _logged;
+        private static string _path;
+
         private static void BeforeShow(ref string text)
+        {
+            if (!(LevelGatePlugin.TooltipLayout?.Value ?? true) || string.IsNullOrEmpty(text)) return;
+            string original = text;
+            _path = "no match";
+            Rewrite(ref text);
+            try
+            {
+                // whatever path matched: LevelGate's own "[LOCKED - Lvl 40] " must not stay in a rewritten tooltip
+                if (text.Contains(" At <color=" + Yellow + ">Level ")) text = StripLabels(text);
+            }
+            catch (Exception e) { LevelGatePlugin.Log.LogError("LevelGate tooltip cleanup error: " + e); }
+            if ((LevelGatePlugin.TooltipDebug?.Value ?? false) && _logged < 80)
+            {
+                _logged++;
+                LevelGatePlugin.Log.LogInfo($"LevelGate tooltip #{_logged} [{_path}] hovered={_hoveredTpl ?? "none"}\n  IN : {Show(original)}\n  OUT: {Show(text)}");
+                if (_logged == 80) LevelGatePlugin.Log.LogInfo("LevelGate tooltip log: 80 written, stopping (Debug > TooltipLog).");
+            }
+        }
+
+        private static string Show(string s) => s.Replace("\r", "\\r").Replace("\n", "\\n");
+
+        /// <summary>Takes out every "[LOCKED - Lvl 40] " / "[LOCKED] " (and the semi-locked ones) — the header already says it.</summary>
+        private static string StripLabels(string text)
+        {
+            bool brackets = LevelGatePlugin.LabelBrackets?.Value ?? true;
+            foreach (var label in new[] { LevelGatePlugin.LockedLabel?.Value, LevelGatePlugin.SemiLockedLabel?.Value })
+            {
+                if (string.IsNullOrEmpty(label)) continue;
+                string l = System.Text.RegularExpressions.Regex.Escape(label);
+                string pattern = brackets ? @"\[" + l + @"(?: - Lvl \d+)?\] ?" : l + @" - Lvl \d+ ";
+                text = System.Text.RegularExpressions.Regex.Replace(text, pattern, "");
+            }
+            return text;
+        }
+
+        private static void Rewrite(ref string text)
         {
             try
             {
-                if (!(LevelGatePlugin.TooltipLayout?.Value ?? true) || string.IsNullOrEmpty(text)) return;
 
                 // the name is the tooltip's first line (sometimes wrapped in <b>/<color> tags by the game or other mods)
                 int lineEnd = text.IndexOf('\n');
@@ -2841,6 +2882,7 @@ namespace LevelGate
                     if (!ItemRenameShared.ShownNames.TryGetValue(key, out info)) key = null;
                 }
                 if (key != null) at = text.IndexOf(key, StringComparison.Ordinal);
+                if (at >= 0) _path = "first line";
                 if (at < 0 && _hoveredTpl != null)
                 {
                     // name not on the first line as-is: look for any name of the hovered item in the text
@@ -2858,7 +2900,8 @@ namespace LevelGate
                     }
                     if (key == null && ItemRenameShared.PlainNames.TryGetValue(_hoveredTpl, out var plainName) && !string.IsNullOrEmpty(plainName)
                         && text.IndexOf(plainName, StringComparison.Ordinal) >= 0)
-                    { key = plainName; info = (_hoveredTpl, 0); }
+                    { key = plainName; info = (_hoveredTpl, 0); _path = "plain name"; }
+                    else if (key != null) _path = "hovered item";
                     if (key != null) at = text.IndexOf(key, StringComparison.Ordinal);
                 }
                 if (at < 0) return;
@@ -2887,7 +2930,7 @@ namespace LevelGate
                 }
                 else return;
 
-                if (text.Contains(levelLine)) return; // already rewritten
+                if (text.Contains(levelLine)) { _path += ", already rewritten"; return; }
                 int start = LabelBefore(text, at);
                 text = text.Substring(0, start) + header + "\n" + levelLine + text.Substring(at + key.Length);
             }
