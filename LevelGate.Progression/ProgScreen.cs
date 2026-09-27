@@ -22,15 +22,28 @@ namespace LevelGate.Progression
         private const int PerPage = 5;
         private static int Pages => Mathf.CeilToInt(ProgData.MaxLevel / (float)PerPage);
 
+        // ---- design tokens (use these, not one-off numbers) ----
+        // spacing scale
+        private const float S1 = 4, S2 = 8, S3 = 12, S4 = 16, S5 = 24;
+        private const float Margin = 48;      // screen edge → panels / cards (left and right)
+        private const float Gutter = 16;      // between panels
+        private const float PanelPad = 16;    // inside a panel
+        private const float PanelTop = 108;   // header height: panels start below it
+        // type scale: caps label, body, strong body, heading, hero (item name / stats / XP), level number
+        private const float TCaps = 12, TBody = 13, TStrong = 15, TTitle = 22, THero = 24, TLevel = 34;
+        private const float Caps = 2;         // letter spacing for small caps labels (everything else: 0)
+        // colour roles: orange = "you" (your level, XP, current level); light neutral = selection; red = only an unmet requirement
+        private static readonly Color Select = Ui.Hex("#d9dfdc");
+        private static readonly Color HoverEdge = Ui.Hex("#56636a");
+        private static readonly Color Face = Ui.Hex("#0f1315"), FaceHover = Ui.Hex("#151b1e"), FaceSelect = Ui.Hex("#182023");
+
         // colors: muted, like the Tarkov battle pass
         private static readonly Color Text = Ui.Hex("#d5d9d6");
         private static readonly Color Grey = Ui.Hex("#7d8588");
         private static readonly Color Dim = Ui.Hex("#4f575a");
-        private static readonly Color Accent = Ui.Hex("#c9d8d2");
-        private static readonly Color Teal = Ui.Hex("#7fb3a8");
         private static readonly Color PanelBg = Ui.Hex("#10161a", .80f);
         private static readonly Color Border = Ui.Hex("#2b3438", .9f);
-        private const string Green = "#8fb35a", Red = "#d0453a", Yellow = "#e3c26a";
+        private const string Green = "#8fae6a", Red = "#d0453a";
 
         /// <summary>Rank look per level band: name, rim color, light color.</summary>
         private static readonly (int From, string Name, string Rim, string Light)[] Tiers =
@@ -51,15 +64,14 @@ namespace LevelGate.Progression
 
         // header
         private static Badge _headBadge;
-        private static Component _headSub;
         // left: unlocks
-        private static Component _listTitle, _listCount;
+        private static Component _listTitle;
         private static RectTransform _content;
         // centre + right: the featured item
         private static Image _featPic, _featLock;
-        private static Component _featShort, _featMeta, _featType, _featName, _featReq, _featReqValue, _featStatus;
+        private static Component _featShort, _featType, _featName, _featReq, _featReqValue, _featStatus;
         private static Image _featCheck;
-        private static Component _featFacts, _featFactValues, _featDesc;
+        private static Component _featDesc;
         private static string _featTpl;
         private static object _featIcon;
         private static bool _featIconLogged;
@@ -91,6 +103,8 @@ namespace LevelGate.Progression
                 if (!_built || _canvas == null) { _built = false; Build(); }
                 ProgData.Invalidate(); // names / categories again (the game may have finished loading them since)
                 int player = ProgData.PlayerLevel();
+                int seen = ProgressionPlugin.LastSeenLevel.Value;
+                _newFrom = seen > 0 && seen < player ? seen : 0;
                 MenuWidget.Seen(player); // the NEW tag on the main-menu shortcut goes away
                 L.Info($"screen open ({why}); player level {player}, {ProgData.Levels.Count} limited items");
                 if (player > 0 && _level == 1) { _level = Mathf.Clamp(player, 1, ProgData.MaxLevel); _page = (_level - 1) / PerPage; }
@@ -106,6 +120,14 @@ namespace LevelGate.Progression
                 ShowLevel(_level);
             }
             catch (Exception e) { L.Error("opening the screen", e); }
+        }
+
+        /// <summary>Redraws the open screen (a setting changed).</summary>
+        public static void Refresh()
+        {
+            if (!IsOpen) return;
+            ShowPage(_page, 0);
+            ShowLevel(_level);
         }
 
         public static void Close(string why)
@@ -234,16 +256,35 @@ namespace LevelGate.Progression
 
         private static void BuildHeader(RectTransform top)
         {
-            _headBadge = new Badge(top, new Vector2(0, 1), new Vector2(78, -58), 76);
-            Ui.Label(Ui.Rect(top, "Title", new Vector2(0, 1), new Vector2(.5f, 1), new Vector2(128, -58), new Vector2(0, -18)), "Text", "PROGRESSION", 34, Text, TextAnchor.MiddleLeft, false, 1);
-            _headSub = Ui.Label(Ui.Rect(top, "Sub", new Vector2(0, 1), new Vector2(.5f, 1), new Vector2(130, -86), new Vector2(0, -60)), "Text", "", 16, Grey, TextAnchor.MiddleLeft, false, 1);
+            // left: who you are — your rank emblem, "PROGRESSION" as a quiet page label, your rank name, how far to the next rank
+            const float badge = 72;
+            _headBadge = new Badge(top, new Vector2(0, 1), new Vector2(Margin + badge / 2, -(S3 + badge / 2)), badge);
+            float x = Margin + badge + S3;
+            Ui.Label(Ui.Rect(top, "Page", new Vector2(0, 1), new Vector2(.34f, 1), new Vector2(x, -44), new Vector2(-Gutter, -S3)), "Text", "PROGRESSION", TTitle, Grey, TextAnchor.MiddleLeft, false, 1);
+            _headRank = Ui.Label(Ui.Rect(top, "Rank", new Vector2(0, 1), new Vector2(.34f, 1), new Vector2(x, -66), new Vector2(-Gutter, -46)), "Text", "", TStrong, Text, TextAnchor.MiddleLeft, false);
+            _headNext = Ui.Label(Ui.Rect(top, "NextRank", new Vector2(0, 1), new Vector2(.34f, 1), new Vector2(x, -86), new Vector2(-Gutter, -66)), "Text", "", TBody, Grey, TextAnchor.MiddleLeft, false);
 
             BuildXp(top);
 
-            // the Tarkov logo (eft-logo.png next to the plugin)
+            // the Tarkov logo (eft-logo.png next to the plugin), dimmed: it's branding, not information
             var logo = Ui.LoadPng(Path.Combine(Path.GetDirectoryName(typeof(ProgScreen).Assembly.Location) ?? Paths.PluginPath, "eft-logo.png"));
-            if (logo != null) Ui.Img(Ui.Box(top, "Logo", new Vector2(1, 1), new Vector2(-150, -54), new Vector2(230, 80)), Color.white, logo).preserveAspect = true;
+            if (logo != null) Ui.Img(Ui.Box(top, "Logo", new Vector2(1, 1), new Vector2(-(Margin + 90), -(S3 + 32)), new Vector2(180, 64)), new Color(1, 1, 1, .4f), logo).preserveAspect = true;
+        }
 
+        private static Component _headRank, _headNext;
+
+        /// <summary>The header shows the player: rank emblem, rank name, levels to the next rank.</summary>
+        private static void UpdateHeader(int player)
+        {
+            if (_headRank == null) return;
+            int lv = Mathf.Max(1, player);
+            _headBadge.Set(lv);
+            var tier = TierOf(lv);
+            int index = Array.IndexOf(Tiers, tier) + 1;
+            Ui.SetText(_headRank, player > 0 ? tier.Name : "Progression");
+            var next = Tiers.FirstOrDefault(t => t.From > lv);
+            Ui.SetText(_headNext, player <= 0 ? "" : next.Name == null ? $"Rank {index} of {Tiers.Length}  ·  top rank"
+                : $"Rank {index} of {Tiers.Length}  ·  {next.Name} at level {next.From}");
         }
 
         private static Component _xpLevel, _xpText, _xpNext;
@@ -255,30 +296,42 @@ namespace LevelGate.Progression
         private static void BuildXp(RectTransform top)
         {
             L.Step("BuildXp");
-            var xp = Ui.Rect(top, "Xp", new Vector2(.34f, 1), new Vector2(.74f, 1), new Vector2(16, -106), new Vector2(-8, -12));
+            var xp = Ui.Rect(top, "Xp", new Vector2(.34f, 1), new Vector2(.74f, 1), new Vector2(Gutter / 2, -(S3 + 80)), new Vector2(-Gutter / 2, -S3));
             var sq = Ui.Rect(xp, "Level", new Vector2(0, .5f), new Vector2(0, .5f), new Vector2(0, -40), new Vector2(80, 40));
             _xpSquare = Ui.Img(sq, Ui.Hex("#e0562f"), Ui.CutCorner());
-            _xpLevel = Ui.Label(sq, "Text", "", 32, Color.white, TextAnchor.MiddleCenter, true);
-            var right = Ui.Rect(xp, "Right", Vector2.zero, Vector2.one, new Vector2(96, 0), Vector2.zero);
+            _xpLevel = Ui.Label(sq, "Text", "", TLevel, Color.white, TextAnchor.MiddleCenter, true);
+            var right = Ui.Rect(xp, "Right", Vector2.zero, Vector2.one, new Vector2(80 + S4, 0), Vector2.zero);
             // the bar: dark frame, thin grey edge, orange fill
-            var bar = Ui.Rect(right, "Bar", new Vector2(0, 1), new Vector2(1, 1), new Vector2(0, -26), new Vector2(0, -6));
+            var bar = Ui.Rect(right, "Bar", new Vector2(0, 1), new Vector2(1, 1), new Vector2(0, -20), new Vector2(0, -2));
             Ui.Img(bar, Ui.Hex("#4a5155"));
             var barIn = Ui.Fill(bar, "In", 2);
             Ui.Img(barIn, Ui.Hex("#15191b"));
             _xpFill = Ui.Rect(barIn, "Fill", Vector2.zero, new Vector2(0, 1), new Vector2(2, 2), new Vector2(0, -2));
             Ui.Img(_xpFill, Ui.Hex("#e0562f"));
-            _xpText = Ui.Label(Ui.Rect(right, "Exp", new Vector2(0, 1), new Vector2(1, 1), new Vector2(0, -62), new Vector2(0, -30)), "Text", "", 26, Ui.Hex("#b9c0c3"), TextAnchor.MiddleLeft, true, 1);
+            _xpText = Ui.Label(Ui.Rect(right, "Exp", new Vector2(0, 1), new Vector2(1, 1), new Vector2(0, -56), new Vector2(0, -26)), "Text", "", THero, Ui.Hex("#b9c0c3"), TextAnchor.MiddleLeft, true);
             // the orange EXP tag right after the numbers (moved to the text's end whenever it changes)
-            _xpTag = Ui.Rect(right, "ExpTag", new Vector2(0, 1), new Vector2(0, 1), new Vector2(0, -55), new Vector2(40, -37));
+            _xpTag = Ui.Rect(right, "ExpTag", new Vector2(0, 1), new Vector2(0, 1), new Vector2(0, -50), new Vector2(40, -32));
             Ui.Img(_xpTag, Ui.Hex("#e0562f"));
-            Ui.Label(_xpTag, "Text", "EXP", 12, Ui.Hex("#1a1210"), TextAnchor.MiddleCenter, true, 1);
-            var next = Ui.Rect(right, "Next", new Vector2(0, 1), new Vector2(1, 1), new Vector2(0, -88), new Vector2(0, -62));
-            _xpNext = Ui.Label(next, "Text", "", 15, Grey, TextAnchor.MiddleLeft, false, 1);
+            Ui.Label(_xpTag, "Text", "EXP", TCaps, Ui.Hex("#1a1210"), TextAnchor.MiddleCenter, true, 1);
+            var next = Ui.Rect(right, "Next", new Vector2(0, 1), new Vector2(0, 1), new Vector2(0, -80), new Vector2(420, -58));
+            _xpNext = Ui.Label(next, "Text", "", TBody, Grey, TextAnchor.MiddleLeft, false);
             var hit = Ui.Img(next, new Color(0, 0, 0, 0), null, true);
             var b = next.gameObject.AddComponent<Button>();
             b.targetGraphic = hit;
             b.transition = Selectable.Transition.None;
             b.onClick.AddListener(() => { int p = ProgData.PlayerLevel(); if (p > 0 && p < ProgData.MaxLevel) { Sounds.Click(); ShowLevel(p + 1); } });
+            // it's a link: brightens and underlines on hover
+            HoverHook.Add(next, on => { _xpNextHover = on; UpdateXpNext(); if (on) Sounds.Play("ButtonOver"); });
+        }
+
+        private static bool _xpNextHover;
+
+        private static void UpdateXpNext()
+        {
+            int player = ProgData.PlayerLevel();
+            int nextCount = player > 0 && player < ProgData.MaxLevel ? ProgData.CountAt(player + 1) : -1;
+            string body = $"Next level reward: <color=#e0562f>{nextCount}</color> unlock{(nextCount == 1 ? "" : "s")}  ·  level {player + 1}  ›";
+            Ui.SetText(_xpNext, nextCount < 0 ? "" : _xpNextHover ? $"<color=#d5d9d6><u>{body}</u></color>" : body);
         }
 
         private static string Thousands(int n) => n.ToString("#,0", System.Globalization.CultureInfo.InvariantCulture).Replace(",", " ");
@@ -314,19 +367,25 @@ namespace LevelGate.Progression
                 _xpTag.offsetMax = new Vector2(w + 12 + 40, _xpTag.offsetMax.y);
             }
             _xpFill.anchorMax = new Vector2(frac, 1);
-            int nextCount = player > 0 && player < ProgData.MaxLevel ? ProgData.CountAt(player + 1) : -1;
-            Ui.SetText(_xpNext, nextCount < 0 ? "" : $"Next level reward:  <b><color=#e0562f>{nextCount}</color></b> unlock{(nextCount == 1 ? "" : "s")}  <color=#4f575a>·  level {player + 1}</color>");
+            UpdateXpNext();
+            UpdateHeader(player);
         }
+
+        private static Image _listLock;
+        private static Component _listState;
 
         private static void BuildUnlocks(RectTransform top)
         {
-            // left third: the reward list
-            var panel = Panel(top, "Unlocks", new Vector2(0, 0), new Vector2(.34f, 1), new Vector2(40, 18), new Vector2(0, -116));
-            _listTitle = Ui.Label(Ui.Rect(panel, "Title", new Vector2(0, 1), Vector2.one, new Vector2(18, -46), new Vector2(-18, -8)), "Text", "UNLOCKS", 26, Text, TextAnchor.MiddleLeft, false, .5f);
-            _listCount = Ui.Label(Ui.Rect(panel, "Count", new Vector2(0, 1), Vector2.one, new Vector2(18, -46), new Vector2(-18, -8)), "Text", "", 15, Grey, TextAnchor.MiddleRight, false, 1);
-            Ui.Img(Ui.Rect(panel, "Rule", new Vector2(0, 1), Vector2.one, new Vector2(0, -52), new Vector2(0, -51)), Border);
+            // left third: the selected level's rewards
+            var panel = Panel(top, "Unlocks", new Vector2(0, 0), new Vector2(.34f, 1), new Vector2(Margin, S4), new Vector2(-Gutter / 2, -PanelTop));
+            _listTitle = Ui.Label(Ui.Rect(panel, "Title", new Vector2(0, 1), Vector2.one, new Vector2(PanelPad, -48), new Vector2(-PanelPad, -S2)), "Text", "", TTitle, Text, TextAnchor.MiddleLeft, false);
+            // state on the right in small caps: "20 ITEMS · CURRENT LEVEL" / "8 ITEMS · 29 LEVELS AWAY" (with a small lock)
+            _listState = Ui.Label(Ui.Rect(panel, "State", new Vector2(0, 1), Vector2.one, new Vector2(PanelPad, -48), new Vector2(-PanelPad, -S2)), "Text", "", TCaps, Grey, TextAnchor.MiddleRight, false, Caps);
+            _listLock = Ui.Img(Ui.Rect(panel, "Lock", new Vector2(1, 1), new Vector2(1, 1), new Vector2(-PanelPad - 14, -35), new Vector2(-PanelPad, -21)), Grey, Ui.Lock());
+            _listLock.enabled = false;
+            Ui.Img(Ui.Rect(panel, "Rule", new Vector2(0, 1), Vector2.one, new Vector2(0, -56), new Vector2(0, -55)), Border);
 
-            var view = Ui.Rect(panel, "Scroll", Vector2.zero, Vector2.one, new Vector2(12, 8), new Vector2(-6, -58));
+            var view = Ui.Rect(panel, "Scroll", Vector2.zero, Vector2.one, new Vector2(PanelPad, S2), new Vector2(-S2, -56 - S2));
             var scroll = view.gameObject.AddComponent<ScrollRect>();
             scroll.horizontal = false;
             scroll.scrollSensitivity = 40;
@@ -337,71 +396,150 @@ namespace LevelGate.Progression
             _content = Ui.Rect(viewport, "Content", new Vector2(0, 1), new Vector2(1, 1), Vector2.zero, Vector2.zero);
             _content.pivot = new Vector2(.5f, 1);
             var vl = _content.gameObject.AddComponent<VerticalLayoutGroup>();
-            vl.spacing = 10; vl.childControlHeight = true; vl.childControlWidth = true; vl.childForceExpandHeight = false; vl.childForceExpandWidth = true;
-            vl.padding = new RectOffset(0, 8, 4, 10);
+            vl.spacing = S4; // between sections
+            vl.childControlHeight = true; vl.childControlWidth = true; vl.childForceExpandHeight = false; vl.childForceExpandWidth = true;
+            vl.padding = new RectOffset(0, (int)S2, (int)S2, (int)S4);
             _content.gameObject.AddComponent<ContentSizeFitter>().verticalFit = ContentSizeFitter.FitMode.PreferredSize;
             scroll.viewport = viewport;
             scroll.content = _content;
+
+            // hover tooltip with the full item name (drawn over everything in the top half)
+            _tip = Ui.Rect(top, "Tooltip", new Vector2(.5f, .5f), new Vector2(.5f, .5f), Vector2.zero, Vector2.zero);
+            _tip.pivot = new Vector2(.5f, 0);
+            Ui.Img(_tip, Ui.Hex("#56636a"));
+            Ui.Img(Ui.Fill(_tip, "In", 1), Ui.Hex("#0b0f11", .97f));
+            _tipText = Ui.Label(Ui.Fill(_tip, "Text", 0), "Text", "", TBody, Text, TextAnchor.MiddleCenter, false);
+            _tip.gameObject.SetActive(false);
         }
 
         private static void BuildFeatured(RectTransform top)
         {
-            // centre: the item, big, on a soft floor light; ITEM / CATEGORY / UNLOCKS AT in small grey at the bottom-left
-            var stage = Panel(top, "Stage", new Vector2(.34f, 0), new Vector2(.74f, 1), new Vector2(16, 18), new Vector2(-8, -116));
-            // the same preview box as the cards' pictures, big and square: thin frame, dark face, soft light, faded edges, lock
-            var area = Ui.Rect(stage, "PicArea", Vector2.zero, Vector2.one, new Vector2(24, 100), new Vector2(-24, -24));
+            // centre: the selected reward, the hero of the screen — one big square preview filling the stage
+            var stage = Panel(top, "Stage", new Vector2(.34f, 0), new Vector2(.74f, 1), new Vector2(Gutter / 2, S4), new Vector2(-Gutter / 2, -PanelTop));
+            var area = Ui.Rect(stage, "PicArea", Vector2.zero, Vector2.one, new Vector2(PanelPad, PanelPad), new Vector2(-PanelPad, -PanelPad));
             var picBox = Ui.Fill(area, "Box");
             var fit = picBox.gameObject.AddComponent<AspectRatioFitter>();
             fit.aspectMode = AspectRatioFitter.AspectMode.FitInParent;
             fit.aspectRatio = 1;
             Ui.Img(picBox, Ui.Hex("#2a3134"));
-            var picFace = Ui.Fill(picBox, "Face", 2);
-            Ui.Img(picFace, Ui.Hex("#0f1315"));
-            Ui.Img(Ui.Fill(picFace, "Light"), new Color(1, 1, 1, .06f), Ui.Radial());
-            _featPic = Ui.Img(Ui.Fill(picFace, "Pic", 36), Color.white);
+            var picFace = Ui.Fill(picBox, "Face", 1);
+            Ui.Img(picFace, Face);
+            // lighting only: a soft key light from above and a centre glow, so the item sits on a lit surface
+            Ui.Img(Ui.Rect(picFace, "KeyLight", new Vector2(0, .45f), Vector2.one, Vector2.zero, Vector2.zero), new Color(1, 1, 1, .03f), Ui.VerticalFade());
+            Ui.Img(Ui.Fill(picFace, "Light"), new Color(1, 1, 1, .07f), Ui.Radial());
+            _featPic = Ui.Img(Ui.Fill(picFace, "Pic", 40), Color.white);
             _featPic.preserveAspect = true;
             _featPic.enabled = false;
-            _featShort = Ui.Label(Ui.Fill(picFace, "Short", 36), "Text", "", 34, Dim, TextAnchor.MiddleCenter, false, 1, true);
+            _featShort = Ui.Label(Ui.Fill(picFace, "Short", 40), "Text", "", THero, Dim, TextAnchor.MiddleCenter, false, 0, true);
             Ui.EdgeFade(picFace, .14f, .55f);
-            Ui.Grit(picFace, 2, .017f); // worn edges, like the battle pass frames
-            _featLock = Ui.Img(Ui.Rect(picFace, "Lock", new Vector2(1, 0), new Vector2(1, 0), new Vector2(-46, 12), new Vector2(-12, 46)), Ui.Hex("#aeb6b9", .85f), Ui.Lock());
+            Ui.Grit(picFace, 2, .017f);
+            // secondary locked signal only (the requirement on the right is the primary one)
+            _featLock = Ui.Img(Ui.Rect(picFace, "Lock", new Vector2(1, 0), new Vector2(1, 0), new Vector2(-S4 - 28, S4), new Vector2(-S4, S4 + 28)), Ui.Hex("#aeb6b9", .7f), Ui.Lock());
             _featLock.enabled = false;
-            // ITEM / CATEGORY / UNLOCKS AT: a label column and a value column, so the values line up
-            Ui.Label(Ui.Rect(stage, "MetaKeys", new Vector2(0, 0), new Vector2(0, 0), new Vector2(18, 14), new Vector2(128, 90)), "Text", "ITEM\nCATEGORY\nUNLOCKS AT", 15, Dim, TextAnchor.LowerLeft, false, 1);
-            _featMeta = Ui.Label(Ui.Rect(stage, "Meta", new Vector2(0, 0), new Vector2(1, 0), new Vector2(132, 14), new Vector2(-18, 90)), "Text", "", 15, Ui.Hex("#9aa2a5"), TextAnchor.LowerLeft, false, 1);
 
-            // right: the item's details, like the battle pass reward panel
-            var side = Panel(top, "Details", new Vector2(.74f, 0), new Vector2(1, 1), new Vector2(8, 18), new Vector2(-40, -116));
-            _featType = Ui.Label(Ui.Rect(side, "Type", new Vector2(0, 1), Vector2.one, new Vector2(18, -46), new Vector2(-18, -8)), "Text", "", 26, Text, TextAnchor.MiddleLeft, false, .5f);
-            Ui.Img(Ui.Rect(side, "Rule", new Vector2(0, 1), Vector2.one, new Vector2(0, -52), new Vector2(0, -51)), Border);
-            _featName = Ui.Label(Ui.Rect(side, "Name", new Vector2(0, 1), Vector2.one, new Vector2(18, -120), new Vector2(-18, -64)), "Text", "", 20, Text, TextAnchor.UpperLeft, false, 0, true);
-            Ui.SetWrap(_featName, true);
-            // requirement row: [ ] Reach level 6        2 / 6   (red while not met, like the Arena battle pass)
-            var req = Ui.Rect(side, "Req", new Vector2(0, 1), Vector2.one, new Vector2(18, -160), new Vector2(-18, -130));
-            var box = Ui.Rect(req, "Box", new Vector2(0, .5f), new Vector2(0, .5f), new Vector2(0, -8), new Vector2(16, 8));
+            // right: the selected reward's details, laid out in content order (nothing at fixed heights, so long names
+            // and descriptions push the rest down instead of overlapping)
+            var side = Panel(top, "Details", new Vector2(.74f, 0), new Vector2(1, 1), new Vector2(Gutter / 2, S4), new Vector2(-Margin, -PanelTop));
+            const float bottomStack = S4 + 40 + S3 + 72 + S4; // inspect row + requirement box + gaps
+            var info = Ui.Rect(side, "Info", Vector2.zero, Vector2.one, new Vector2(PanelPad, bottomStack), new Vector2(-PanelPad, -PanelPad));
+            var vl = info.gameObject.AddComponent<VerticalLayoutGroup>();
+            vl.spacing = S2; vl.childControlHeight = true; vl.childControlWidth = true; vl.childForceExpandHeight = false; vl.childForceExpandWidth = true;
+
+            _featType = FlowText(info, "Category", TCaps, Grey, false, Caps);                  // CATEGORY
+            _featName = FlowText(info, "Name", THero, Text, false, 0, wrap: true);             // Item name
+            Rule(info, S1);
+            _majorRow = Row(info, "Major", S4);                                                 // DAMAGE  PENETRATION …
+            _minorRow = Row(info, "Minor", S4);                                                 // WEIGHT  SIZE  CALIBER
+            Rule(info, S1);
+            // the game's description: scrolls when it's longer than the space left
+            var descView = Ui.Rect(info, "Description", Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
+            var dle = descView.gameObject.AddComponent<LayoutElement>();
+            dle.flexibleHeight = 1; dle.minHeight = 48;
+            _descScroll = descView.gameObject.AddComponent<ScrollRect>();
+            _descScroll.horizontal = false; _descScroll.scrollSensitivity = 30; _descScroll.movementType = ScrollRect.MovementType.Clamped;
+            var dvp = Ui.Fill(descView, "Viewport");
+            dvp.gameObject.AddComponent<RectMask2D>();
+            Ui.Img(dvp, new Color(0, 0, 0, 0), null, true);
+            var dContent = Ui.Rect(dvp, "Content", new Vector2(0, 1), new Vector2(1, 1), Vector2.zero, Vector2.zero);
+            dContent.pivot = new Vector2(.5f, 1);
+            var dcl = dContent.gameObject.AddComponent<VerticalLayoutGroup>();
+            dcl.childControlHeight = true; dcl.childControlWidth = true; dcl.childForceExpandHeight = false; dcl.padding = new RectOffset(0, (int)S2, 0, 0);
+            dContent.gameObject.AddComponent<ContentSizeFitter>().verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+            _featDesc = FlowText(dContent, "Text", TBody, Grey, false, 0, wrap: true);
+            Refl.Set(_featDesc, "lineSpacing", 6f);
+            _descScroll.viewport = dvp; _descScroll.content = dContent;
+
+            // requirement box, just above INSPECT: the one place that explains a locked reward
+            var req = Ui.Rect(side, "Requirement", new Vector2(0, 0), new Vector2(1, 0), new Vector2(PanelPad, S4 + 40 + S3), new Vector2(-PanelPad, S4 + 40 + S3 + 72));
+            _reqEdge = Ui.Img(req, Border);
+            var reqIn = Ui.Fill(req, "In", 1);
+            Ui.Img(reqIn, Ui.Hex("#0b0f11", .9f));
+            Ui.Label(Ui.Rect(reqIn, "Head", new Vector2(0, 1), Vector2.one, new Vector2(S3, -28), new Vector2(-S3, -S2)), "Text", "REQUIREMENT", TCaps, Grey, TextAnchor.MiddleLeft, false, Caps);
+            _featStatus = Ui.Label(Ui.Rect(reqIn, "State", new Vector2(0, 1), Vector2.one, new Vector2(S3, -28), new Vector2(-S3, -S2)), "Text", "", TCaps, Grey, TextAnchor.MiddleRight, false, Caps);
+            var row = Ui.Rect(reqIn, "Row", Vector2.zero, new Vector2(1, 0), new Vector2(S3, S3), new Vector2(-S3, S3 + 24));
+            var box = Ui.Rect(row, "Box", new Vector2(0, .5f), new Vector2(0, .5f), new Vector2(0, -8), new Vector2(16, 8));
             Ui.Img(box, Grey);
             Ui.Img(Ui.Fill(box, "In", 2), Ui.Hex("#10161a"));
             _featCheck = Ui.Img(Ui.Fill(box, "Check", 4), Ui.Hex(Green));
-            _featReq = Ui.Label(Ui.Rect(req, "Text", Vector2.zero, Vector2.one, new Vector2(26, 0), Vector2.zero), "Text", "", 18, Text, TextAnchor.MiddleLeft, false);
-            _featReqValue = Ui.Label(Ui.Rect(req, "Value", Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero), "Text", "", 17, Text, TextAnchor.MiddleRight, true);
-            _featStatus = Ui.Label(Ui.Rect(side, "Status", new Vector2(0, 1), Vector2.one, new Vector2(18, -196), new Vector2(-18, -168)), "Text", "", 15, Grey, TextAnchor.MiddleLeft, false);
-            // details (size, weight, damage…) and the game's description: the space the requirement doesn't need
-            Ui.Label(Ui.Rect(side, "DetHead", new Vector2(0, 1), Vector2.one, new Vector2(18, -232), new Vector2(-18, -208)), "Text", "DETAILS", 13, Dim, TextAnchor.MiddleLeft, true, 2);
-            Ui.Img(Ui.Rect(side, "DetRule", new Vector2(0, 1), Vector2.one, new Vector2(18, -234), new Vector2(-18, -233)), Border);
-            _featFacts = Ui.Label(Ui.Rect(side, "Facts", new Vector2(0, 1), new Vector2(.62f, 1), new Vector2(18, -380), new Vector2(0, -242)), "Text", "", 15, Grey, TextAnchor.UpperLeft, false);
-            _featFactValues = Ui.Label(Ui.Rect(side, "FactValues", new Vector2(.4f, 1), Vector2.one, new Vector2(0, -380), new Vector2(-18, -242)), "Text", "", 15, Text, TextAnchor.UpperRight, true);
-            _featDesc = Ui.Label(Ui.Rect(side, "Desc", new Vector2(0, 0), Vector2.one, new Vector2(18, 100), new Vector2(-18, -392)), "Text", "", 14, Grey, TextAnchor.UpperLeft, false, 0, true);
-            Ui.SetWrap(_featDesc, true);
+            _featReq = Ui.Label(Ui.Rect(row, "Text", Vector2.zero, Vector2.one, new Vector2(16 + S2, 0), Vector2.zero), "Text", "", TStrong, Text, TextAnchor.MiddleLeft, false);
+            _featReqValue = Ui.Label(Ui.Rect(row, "Value", Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero), "Text", "", TStrong, Text, TextAnchor.MiddleRight, true);
 
-            // INSPECT (like CLAIM REWARD) and the hint under it
-            var btn = Ui.Rect(side, "Inspect", new Vector2(0, 0), new Vector2(1, 0), new Vector2(18, 44), new Vector2(-18, 84));
+            // INSPECT, with the right-click shortcut as a keycap next to it (like Q / E)
+            var btn = Ui.Rect(side, "Inspect", new Vector2(0, 0), new Vector2(1, 0), new Vector2(PanelPad, S4), new Vector2(-PanelPad - 96, S4 + 40));
             var bimg = Ui.Img(btn, Ui.Hex("#34464c"), null, true);
-            Ui.Label(btn, "Text", "INSPECT", 17, Text, TextAnchor.MiddleCenter, false, 1);
+            Ui.Label(btn, "Text", "INSPECT", TStrong, Text, TextAnchor.MiddleCenter, false, 1);
             var b = btn.gameObject.AddComponent<Button>();
             b.targetGraphic = bimg;
             var colors = b.colors; colors.highlightedColor = new Color(1.25f, 1.25f, 1.25f, 1f); b.colors = colors;
             b.onClick.AddListener(() => { if (_featTpl != null) Inspect(_featTpl); });
-            Ui.Label(Ui.Rect(side, "Hint", new Vector2(0, 0), new Vector2(1, 0), new Vector2(18, 14), new Vector2(-18, 38)), "Text", "<i>or right-click any item</i>", 13, Dim, TextAnchor.MiddleCenter, false);
+            var hint = Ui.Rect(side, "InspectHint", new Vector2(1, 0), new Vector2(1, 0), new Vector2(-PanelPad - 84, S4), new Vector2(-PanelPad, S4 + 40));
+            var cap = Ui.Rect(hint, "Key", new Vector2(0, .5f), new Vector2(0, .5f), new Vector2(0, -13), new Vector2(38, 13));
+            Ui.Img(cap, Ui.Hex("#5a6468"));
+            Ui.Img(Ui.Fill(cap, "In", 2), Ui.Hex("#161c1f"));
+            Ui.Label(cap, "Text", "RMB", TCaps, Ui.Hex("#c3ccd0"), TextAnchor.MiddleCenter, true);
+            Ui.Label(Ui.Rect(hint, "Text", Vector2.zero, Vector2.one, new Vector2(38 + S2, 0), Vector2.zero), "Text", "Inspect", TBody, Grey, TextAnchor.MiddleLeft, false);
+        }
+
+        private static RectTransform _majorRow, _minorRow;
+        private static ScrollRect _descScroll;
+        private static Image _reqEdge;
+
+        /// <summary>A text that sizes itself in a layout group (its height follows its content).</summary>
+        private static Component FlowText(RectTransform parent, string name, float size, Color color, bool bold, float spacing, bool wrap = false)
+        {
+            var go = new GameObject(name, typeof(RectTransform));
+            go.transform.SetParent(parent, false);
+            var c = Ui.AddText(go, "", size, color, TextAnchor.UpperLeft, bold, spacing);
+            if (wrap) Ui.SetWrap(c, true);
+            return c;
+        }
+
+        private static void Rule(RectTransform parent, float gap)
+        {
+            var rt = Ui.Rect(parent, "Rule", Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
+            var le = rt.gameObject.AddComponent<LayoutElement>();
+            le.minHeight = le.preferredHeight = 1 + gap * 2;
+            Ui.Img(Ui.Rect(rt, "Line", new Vector2(0, .5f), new Vector2(1, .5f), new Vector2(0, 0), new Vector2(0, 1)), Border);
+        }
+
+        private static RectTransform Row(RectTransform parent, string name, float spacing)
+        {
+            var rt = Ui.Rect(parent, name, Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
+            var hl = rt.gameObject.AddComponent<HorizontalLayoutGroup>();
+            hl.spacing = spacing; hl.childControlHeight = true; hl.childControlWidth = true; hl.childForceExpandWidth = true; hl.childForceExpandHeight = false;
+            return rt;
+        }
+
+        /// <summary>One stat: small caps label over its value (major: big and bold; minor: body size).</summary>
+        private static void Stat(RectTransform row, string label, string value, bool major)
+        {
+            var cell = Ui.Rect(row, label, Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
+            var vl = cell.gameObject.AddComponent<VerticalLayoutGroup>();
+            vl.spacing = 2; vl.childControlHeight = true; vl.childControlWidth = true; vl.childForceExpandHeight = false;
+            var l = FlowText(cell, "Label", TCaps, Dim, false, Caps);
+            Ui.SetText(l, label.ToUpperInvariant());
+            var v = FlowText(cell, "Value", major ? THero : TStrong, Text, major, 0);
+            Ui.SetText(v, value);
         }
 
         private static void BuildBottom(RectTransform bottom)
@@ -409,16 +547,15 @@ namespace LevelGate.Progression
             _prev = Arrow(bottom, "Prev", "‹", 0, () => ShowPage(_page - 1, -1));
             _next = Arrow(bottom, "Next", "›", 1, () => ShowPage(_page + 1, 1));
 
-            var cards = Ui.Rect(bottom, "Cards", Vector2.zero, Vector2.one, new Vector2(96, 78), new Vector2(-96, -14));
+            // cards share the panels' left/right guides (the slots' inner 8 px sit on the margin); arrows live outside, in the margin
+            var cards = Ui.Rect(bottom, "Cards", Vector2.zero, Vector2.one, new Vector2(Margin - Gutter / 2, 78), new Vector2(-Margin + Gutter / 2, -S3));
             for (int i = 0; i < PerPage; i++)
             {
                 float a = i / (float)PerPage, b = (i + 1) / (float)PerPage;
-                var slot = Ui.Rect(cards, "Slot" + i, new Vector2(a, 0), new Vector2(b, 1), new Vector2(6, 0), new Vector2(-6, 0));
+                var slot = Ui.Rect(cards, "Slot" + i, new Vector2(a, 0), new Vector2(b, 1), new Vector2(Gutter / 2, 0), new Vector2(-Gutter / 2, 0));
                 _cards[i] = new Card(slot);
             }
 
-            PerfToggle(bottom);
-            RepairButton(bottom);
 
             // page bar like the Arena battle pass: [Q] ▬▬▬▬ … [E], the page numbers under the segments
             var bar = Ui.Rect(bottom, "Pages", new Vector2(.5f, 0), new Vector2(.5f, 0), new Vector2(-560, 14), new Vector2(560, 60));
@@ -438,54 +575,8 @@ namespace LevelGate.Progression
                 _segments.Add(img);
                 // thin divider between the page numbers, like Arena
                 if (i > 0) Ui.Img(Ui.Rect(bar, "Div" + i, new Vector2(0, 0), new Vector2(0, 0), new Vector2(x0 + i * w - 1, 4), new Vector2(x0 + i * w + 1, 22)), Ui.Hex("#3a4245"));
-                _segmentNums.Add(Ui.Label(Ui.Rect(bar, "Num" + i, new Vector2(0, 0), new Vector2(0, 0), new Vector2(x0 + i * w, 0), new Vector2(x0 + (i + 1) * w, 24)), "Text", (i + 1).ToString(), 15, Dim, TextAnchor.MiddleCenter, false));
+                _segmentNums.Add(Ui.Label(Ui.Rect(bar, "Num" + i, new Vector2(0, 0), new Vector2(0, 0), new Vector2(x0 + i * w, 0), new Vector2(x0 + (i + 1) * w, 24)), "Text", (i + 1).ToString(), TBody, Dim, TextAnchor.MiddleCenter, false));
             }
-        }
-
-        private static Image _perfCheck;
-
-        /// <summary>[x] Performance mode — bottom-right, next to the page bar.</summary>
-        private static void PerfToggle(RectTransform bottom)
-        {
-            var rt = Ui.Rect(bottom, "Perf", new Vector2(1, 0), new Vector2(1, 0), new Vector2(-260, 22), new Vector2(-40, 50));
-            var hit = Ui.Img(rt, new Color(0, 0, 0, 0), null, true);
-            var box = Ui.Rect(rt, "Box", new Vector2(0, .5f), new Vector2(0, .5f), new Vector2(0, -9), new Vector2(18, 9));
-            Ui.Img(box, Ui.Hex("#5a6468"));
-            Ui.Img(Ui.Fill(box, "In", 2), Ui.Hex("#161c1f"));
-            _perfCheck = Ui.Img(Ui.Fill(box, "Check", 5), Ui.Hex(Orange));
-            _perfCheck.enabled = Perf;
-            Ui.Label(Ui.Rect(rt, "Text", Vector2.zero, Vector2.one, new Vector2(28, 0), Vector2.zero), "Text", "Performance mode", 15, Grey, TextAnchor.MiddleLeft, true, 1);
-            var b = rt.gameObject.AddComponent<Button>();
-            b.targetGraphic = hit;
-            b.transition = Selectable.Transition.None;
-            b.onClick.AddListener(() =>
-            {
-                ProgressionPlugin.PerformanceMode.Value = !Perf;
-                _perfCheck.enabled = Perf;
-                Sounds.Click();
-                L.Info("performance mode " + (Perf ? "on" : "off"));
-                ShowPage(_page, 0);
-                ShowLevel(_level);
-            });
-        }
-
-        private static Component _repairLabel;
-
-        /// <summary>"Fix stash icons" — left of the performance checkbox.</summary>
-        private static void RepairButton(RectTransform bottom)
-        {
-            var rt = Ui.Rect(bottom, "Repair", new Vector2(1, 0), new Vector2(1, 0), new Vector2(-470, 22), new Vector2(-285, 50));
-            var hit = Ui.Img(rt, new Color(0, 0, 0, 0), null, true);
-            _repairLabel = Ui.Label(rt, "Text", "Fix stash icons", 15, Grey, TextAnchor.MiddleRight, false, 1);
-            var b = rt.gameObject.AddComponent<Button>();
-            b.targetGraphic = hit;
-            b.transition = Selectable.Transition.None;
-            b.onClick.AddListener(() =>
-            {
-                if (GameItems.RepairLeft > 0) return;
-                Sounds.Click();
-                GameItems.RepairAll(ProgData.Levels.Keys.ToList());
-            });
         }
 
         private static void KeyBox(RectTransform parent, string key, float side, Action click)
@@ -495,7 +586,7 @@ namespace LevelGate.Progression
             Ui.Img(rt, Ui.Hex("#5a6468"));
             var img = Ui.Img(Ui.Fill(rt, "In", 2), Ui.Hex("#161c1f"), null, true);
             Ui.Img(Ui.Rect(rt, "Shine", new Vector2(0, 1), Vector2.one, new Vector2(2, -4), new Vector2(-2, -2)), new Color(1, 1, 1, .08f));
-            Ui.Label(rt, "Text", key, 15, Ui.Hex("#c3ccd0"), TextAnchor.MiddleCenter, true);
+            Ui.Label(rt, "Text", key, TCaps, Ui.Hex("#c3ccd0"), TextAnchor.MiddleCenter, true);
             var b = rt.gameObject.AddComponent<Button>();
             b.targetGraphic = img;
             b.onClick.AddListener(() => click());
@@ -503,9 +594,9 @@ namespace LevelGate.Progression
 
         private static Button Arrow(RectTransform parent, string name, string glyph, float side, Action click)
         {
-            var rt = Ui.Rect(parent, name, new Vector2(side, 0), new Vector2(side, 1), new Vector2(side == 0 ? 36 : -84, 78), new Vector2(side == 0 ? 84 : -36, -14));
+            var rt = Ui.Rect(parent, name, new Vector2(side, 0), new Vector2(side, 1), new Vector2(side == 0 ? S1 : -Margin + S1, 78), new Vector2(side == 0 ? Margin - S1 : -S1, -S3));
             var img = Ui.Img(rt, new Color(1, 1, 1, 0), null, true);
-            Ui.Label(rt, "Glyph", glyph, 60, Accent, TextAnchor.MiddleCenter, false);
+            Ui.Label(rt, "Glyph", glyph, 48, Grey, TextAnchor.MiddleCenter, false);
             var b = rt.gameObject.AddComponent<Button>();
             b.targetGraphic = img;
             var colors = b.colors;
@@ -649,53 +740,64 @@ namespace LevelGate.Progression
             var items = ProgData.ItemsAt(level);
             int player = ProgData.PlayerLevel();
 
-            // header
-            _headBadge.Set(level);
-            string state = player <= 0 ? "" : level < player ? $"<color={Green}>Unlocked</color>" : level == player ? $"<color={Yellow}>Current level</color>"
-                : level == player + 1 ? "<color=#7fb3a8>Next level</color>" : $"<color={Red}>Locked</color>";
-            Ui.SetText(_headSub, $"Level {level}  ·  {TierOf(level).Name}  ·  {items.Count} unlock{(items.Count == 1 ? "" : "s")}" + (state != "" ? "  ·  " + state : ""));
             SetMood(player > 0 && level > player);
             UpdateXp();
 
             // the reward list
             var groups = ProgData.Groups.Select(g => (g, list: items.Where(it => it.Group == g.Key).ToList())).Where(x => x.list.Count > 0).ToList();
-            Ui.SetText(_listTitle, $"UNLOCKS  <color=#7d8588>·  LEVEL {level}</color>");
-            Ui.SetText(_listCount, level <= player || player <= 0 ? $"{items.Count}" : $"<color={Red}>{items.Count}  LOCKED</color>");
+            Ui.SetText(_listTitle, $"LEVEL {level} <color=#7d8588>REWARDS</color>");
+            string count = $"{items.Count} ITEM{(items.Count == 1 ? "" : "S")}";
+            bool away = player > 0 && level > player;
+            string st = player <= 0 ? count : level == player ? $"{count}  ·  <color=#e0562f>CURRENT LEVEL</color>" : level < player ? $"{count}  ·  UNLOCKED"
+                : level == player + 1 ? $"{count}  ·  NEXT LEVEL" : $"{count}  ·  {level - player} LEVELS AWAY";
+            Ui.SetText(_listState, st);
+            _listLock.enabled = away;
+            var srt = ((Component)_listState).GetComponent<RectTransform>();
+            srt.offsetMax = new Vector2(away ? -PanelPad - 14 - S2 : -PanelPad, srt.offsetMax.y);
 
             foreach (Transform ch in _content) UnityEngine.Object.Destroy(ch.gameObject);
             _tiles.Clear();
-            _tileFrames.Clear();
+            _tileViews.Clear();
+            ShowTip(null);
             _icons.Clear(); DropRequests(_icons);
             _hits.RemoveAll(h => h.Rect == null || !h.Rect.IsChildOf(_bottom));
             Feature(items.FirstOrDefault());
             int max = Mathf.Max(1, Perf ? Mathf.Min(12, ProgressionPlugin.MaxTilesPerCategory.Value) : ProgressionPlugin.MaxTilesPerCategory.Value), n = 0;
+            // a fixed column count from the panel width (4 at 1080p), all tiles the same size, 8 px apart
+            float width = _content.rect.width - S2;
+            if (width < 100) { Canvas.ForceUpdateCanvases(); width = _content.rect.width - S2; } // first open: layout not done yet
+            if (width < 100) width = 560;
+            int cols = Mathf.Clamp(Mathf.FloorToInt((width + S2) / (TileMin + S2)), 2, 6);
+            float cell = Mathf.Floor((width - (cols - 1) * S2) / cols);
+            // names that collide at this level (e.g. three "Stich Profi Ches…") show their full name instead
+            var dupes = new HashSet<string>(items.GroupBy(x => x.Short).Where(x => x.Count() > 1).Select(x => x.Key));
             foreach (var (g, list) in groups)
             {
-                var color = Ui.Hex(g.Color);
                 var section = Ui.Rect(_content, "Cat_" + g.Key, Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
                 var sl = section.gameObject.AddComponent<VerticalLayoutGroup>();
-                sl.spacing = 6; sl.childControlHeight = true; sl.childControlWidth = true; sl.childForceExpandHeight = false; sl.childForceExpandWidth = true;
+                sl.spacing = S2; sl.childControlHeight = true; sl.childControlWidth = true; sl.childForceExpandHeight = false; sl.childForceExpandWidth = true;
 
+                // section header: the category's colour once, as a 3 px bar; name in small caps; the count quieter
                 var head = Ui.Rect(section, "Head", Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
-                head.gameObject.AddComponent<LayoutElement>().preferredHeight = 24;
-                Ui.Label(Ui.Rect(head, "Name", Vector2.zero, Vector2.one, new Vector2(2, 0), Vector2.zero), "Text",
-                    $"{g.Name}  <color=#7d8588>{list.Count}{(list.Count > max ? $" (showing {max})" : "")}</color>", 15, Text, TextAnchor.MiddleLeft, false, 1);
-                Ui.Img(Ui.Rect(head, "Rule", new Vector2(0, 0), new Vector2(1, 0), Vector2.zero, new Vector2(0, 1)), Border);
+                head.gameObject.AddComponent<LayoutElement>().preferredHeight = 20;
+                Ui.Img(Ui.Rect(head, "Bar", new Vector2(0, .5f), new Vector2(0, .5f), new Vector2(0, -7), new Vector2(3, 7)), Ui.Hex(g.Color, .85f));
+                Ui.Label(Ui.Rect(head, "Name", Vector2.zero, Vector2.one, new Vector2(3 + S2, 0), Vector2.zero), "Text",
+                    $"{g.Name.ToUpperInvariant()}  <color=#7d8588>{list.Count}{(list.Count > max ? $" · showing {max}" : "")}</color>", TCaps, Ui.Hex("#b9c0c3"), TextAnchor.MiddleLeft, false, Caps);
 
                 var grid = Ui.Rect(section, "Grid", Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
                 var gl = grid.gameObject.AddComponent<GridLayoutGroup>();
-                float cell = Mathf.Clamp(ProgressionPlugin.TileSize.Value, 60, 200);
-                gl.cellSize = new Vector2(cell * 1.1f, cell);
-                gl.spacing = new Vector2(5, 5);
+                gl.cellSize = new Vector2(cell, cell + TileLabel);
+                gl.spacing = new Vector2(S2, S2);
                 gl.startCorner = GridLayoutGroup.Corner.UpperLeft;
-                gl.constraint = GridLayoutGroup.Constraint.Flexible;
-                foreach (var it in list.Take(max)) Tile(grid, it, color, level <= player || player <= 0, n++);
+                gl.constraint = GridLayoutGroup.Constraint.FixedColumnCount;
+                gl.constraintCount = cols;
+                foreach (var it in list.Take(max)) Tile(grid, it, level <= player || player <= 0, dupes.Contains(it.Short), n++);
             }
             if (groups.Count == 0)
             {
                 var empty = Ui.Rect(_content, "Empty", Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
                 empty.gameObject.AddComponent<LayoutElement>().preferredHeight = 120;
-                Ui.Label(empty, "Text", $"Nothing unlocks at level {level}\n<size=13><color=#7d8588>Set items to this level in the Level & Item Editor.</color></size>", 17, Text, TextAnchor.MiddleCenter, false);
+                Ui.Label(empty, "Text", $"Nothing unlocks at level {level}\n<size=13><color=#7d8588>Set items to this level in the Level & Item Editor.</color></size>", TStrong, Text, TextAnchor.MiddleCenter, false);
             }
             _content.anchoredPosition = Vector2.zero;
             _tilesStart = Time.unscaledTime;
@@ -703,28 +805,102 @@ namespace LevelGate.Progression
             L.Debug($"level {level}: {items.Count} item(s) in {groups.Count} categories, {n} tiles drawn in {(Time.realtimeSinceStartup - t0) * 1000:0} ms");
         }
 
-        /// <summary>A reward-list tile: dark cell, thin frame, the game's picture, the short name under it.</summary>
-        private static void Tile(RectTransform grid, ProgItem it, Color color, bool reached, int index)
+        private const float TileMin = 118;   // smallest tile width before a column is dropped
+        private const float TileLabel = 34;  // name area under the thumbnail (two lines of 12 px)
+
+        /// <summary>One reward tile's parts, so hover / selection / locked can be restyled without rebuilding it.</summary>
+        private sealed class TileView
+        {
+            public ProgItem Item;
+            public RectTransform Rt;
+            public Image Frame, Face, Top, Pic;
+            public Component Name;
+            public bool Locked, Hover;
+        }
+
+        private static readonly Dictionary<string, TileView> _tileViews = new Dictionary<string, TileView>();
+        private static int _newFrom; // your level when you last opened the screen: rewards above it (up to yours) are new
+
+        /// <summary>An inventory-style tile: thin frame, dark lit surface, big centred thumbnail, the name under it.</summary>
+        private static void Tile(RectTransform grid, ProgItem it, bool reached, bool fullName, int index)
         {
             var rt = Ui.Rect(grid, "Tile", Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
             var group = rt.gameObject.AddComponent<CanvasGroup>();
             group.alpha = 0;
-            var inner = Ui.Fill(rt, "Inner");
-            _tileFrames[it.Tpl] = Ui.Img(inner, it.Tpl == _featTpl ? Accent : Border);
-            var slot = Ui.Rect(inner, "Slot", new Vector2(0, .22f), Vector2.one, new Vector2(1, 0), new Vector2(-1, -1));
-            Ui.Img(slot, Ui.Hex("#12181b"));
-            Ui.Img(Ui.Rect(slot, "Shade", Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero), new Color(1, 1, 1, .03f), Ui.VerticalFade());
-            Ui.Img(Ui.Rect(inner, "Strip", new Vector2(0, .22f), new Vector2(1, .22f), new Vector2(1, 0), new Vector2(-1, 1)), new Color(color.r, color.g, color.b, .55f));
-            Ui.Img(Ui.Rect(inner, "Label", Vector2.zero, new Vector2(1, .22f), new Vector2(1, 1), new Vector2(-1, 0)), Ui.Hex("#0c1113"));
-            var shortName = Ui.Label(Ui.Rect(slot, "Short", Vector2.zero, Vector2.one, new Vector2(4, 0), new Vector2(-4, 0)), "Text", it.Short, 12, Dim, TextAnchor.MiddleCenter, false, 0, true);
-            Ui.Label(Ui.Rect(inner, "Name", Vector2.zero, new Vector2(1, .22f), new Vector2(5, 0), new Vector2(-5, 0)), "Text", it.Short, 11, Ui.Hex("#b9bfbc"), TextAnchor.MiddleLeft, false, 0, true);
-            var pic = Ui.Img(Ui.Fill(slot, "Icon", 5), Color.white);
-            pic.preserveAspect = true;
-            pic.enabled = false;
-            RequestIcon(_icons, it.Tpl, 1, pic, shortName);
+            var v = new TileView { Item = it, Rt = rt, Locked = !reached };
+            v.Frame = Ui.Img(rt, Border, null, true);
+            var inner = Ui.Fill(rt, "Inner", 1);
+            v.Face = Ui.Img(inner, Face);
+            // thumbnail: a square on top, lit like the big preview; the icon uses ~80% of it
+            var thumb = Ui.Rect(inner, "Thumb", new Vector2(0, 0), Vector2.one, new Vector2(0, TileLabel - 1), Vector2.zero);
+            Ui.Img(Ui.Fill(thumb, "Light"), new Color(1, 1, 1, .05f), Ui.Radial());
+            var placeholder = Ui.Label(Ui.Fill(thumb, "Placeholder", S2), "Text", "", TCaps, Dim, TextAnchor.MiddleCenter, false, 0, true);
+            v.Pic = Ui.Img(Ui.Fill(thumb, "Icon", 0), Color.white);
+            var prt = v.Pic.rectTransform;
+            prt.anchorMin = new Vector2(.1f, .1f); prt.anchorMax = new Vector2(.9f, .9f); prt.offsetMin = prt.offsetMax = Vector2.zero;
+            v.Pic.preserveAspect = true;
+            v.Pic.enabled = false;
+            // selection: a 2 px light bar along the top (so selected isn't told by colour alone)
+            v.Top = Ui.Img(Ui.Rect(inner, "Top", new Vector2(0, 1), Vector2.one, new Vector2(0, -2), Vector2.zero), Select);
+            v.Top.enabled = false;
+            // name: two lines of 12 px, the full name when short names collide
+            v.Name = Ui.Label(Ui.Rect(inner, "Name", Vector2.zero, new Vector2(1, 0), new Vector2(S2, 2), new Vector2(-S1, TileLabel - 2)), "Text",
+                fullName ? it.Name : it.Short, TCaps, Grey, TextAnchor.MiddleLeft, false, 0, true);
+            Ui.SetWrap(v.Name, true);
+            Refl.Set(v.Name, "lineSpacing", -8f);
+            // newly reached since you last opened the screen: a small restrained tag
+            if (_newFrom > 0 && reached && it.Level > _newFrom)
+            {
+                var tag = Ui.Rect(inner, "New", new Vector2(0, 1), new Vector2(0, 1), new Vector2(S1, -S1 - 14), new Vector2(S1 + 30, -S1));
+                Ui.Img(tag, Ui.Hex(Orange, .9f));
+                Ui.Label(tag, "Text", "NEW", 10, Ui.Hex("#1a1210"), TextAnchor.MiddleCenter, true, 1);
+            }
+            RequestIcon(_icons, it.Tpl, 1, v.Pic, placeholder);
             _hits.Add((rt, it));
-            if (!reached) Ui.Img(Ui.Rect(slot, "Lock", new Vector2(1, 1), new Vector2(1, 1), new Vector2(-9, -9), new Vector2(-4, -4)), Ui.Hex(Red));
+            HoverHook.Add(v.Frame, on =>
+            {
+                if (v.Hover == on) return;
+                v.Hover = on;
+                if (on) Sounds.Play("ButtonOver");
+                ApplyTile(v);
+                ShowTip(on ? v : null);
+            });
+            _tileViews[it.Tpl] = v;
+            ApplyTile(v, true);
             _tiles.Add((group, inner, Mathf.Min(index, 40) * .012f));
+        }
+
+        /// <summary>normal: neutral · hover: brighter edge and surface · selected: light edge + top bar + bright name · locked: muted.</summary>
+        private static void ApplyTile(TileView v, bool instant = false)
+        {
+            if (v?.Frame == null) return;
+            bool sel = v.Item.Tpl == _featTpl;
+            FadeTo(v.Frame, sel ? Select : v.Hover ? HoverEdge : Border, instant);
+            FadeTo(v.Face, sel ? FaceSelect : v.Hover ? FaceHover : Face, instant);
+            v.Top.enabled = sel;
+            v.Pic.rectTransform.localScale = Vector3.one * (v.Hover ? 1.04f : 1f); // a slight lift on hover
+            float pa = v.Locked ? (v.Hover || sel ? .8f : .6f) : 1f;
+            FadeTo(v.Pic, new Color(1, 1, 1, pa), instant);
+            FadeTo(v.Name as Graphic, sel ? Text : v.Hover ? Ui.Hex("#b9c0c3") : v.Locked ? Dim : Grey, instant);
+        }
+
+        // hover tooltip: the full name above the tile
+        private static RectTransform _tip;
+        private static Component _tipText;
+
+        private static void ShowTip(TileView v)
+        {
+            if (_tip == null) return;
+            if (v == null || v.Rt == null) { _tip.gameObject.SetActive(false); return; }
+            string name = v.Item.Name;
+            Ui.SetText(_tipText, name);
+            float w = Ui.PreferredWidth(_tipText, name) + S3 * 2;
+            _tip.sizeDelta = new Vector2(Mathf.Min(w, 420), 26);
+            var r = v.Rt.rect;
+            _tip.position = v.Rt.TransformPoint(new Vector3(r.center.x, r.yMax, 0));
+            _tip.anchoredPosition += new Vector2(0, S1);
+            _tip.SetAsLastSibling();
+            _tip.gameObject.SetActive(true);
         }
 
         // Icons the game hasn't drawn yet cost it 20-100 ms each, all in one frame when a big level opens (the stutter).
@@ -818,34 +994,42 @@ namespace LevelGate.Progression
             _featTpl = it?.Tpl;
             _featPic.enabled = false;
             _featShort.gameObject.SetActive(it != null);
+            foreach (Transform ch in _majorRow) UnityEngine.Object.Destroy(ch.gameObject);
+            foreach (Transform ch in _minorRow) UnityEngine.Object.Destroy(ch.gameObject);
             if (it == null)
             {
-                foreach (var c in new[] { _featMeta, _featType, _featName, _featReq, _featReqValue, _featStatus, _featFacts, _featFactValues, _featDesc }) Ui.SetText(c, "");
+                foreach (var c in new[] { _featType, _featName, _featReq, _featReqValue, _featStatus, _featDesc }) Ui.SetText(c, "");
                 _featCheck.enabled = false;
+                _featLock.enabled = false;
                 _featIcon = null;
+                MarkSelectedTile();
                 return;
             }
             var g = ProgData.Groups.FirstOrDefault(x => x.Key == it.Group);
             int player = ProgData.PlayerLevel();
             bool met = player <= 0 || it.Level <= player;
             Ui.SetText(_featShort, it.Short);
-            Ui.SetText(_featMeta, $"{it.Short}\n{g.Name}\nLevel {it.Level}");
             Ui.SetText(_featType, (g.Name ?? "Item").ToUpperInvariant());
             Ui.SetText(_featName, it.Name);
-            _featCheck.enabled = met;
-            string col = met ? "#d5d9d6" : Red;
-            Ui.SetText(_featReq, $"<color={col}>Reach level {it.Level}</color>");
-            Ui.SetText(_featReqValue, player > 0 ? $"<color={col}>{Mathf.Min(player, it.Level)} / {it.Level}</color>" : "");
-            Ui.SetText(_featStatus, player <= 0 ? "" : it.Level == player ? $"<color={Yellow}>Current level</color> <color=#7d8588>— you can use it</color>"
-                : met ? $"<color={Green}>Unlocked</color> <color=#7d8588>— you can use it</color>" : $"<color={Red}>Locked</color> <color=#7d8588>· {it.Level - player} level{(it.Level - player == 1 ? "" : "s")} to go</color>");
+            // stats: damage / penetration / armor class / resource big; weight / size / caliber small (nothing invented, nothing dropped)
             var facts = GameItems.Facts(it.Tpl);
-            facts.Insert(0, ("Category", g.Name));
-            Ui.SetText(_featFacts, string.Join("\n", facts.Select(f => f.Label).ToArray()));
-            Ui.SetText(_featFactValues, string.Join("\n", facts.Select(f => f.Value).ToArray()));
-            var desc = ProgData.DescriptionOf(it.Tpl);
-            Ui.SetText(_featDesc, desc.Length > 520 ? desc.Substring(0, 520).TrimEnd() + "…" : desc);
-            int you = ProgData.PlayerLevel();
-            _featLock.enabled = you > 0 && it.Level > you;
+            var majorKeys = new[] { "Damage", "Penetration", "Armor class", "Resource" };
+            var majors = facts.Where(f => majorKeys.Contains(f.Label)).ToList();
+            var minors = new[] { "Weight", "Size", "Caliber" }.Select(k => facts.FirstOrDefault(f => f.Label == k)).Where(f => f.Label != null)
+                .Concat(facts.Where(f => !majorKeys.Contains(f.Label) && f.Label != "Weight" && f.Label != "Size" && f.Label != "Caliber")).ToList();
+            foreach (var f in majors) Stat(_majorRow, f.Label, f.Value, true);
+            foreach (var f in minors) Stat(_minorRow, f.Label, f.Value, false);
+            _majorRow.gameObject.SetActive(majors.Count > 0);
+            _minorRow.gameObject.SetActive(minors.Count > 0);
+            Ui.SetText(_featDesc, ProgData.DescriptionOf(it.Tpl));
+            _descScroll.verticalNormalizedPosition = 1;
+            // requirement: the primary (and only red) locked signal
+            _featCheck.enabled = met;
+            Ui.SetText(_featReq, $"Reach level {it.Level}");
+            Ui.SetText(_featReqValue, player > 0 ? $"<color={(met ? Green : Red)}>{Mathf.Min(player, it.Level)} / {it.Level}</color>" : "");
+            Ui.SetText(_featStatus, player <= 0 ? "" : it.Level == player ? "<color=#e0562f>YOUR LEVEL</color>" : met ? $"<color={Green}>MET</color>" : $"{it.Level - player} LEVEL{(it.Level - player == 1 ? "" : "S")} AWAY");
+            _reqEdge.color = met ? Border : Ui.Hex(Red, .55f);
+            _featLock.enabled = player > 0 && it.Level > player;
             int featScale = Perf ? 2 : 4;
             var kept = GameItems.CopyOf(it.Tpl, featScale);
             if (kept != null) { _featIcon = null; _featPic.sprite = kept; _featPic.enabled = true; _featShort.gameObject.SetActive(false); }
@@ -853,11 +1037,9 @@ namespace LevelGate.Progression
             MarkSelectedTile();
         }
 
-        private static readonly Dictionary<string, Image> _tileFrames = new Dictionary<string, Image>();
-
         private static void MarkSelectedTile()
         {
-            foreach (var kv in _tileFrames) if (kv.Value != null) kv.Value.color = kv.Key == _featTpl ? Accent : Border;
+            foreach (var v in _tileViews.Values) ApplyTile(v);
         }
 
         // ---------------------------------------------------------------- mood: red bloom for locked levels
@@ -874,8 +1056,9 @@ namespace LevelGate.Progression
             _mood = _mood < 0 ? _moodTarget : Mathf.MoveTowards(_mood, _moodTarget, dt * 3f);
             float m = Mathf.Max(0, _mood);
             // the red glow is the screen's colour on every level; locked levels only push it a little further
-            if (_bloom.Count > 0 && _bloom[0] != null) _bloom[0].color = new Color(.85f, .14f, .08f, Mathf.Lerp(.22f, .27f, m));
-            if (_bloom.Count > 1 && _bloom[1] != null) _bloom[1].color = new Color(.95f, .2f, .1f, Mathf.Lerp(.18f, .22f, m));
+            // ~40% under the old strength: it supports the screen, it doesn't compete with it
+            if (_bloom.Count > 0 && _bloom[0] != null) _bloom[0].color = new Color(.85f, .14f, .08f, Mathf.Lerp(.13f, .16f, m));
+            if (_bloom.Count > 1 && _bloom[1] != null) _bloom[1].color = new Color(.95f, .2f, .1f, Mathf.Lerp(.11f, .13f, m));
             var border = Border; // the panel borders stay as they are (only the glow turns red)
             foreach (var f in _panelFrames) if (f != null) f.color = border;
         }
@@ -884,6 +1067,36 @@ namespace LevelGate.Progression
         {
             int player = ProgData.PlayerLevel();
             foreach (var c in _cards) c.Mark(_level, player);
+        }
+
+        // ---------------------------------------------------------------- state colour fades (hover / select), ~120 ms
+
+        private static readonly Dictionary<Graphic, (Color From, Color To, float Start)> _fades = new Dictionary<Graphic, (Color, Color, float)>();
+
+        /// <summary>Moves a graphic's colour to target quickly (instant while the screen is hidden or first drawn).</summary>
+        private static void FadeTo(Graphic g, Color to, bool instant = false)
+        {
+            if (g == null) return;
+            if (instant || !IsOpen) { _fades.Remove(g); g.color = to; return; }
+            if (g.color == to) { _fades.Remove(g); return; }
+            _fades[g] = (g.color, to, Time.unscaledTime);
+        }
+
+        private static readonly List<Graphic> _fadeDone = new List<Graphic>();
+
+        private static void RunFades()
+        {
+            if (_fades.Count == 0) return;
+            float now = Time.unscaledTime;
+            _fadeDone.Clear();
+            foreach (var kv in _fades)
+            {
+                if (kv.Key == null) { _fadeDone.Add(kv.Key); continue; }
+                float t = Mathf.Clamp01((now - kv.Value.Start) / .12f);
+                kv.Key.color = Color.Lerp(kv.Value.From, kv.Value.To, 1 - (1 - t) * (1 - t));
+                if (t >= 1) _fadeDone.Add(kv.Key);
+            }
+            foreach (var g in _fadeDone) _fades.Remove(g);
         }
 
         // ---------------------------------------------------------------- every frame
@@ -897,11 +1110,6 @@ namespace LevelGate.Progression
             if (_restoreAgainAt > 0 && Time.unscaledTime > _restoreAgainAt && !IsOpen) { _restoreAgainAt = -1; GameItems.RestoreIcons(); }
             if (!IsOpen) return;
             if (!_xpKnown && ProgData.HasExpTable) { _xpKnown = true; UpdateXp(); } // the SPT server's answer came in
-            if (_repairLabel != null)
-            {
-                int left = GameItems.RepairLeft;
-                Ui.SetText(_repairLabel, left > 0 ? $"<color=#e0562f>Fixing icons {GameItems.RepairTotal - left} / {GameItems.RepairTotal}</color>" : "<u>Fix stash icons</u>");
-            }
             if (_fade != null && _fade.alpha < 1)
             {
                 float f = Mathf.Clamp01((Time.unscaledTime - _openedAt) / .3f);
@@ -941,6 +1149,7 @@ namespace LevelGate.Progression
                     float t = Mathf.Clamp01((now - _cardsStart - delay) / .38f);
                     _cards[i].Animate(1 - Mathf.Pow(1 - t, 3), _cardsDir);
                 }
+            RunFades();
             RunIconRequests();
             Prefetch();
             ShowIcons(_icons);
@@ -1056,15 +1265,17 @@ namespace LevelGate.Progression
         {
             private readonly RectTransform _body;
             private readonly CanvasGroup _group;
-            private readonly Image _frame, _bg, _glow;
+            private readonly Image _frame, _bg, _glow, _top, _stateLock;
             private readonly DottedLine _headL, _headR;
-            private readonly Component _head, _count, _more, _state, _tier;
+            private readonly Component _head, _count, _state, _tier;
             private readonly Image[] _pics = new Image[3];
-            private readonly Image[] _locks = new Image[3];
             private readonly Component[] _picNames = new Component[3];
             private readonly RectTransform[] _picRects = new RectTransform[3];
             private readonly Badge _badge;
             private int _level;
+            private bool _hover;
+            private float _baseAlpha = 1;
+            private int _picked, _player;
 
             /// <summary>A square picture slot, as big as fits in the given area (so icons keep their shape at any screen size).</summary>
             private static RectTransform Square(RectTransform parent, string name, Vector2 aMin, Vector2 aMax, Vector2 oMin, Vector2 oMax)
@@ -1083,13 +1294,13 @@ namespace LevelGate.Progression
                 _group = _body.gameObject.AddComponent<CanvasGroup>();
                 // |------ Level 6 ------|  dots bright by the label, fading out toward the ticks at the card's edges (Arena)
                 var head = Ui.Rect(_body, "Head", new Vector2(0, 1), Vector2.one, new Vector2(0, -24), Vector2.zero);
-                _head = Ui.Label(head, "Text", "", 17, Grey, TextAnchor.MiddleCenter, true);
+                _head = Ui.Label(head, "Text", "", TStrong, Grey, TextAnchor.MiddleCenter, true);
                 _headL = DottedLine.Add(Ui.Rect(head, "L", new Vector2(0, 0), new Vector2(.5f, 1), Vector2.zero, new Vector2(-46, 0)), false);
                 _headR = DottedLine.Add(Ui.Rect(head, "R", new Vector2(.5f, 0), new Vector2(1, 1), new Vector2(46, 0), Vector2.zero), true);
 
                 var card = Ui.Rect(_body, "Box", Vector2.zero, Vector2.one, Vector2.zero, new Vector2(0, -32));
-                _frame = Ui.Img(card, Border);
-                var inner = Ui.Fill(card, "In", BorderWidth);
+                _frame = Ui.Img(card, Border, null, true);
+                var inner = Ui.Fill(card, "In", 2);
                 _bg = Ui.Img(inner, Ui.Hex("#12181b", .92f), null, true);
                 // Arena-style warm glow in the top-right corner of the picked card
                 var glow = Ui.Box(inner, "Glow", new Vector2(1, 1), Vector2.zero, new Vector2(260, 260));
@@ -1098,15 +1309,19 @@ namespace LevelGate.Progression
                 // header row: small badge + rank title, tight to the top-left
                 // one spacing unit (Pad) everywhere: card edge → badge, badge → title, header → pictures, pictures → bottom row
                 // (the badge's diamond is ~B wide corner to corner, so its box sits exactly Pad from the edges)
-                const float Pad = 12, B = 50, Head = Pad + B + Pad, Foot = 34;
+                // the rank stays quiet: a small emblem and small caps (the level itself is the card's header)
+                const float Pad = S3, B = 36, Head = Pad + B + S2, Foot = 32;
                 _badge = new Badge(inner, new Vector2(0, 1), new Vector2(Pad + B / 2, -(Pad + B / 2)), B);
-                _tier = Ui.Label(Ui.Rect(inner, "Tier", new Vector2(0, 1), Vector2.one, new Vector2(Pad + B + Pad, -(Pad + B)), new Vector2(-Pad, -Pad)), "Text", "", 17, Text, TextAnchor.MiddleLeft, true, 1.5f);
+                _tier = Ui.Label(Ui.Rect(inner, "Tier", new Vector2(0, 1), Vector2.one, new Vector2(Pad + B + S2, -(Pad + B)), new Vector2(-Pad, -Pad)), "Text", "", TCaps, Grey, TextAnchor.MiddleLeft, false, Caps);
+                // selected: a 2 px light bar along the top edge (shape, not only colour)
+                _top = Ui.Img(Ui.Rect(inner, "Top", new Vector2(0, 1), Vector2.one, new Vector2(0, -2), Vector2.zero), Select);
+                _top.enabled = false;
                 // one big square picture (the level's top category) and two small ones stacked beside it
                 // the pictures sit in the area between header and footer; each is kept square
                 var pics = Ui.Rect(inner, "Pics", Vector2.zero, Vector2.one, new Vector2(Pad, Foot), new Vector2(-Pad, -Head));
-                _picRects[0] = Square(pics, "Pic0", new Vector2(0, 0), new Vector2(.58f, 1), Vector2.zero, new Vector2(-Pad / 2, 0));
-                _picRects[1] = Square(pics, "Pic1", new Vector2(.58f, .5f), new Vector2(.86f, 1), new Vector2(Pad / 2, Pad / 4), Vector2.zero);
-                _picRects[2] = Square(pics, "Pic2", new Vector2(.58f, 0), new Vector2(.86f, .5f), new Vector2(Pad / 2, 0), new Vector2(0, -Pad / 4));
+                _picRects[0] = Square(pics, "Pic0", new Vector2(0, 0), new Vector2(.64f, 1), Vector2.zero, new Vector2(-S1, 0));
+                _picRects[1] = Square(pics, "Pic1", new Vector2(.64f, .5f), new Vector2(1, 1), new Vector2(S1, S1 / 2), Vector2.zero);
+                _picRects[2] = Square(pics, "Pic2", new Vector2(.64f, 0), new Vector2(1, .5f), new Vector2(S1, 0), new Vector2(0, -S1 / 2));
                 for (int i = 0; i < 3; i++)
                 {
                     // Arena item preview: thin frame, dark face, the item, a soft dark fade around the edges, lock bottom-right
@@ -1115,23 +1330,23 @@ namespace LevelGate.Progression
                     var face = Ui.Fill(picSlot, "Face", 2);
                     Ui.Img(face, Ui.Hex("#0f1315"));
                     Ui.Img(Ui.Fill(face, "Light"), new Color(1, 1, 1, .05f), Ui.Radial());
-                    _picNames[i] = Ui.Label(face, "Name", "", 11, Grey, TextAnchor.MiddleCenter, false, 0, true);
+                    _picNames[i] = Ui.Label(face, "Name", "", TCaps, Grey, TextAnchor.MiddleCenter, false, 0, true);
                     _pics[i] = Ui.Img(Ui.Fill(face, "Img", i == 0 ? 8 : 4), Color.white);
                     _pics[i].preserveAspect = true;
                     _pics[i].enabled = false;
                     Ui.EdgeFade(face, .18f, .55f);
                     Ui.Grit(face, _gritSeed++, .02f);
-                    float ls = i == 0 ? 22 : 16;
-                    _locks[i] = Ui.Img(Ui.Rect(face, "Lock", new Vector2(1, 0), new Vector2(1, 0), new Vector2(-ls - 6, 6), new Vector2(-6, ls + 6)), Ui.Hex("#aeb6b9", .85f), Ui.Lock());
                 }
-                _more = Ui.Label(Ui.Rect(inner, "More", new Vector2(.86f, 0), new Vector2(1, 1), new Vector2(Pad, Foot), new Vector2(-Pad, -Head)), "Text", "", 17, Accent, TextAnchor.MiddleCenter, true);
-                // bottom row: count left, state right, right under the pictures
-                _count = Ui.Label(Ui.Rect(inner, "Count", new Vector2(0, 0), new Vector2(.5f, 0), new Vector2(Pad, 4), new Vector2(0, Foot - 4)), "Text", "", 15, Text, TextAnchor.MiddleLeft, true);
-                _state = Ui.Label(Ui.Rect(inner, "State", new Vector2(.5f, 0), new Vector2(1, 0), new Vector2(0, 4), new Vector2(-Pad, Foot - 4)), "Text", "", 15, Grey, TextAnchor.MiddleRight, true);
+                // footer: "147 unlocks" left, the level's state right in small caps (one small lock for future levels)
+                _count = Ui.Label(Ui.Rect(inner, "Count", new Vector2(0, 0), new Vector2(.5f, 0), new Vector2(Pad, S1), new Vector2(0, Foot - S1)), "Text", "", TBody, Text, TextAnchor.MiddleLeft, false);
+                _state = Ui.Label(Ui.Rect(inner, "State", new Vector2(.5f, 0), new Vector2(1, 0), new Vector2(0, S1), new Vector2(-Pad, Foot - S1)), "Text", "", TCaps, Grey, TextAnchor.MiddleRight, false, Caps);
+                _stateLock = Ui.Img(Ui.Rect(inner, "StateLock", new Vector2(1, 0), new Vector2(1, 0), new Vector2(-Pad - 68 - 12, Foot / 2 - 6), new Vector2(-Pad - 68, Foot / 2 + 6)), Grey, Ui.Lock());
+                _stateLock.enabled = false;
                 var button = inner.gameObject.AddComponent<Button>();
                 button.targetGraphic = _bg;
                 button.transition = Selectable.Transition.None;
                 button.onClick.AddListener(() => { L.Debug($"card level {_level} clicked"); Sounds.Click(); ShowLevel(_level); });
+                HoverHook.Add(_frame, on => { if (_hover == on) return; _hover = on; if (on) Sounds.Play("ButtonOver"); Mark(_picked, _player); });
             }
 
             public void Show(int level)
@@ -1146,7 +1361,7 @@ namespace LevelGate.Progression
                 Ui.SetText(_head, "Level " + level);
                 _badge.Set(level, items.Count == 0);
                 Ui.SetText(_tier, TierOf(level).Name);
-                Ui.SetText(_count, items.Count == 0 ? "No unlocks" : $"{items.Count} unlock{(items.Count == 1 ? "" : "s")}");
+                Ui.SetText(_count, items.Count == 0 ? "No unlocks" : $"{items.Count} unlock{(items.Count == 1 ? "" : "s")}"); // the total (was a separate "+N")
                 for (int i = 0; i < 3; i++)
                 {
                     var it = i < picks.Count ? picks[i] : null;
@@ -1158,37 +1373,46 @@ namespace LevelGate.Progression
                     RequestIcon(_cardIcons, it.Tpl, Perf ? 1 : 2, _pics[i], _picNames[i]);
                     _hits.Add((_picRects[i], it));
                 }
-                Ui.SetText(_more, items.Count > 3 ? "+" + (items.Count - 3) : "");
                 _group.alpha = items.Count == 0 ? .55f : 1f;
             }
 
+            /// <summary>current (your level): orange header + state · selected: light 2 px frame + top bar · hover: brighter edge ·
+            /// future: muted, one small lock, "LOCKED" in grey · new since your last visit: a small orange NEW.</summary>
             public void Mark(int picked, int player)
             {
-                bool sel = _level == picked, current = _level == player;
-                _frame.color = sel ? Ui.Hex(Orange, .9f) : Border;
-                bool unlocked = player > 0 && _level <= player;
-                // Arena: unlocked levels carry a warm red hue in the top-right corner; the picked card gets it strongest
-                _glow.color = sel ? Ui.Hex(Orange, .32f) : unlocked ? Ui.Hex("#d0453a", .22f) : new Color(0, 0, 0, 0);
-                foreach (var l in _locks) l.enabled = !unlocked;
-                // a locked level's whole card is darker, so what you have and what you don't reads at a glance
-                bool locked = player > 0 && _level > player;
-                _bg.color = locked ? (sel ? Ui.Hex("#0e1214", .97f) : Ui.Hex("#090c0e", .97f)) : sel ? Ui.Hex("#171d20", .95f) : Ui.Hex("#12181b", .92f);
-                Ui.SetColor(_tier, locked ? Grey : Text);
-                // Arena: your current level in orange, the picked one white, the rest grey
-                var c = current ? Ui.Hex(Orange) : sel ? Text : Grey;
-                Ui.SetColor(_head, c);
-                _headL.color = _headR.color = current ? Ui.Hex(Orange) : sel ? Text : Grey;
-                string state = player <= 0 ? "" : _level < player ? "<color=#e8765a>Unlocked</color>" : _level == player ? $"<color={Yellow}>Current level</color>"
-                    : _level == player + 1 ? "<color=#7fb3a8>Next level</color>" : $"<color={Red}>Locked</color>";
+                _picked = picked; _player = player;
+                bool sel = _level == picked, current = player > 0 && _level == player;
+                bool locked = player > 0 && _level > player, reached = player > 0 && _level <= player;
+                bool fresh = reached && !current && _newFrom > 0 && _level > _newFrom;
+                FadeTo(_frame, sel ? Select : _hover ? HoverEdge : Border);
+                _top.enabled = sel;
+                FadeTo(_bg, sel ? Ui.Hex("#172024", .96f) : _hover ? Ui.Hex("#141b1e", .94f) : locked ? Ui.Hex("#0b0e10", .96f) : Ui.Hex("#11171a", .92f));
+                _glow.color = current ? Ui.Hex(Orange, .16f) : new Color(0, 0, 0, 0);
+                Ui.SetColor(_tier, locked ? Dim : Grey);
+                var head = current ? Ui.Hex(Orange) : sel ? Text : locked ? Dim : Grey;
+                Ui.SetColor(_head, head);
+                _headL.color = _headR.color = new Color(head.r, head.g, head.b, current || sel ? .9f : .45f);
+                string state = player <= 0 ? "" : current ? "<color=#e0562f>CURRENT LEVEL</color>" : fresh ? "<color=#e0562f>NEW</color>"
+                    : reached ? $"<color={Green}>UNLOCKED</color>" : _level == player + 1 ? "<color=#b9c0c3>NEXT LEVEL</color>" : "LOCKED";
                 Ui.SetText(_state, state);
+                _stateLock.enabled = locked && _level != player + 1;
+                if (_stateLock.enabled)
+                {
+                    float w = Ui.PreferredWidth(_state, "LOCKED");
+                    var lr = _stateLock.rectTransform;
+                    lr.offsetMin = new Vector2(-S3 - w - S1 - 12, lr.offsetMin.y);
+                    lr.offsetMax = new Vector2(-S3 - w - S1, lr.offsetMax.y);
+                }
+                // future levels step back (unless picked or under the mouse)
+                _baseAlpha = (ProgData.CountAt(_level) == 0 ? .55f : 1f) * (locked && !sel && !_hover ? .75f : 1f);
+                _group.alpha = _baseAlpha;
             }
 
             public void Animate(float e, int dir)
             {
                 if (!_body.gameObject.activeSelf) return;
                 _body.anchoredPosition = new Vector2(dir == 0 ? 0 : dir * 90f * (1 - e), 0);
-                float baseAlpha = ProgData.CountAt(_level) == 0 ? .55f : 1f;
-                _group.alpha = baseAlpha * (dir == 0 ? 1 : e);
+                _group.alpha = _baseAlpha * (dir == 0 ? 1 : e);
             }
         }
     }

@@ -25,7 +25,7 @@ namespace LevelGate.Progression
         public const string Guid = "com.kkyangg.levelgate.progression";
         public const string Name = "LevelGate Progression";
         // MAJOR.MINOR.PATCH — see CHANGELOG.md
-        public const string Version = "0.9.8";
+        public const string Version = "0.9.9";
 
         internal static ProgressionPlugin Instance;
         internal static ConfigEntry<KeyboardShortcut> OpenKey;
@@ -47,6 +47,7 @@ namespace LevelGate.Progression
         internal static ConfigEntry<bool> BlurBackground;
         internal static ConfigEntry<bool> PerformanceMode;
         internal static ConfigEntry<bool> MenuShortcut;
+        internal static ConfigEntry<bool> FixStashIcons;
         internal static ConfigEntry<int> LastSeenLevel;
 
         private void Awake()
@@ -74,7 +75,16 @@ namespace LevelGate.Progression
                 new AcceptableValueRange<float>(-150f, 150f)));
             BlurBackground = Config.Bind("Screen", "BlurBackground", true, "Switch on a blur effect on the background camera while open (if the game's camera has one).");
             PerformanceMode = Config.Bind("Screen", "PerformanceMode", false,
-                "Lighter pictures for slower PCs: the big item picture and the cards' main pictures are drawn at normal size instead of extra sharp, and the rank emblems stand still. Also switchable with the checkbox on the screen.");
+                "Lighter pictures for slower PCs: the big item picture and the card pictures are drawn at a smaller size, the rank emblems stand still, and the list shows up to 12 items per category.");
+            PerformanceMode.SettingChanged += (_, __) => ProgScreen.Refresh();
+            FixStashIcons = Config.Bind("Screen", "FixStashIcons", false,
+                "Tick once to redraw every level-list item's icon at stash size (clears big icons left in the game's icon cache by older builds). It turns itself off again. Takes a few minutes; the stash shows loading icons meanwhile.");
+            FixStashIcons.SettingChanged += (_, __) =>
+            {
+                if (!FixStashIcons.Value) return;
+                FixStashIcons.Value = false;
+                if (GameItems.RepairLeft == 0) GameItems.RepairAll(ProgData.Levels.Keys.ToList());
+            };
             MenuShortcut = Config.Bind("Menu Button", "MainMenuShortcut", true, "A PROGRESSION block in the main menu's bottom-left corner (like the game's EXPANSIONS one) that opens the screen.");
             LastSeenLevel = Config.Bind("Menu Button", "LastSeenLevel", 0, new ConfigDescription("Your level when you last opened the screen (the NEW tag shows after a level-up). Set by the plugin.", null, new ConfigurationManagerAttributes { Browsable = false }));
             HideMainMenu = Config.Bind("Screen", "HideMainMenu", true, "Fade out the main menu (ESCAPE FROM TARKOV, CHARACTER, TRADING, EXIT…) while the screen is open.");

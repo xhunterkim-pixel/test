@@ -175,7 +175,7 @@ namespace LevelGate.Progression
 
         // ---------------------------------------------------------------- generated pictures
 
-        private static Sprite _diamond, _white, _vgrad, _hgrad, _radial, _dots, _cut, _lock, _vignette;
+        private static Sprite _white, _vgrad, _hgrad, _radial, _dots, _cut, _lock, _vignette;
         private static Sprite[] _grime;
         private static Sprite _dotGrid, _cutTR, _tabIcon;
 
@@ -431,26 +431,6 @@ namespace LevelGate.Progression
             return _dots = Sprite.Create(tex, new Rect(0, 0, w, h), new Vector2(.5f, .5f));
         }
 
-        /// <summary>A filled diamond (square turned 45°) — the menu button icon.</summary>
-        public static Sprite DiamondSprite()
-        {
-            if (_diamond != null) return _diamond;
-            const int n = 64;
-            var tex = new Texture2D(n, n, TextureFormat.RGBA32, false);
-            for (int y = 0; y < n; y++)
-                for (int x = 0; x < n; x++)
-                {
-                    float d = Mathf.Abs(x - n / 2f + .5f) + Mathf.Abs(y - n / 2f + .5f);
-                    float outer = Mathf.Clamp01(n / 2f - 2 - d), ring = Mathf.Clamp01(d - (n / 2f - 12)) * outer;
-                    float inner = Mathf.Clamp01(n / 2f - 18 - d);
-                    float a = Mathf.Max(ring, inner);
-                    tex.SetPixel(x, y, new Color(1, 1, 1, a));
-                }
-            tex.Apply();
-            _diamond = Sprite.Create(tex, new Rect(0, 0, n, n), new Vector2(.5f, .5f));
-            return _diamond;
-        }
-
         public static Sprite White()
         {
             if (_white != null) return _white;
@@ -531,5 +511,20 @@ namespace LevelGate.Progression
             }
             Quad(end, end + 2, Tick, .45f); // the end tick |
         }
+    }
+
+    /// <summary>Calls back on pointer enter / exit (hover states).</summary>
+    internal sealed class HoverHook : MonoBehaviour, UnityEngine.EventSystems.IPointerEnterHandler, UnityEngine.EventSystems.IPointerExitHandler
+    {
+        public Action<bool> On;
+        public static HoverHook Add(Component c, Action<bool> on)
+        {
+            var h = c.gameObject.GetComponent<HoverHook>() ?? c.gameObject.AddComponent<HoverHook>();
+            h.On = on;
+            return h;
+        }
+        public void OnPointerEnter(UnityEngine.EventSystems.PointerEventData e) { try { On?.Invoke(true); } catch (Exception x) { L.ErrorOnce("hover", x); } }
+        public void OnPointerExit(UnityEngine.EventSystems.PointerEventData e) { try { On?.Invoke(false); } catch (Exception x) { L.ErrorOnce("hover", x); } }
+        private void OnDisable() { try { On?.Invoke(false); } catch { } }
     }
 }

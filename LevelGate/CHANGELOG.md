@@ -40,6 +40,39 @@ Versions are **MAJOR.MINOR.PATCH**:
 
 ## LevelGate Progression (BepInEx plugin, separate DLL)
 
+### 0.9.9 — UI/UX pass
+- **Hierarchy:**
+  - The header is about you only: your rank emblem, rank name, "Rank X of 16 · next rank at level N", your level square and XP.
+  - "PROGRESSION" is a quiet 22 px grey page label. The selected level is shown only as **LEVEL X REWARDS**, on its card and in the reward content.
+- **Colour roles:**
+  - Orange means you (your level, XP, current level). Light neutral means selected. Grey means secondary, future or locked.
+  - Red appears only on an unmet requirement count, and green is restrained for met or unlocked.
+  - The background glow is about 40% weaker.
+- **Right panel:**
+  - Order: category → name → big damage / penetration / armor class / resource → weight / size / caliber → description → requirement box → INSPECT with an RMB keycap.
+  - Laid out by content, so long names push things down instead of overlapping. The description scrolls instead of being cut off.
+  - The duplicate "Category" row is gone.
+- **Preview:** the centre ITEM / CATEGORY / UNLOCKS AT block is gone. The preview fills the stage with a soft key light and is the focal point.
+- **Reward tiles:**
+  - Inventory-style tiles on a responsive grid (4 columns at 1080p, fewer on narrower screens), with 8 px gaps and the icon at about 80%.
+  - Category colour appears once per section, as a 3 px bar. Names get two lines, show the full name when short names collide, and hover shows a tooltip.
+  - The coloured strips, red dots and name bars are gone. Locked tiles are dimmed.
+- **Level cards:**
+  - Current level: orange header and state. Selected: light 2 px frame with a top bar. Hover: brighter edge.
+  - Future levels are muted, with one small lock and "LOCKED" in grey. The three per-card picture locks and the separate "+N" are gone ("147 unlocks").
+  - The rank title is small caps. The NEW state shows on levels reached since your last visit.
+- **Locked state:** one primary explanation, the requirement box with its unmet count in red. The preview lock stays as a quiet secondary signal. The list says "X LEVELS AWAY" in grey.
+- **Interaction:**
+  - Hover and selected states on tiles and cards, with short ~120 ms fades and the game's hover sound.
+  - Hovering a tile lifts it slightly. Selection is shown by shape (a top bar), not colour alone.
+  - The next-level-reward line is a visible link (underline on hover, "›").
+- **Spacing and type:**
+  - One spacing scale: 4, 8, 12, 16, 24 px.
+  - A 48 px screen margin shared by the panels and cards, with the arrows outside in the margin. 16 px gutters and panel padding.
+  - Six font sizes (12, 13, 15, 22, 24, 34) and two letter-spacing values.
+- **Developer controls:** "Performance mode" and "Fix stash icons" are off the screen and in the config: `Screen > PerformanceMode` (applies live) and `Screen > FixStashIcons` (tick once).
+- **Removed dead code:** the old diamond sprite, unused colour constants, the performance toggle and repair button UI, and the per-tile frame map.
+
 ### 0.9.8
 - **Q / E load instantly:**
   - Once the current page's pictures are done, the card pictures of the previous and next page are drawn ahead, at most one per frame.

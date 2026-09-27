@@ -1,4 +1,4 @@
-# LevelGate Progression (0.9.8, test build)
+# LevelGate Progression (0.9.9, test build)
 
 A Call of Duty style **Progression** screen inside Tarkov's main menu. It adds a
 **PROGRESSION** button to the menu bar next to Character, Trading, Flea Market and the rest.
@@ -6,11 +6,11 @@ A Call of Duty style **Progression** screen inside Tarkov's main menu. It adds a
 - **Bottom half:** five level cards per page (16 pages for levels 1–79).
   - Each card has an animated rank emblem, a rank title (a new rank every 5 levels), pictures from its top categories and its unlock count.
   - The emblems are in the `emblems` folder (sprite sheets listed in `emblems.txt`); delete it to get plain diamond badges.
-  - Each card also says whether the level is **Unlocked**, your **Current level**, the **Next level** or **Locked**.
-- **Top half:** everything that unlocks at the picked level, grouped by category.
-  - The header shows your level, your XP toward the next level and the next level's reward count.
-  - Left-click an item to show it big; right-click to inspect it.
-  - A red bloom glows from the right, stronger on locked levels.
+  - Each card also says whether the level is **Unlocked**, your **Current level**, the **Next level** or **Locked** (with a small lock).
+- **Header:** you — your rank emblem and rank, your level, your XP toward the next level and the next level's rewards (click it to jump there).
+- **Top half:** the picked level's rewards (**LEVEL X REWARDS**), grouped by category, the selected reward big in the middle,
+  and its details on the right (category, name, key stats, weight / size / caliber, description, requirement, INSPECT).
+  - Left-click an item to show it big; right-click (RMB) to inspect it. Hover a tile for its full name.
 - **Controls:**
   - ← → change the level by one.
   - Q / E, the arrows, the mouse wheel over the cards or the page dots change the page.
@@ -36,3 +36,5 @@ Settings are in `BepInEx\config\com.kkyangg.levelgate.progression.cfg` (or the F
 - **Menu Button > CopyButton**: which menu button to copy (a part of its name from the log).
 - **Screen > TopMargin / BottomMargin**: keep the game's bars uncovered.
 - **Menu Button > AddButton = false**: use the P key only (General > OpenScreenKey).
+- **Screen > PerformanceMode**: lighter pictures and still emblems for slower PCs.
+- **Screen > FixStashIcons**: tick once to redraw every level-list item's icon at stash size (clears big icons left by older builds).
