@@ -96,6 +96,7 @@ namespace LevelGate.Progression
         {
             L.Debug($"game screen changed to {screen}");
             CurrentScreen = screen?.ToString() ?? "";
+            ScreenChangedAt = Time.realtimeSinceStartup;
             if (ProgScreen.IsOpen) ProgScreen.Close("game screen changed to " + screen);
             if (_pendingOpen != null && CurrentScreen == "MainMenu") _pendingAt = Time.realtimeSinceStartup + .1f; // open just after the menu is back
         }
@@ -139,6 +140,13 @@ namespace LevelGate.Progression
         }
 
         public static bool Blocked() => Blocked(out _);
+
+        public static float ScreenChangedAt = -100;
+
+        /// <summary>Safe moment for background icon work: on the main menu itself (not the stash / traders / flea, which
+        /// draw their own icons), Progression closed, no screen change in the last 2 s, not deploying / in a raid.</summary>
+        public static bool QuietMenu() => CurrentScreen == "MainMenu" && !ProgScreen.IsOpen && !Blocked()
+            && Time.realtimeSinceStartup - ScreenChangedAt > 2f;
 
         private static bool _blockedShown;
         private static float _blockCheckAt;

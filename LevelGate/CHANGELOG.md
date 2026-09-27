@@ -40,6 +40,12 @@ Versions are **MAJOR.MINOR.PATCH**:
 
 ## LevelGate Progression (BepInEx plugin, separate DLL)
 
+### 0.9.21
+- **Fix (likely cause of a crash): background icon redraws ran during fast screen switching.** A 903-icon FixStashIcons pass was still forcing redraws while Inventory → Flea → Trader were switched quickly (each draws its own icons), and the game crashed natively.
+  - Background redraws (FixStashIcons, the SharpWeaponPreview weapon repair, the second restore pass) now run only on the main menu itself: Progression closed, no screen change in the last 2 s, not deploying or in a raid. They pause otherwise and continue later.
+  - They run at 2 icons per frame, and pausing, continuing and progress are logged.
+  - Closing Progression because another screen opened no longer redraws icons in the middle of that switch.
+
 ### 0.9.20
 - **Fix: Progression could be opened while deploying to a raid.** Clicking the tab on the deploying screen ("TimeHasCome") made the plugin go back to the main menu, which could break the raid load.
   - The PROGRESSION tab is now greyed out and not clickable (and P does nothing) everywhere except the main menu, inventory, traders, flea market, handbook, messenger, hideout and settings. That covers raid side / location selection, matchmaking, deploying, countdown, the raid and post-raid screens.

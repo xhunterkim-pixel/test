@@ -359,6 +359,7 @@ namespace LevelGate.Progression
         private static readonly Queue<string> _repair = new Queue<string>();
         public static int RepairLeft => _repair.Count;
         public static int RepairTotal;
+        private static bool _repairPaused;
 
         public static void RepairAll(IEnumerable<string> tpls)
         {
@@ -370,15 +371,23 @@ namespace LevelGate.Progression
         public static void RepairTick()
         {
             if (_repair.Count == 0 || _loadIcon == null) return;
-            if (MenuHook.Blocked()) return; // never while deploying / in a raid: the game needs its render time
-            var t0 = Time.realtimeSinceStartup;
-            while (_repair.Count > 0 && Time.realtimeSinceStartup - t0 < .012f)
+            // only on the main menu itself with nothing else going on: forcing icon redraws while the stash / traders /
+            // flea draw their own (and screens switch fast) crashed the game once
+            if (!MenuHook.QuietMenu())
+            {
+                if (!_repairPaused) { _repairPaused = true; L.Info($"items: icon redraw paused ({_repair.Count} left) — continues on the main menu"); }
+                return;
+            }
+            if (_repairPaused) { _repairPaused = false; L.Info($"items: icon redraw continues ({_repair.Count} left)"); }
+            int budget = 2; // a couple per frame
+            while (_repair.Count > 0 && budget-- > 0)
             {
                 var tpl = _repair.Dequeue();
                 var item = ItemOf(tpl);
                 if (item == null) continue;
                 try { CallIcon(_loadIcon, item, 1, true); } catch (Exception e) { L.ErrorOnce("redrawing an icon", e); }
             }
+            if (_repair.Count > 0 && _repair.Count % 100 == 0) L.Debug($"items: icon redraw {RepairTotal - _repair.Count} / {RepairTotal}");
             if (_repair.Count == 0) L.Info($"items: {RepairTotal} icons redrawn at stash size");
         }
 

@@ -151,7 +151,9 @@ namespace LevelGate.Progression
             _canvas.SetActive(false);
             MenuHook.SetOn(false);
             HideMenu(false);
-            GameItems.RestoreIcons(); // the big renders replaced the stash's cached icons: put them back
+            // the big renders' stash icons back to stash size: right away if we stay on the main menu; if the game is switching
+            // to another screen (stash, traders…) not in the middle of that — at the next quiet moment on the main menu
+            if (!why.StartsWith("game screen") && !why.StartsWith("blocked") && !why.StartsWith("another menu button")) GameItems.RestoreIcons();
             // at most every 10 minutes: each pass asks the game to redraw ~160 weapons, which it does in the background
             if (_sharpWeaponShown && GameItems.RepairLeft == 0 && Time.unscaledTime - _lastWeaponRepair > 600f)
             {
@@ -1383,7 +1385,7 @@ namespace LevelGate.Progression
 
         public static void Tick()
         {
-            if (_restoreAgainAt > 0 && Time.unscaledTime > _restoreAgainAt && !IsOpen && !MenuHook.Blocked()) { _restoreAgainAt = -1; GameItems.RestoreIcons(); }
+            if (_restoreAgainAt > 0 && Time.unscaledTime > _restoreAgainAt && !IsOpen && MenuHook.QuietMenu()) { _restoreAgainAt = -1; GameItems.RestoreIcons(); }
             if (!IsOpen) return;
             if (!_xpKnown && ProgData.HasExpTable) { _xpKnown = true; UpdateXp(); } // the SPT server's answer came in
             if (_fade != null && _fade.alpha < 1)
