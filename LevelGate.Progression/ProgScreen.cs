@@ -42,7 +42,7 @@ namespace LevelGate.Progression
             (61, "War Chief", "#b8323f", "#ff9aa5"), (66, "Ghost", "#b8323f", "#ffc0c6"), (71, "Myth", "#c9a227", "#fff1a8"),
             (76, "Legend of Tarkov", "#e0b84a", "#ffffff"),
         };
-        private static (int From, string Name, string Rim, string Light) TierOf(int level) => Tiers.Last(t => level >= t.From);
+        internal static (int From, string Name, string Rim, string Light) TierOf(int level) => Tiers.Last(t => level >= t.From);
 
         private static GameObject _canvas;
         private static RectTransform _bottom;
@@ -90,6 +90,7 @@ namespace LevelGate.Progression
                 if (!_built || _canvas == null) { _built = false; Build(); }
                 ProgData.Invalidate(); // names / categories again (the game may have finished loading them since)
                 int player = ProgData.PlayerLevel();
+                MenuWidget.Seen(player); // the NEW tag on the main-menu shortcut goes away
                 L.Info($"screen open ({why}); player level {player}, {ProgData.Levels.Count} limited items");
                 if (player > 0 && _level == 1) { _level = Mathf.Clamp(player, 1, ProgData.MaxLevel); _page = (_level - 1) / PerPage; }
                 _canvas.SetActive(true);

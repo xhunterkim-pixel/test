@@ -177,7 +177,53 @@ namespace LevelGate.Progression
 
         private static Sprite _diamond, _white, _vgrad, _hgrad, _radial, _dots, _cut, _lock, _vignette;
         private static Sprite[] _grime;
-        private static Sprite _dotGrid;
+        private static Sprite _dotGrid, _cutTR, _tabIcon;
+
+        /// <summary>A block with its top-right corner cut off (the EXPANSIONS icon shape). White: tint it.</summary>
+        public static Sprite CutCornerTopRight()
+        {
+            if (_cutTR != null) return _cutTR;
+            const int w = 84, h = 112, cut = 22;
+            var tex = new Texture2D(w, h, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Clamp };
+            for (int y = 0; y < h; y++)
+                for (int x = 0; x < w; x++)
+                {
+                    float d = (x + .5f) + (y + .5f) - (w + h - cut); // past the diagonal near the top-right
+                    tex.SetPixel(x, y, new Color(1, 1, 1, Mathf.Clamp01(.5f - d / 1.414f)));
+                }
+            tex.Apply();
+            return _cutTR = Sprite.Create(tex, new Rect(0, 0, w, h), new Vector2(.5f, .5f));
+        }
+
+        /// <summary>The menu tab icon: a red block with its top-right corner cut and a dark diamond in it (coloured, not white).</summary>
+        public static Sprite TabIcon()
+        {
+            if (_tabIcon != null) return _tabIcon;
+            const int n = 64, cut = 16, ss = 3;
+            var red = Hex("#d8412f");
+            var tex = new Texture2D(n, n, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Clamp };
+            for (int y = 0; y < n; y++)
+                for (int x = 0; x < n; x++)
+                {
+                    int inBlock = 0, inDiamond = 0;
+                    for (int j = 0; j < ss; j++)
+                        for (int i = 0; i < ss; i++)
+                        {
+                            float px = x + (i + .5f) / ss, py = y + (j + .5f) / ss;
+                            bool block = px >= 6 && px <= n - 6 && py >= 2 && py <= n - 2 && (px + py) <= (2 * n - 8 - cut);
+                            if (!block) continue;
+                            inBlock++;
+                            float d = Mathf.Abs(px - n / 2f + 2) + Mathf.Abs(py - n / 2f + 2);
+                            if (d <= 17 && d >= 9 || d <= 4) inDiamond++;
+                        }
+                    float a = inBlock / (float)(ss * ss), dia = inBlock == 0 ? 0 : inDiamond / (float)inBlock;
+                    var c = Color.Lerp(red, new Color(.08f, .05f, .05f), dia);
+                    c.a = a;
+                    tex.SetPixel(x, y, c);
+                }
+            tex.Apply();
+            return _tabIcon = Sprite.Create(tex, new Rect(0, 0, n, n), new Vector2(.5f, .5f));
+        }
 
         /// <summary>A repeating tile: a fine dot grid with a faint line every 4th dot (the Arena background pattern).</summary>
         public static Sprite DotGrid()

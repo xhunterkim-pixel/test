@@ -40,6 +40,15 @@ Versions are **MAJOR.MINOR.PATCH**:
 
 ## LevelGate Progression (BepInEx plugin, separate DLL)
 
+### 0.9.6
+- **Main menu shortcut** (bottom-left, like the game's EXPANSIONS block):
+  - A red block with your rank emblem as a dark silhouette, **PROGRESSION** in red, and "Level X · Rank | XP / needed EXP" under it.
+  - A red glow comes out of the corner, and it brightens on hover with the game's hover sound.
+  - Clicking it opens the screen. It's part of the game's main menu, so it hides and shows with it.
+  - Turn it off with `Menu Button > MainMenuShortcut`.
+- **NEW tag:** a green NEW shows on the shortcut after you level up, until you open the screen. The last seen level is saved in the config, so it survives restarts.
+- **Tab icon:** the PROGRESSION tab's icon is now a red block with a cut corner and a dark diamond, instead of the white diamond.
+
 ### 0.9.5
 - **XP bar:** fixed an off-by-one-level sum. At level 2 it showed your total XP (1 364 / 1 000) instead of the XP into the level (364 / 1 000).
 - **Enlarged stash icons:**

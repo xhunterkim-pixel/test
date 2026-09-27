@@ -336,7 +336,8 @@ namespace LevelGate.Progression
                 // the layout sizes the icon from its picture: keep the original icon's size (a bit smaller: the diamond is bold)
                 var size = img.rectTransform.rect.size;
                 if (size.x < 4) size = new Vector2(26, 26);
-                img.sprite = Ui.DiamondSprite();
+                img.sprite = Ui.TabIcon(); // red block, like the EXPANSIONS icon
+                img.color = Color.white;
                 img.preserveAspect = true;
                 var le = img.GetComponent<LayoutElement>() ?? img.gameObject.AddComponent<LayoutElement>();
                 le.minWidth = le.preferredWidth = size.x * .8f;

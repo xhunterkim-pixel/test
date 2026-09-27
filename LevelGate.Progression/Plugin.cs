@@ -25,7 +25,7 @@ namespace LevelGate.Progression
         public const string Guid = "com.kkyangg.levelgate.progression";
         public const string Name = "LevelGate Progression";
         // MAJOR.MINOR.PATCH — see CHANGELOG.md
-        public const string Version = "0.9.5";
+        public const string Version = "0.9.6";
 
         internal static ProgressionPlugin Instance;
         internal static ConfigEntry<KeyboardShortcut> OpenKey;
@@ -46,6 +46,8 @@ namespace LevelGate.Progression
         internal static ConfigEntry<float> CameraTurn;
         internal static ConfigEntry<bool> BlurBackground;
         internal static ConfigEntry<bool> PerformanceMode;
+        internal static ConfigEntry<bool> MenuShortcut;
+        internal static ConfigEntry<int> LastSeenLevel;
 
         private void Awake()
         {
@@ -73,6 +75,8 @@ namespace LevelGate.Progression
             BlurBackground = Config.Bind("Screen", "BlurBackground", true, "Switch on a blur effect on the background camera while open (if the game's camera has one).");
             PerformanceMode = Config.Bind("Screen", "PerformanceMode", false,
                 "Lighter pictures for slower PCs: the big item picture and the cards' main pictures are drawn at normal size instead of extra sharp, and the rank emblems stand still. Also switchable with the checkbox on the screen.");
+            MenuShortcut = Config.Bind("Menu Button", "MainMenuShortcut", true, "A PROGRESSION block in the main menu's bottom-left corner (like the game's EXPANSIONS one) that opens the screen.");
+            LastSeenLevel = Config.Bind("Menu Button", "LastSeenLevel", 0, new ConfigDescription("Your level when you last opened the screen (the NEW tag shows after a level-up). Set by the plugin.", null, new ConfigurationManagerAttributes { Browsable = false }));
             HideMainMenu = Config.Bind("Screen", "HideMainMenu", true, "Fade out the main menu (ESCAPE FROM TARKOV, CHARACTER, TRADING, EXIT…) while the screen is open.");
             FreeItemsAtLevel1 = Config.Bind("Screen", "CountFreeItemsAtLevel1", false,
                 "Count items without a limit as level 1 unlocks (that's most of the game's items).");
@@ -111,6 +115,7 @@ namespace LevelGate.Progression
                 ProgData.Tick();
                 MenuHook.Tick();
                 ProgScreen.Tick();
+                MenuWidget.Tick();
             }
             catch (Exception e) { L.ErrorOnce("update", e); }
         }
@@ -177,5 +182,14 @@ namespace LevelGate.Progression
         {
             if (_once.Add(where + e.GetType().Name + e.Message)) Error(where + " (further identical errors not logged)", e);
         }
+    }
+}
+
+namespace LevelGate.Progression
+{
+    /// <summary>Read by BepInEx Configuration Manager (by name): hides a setting from its window.</summary>
+    internal sealed class ConfigurationManagerAttributes
+    {
+        public bool? Browsable;
     }
 }
