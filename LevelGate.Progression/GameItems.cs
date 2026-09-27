@@ -107,7 +107,7 @@ namespace LevelGate.Progression
             for (int i = 1; i < ps.Length; i++)
                 args[i] = ps[i].ParameterType == typeof(int) && ps[i].Name.IndexOf("scale", StringComparison.OrdinalIgnoreCase) >= 0 ? scale
                     // a bigger picture has to be drawn again, not taken from the stash-size cache
-                    : ps[i].ParameterType == typeof(bool) && ps[i].Name.IndexOf("forced", StringComparison.OrdinalIgnoreCase) >= 0 ? (object)(forced ?? scale >= 3)
+                    : ps[i].ParameterType == typeof(bool) && ps[i].Name.IndexOf("forced", StringComparison.OrdinalIgnoreCase) >= 0 ? (object)(forced ?? scale >= 2)
                     : ps[i].HasDefaultValue ? ps[i].DefaultValue : ps[i].ParameterType == typeof(int) ? (object)1 : false;
             return m.Invoke(null, args);
         }
@@ -217,7 +217,9 @@ namespace LevelGate.Progression
                     L.Info($"items: icons from {m.DeclaringType.FullName}.{m.Name}({Sig(m)}) -> {icon.GetType().FullName}");
                     L.Debug("  icon object members: " + string.Join(", ", icon.GetType().GetProperties(Refl.All).Select(p => p.Name + ":" + p.PropertyType.Name)
                         .Concat(icon.GetType().GetFields(Refl.All).Select(f => f.Name + ":" + f.FieldType.Name)).Take(40).ToArray()));
-                    return icon;
+                    // the probe asked at stash size; a bigger request goes through the normal path (else the session's
+                    // first picture stayed a stretched 64 px icon)
+                    return scale != 1 ? IconOf(item, scale) : icon;
                 }
                 catch (Exception e) { L.Debug($"icon loader {m.DeclaringType.Name}.{m.Name} failed: {e.GetBaseException().GetType().Name}: {e.GetBaseException().Message}"); }
             }
@@ -267,6 +269,13 @@ namespace LevelGate.Progression
 
         /// <summary>The render scale that gives about targetPx on the item's long side (so a 1×1 box of ammo gets as many
         /// real pixels as a rifle), clamped to 2–8x and to 2048 px.</summary>
+        /// <summary>Card pictures: stash size when that's already big enough (rifles, backpacks), 2–3x for small items.</summary>
+        public static int CardScale(string tpl, float targetPx)
+        {
+            var (w, h) = CellsOf(ItemOf(tpl));
+            return Mathf.Clamp(Mathf.CeilToInt(targetPx / (PxPerCell * Mathf.Max(w, h))), 1, 3);
+        }
+
         public static int ScaleFor(string tpl, float targetPx)
         {
             var (w, h) = CellsOf(ItemOf(tpl));
@@ -282,16 +291,20 @@ namespace LevelGate.Progression
         public static Sprite CopyOf(string tpl, int scale) => _copies.TryGetValue(tpl + "@" + scale, out var sp) && sp != null ? sp : null;
 
         /// <summary>The picture to show for an icon: normal ones as they are; bigger ones copied (then the game's is put back).</summary>
-        public static Sprite TakeSprite(object icon, string tpl)
+        /// <summary>done = false: a stand-in (the stash-size picture) while the bigger one is still being drawn — show it and ask again.</summary>
+        public static Sprite TakeSprite(object icon, string tpl, out bool done)
         {
+            done = false;
             var sp = SpriteOf(icon);
-            if (sp == null || icon == null || !_pending.TryGetValue(icon, out var p)) return sp;
+            if (sp == null) return null;
+            if (icon == null || !_pending.TryGetValue(icon, out var p)) { done = true; return sp; }
             // only the render we asked for counts: at least ~70% of the expected size. The first picture to arrive is often
             // the game's stash-size one (64 px a cell) — taking that one made the big preview a stretched thumbnail.
             float longSide = Mathf.Max(sp.rect.width, sp.rect.height);
             bool bigEnough = sp != p.Before && longSide >= p.Expect * .7f;
-            if (!bigEnough && Time.realtimeSinceStartup < p.Deadline) return null;
+            if (!bigEnough && Time.realtimeSinceStartup < p.Deadline) return sp; // stand-in, not done
             _pending.Remove(icon);
+            done = true;
             if (!bigEnough)
             {
                 // gave up waiting: show what there is, but don't keep it (next time asks again), and put the stash's back

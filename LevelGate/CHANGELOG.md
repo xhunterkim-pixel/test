@@ -40,6 +40,14 @@ Versions are **MAJOR.MINOR.PATCH**:
 
 ## LevelGate Progression (BepInEx plugin, separate DLL)
 
+### 0.9.11
+- **Reward list header:** back to the cleaner 0.9.9 look, "LEVEL 21 REWARDS" with "4 ITEMS · 19 LEVELS AWAY" and a small lock on the right. The state words stay the 0.9.10 ones (CURRENT / UNLOCKED / NEXT / X LEVELS AWAY).
+- **Pictures, fixes to the 0.9.10 sharpness work (found in the log):**
+  - The session's first picture went through the loader probe at stash size, so the centre showed "64x64 (asked for 8x)". Once the loader is known, it now goes through the normal scaled path.
+  - 2x renders weren't forced, so the game just returned its cached stash-size icon, and the size check then held card pictures back for up to 6 s. 2x renders are forced now.
+  - While a bigger render is being drawn, the stash-size picture shows straight away and is swapped for the sharp one when it arrives.
+  - Card pictures (and their pre-loading) use one scale per item: stash size when that's already about 120 px (rifles, backpacks), 2–3x for small items.
+
 ### 0.9.10 — final audit fixes
 - **Level terms spelled out:**
   - The header has "CURRENT LEVEL" next to your level number, and the rank line reads "Rank 1 of 16 · next: Drifter (level 6)".

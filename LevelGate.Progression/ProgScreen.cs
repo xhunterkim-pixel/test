@@ -75,7 +75,6 @@ namespace LevelGate.Progression
         private static string _featTpl;
         private static object _featIcon;
         private static int _featScale;
-        private static bool _featIconLogged;
         // bottom
         private static readonly Card[] _cards = new Card[PerPage];
         private static readonly List<Image> _segments = new List<Image>();
@@ -383,11 +382,10 @@ namespace LevelGate.Progression
         {
             // left third: the selected level's rewards
             var panel = Panel(top, "Unlocks", new Vector2(0, 0), new Vector2(.34f, 1), new Vector2(Margin, S4), new Vector2(-Gutter / 2, -PanelTop));
-            _listTitle = Ui.Label(Ui.Rect(panel, "Title", new Vector2(0, 1), Vector2.one, new Vector2(PanelPad, -34), new Vector2(-PanelPad, -S2)), "Text", "", TTitle, Text, TextAnchor.MiddleLeft, false, 0, true);
-            // the state on its own line under the title (so the two never collide on narrow screens):
-            // "20 ITEMS · CURRENT" / "8 ITEMS · 29 LEVELS AWAY" (with a small lock in front)
-            _listState = Ui.Label(Ui.Rect(panel, "State", new Vector2(0, 1), Vector2.one, new Vector2(PanelPad, -50), new Vector2(-PanelPad, -34)), "Text", "", TCaps, Grey, TextAnchor.MiddleLeft, false, Caps);
-            _listLock = Ui.Img(Ui.Rect(panel, "Lock", new Vector2(0, 1), new Vector2(0, 1), new Vector2(PanelPad, -48), new Vector2(PanelPad + 12, -36)), Grey, Ui.Lock());
+            _listTitle = Ui.Label(Ui.Rect(panel, "Title", new Vector2(0, 1), Vector2.one, new Vector2(PanelPad, -48), new Vector2(-PanelPad, -S2)), "Text", "", TTitle, Text, TextAnchor.MiddleLeft, false);
+            // state on the right in small caps: "20 ITEMS · CURRENT" / "4 ITEMS · 19 LEVELS AWAY" with a small lock after it
+            _listState = Ui.Label(Ui.Rect(panel, "State", new Vector2(0, 1), Vector2.one, new Vector2(PanelPad, -48), new Vector2(-PanelPad, -S2)), "Text", "", TCaps, Grey, TextAnchor.MiddleRight, false, Caps);
+            _listLock = Ui.Img(Ui.Rect(panel, "Lock", new Vector2(1, 1), new Vector2(1, 1), new Vector2(-PanelPad - 12, -34), new Vector2(-PanelPad, -22)), Grey, Ui.Lock());
             _listLock.enabled = false;
             Ui.Img(Ui.Rect(panel, "Rule", new Vector2(0, 1), Vector2.one, new Vector2(0, -56), new Vector2(0, -55)), Border);
 
@@ -780,7 +778,7 @@ namespace LevelGate.Progression
 
             // the reward list
             var groups = ProgData.Groups.Select(g => (g, list: items.Where(it => it.Group == g.Key).ToList())).Where(x => x.list.Count > 0).ToList();
-            Ui.SetText(_listTitle, $"<size={TCaps}><color=#7d8588>VIEWING</color></size>  LEVEL {level} <color=#7d8588>REWARDS</color>");
+            Ui.SetText(_listTitle, $"LEVEL {level} <color=#7d8588>REWARDS</color>");
             string count = $"{items.Count} ITEM{(items.Count == 1 ? "" : "S")}";
             bool away = player > 0 && level > player;
             string st = player <= 0 ? count : level == player ? $"{count}  ·  <color=#e0562f>CURRENT</color>" : level < player ? $"{count}  ·  <color={Green}>UNLOCKED</color>"
@@ -788,7 +786,7 @@ namespace LevelGate.Progression
             Ui.SetText(_listState, st);
             _listLock.enabled = away;
             var srt = ((Component)_listState).GetComponent<RectTransform>();
-            srt.offsetMin = new Vector2(away ? PanelPad + 12 + S2 : PanelPad, srt.offsetMin.y);
+            srt.offsetMax = new Vector2(away ? -PanelPad - 12 - S2 : -PanelPad, srt.offsetMax.y);
 
             foreach (Transform ch in _content) UnityEngine.Object.Destroy(ch.gameObject);
             _tiles.Clear();
@@ -976,14 +974,19 @@ namespace LevelGate.Progression
         private static int _prefetchPage = -1;
         private static readonly Queue<string> _prefetchQueue = new Queue<string>();
 
+        /// <summary>Card pictures (and their pre-loading) share one scale per item: about 120 px on the long side.</summary>
+        private static int CardScaleOf(string tpl) => Perf ? 1 : GameItems.CardScale(tpl, 120);
+
         private static void Prefetch()
         {
-            int scale = Perf ? 1 : 2;
+
             // pictures asked for earlier: take them once drawn (bigger ones become our own copy)
             for (int i = _prefetching.Count - 1; i >= 0; i--)
             {
                 var (icon, tpl) = _prefetching[i];
-                if (icon == null || GameItems.TakeSprite(icon, tpl) != null) _prefetching.RemoveAt(i);
+                if (icon == null) { _prefetching.RemoveAt(i); continue; }
+                GameItems.TakeSprite(icon, tpl, out bool done);
+                if (done) _prefetching.RemoveAt(i);
             }
             if (_iconRequests.Count > 0 || _prefetching.Count > 2) return; // the current page first
             if (_prefetchPage != _page)
@@ -1000,6 +1003,7 @@ namespace LevelGate.Progression
             while (_prefetchQueue.Count > 0)
             {
                 var tpl = _prefetchQueue.Dequeue();
+                int scale = CardScaleOf(tpl);
                 if (!_prefetchAsked.Add(tpl + "@" + scale) || (scale != 1 && GameItems.CopyOf(tpl, scale) != null)) continue;
                 _prefetching.Add((GameItems.IconOf(GameItems.ItemOf(tpl), scale), tpl));
                 break; // one per frame
@@ -1012,11 +1016,12 @@ namespace LevelGate.Progression
             {
                 var (icon, pic, placeholder, tpl) = list[i];
                 if (pic == null) { list.RemoveAt(i); continue; }
-                var sprite = GameItems.TakeSprite(icon, tpl);
+                var sprite = GameItems.TakeSprite(icon, tpl, out bool done);
                 if (sprite == null) continue;
-                pic.sprite = sprite;
+                if (pic.sprite != sprite) pic.sprite = sprite; // a stand-in first, then the sharper one when it's drawn
                 pic.enabled = true;
                 if (placeholder != null) placeholder.gameObject.SetActive(false);
+                if (!done) continue;
                 list.RemoveAt(i);
                 if (_iconsShown++ == 0) L.Info($"first item icon shown ({tpl}, {sprite.rect.width:0}x{sprite.rect.height:0} px)");
             }
@@ -1211,13 +1216,18 @@ namespace LevelGate.Progression
                     if (over != null) Inspect(over.Tpl);
                 }
             }
-            if (_featIcon != null && !_featPic.enabled)
+            if (_featIcon != null)
             {
-                var sp = GameItems.TakeSprite(_featIcon, _featTpl);
+                var sp = GameItems.TakeSprite(_featIcon, _featTpl, out bool done);
                 if (sp != null)
                 {
-                    _featPic.sprite = sp; _featPic.enabled = true; _featShort.gameObject.SetActive(false);
-                    if (!_featIconLogged) { _featIconLogged = true; L.Info($"big picture: {sp.rect.width:0}x{sp.rect.height:0} px (asked the game for {(_featScale)}x)"); }
+                    if (_featPic.sprite != sp) _featPic.sprite = sp; // stand-in first, the full render when it arrives
+                    _featPic.enabled = true; _featShort.gameObject.SetActive(false);
+                    if (done)
+                    {
+                        _featIcon = null;
+                        L.Debug($"big picture: {sp.rect.width:0}x{sp.rect.height:0} px (asked the game for {_featScale}x)");
+                    }
                 }
             }
             if (_windowLogAt > 0 && now > _windowLogAt) { _windowLogAt = 0; LogWindows(); }
@@ -1410,7 +1420,7 @@ namespace LevelGate.Progression
                     if (it == null) continue;
                     Ui.SetText(_picNames[i], ""); // no name flashing in while the picture loads (the pages around are pre-loaded)
                     _picNames[i].gameObject.SetActive(true);
-                    RequestIcon(_cardIcons, it.Tpl, Perf ? 1 : 2, _pics[i], _picNames[i]);
+                    RequestIcon(_cardIcons, it.Tpl, CardScaleOf(it.Tpl), _pics[i], _picNames[i]);
                     _hits.Add((_picRects[i], it));
                 }
                 _group.alpha = items.Count == 0 ? .55f : 1f;
