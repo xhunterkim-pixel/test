@@ -40,6 +40,11 @@ Versions are **MAJOR.MINOR.PATCH**:
 
 ## LevelGate Progression (BepInEx plugin, separate DLL)
 
+### 0.9.46
+- **Stat icons** in the right panel: every stat shows the game's own icon from its inspect window (fire rate, ergonomics, recoil, caliber, effective distance, weight, armor class…), found by name at runtime; a stat the game has no icon for just shows without one. The log lists what was found ("stat icons: …", "stat icon 'Caliber': …").
+- **Small stats laid out like the inspect window**: dark strips with icon + CAPS label on the left and the value on the right, two to a line in even columns (they used to be a 3/4-column grid that didn't line up with the big stats above).
+- **Category titles work now**: WEAPONS › / AMMO › are grey tabs like the game's slot titles (EARPIECE ›, HEADWEAR ›). Click one to fold that category away (›) or open it again (chevron points down); it stays folded on other levels until the screen is reloaded.
+
 ### 0.9.45
 - **Streaks, Contours and Topo now move**, very slowly: contour lines flow along the slope (rings grow and shrink on Topo), streaks shimmer and drift. **2. Graphics > PatternMotion** (0–3, default 1) sets how fast; 0 = still.
 - **Many more lines**: Contours is now ~55 long wavy lines across the screen; Topo is a dense topographic map with every fifth line a little brighter (index lines).

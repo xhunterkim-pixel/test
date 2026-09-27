@@ -1,4 +1,4 @@
-# LevelGate Progression (0.9.45, test build)
+# LevelGate Progression (0.9.46, test build)
 
 A Call of Duty style **Progression** screen inside Tarkov's main menu. It adds a
 **PROGRESSION** button to the menu bar next to Character, Trading, Flea Market and the rest.
@@ -40,6 +40,7 @@ Settings are in `BepInEx\config\com.kkyangg.levelgate.progression.cfg` (or the F
   - High: extra-sharp weapons too (every level-list weapon is redrawn at stash size after the screen closes, since the game can carry big weapon pictures over to stash weapons).
 - **2. Graphics > XpAnimation** (on by default): after you gain XP, the next open plays it out in beats: the XP bar and level ups, then a new rank emblem, then the new levels' cards unlocking, then your new level is selected. Space (or a click): tap = next moment (next level up, the rank, the cards, the summary, the end), hold Space = next part. Esc closes.
 - **2. Graphics > Scratches / Vignette / RedGlow**: how strong the worn surface (scratches, smudges, dot grid), the dark corners and the red top-right glow are (1 = original; live).
+- The right panel shows each stat with the game's own inspect icon; the small stats are inspect-style strips, two per line. Category titles in the reward list (WEAPONS ›, AMMO ›) fold / unfold that category on click.
 - **2. Graphics > Pattern**: the faint background pattern: Dots (default grid), Streaks (vertical grain), Contours (smooth wavy lines) or Topo (busy topographic lines). Neutral white; its strength follows Scratches. Live.
 - **2. Graphics > PatternMotion** (0–3, default 1): how fast Streaks / Contours / Topo slowly move (0 = still). The pattern is worked out on a worker thread and refreshed about 10 times a second (5 on Low), only while the screen is open; closed, it does nothing, and going into a raid frees it.
 - **2. Graphics > RefreshIcons**: tick once to redraw every item picture (the screen's own and the stash icons). A message at the top of the screen shows the progress and when it's done. Changing Quality does this by itself for the pictures it affects.

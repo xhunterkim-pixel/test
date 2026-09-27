@@ -544,7 +544,7 @@ namespace LevelGate.Progression
             // WEIGHT  SIZE  CALIBER (a second line when there are more than fit the grid)
             _minorRow = Ui.Rect(info, "Minor", Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
             var mvl = _minorRow.gameObject.AddComponent<VerticalLayoutGroup>();
-            mvl.spacing = S2; mvl.childControlHeight = true; mvl.childControlWidth = true; mvl.childForceExpandHeight = false; mvl.childForceExpandWidth = true;
+            mvl.spacing = S1; mvl.childControlHeight = true; mvl.childControlWidth = true; mvl.childForceExpandHeight = false; mvl.childForceExpandWidth = true;
             BuildRequirement(info);                                                             // REQUIREMENT (right under the item's stats)
             Rule(info, S1);
             // the game's description: scrolls when it's longer than the space left
@@ -716,7 +716,7 @@ namespace LevelGate.Progression
             return rt;
         }
 
-        /// <summary>One stat: small caps label over its value (major: big and bold; minor: body size).</summary>
+        /// <summary>One big stat: the game's stat icon and a small caps label, the value big under it.</summary>
         private static void Stat(RectTransform row, string label, string value, bool major)
         {
             var cell = Ui.Rect(row, label, Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
@@ -725,10 +725,52 @@ namespace LevelGate.Progression
             le.minWidth = 0; le.preferredWidth = 0; le.flexibleWidth = 1; le.layoutPriority = 2;
             var vl = cell.gameObject.AddComponent<VerticalLayoutGroup>();
             vl.spacing = 2; vl.childControlHeight = true; vl.childControlWidth = true; vl.childForceExpandHeight = false;
-            var l = FlowText(cell, "Label", TCaps, Dim, false, Caps);
+            var head = Ui.Rect(cell, "Head", Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
+            var hl = head.gameObject.AddComponent<HorizontalLayoutGroup>();
+            hl.spacing = 5; hl.childAlignment = TextAnchor.MiddleLeft;
+            hl.childControlWidth = hl.childControlHeight = true; hl.childForceExpandWidth = hl.childForceExpandHeight = false;
+            StatIcon(head, label, 13);
+            var l = FlowText(head, "Label", TCaps, Dim, false, Caps);
             Ui.SetText(l, label.ToUpperInvariant());
             var v = FlowText(cell, "Value", major ? THero : TStrong, Text, major, 0);
             Ui.SetText(v, value);
+        }
+
+        /// <summary>The game's own icon for a stat (as in its inspect window), or nothing when it has none.</summary>
+        private static void StatIcon(RectTransform parent, string label, float size)
+        {
+            var sp = StatIcons.Of(label);
+            if (sp == null) return;
+            var rt = Ui.Rect(parent, "Icon", Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
+            var le = rt.gameObject.AddComponent<LayoutElement>();
+            le.minWidth = le.preferredWidth = le.minHeight = le.preferredHeight = size;
+            var img = Ui.Img(rt, Ui.Hex("#8d9699"), sp);
+            img.preserveAspect = true;
+        }
+
+        /// <summary>
+        /// One small stat as the game's inspect window shows them (CALIBER · 762x51, EFFECTIVE DISTANCE · 500 meters):
+        /// a dark strip, icon and caps label on the left, the value on the right.
+        /// </summary>
+        private static void StatStrip(RectTransform row, string label, string value)
+        {
+            var cell = Ui.Rect(row, label.Length > 0 ? label : "Empty", Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
+            var le = cell.gameObject.AddComponent<LayoutElement>();
+            le.minWidth = 0; le.preferredWidth = 0; le.flexibleWidth = 1; le.minHeight = le.preferredHeight = 26;
+            if (label.Length == 0) return;
+            Ui.Img(cell, Ui.Hex("#0b1012", .75f));
+            Ui.Img(Ui.Rect(cell, "Edge", Vector2.zero, new Vector2(1, 0), Vector2.zero, new Vector2(0, 1)), Ui.Hex("#2b3438", .7f));
+            var hl = cell.gameObject.AddComponent<HorizontalLayoutGroup>();
+            hl.padding = new RectOffset(7, 8, 0, 0); hl.spacing = 6; hl.childAlignment = TextAnchor.MiddleLeft;
+            hl.childControlWidth = hl.childControlHeight = true; hl.childForceExpandWidth = hl.childForceExpandHeight = false;
+            StatIcon(cell, label, 14);
+            var l = FlowText(cell, "Label", TCaps - 1, Dim, false, 1);
+            Ui.SetText(l, label.ToUpperInvariant());
+            var lle = ((Component)l).gameObject.AddComponent<LayoutElement>();
+            lle.flexibleWidth = 1; lle.minWidth = 0;
+            var vgo = new GameObject("Value", typeof(RectTransform));
+            vgo.transform.SetParent(cell, false);
+            Ui.AddText(vgo, value, TBody, Text, TextAnchor.MiddleRight, false, 0);
         }
 
         private static void BuildBottom(RectTransform bottom)
@@ -1172,18 +1214,54 @@ namespace LevelGate.Progression
                 var sl = section.gameObject.AddComponent<VerticalLayoutGroup>();
                 sl.spacing = S2; sl.childControlHeight = true; sl.childControlWidth = true; sl.childForceExpandHeight = false; sl.childForceExpandWidth = true;
 
-                // section header: the category's colour once, as a 3 px bar; name in small caps; the count quieter
+                // section header like the game's slot titles (EARPIECE ›, HEADWEAR ›): a grey tab with caps and a chevron,
+                // sitting on a hairline; clicking it folds the category away (› ) or opens it again (⌄), kept while the screen is up
                 var head = Ui.Rect(section, "Head", Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
-                head.gameObject.AddComponent<LayoutElement>().preferredHeight = 22;
-                // like the game's slot titles (EARPIECE ›, BACKPACK ›): a dark strip, caps, a chevron at the end
-                Ui.Img(head, Ui.Hex("#1a2124", .95f));
-                Ui.Img(Ui.Rect(head, "Line", Vector2.zero, new Vector2(1, 0), Vector2.zero, new Vector2(0, 1)), Ui.Hex("#3a4346"));
-                Ui.Img(Ui.Rect(head, "Bar", Vector2.zero, new Vector2(0, 1), Vector2.zero, new Vector2(2, 0)), Ui.Hex(g.Color, .85f));
-                Ui.Label(Ui.Rect(head, "Chevron", new Vector2(1, 0), Vector2.one, new Vector2(-20, 0), new Vector2(-S2, 0)), "Text", "›", TStrong, Ui.Hex("#7d8588"), TextAnchor.MiddleRight, false);
-                Ui.Label(Ui.Rect(head, "Name", Vector2.zero, Vector2.one, new Vector2(2 + S2, 0), new Vector2(-24, 0)), "Text",
-                    $"{g.Name.ToUpperInvariant()}  <color=#7d8588>{list.Count}{(list.Count > max ? $" · showing {max}" : "")}</color>", TCaps, Ui.Hex("#b9c0c3"), TextAnchor.MiddleLeft, false, Caps);
+                head.gameObject.AddComponent<LayoutElement>().preferredHeight = 24;
+                var headHit = Ui.Img(head, new Color(0, 0, 0, 0), null, true);
+                Ui.Img(Ui.Rect(head, "Line", Vector2.zero, new Vector2(1, 0), Vector2.zero, new Vector2(0, 1)), Ui.Hex("#3a4346", .8f));
+                var tab = Ui.Rect(head, "Tab", Vector2.zero, new Vector2(0, 1), Vector2.zero, Vector2.zero);
+                tab.pivot = new Vector2(0, .5f);
+                var tabFace = Ui.Img(tab, Ui.Hex("#262d30", .95f));
+                var tabTop = Ui.Img(Ui.Rect(tab, "Top", new Vector2(0, 1), Vector2.one, new Vector2(0, -1), Vector2.zero), Ui.Hex("#3e484c"));
+                tabTop.gameObject.AddComponent<LayoutElement>().ignoreLayout = true;
+                var bar = Ui.Img(Ui.Rect(tab, "Bar", Vector2.zero, new Vector2(0, 1), Vector2.zero, new Vector2(2, 0)), Ui.Hex(g.Color, .9f));
+                bar.gameObject.AddComponent<LayoutElement>().ignoreLayout = true;
+                var thl = tab.gameObject.AddComponent<HorizontalLayoutGroup>();
+                thl.padding = new RectOffset(10, 8, 0, 0); thl.spacing = 10; thl.childAlignment = TextAnchor.MiddleLeft;
+                thl.childControlWidth = thl.childControlHeight = true; thl.childForceExpandWidth = thl.childForceExpandHeight = false;
+                tab.gameObject.AddComponent<ContentSizeFitter>().horizontalFit = ContentSizeFitter.FitMode.PreferredSize;
+                var tabText = FlowText(tab, "Name", TCaps, Ui.Hex("#c3c9cb"), true, 1);
+                Ui.SetText(tabText, $"{g.Name.ToUpperInvariant()}  <color=#7d8588>{list.Count}{(list.Count > max ? $" · showing {max}" : "")}</color>");
+                var chev = Ui.Rect(tab, "Chevron", Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
+                var cle = chev.gameObject.AddComponent<LayoutElement>();
+                cle.minWidth = cle.preferredWidth = 12; cle.minHeight = cle.preferredHeight = 14;
+                var chevText = Ui.Label(chev, "Text", "›", TStrong + 2, Ui.Hex("#9aa2a5"), TextAnchor.MiddleCenter, false);
 
                 var grid = Ui.Rect(section, "Grid", Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
+                string catKey = g.Key;
+                void ShowFolded()
+                {
+                    bool folded = _foldedCats.Contains(catKey);
+                    grid.gameObject.SetActive(!folded);
+                    chev.localRotation = Quaternion.Euler(0, 0, folded ? 0 : -90); // › folded, pointing down while open
+                }
+                ShowFolded();
+                var hb = head.gameObject.AddComponent<Button>();
+                hb.targetGraphic = headHit; hb.transition = Selectable.Transition.None;
+                hb.onClick.AddListener(() =>
+                {
+                    if (!_foldedCats.Remove(catKey)) _foldedCats.Add(catKey);
+                    Sounds.Click();
+                    ShowFolded();
+                    L.Debug($"category {catKey} {(_foldedCats.Contains(catKey) ? "folded" : "opened")}");
+                });
+                HoverHook.Add(headHit, on =>
+                {
+                    FadeTo(tabFace, on ? Ui.Hex("#323a3e", .95f) : Ui.Hex("#262d30", .95f));
+                    FadeTo(chevText as Graphic, on ? Text : Ui.Hex("#9aa2a5"));
+                });
+
                 var gl = grid.gameObject.AddComponent<GridLayoutGroup>();
                 gl.cellSize = new Vector2(cell, Mathf.Round(cell * .78f) + TileLabel); // 4:3 thumbnails
                 gl.spacing = new Vector2(S2, S2);
@@ -1205,6 +1283,8 @@ namespace LevelGate.Progression
             UpdateSelection();
             L.Debug($"level {level}: {items.Count} item(s) in {groups.Count} categories, {n} tiles drawn in {(Time.realtimeSinceStartup - t0) * 1000:0} ms");
         }
+
+        private static readonly HashSet<string> _foldedCats = new HashSet<string>(); // categories folded away (click their title)
 
         private const float TileMin = 118;   // smallest tile width before a column is dropped
         private const float TileLabel = 34;  // name area under the thumbnail (two lines of 12 px)
@@ -1736,14 +1816,14 @@ namespace LevelGate.Progression
             int cols = Mathf.Max(3, majors.Count);
             foreach (var f in majors) Stat(_majorRow, f.Label, f.Value, true);
             for (int c = majors.Count; c < cols && majors.Count > 0; c++) Stat(_majorRow, "", "", true);
-            int minorCols = minors.Count == 4 ? 4 : cols; // four small stats: one row of four, not three and an orphan
-            for (int start = 0; start < minors.Count; start += minorCols)
+            // the small stats: the game's inspect strips, two to a line (every line the same two columns)
+            for (int start = 0; start < minors.Count; start += 2)
             {
-                var line = Row(_minorRow, "Line", S4);
-                for (int c = 0; c < minorCols; c++)
+                var line = Row(_minorRow, "Line", S1);
+                for (int c = 0; c < 2; c++)
                 {
                     var f = start + c < minors.Count ? minors[start + c] : ("", "");
-                    Stat(line, f.Item1, f.Item2, false);
+                    StatStrip(line, f.Item1, f.Item2);
                 }
             }
             _majorRow.gameObject.SetActive(majors.Count > 0);
