@@ -25,7 +25,7 @@ namespace LevelGate.Progression
         public const string Guid = "com.kkyangg.levelgate.progression";
         public const string Name = "LevelGate Progression";
         // MAJOR.MINOR.PATCH — see CHANGELOG.md
-        public const string Version = "0.9.23";
+        public const string Version = "0.9.24";
 
         internal static ProgressionPlugin Instance;
         internal static ConfigEntry<KeyboardShortcut> OpenKey;
@@ -152,8 +152,7 @@ namespace LevelGate.Progression
         internal static void RefreshPictures(bool all)
         {
             GameItems.ClearCopies();
-            ProgScreen.ForgetPictures();
-            ProgScreen.Refresh();
+            ProgScreen.PicturesCleared();
             var tpls = all ? ProgData.Levels.Keys.ToList() : GameItems.ScaledTpls();
             if (tpls.Count > 0) GameItems.RepairAll(tpls, all);
             else if (all) Toast.Show("Item icons refreshed");

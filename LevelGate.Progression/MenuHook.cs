@@ -163,6 +163,9 @@ namespace LevelGate.Progression
             g.alpha = blocked ? .35f : 1f; g.interactable = !blocked; g.blocksRaycasts = !blocked;
             L.Info(blocked ? $"PROGRESSION tab disabled ({why})" : "PROGRESSION tab enabled again");
             if (blocked && ProgScreen.IsOpen) ProgScreen.Close("blocked: " + why);
+            // going into a raid (picking a side / map, deploying): the screen's kept pictures are let go
+            if (blocked && (why == "in raid" || why.StartsWith("on SelectRaidSide") || why.StartsWith("on SelectLocation") || why.StartsWith("on MatchMaker") || why.StartsWith("on TimeHasCome")))
+                ProgScreen.Unload(why);
             if (!blocked) Enable(_button, "unblocked");
         }
 

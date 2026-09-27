@@ -125,6 +125,7 @@ namespace LevelGate.Progression
                 MenuCamera.Turn(true);
                 Sounds.Open();
                 _frames = 0; _frameTime = 0; _frameLogAt = Time.unscaledTime + 5;
+                StartLoading(); // first open of this menu visit: pictures drawn behind a short loading screen
                 ShowPage(_page, 0);
                 ShowLevel(_level, true);
             }
@@ -255,6 +256,7 @@ namespace LevelGate.Progression
             Ui.Img(Ui.Fill(_tip, "In", 1), Ui.Hex("#0b0f11", .97f)).raycastTarget = false;
             _tipText = Ui.Label(Ui.Fill(_tip, "Text", 0), "Text", "", TBody, Text, TextAnchor.MiddleCenter, false);
             _tip.gameObject.SetActive(false);
+            BuildLoading(root);
 
             if (!_changedHooked)
             {
@@ -897,7 +899,7 @@ namespace LevelGate.Progression
             _next.interactable = page < Pages - 1;
             UpdatePageBar();
             _hits.RemoveAll(h => h.Rect == null || h.Rect.IsChildOf(_bottom));
-            _cardIcons.Clear(); DropRequests(_cardIcons);
+            Adopt(_cardIcons); DropRequests(_cardIcons);
             for (int i = 0; i < PerPage; i++) _cards[i].Show(first + i);
             _cardsDir = dir;
             _cardsStart = dir != 0 ? Time.unscaledTime : -10;
@@ -962,7 +964,7 @@ namespace LevelGate.Progression
             _tiles.Clear();
             _tileViews.Clear();
             ShowTip(null);
-            _icons.Clear(); DropRequests(_icons);
+            Adopt(_icons); DropRequests(_icons);
             _hits.RemoveAll(h => h.Rect == null || !h.Rect.IsChildOf(_bottom));
             Feature(CardPicks(items).FirstOrDefault()); // opens on the item the level's card shows big (weapons first)
             int max = Mathf.Max(1, Perf ? Mathf.Min(12, ProgressionPlugin.MaxTilesPerCategory.Value) : ProgressionPlugin.MaxTilesPerCategory.Value), n = 0;
@@ -1156,6 +1158,16 @@ namespace LevelGate.Progression
             _iconRequests.Add((target, tpl, scale, pic, placeholder));
         }
 
+        /// <summary>
+        /// Pictures still being drawn for a page / level we just left: not dropped — the pre-loader keeps collecting them,
+        /// so they're kept (sharp) for when you come back, and the game's own icon goes back to stash size.
+        /// </summary>
+        private static void Adopt(List<(object Icon, Image Pic, Component Placeholder, string Tpl)> list)
+        {
+            foreach (var e in list) if (e.Icon != null) _prefetching.Add((e.Icon, e.Tpl));
+            list.Clear();
+        }
+
         private static void DropRequests(List<(object Icon, Image Pic, Component Placeholder, string Tpl)> target) => _iconRequests.RemoveAll(r => r.Target == target);
 
         private static void RunIconRequests()
@@ -1181,12 +1193,135 @@ namespace LevelGate.Progression
         private static readonly List<(object Icon, string Tpl)> _prefetching = new List<(object, string)>();
         private static readonly HashSet<string> _prefetchAsked = new HashSet<string>();
         /// <summary>Pictures are asked for again from scratch (the kept ones were cleared).</summary>
-        public static void ForgetPictures() { _prefetchAsked.Clear(); _prefetching.Clear(); }
+        public static void ForgetPictures() { _prefetchAsked.Clear(); _prefetchQueue.Clear(); _prefetchPage = -1; }
         private static int _prefetchPage = -1;
-        private static readonly Queue<string> _prefetchQueue = new Queue<string>();
+        private static readonly Queue<(string Tpl, int Scale)> _prefetchQueue = new Queue<(string, int)>();
 
         /// <summary>Card pictures (and their pre-loading) share one scale per item: about 120 px on the long side.</summary>
         private static int CardScaleOf(string tpl) => Perf || ProgData.GroupOf(tpl) == "Weapons" ? 1 : GameItems.CardScale(tpl, 120);
+
+        /// <summary>Every picture these pages show bigger than stash size: each level's centre item and its card pictures.</summary>
+        private static List<(string Tpl, int Scale)> PictureJobs(IEnumerable<int> pages)
+        {
+            var jobs = new List<(string, int)>();
+            var seen = new HashSet<string>();
+            void Add(string tpl, int scale) { if (scale != 1 && seen.Add(tpl + "@" + scale) && GameItems.CopyOf(tpl, scale) == null) jobs.Add((tpl, scale)); }
+            foreach (var p in pages)
+            {
+                if (p < 0 || p >= Pages) continue;
+                for (int level = p * PerPage + 1; level <= Mathf.Min(ProgData.MaxLevel, (p + 1) * PerPage); level++)
+                {
+                    var picks = CardPicks(ProgData.ItemsAt(level));
+                    if (picks.Count > 0) Add(picks[0].Tpl, FeatScaleOf(picks[0])); // what the level opens on
+                    foreach (var it in picks) Add(it.Tpl, CardScaleOf(it.Tpl));
+                }
+            }
+            return jobs;
+        }
+
+        // ---------------------------------------------------------------- loading screen (first open of a menu visit)
+        // Like the hideout's: the pictures of this page and the pages next to it are drawn once behind a short loading
+        // screen, then everything shows up sharp. Reset before a raid (the kept pictures are let go to free memory).
+        private static bool _warm, _loading;
+        private static RectTransform _loadLayer, _loadBar;
+        private static Component _loadText;
+        private static CanvasGroup _loadGroup;
+        private static readonly Queue<(string Tpl, int Scale)> _loadQueue = new Queue<(string, int)>();
+        private static readonly List<(object Icon, string Tpl)> _loadWaiting = new List<(object, string)>();
+        private static int _loadTotal, _loadDone;
+        private static float _loadStart, _loadHideAt = -1;
+
+        private static void BuildLoading(RectTransform root)
+        {
+            _loadLayer = Ui.Rect(root, "Loading", Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
+            SubCanvas(_loadLayer);
+            _loadGroup = _loadLayer.gameObject.AddComponent<CanvasGroup>();
+            Ui.Img(_loadLayer, Ui.Hex("#0a0f12", .985f), null, true); // blocks clicks while loading
+            var mid = Ui.Box(_loadLayer, "Middle", new Vector2(.5f, .5f), Vector2.zero, new Vector2(420, 90));
+            Ui.Label(Ui.Rect(mid, "Title", new Vector2(0, 1), Vector2.one, new Vector2(0, -30), Vector2.zero), "Text", "LOADING PROGRESSION", TTitle, Text, TextAnchor.MiddleCenter, false, Caps);
+            var track = Ui.Rect(mid, "Track", new Vector2(0, .5f), new Vector2(1, .5f), new Vector2(0, -2), new Vector2(0, 1));
+            Ui.Img(track, Ui.Hex("#2b3438"));
+            _loadBar = Ui.Rect(track, "Fill", Vector2.zero, new Vector2(0, 1), Vector2.zero, Vector2.zero);
+            Ui.Img(_loadBar, Ui.Hex(Orange));
+            _loadText = Ui.Label(Ui.Rect(mid, "State", Vector2.zero, new Vector2(1, 0), Vector2.zero, new Vector2(0, 24)), "Text", "", TCaps, Grey, TextAnchor.MiddleCenter, false, Caps);
+            _loadLayer.gameObject.SetActive(false);
+        }
+
+        private static void StartLoading()
+        {
+            if (_warm || _loadLayer == null) return;
+            Canvas.ForceUpdateCanvases(); // the preview's real size, for the render sizes
+            _loadQueue.Clear(); _loadWaiting.Clear();
+            foreach (var job in PictureJobs(new[] { _page, _page - 1, _page + 1 })) _loadQueue.Enqueue(job);
+            _loadTotal = _loadQueue.Count; _loadDone = 0;
+            _warm = true;
+            if (_loadTotal == 0) return;
+            _loading = true; _loadStart = Time.unscaledTime; _loadHideAt = -1;
+            _loadGroup.alpha = 1;
+            _loadLayer.gameObject.SetActive(true);
+            L.Info($"loading: drawing {_loadTotal} picture(s) for pages {Mathf.Max(1, _page)}–{Mathf.Min(Pages, _page + 2)} (graphics {ProgressionPlugin.Quality.Value})");
+        }
+
+        /// <summary>True while the loading screen is up (the screen's own input waits).</summary>
+        private static bool RunLoading()
+        {
+            if (_loadHideAt > 0)
+            {
+                float f = (_loadHideAt - Time.unscaledTime) / .25f;
+                _loadGroup.alpha = Mathf.Clamp01(f);
+                if (f <= 0) { _loadHideAt = -1; _loadLayer.gameObject.SetActive(false); }
+            }
+            if (!_loading) return false;
+            for (int i = _loadWaiting.Count - 1; i >= 0; i--)
+            {
+                var (icon, tpl) = _loadWaiting[i];
+                if (icon != null) { GameItems.TakeSprite(icon, tpl, out bool done); if (!done) continue; }
+                _loadWaiting.RemoveAt(i); _loadDone++;
+            }
+            // a few at a time: the game draws them in the background
+            while (_loadWaiting.Count < 4 && _loadQueue.Count > 0)
+            {
+                var (tpl, scale) = _loadQueue.Dequeue();
+                if (GameItems.CopyOf(tpl, scale) != null) { _loadDone++; continue; }
+                L.Step($"loading: {tpl} at {scale}x");
+                _loadWaiting.Add((GameItems.IconOf(GameItems.ItemOf(tpl), scale), tpl));
+            }
+            _loadBar.anchorMax = new Vector2(_loadTotal > 0 ? (float)_loadDone / _loadTotal : 1, 1);
+            Ui.SetText(_loadText, $"DRAWING ITEM PICTURES  {_loadDone} / {_loadTotal}");
+            float took = Time.unscaledTime - _loadStart;
+            if ((_loadQueue.Count == 0 && _loadWaiting.Count == 0) || took > 12f)
+            {
+                _loading = false;
+                foreach (var w in _loadWaiting) if (w.Icon != null) _prefetching.Add(w); // still coming: kept when they arrive
+                _loadWaiting.Clear();
+                L.Info($"loading: {_loadDone} / {_loadTotal} picture(s) in {took:0.0} s{(took > 12f ? " (stopped waiting; the rest keeps loading)" : "")}");
+                _loadHideAt = Time.unscaledTime + .25f;
+                ForgetPictures();
+                Refresh(); // the page again, now from the kept pictures
+            }
+            return _loading;
+        }
+
+        /// <summary>Kept pictures were thrown away (new graphics quality, RefreshIcons): load again (now if open).</summary>
+        public static void PicturesCleared()
+        {
+            ForgetPictures();
+            _warm = _loading = false; _loadQueue.Clear(); _loadWaiting.Clear();
+            if (!IsOpen) return;
+            StartLoading();
+            Refresh();
+        }
+
+        /// <summary>Before a raid: let go of the kept pictures (memory), the next visit loads them again.</summary>
+        public static void Unload(string why)
+        {
+            if (!_warm && !_loading) return;
+            _warm = _loading = false;
+            _loadQueue.Clear(); _loadWaiting.Clear();
+            int n = GameItems.ClearCopies();
+            ForgetPictures();
+            L.Info($"loading: {n} kept picture(s) let go ({why}); the next open loads them again");
+        }
 
         private static void Prefetch()
         {
@@ -1204,17 +1339,11 @@ namespace LevelGate.Progression
             {
                 _prefetchPage = _page;
                 _prefetchQueue.Clear();
-                foreach (var p in new[] { _page + 1, _page - 1 })
-                {
-                    if (p < 0 || p >= Pages) continue;
-                    for (int level = p * PerPage + 1; level <= Mathf.Min(ProgData.MaxLevel, (p + 1) * PerPage); level++)
-                        foreach (var it in CardPicks(ProgData.ItemsAt(level))) _prefetchQueue.Enqueue(it.Tpl);
-                }
+                foreach (var job in PictureJobs(new[] { _page, _page + 1, _page - 1 })) _prefetchQueue.Enqueue(job);
             }
             while (_prefetchQueue.Count > 0)
             {
-                var tpl = _prefetchQueue.Dequeue();
-                int scale = CardScaleOf(tpl);
+                var (tpl, scale) = _prefetchQueue.Dequeue();
                 if (!_prefetchAsked.Add(tpl + "@" + scale) || (scale != 1 && GameItems.CopyOf(tpl, scale) != null)) continue;
                 _prefetching.Add((GameItems.IconOf(GameItems.ItemOf(tpl), scale), tpl));
                 break; // one per frame
@@ -1242,6 +1371,9 @@ namespace LevelGate.Progression
         private static void Feature(ProgItem it)
         {
             L.Step("Feature " + it?.Tpl);
+            // the previous item's big picture may still be on its way: keep collecting it (else it came back blurry later)
+            if (_featIcon != null && _featTpl != null) _prefetching.Add((_featIcon, _featTpl));
+            _featIcon = null;
             if (it != null) _sItems++;
             _featTpl = it?.Tpl;
             _featPic.enabled = false;
@@ -1311,22 +1443,30 @@ namespace LevelGate.Progression
             _reqSize.minHeight = _reqSize.preferredHeight = full ? 84 : 28;
             FitDescription();
             _featLock.enabled = player > 0 && it.Level > player;
-            // sized to the preview on screen: enough real pixels for its size at this resolution (performance mode: half)
-            float px = Mathf.Max(_featPic.rectTransform.rect.width, _featPic.rectTransform.rect.height) * (_featPic.canvas != null ? _featPic.canvas.scaleFactor : 1f);
-            if (px < 64) px = 440;
-            int featScale = GameItems.ScaleFor(it.Tpl, px);
-            if (Perf) featScale = Mathf.Max(2, featScale / 2);
-            // weapons: never a bigger render. The game's weapon icons can leak a big render onto OTHER weapons in the
-            // stash (a VPO-215 came out huge after VPO-136 / VPO-209 were drawn big) — nothing we could put back.
-            // They're 4–5 cells wide, so stash size is already ~256–320 px.
-            if (it.Group == "Weapons" && !ProgressionPlugin.High) featScale = 1;
-            else if (it.Group == "Weapons") _sharpWeaponShown = true; // weapons get repaired on close
+            int featScale = FeatScaleOf(it);
+            if (it.Group == "Weapons" && featScale > 1) _sharpWeaponShown = true; // weapons get repaired on close
             _featScale = featScale;
             var kept = GameItems.CopyOf(it.Tpl, featScale);
             if (kept != null) { _featIcon = null; _featPic.sprite = kept; _featPic.enabled = true; _featShort.gameObject.SetActive(false); }
-            else _featIcon = GameItems.IconOf(GameItems.ItemOf(it.Tpl), featScale);
+            else if (!_loading) _featIcon = GameItems.IconOf(GameItems.ItemOf(it.Tpl), featScale);
             MarkSelectedTile();
         }
+
+        /// <summary>
+        /// The centre picture's render size for an item: enough real pixels for the preview at this resolution (Low: half).
+        /// Weapons only on High: the game's weapon icons can leak a big render onto OTHER weapons in the stash (a VPO-215
+        /// came out huge after VPO-136 / VPO-209 were drawn big), so High redraws them at stash size afterwards.
+        /// </summary>
+        private static int FeatScaleOf(ProgItem it)
+        {
+            float px = Mathf.Max(_featPic.rectTransform.rect.width, _featPic.rectTransform.rect.height) * (_featPic.canvas != null ? _featPic.canvas.scaleFactor : 1f);
+            if (px >= 64) _featPx = px; else px = _featPx > 0 ? _featPx : 440;
+            int featScale = GameItems.ScaleFor(it.Tpl, px);
+            if (Perf) featScale = Mathf.Max(2, featScale / 2);
+            if (it.Group == "Weapons" && !ProgressionPlugin.High) featScale = 1;
+            return featScale;
+        }
+        private static float _featPx;
 
         private static void MarkSelectedTile()
         {
@@ -1407,6 +1547,11 @@ namespace LevelGate.Progression
                 _fade.alpha = 1 - (1 - f) * (1 - f); // ease out
             }
             var input = UnityInput.Current;
+            if (RunLoading())
+            {
+                if (input.GetKeyDown(KeyCode.Escape)) Close("Escape (while loading)");
+                return;
+            }
             bool window = GameWindowOpen();
             // the game may close its window on this same Esc before we look: a window seen a moment ago still owns the key
             if (window) _windowSeenAt = Time.unscaledTime;

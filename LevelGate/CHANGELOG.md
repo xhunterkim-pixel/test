@@ -40,6 +40,15 @@ Versions are **MAJOR.MINOR.PATCH**:
 
 ## LevelGate Progression (BepInEx plugin, separate DLL)
 
+### 0.9.24
+- **Fix: High quality only held for the first level you looked at.** Flipping levels while a sharp picture was still being drawn dropped it: it was never kept, and coming back showed the stash-size stand-in (looked like Medium).
+  - Pictures still being drawn for a level or page you left are now collected in the background and kept.
+  - The pre-loader also draws each nearby level's centre picture at its real size, not only the card pictures.
+- **Loading screen:** the first open of a menu visit shows "LOADING PROGRESSION" with a bar while the pictures of your page and the pages on either side are drawn (up to 12 s; the rest keeps loading after). Then everything shows up sharp. Esc still closes it.
+  - Picking a raid side / map / deploying lets the kept pictures go (memory); the next open loads again.
+  - Changing Graphics > Quality or RefreshIcons reloads the same way (right away if the screen is open).
+- Kept picture cache raised from 90 to 150.
+
 ### 0.9.23
 - **Fix: changing Graphics > Quality now redraws the pictures.** The screen's kept pictures were only keyed by size, and FixStashIcons only redrew stash icons, so going back up to High could keep showing old pictures with no sign that anything happened.
   - Changing Quality clears the screen's kept pictures, asks for fresh ones, and redraws the stash icons of items that were drawn bigger.
