@@ -40,6 +40,13 @@ Versions are **MAJOR.MINOR.PATCH**:
 
 ## LevelGate Progression (BepInEx plugin, separate DLL)
 
+### 0.9.18
+- **Fix: a stash weapon came out huge again.** A VPO-215 was only ever drawn at stash size by the plugin, but other weapons (VPO-136, VPO-209…) had been drawn big. The game's weapon icons can carry a big render over to other weapons, and that can't be put back per item.
+  - Weapons now never get a bigger render: the centre picture and the cards use the stash-size icon, which is already 4–5 cells (~256–320 px) wide.
+  - Small items (ammo, meds, food, gear) keep their sharp big renders.
+  - Every big render the plugin asks for is logged with the item's category.
+- **An icon that's already stuck big:** tick `Screen > FixStashIcons` once, or clear the game's icon cache.
+
 ### 0.9.17 — play-test build
 - **Centre render capped at 6x** (was 8x). 8x was the heaviest request: one item took 426 ms and still came back small. 6x is still sharp at 1080p.
 - **Card-picture tooltips** show below the picture, so they don't cover the first card's rank label.

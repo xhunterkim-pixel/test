@@ -188,7 +188,7 @@ namespace LevelGate.Progression
             {
                 try
                 {
-                    if (scale != 1) _scaled.Add(item);
+                    if (scale != 1) { _scaled.Add(item); L.Debug($"icon: asking the game for {Refl.Get(item, "TemplateId")} ({ProgData.GroupOf(Refl.Get(item, "TemplateId")?.ToString() ?? "")}) at {scale}x"); }
                     L.Step($"icon: {Refl.Get(item, "TemplateId") ?? item.GetType().Name} at {scale}x");
                     var before = scale != 1 ? SpriteOf(CallIcon(_loadIcon, item, 1, false)) : null; // what the stash has now
                     var icon = CallIcon(_loadIcon, item, scale);

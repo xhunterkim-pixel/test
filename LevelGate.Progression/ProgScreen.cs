@@ -1158,7 +1158,7 @@ namespace LevelGate.Progression
         private static readonly Queue<string> _prefetchQueue = new Queue<string>();
 
         /// <summary>Card pictures (and their pre-loading) share one scale per item: about 120 px on the long side.</summary>
-        private static int CardScaleOf(string tpl) => Perf ? 1 : GameItems.CardScale(tpl, 120);
+        private static int CardScaleOf(string tpl) => Perf || ProgData.GroupOf(tpl) == "Weapons" ? 1 : GameItems.CardScale(tpl, 120);
 
         private static void Prefetch()
         {
@@ -1288,6 +1288,10 @@ namespace LevelGate.Progression
             if (px < 64) px = 440;
             int featScale = GameItems.ScaleFor(it.Tpl, px);
             if (Perf) featScale = Mathf.Max(2, featScale / 2);
+            // weapons: never a bigger render. The game's weapon icons can leak a big render onto OTHER weapons in the
+            // stash (a VPO-215 came out huge after VPO-136 / VPO-209 were drawn big) — nothing we could put back.
+            // They're 4–5 cells wide, so stash size is already ~256–320 px.
+            if (it.Group == "Weapons") featScale = 1;
             _featScale = featScale;
             var kept = GameItems.CopyOf(it.Tpl, featScale);
             if (kept != null) { _featIcon = null; _featPic.sprite = kept; _featPic.enabled = true; _featShort.gameObject.SetActive(false); }
