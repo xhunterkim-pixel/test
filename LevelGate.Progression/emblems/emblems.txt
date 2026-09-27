@@ -1,20 +1,16 @@
-# file  frames  columns  frame-size  ms-per-frame   (one line per emblem, lowest rank first; the last one is the top level's)
-emblem01.png 48 8 128 33
-emblem02.png 48 8 128 33
-emblem03.png 48 8 128 33
-emblem04.png 48 8 128 33
-emblem05.png 48 8 128 33
-emblem06.png 48 8 128 33
-emblem07.png 48 8 128 33
-emblem08.png 48 8 128 67
-emblem09.png 48 8 128 67
-emblem10.png 48 8 128 67
-emblem11.png 48 8 128 33
-emblem12.png 48 8 128 33
-emblem13.png 48 8 128 67
-emblem14.png 48 8 128 67
-emblem15.png 48 8 128 67
-emblem16.png 48 8 128 67
-emblem17.png 48 8 128 67
-emblem18.png 48 8 128 67
-emblem19.png 48 8 128 67
+# file  frames  columns  frame-size  ms-per-frame  from-level  to-level   (a level with no line of its own uses the closest lower emblem)
+emblem_01-05.png 48 8 128 33 1 5
+emblem_06-10.png 48 8 128 33 6 10
+emblem_11-15.png 48 8 128 33 11 15
+emblem_16-20.png 48 8 128 33 16 20
+emblem_21-25.png 48 8 128 33 21 25
+emblem_26-30.png 48 8 128 33 26 30
+emblem_31-35.png 48 8 128 33 31 35
+emblem_36-40.png 48 8 128 33 36 40
+emblem_41-45.png 48 8 128 33 41 45
+emblem_46-50.png 48 8 128 67 46 50
+emblem_51-55.png 48 8 128 67 51 55
+emblem_61-65.png 48 8 128 67 61 65
+emblem_66-70.png 48 8 128 67 66 70
+emblem_71-75.png 48 8 128 67 71 75
+emblem_76-79.png 48 8 128 67 76 79

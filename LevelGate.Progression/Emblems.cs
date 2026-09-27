@@ -17,7 +17,7 @@ namespace LevelGate.Progression
         private sealed class Sheet
         {
             public string File;
-            public int Frames, Columns, Size, Ms;
+            public int Frames, Columns, Size, Ms, From, To;
             public Sprite[] Sprites;
             public bool Failed;
         }
@@ -39,7 +39,12 @@ namespace LevelGate.Progression
                     var p = line.Trim().Split(new[] { ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries);
                     if (p.Length < 5 || p[0].StartsWith("#")) continue;
                     if (int.TryParse(p[1], out int frames) && int.TryParse(p[2], out int cols) && int.TryParse(p[3], out int size) && int.TryParse(p[4], out int ms))
-                        _sheets.Add(new Sheet { File = p[0], Frames = frames, Columns = Math.Max(1, cols), Size = size, Ms = Math.Max(10, ms) });
+                    {
+                        var sheet = new Sheet { File = p[0], Frames = frames, Columns = Math.Max(1, cols), Size = size, Ms = Math.Max(10, ms) };
+                        // optional: the levels this emblem is for
+                        if (p.Length >= 7 && int.TryParse(p[5], out int from) && int.TryParse(p[6], out int to)) { sheet.From = from; sheet.To = to; }
+                        _sheets.Add(sheet);
+                    }
                     else L.Warn("emblems: can't read line: " + line);
                 }
                 L.Info($"emblems: {_sheets.Count} listed in {list}");
@@ -50,10 +55,23 @@ namespace LevelGate.Progression
 
         public static bool Available => Sheets().Count > 0;
 
-        /// <summary>Which emblem a level gets: the top level the last one, the rest spread evenly over the others.</summary>
+        /// <summary>Which emblem a level gets: the one listed for its levels (or the closest lower one if its own is
+        /// missing); without level ranges in emblems.txt the top level gets the last and the rest are spread evenly.</summary>
         public static int IndexOf(int level)
         {
-            int n = Sheets().Count, max = Math.Max(2, ProgData.MaxLevel);
+            var sheets = Sheets();
+            if (sheets.Any(x => x.From > 0))
+            {
+                int best = -1;
+                for (int i = 0; i < sheets.Count; i++)
+                {
+                    if (sheets[i].From <= 0) continue;
+                    if (level >= sheets[i].From && level <= sheets[i].To) return i;
+                    if (sheets[i].From <= level && (best < 0 || sheets[i].From > sheets[best].From)) best = i;
+                }
+                return best < 0 ? 0 : best;
+            }
+            int n = sheets.Count, max = Math.Max(2, ProgData.MaxLevel);
             if (n <= 1) return 0;
             if (level >= max) return n - 1;
             return Mathf.Clamp((level - 1) * (n - 1) / (max - 1), 0, n - 2);

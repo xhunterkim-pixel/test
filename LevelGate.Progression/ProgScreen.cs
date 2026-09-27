@@ -35,11 +35,11 @@ namespace LevelGate.Progression
         /// <summary>Rank look per level band: name, rim color, light color.</summary>
         private static readonly (int From, string Name, string Rim, string Light)[] Tiers =
         {
-            (1, "Scavenger", "#8a9199", "#d6dde3"), (6, "The Stray", "#8a9199", "#e6eef2"), (11, "Ashwalker", "#8c6b3f", "#d9b37a"),
-            (16, "The Drifter", "#8c6b3f", "#e8c27a"), (21, "The Contractor", "#9aa3ad", "#f4f7fa"), (26, "The Outcast", "#9aa3ad", "#ffffff"),
-            (31, "The Survivor", "#b8901c", "#ffe27a"), (36, "The Fixer", "#b8901c", "#fff0a0"), (41, "The Insider", "#3f7fb8", "#9fd4ff"),
-            (46, "The Unmarked", "#3f7fb8", "#c2e6ff"), (51, "The Enforcer", "#7b4fc9", "#d3b8ff"), (56, "The Harbinger", "#7b4fc9", "#e6d6ff"),
-            (61, "The Executioner", "#b8323f", "#ff9aa5"), (66, "The Forgotten", "#b8323f", "#ffc0c6"), (71, "The Last Witness", "#c9a227", "#fff1a8"),
+            (1, "Scavenger", "#8a9199", "#d6dde3"), (6, "Drifter", "#8a9199", "#e6eef2"), (11, "Trespasser", "#8c6b3f", "#d9b37a"),
+            (16, "Stranger", "#8c6b3f", "#e8c27a"), (21, "Contractor", "#9aa3ad", "#f4f7fa"), (26, "Operator", "#9aa3ad", "#ffffff"),
+            (31, "Outlaw", "#b8901c", "#ffe27a"), (36, "Renegade", "#b8901c", "#fff0a0"), (41, "Insurgent", "#3f7fb8", "#9fd4ff"),
+            (46, "Blacklisted", "#3f7fb8", "#c2e6ff"), (51, "Wanted Man", "#7b4fc9", "#d3b8ff"), (56, "Ringleader", "#7b4fc9", "#e6d6ff"),
+            (61, "War Chief", "#b8323f", "#ff9aa5"), (66, "Ghost", "#b8323f", "#ffc0c6"), (71, "Myth", "#c9a227", "#fff1a8"),
             (76, "Legend of Tarkov", "#e0b84a", "#ffffff"),
         };
         private static (int From, string Name, string Rim, string Light) TierOf(int level) => Tiers.Last(t => level >= t.From);
