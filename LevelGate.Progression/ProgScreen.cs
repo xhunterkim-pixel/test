@@ -2081,6 +2081,35 @@ namespace LevelGate.Progression
                 }
             }
             private Component _float;
+            private RectTransform _picsArea;
+            private GameObject _rankChip;
+
+            /// <summary>
+            /// Places the pictures on the card's grid for this many items (the sizes come from the card's real height):
+            /// 3 → big + two stacked squares · 2 → big + one square, centred on the big one · 1 → the big one alone, full width.
+            /// </summary>
+            private void Layout(int count)
+            {
+                var area = _picsArea;
+                if (area.rect.height < 10) Canvas.ForceUpdateCanvases();
+                float h = area.rect.height, g = S2;
+                float sq = Mathf.Floor((h - g) / 2);
+                var big = _picRects[0];
+                big.anchorMin = Vector2.zero; big.anchorMax = Vector2.one;
+                big.offsetMin = Vector2.zero;
+                big.offsetMax = new Vector2(count > 1 ? -(sq + g) : 0, 0);
+                void Square(RectTransform rt, float y0, float y1)
+                {
+                    rt.anchorMin = new Vector2(1, 0); rt.anchorMax = new Vector2(1, 0);
+                    rt.offsetMin = new Vector2(-sq, y0); rt.offsetMax = new Vector2(0, y1);
+                }
+                if (count == 2) Square(_picRects[1], Mathf.Floor((h - sq) / 2), Mathf.Floor((h - sq) / 2) + sq); // centred beside the big one
+                else
+                {
+                    Square(_picRects[1], h - sq, h);  // top, flush with the big picture's top
+                    Square(_picRects[2], 0, sq);      // bottom, flush with its bottom
+                }
+            }
             private Image _emptyHatch;
             private float _floatAt = -10;
 
@@ -2175,23 +2204,17 @@ namespace LevelGate.Progression
                 // one spacing unit (Pad) everywhere: card edge → badge, badge → title, header → pictures, pictures → bottom row
                 // (the badge's diamond is ~B wide corner to corner, so its box sits exactly Pad from the edges)
                 // the rank stays quiet: a small emblem and small caps (the level itself is the card's header)
-                const float Pad = S3, B = 26, Head = S2 + B + S2 + 2, Foot = 32;
-                _badge = new Badge(inner, new Vector2(0, 1), new Vector2(Pad + B / 2, -(S2 + B / 2)), B);
-                _tier = Ui.Label(Ui.Rect(inner, "Tier", new Vector2(0, 1), Vector2.one, new Vector2(Pad + B + S2, -(S2 + B)), new Vector2(-Pad, -S2)), "Text", "", TCaps, Grey, TextAnchor.MiddleLeft, false, Caps);
+                // ONE grid for every card (the spacing is the point of this strip):
+                //   12 px padding on all four sides of the picture area · 8 px between any two pictures · the small squares'
+                //   size comes from the height ((h - 8) / 2), they sit flush right · the big picture takes all the rest.
+                // The first card's rank emblem sits on its big picture (top-left), so no card needs a row of its own.
+                const float Pad = S3, Foot = 32;
+                var pics = Ui.Rect(inner, "Pics", Vector2.zero, Vector2.one, new Vector2(Pad, Foot), new Vector2(-Pad, -Pad));
+                _picsArea = pics;
                 // selected: a 2 px light bar along the top edge (shape, not only colour)
                 _top = Ui.Img(Ui.Rect(inner, "Top", new Vector2(0, 1), Vector2.one, new Vector2(0, -2), Vector2.zero), Select);
                 _top.enabled = false;
-                // one big picture (the level's top category) and two small square ones stacked beside it
-                // the pictures sit in the area between header and footer; each is kept square
-                // the page's first card keeps a row for its rank emblem; the others centre their pictures (same size) instead of
-                // leaving that row empty over them
-                // every card: the same picture box at the same height (the first card's smaller emblem sits above it)
-                float mid = (Head + Foot) / 2;
-                var pics = Ui.Rect(inner, "Pics", Vector2.zero, Vector2.one, new Vector2(Pad, mid), new Vector2(-Pad, -mid));
-                // the big one is landscape (fills its column): weapons are wide — in a square they came out tiny
-                _picRects[0] = Square(pics, "Pic0", new Vector2(0, 0), new Vector2(.64f, 1), Vector2.zero, new Vector2(-S1, 0), 1.9f);
-                _picRects[1] = Square(pics, "Pic1", new Vector2(.64f, .5f), new Vector2(1, 1), new Vector2(S1, S1 / 2), Vector2.zero);
-                _picRects[2] = Square(pics, "Pic2", new Vector2(.64f, 0), new Vector2(1, .5f), new Vector2(S1, 0), new Vector2(0, -S1 / 2));
+                for (int i = 0; i < 3; i++) _picRects[i] = Ui.Rect(pics, "Pic" + i, Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
                 for (int i = 0; i < 3; i++)
                 {
                     // Arena item preview: thin frame, dark face, the item, a soft dark fade around the edges, lock bottom-right
@@ -2213,6 +2236,13 @@ namespace LevelGate.Progression
                     Ui.EdgeFade(face, .18f, .55f);
                     Ui.Grit(face, _gritSeed++, .02f);
                 }
+                // the page's first card: its rank emblem and title on the big picture, top-left (a small dark chip behind the text)
+                const float B = 22;
+                var chip = Ui.Rect(_picRects[0], "Rank", new Vector2(0, 1), new Vector2(0, 1), new Vector2(6, -6 - B), new Vector2(6 + B + 110, -6));
+                _rankChip = chip.gameObject;
+                _badge = new Badge(chip, new Vector2(0, .5f), new Vector2(B / 2, 0), B);
+                _tier = Ui.Label(Ui.Rect(chip, "Tier", Vector2.zero, Vector2.one, new Vector2(B + S1, 0), Vector2.zero), "Text", "", TCaps, Grey, TextAnchor.MiddleLeft, false, Caps);
+
                 // a level with nothing on it: a quiet line in the picture area instead of empty boxes
                 _emptyHatch = Ui.Img(Ui.Fill(pics, "Hatch"), new Color(1, 1, 1, .045f), Ui.Hatch());
                 _emptyHatch.type = Image.Type.Tiled; _emptyHatch.raycastTarget = false;
@@ -2268,14 +2298,8 @@ namespace LevelGate.Progression
                 }
                 _empty.gameObject.SetActive(items.Count == 0);
                 _emptyHatch.gameObject.SetActive(items.Count == 0);
-                // one item: its picture centred in the card (not in the left column with an empty one beside it)
-                if (_picRects[0].parent is RectTransform area)
-                {
-                    bool single = picks.Count == 1;
-                    area.anchorMin = new Vector2(single ? .18f : 0, 0);
-                    area.anchorMax = new Vector2(single ? .82f : .64f, 1);
-                    area.offsetMax = new Vector2(single ? 0 : -S1, area.offsetMax.y);
-                }
+                Layout(picks.Count);
+                if (_rankChip != null) _rankChip.SetActive(_first && picks.Count > 0);
                 _group.alpha = 1f;
             }
 

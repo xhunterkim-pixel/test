@@ -1,4 +1,4 @@
-# LevelGate Progression (0.9.40, test build)
+# LevelGate Progression (0.9.41, test build)
 
 A Call of Duty style **Progression** screen inside Tarkov's main menu. It adds a
 **PROGRESSION** button to the menu bar next to Character, Trading, Flea Market and the rest.
