@@ -1,0 +1,20 @@
+# file  frames  columns  frame-size  ms-per-frame   (one line per emblem, lowest rank first; the last one is the top level's)
+emblem01.png 48 8 128 33
+emblem02.png 48 8 128 33
+emblem03.png 48 8 128 33
+emblem04.png 48 8 128 33
+emblem05.png 48 8 128 33
+emblem06.png 48 8 128 33
+emblem07.png 48 8 128 33
+emblem08.png 48 8 128 67
+emblem09.png 48 8 128 67
+emblem10.png 48 8 128 67
+emblem11.png 48 8 128 33
+emblem12.png 48 8 128 33
+emblem13.png 48 8 128 67
+emblem14.png 48 8 128 67
+emblem15.png 48 8 128 67
+emblem16.png 48 8 128 67
+emblem17.png 48 8 128 67
+emblem18.png 48 8 128 67
+emblem19.png 48 8 128 67

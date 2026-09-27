@@ -40,6 +40,23 @@ Versions are **MAJOR.MINOR.PATCH**:
 
 ## LevelGate Progression (BepInEx plugin, separate DLL)
 
+### 0.7.0
+- **Animated rank emblems:**
+  - The 19 animated emblems replace the diamond badges, in the header and on every card.
+  - Level 79 gets the final emblem; levels 1–78 are shared out evenly, 4 or 5 levels per emblem.
+  - They're sprite sheets in `LevelGateProgression/emblems`, listed in `emblems.txt`, and each is loaded the first time it's shown.
+  - Without that folder, the old diamonds come back.
+- **XP bar:** it reads the experience table from the game session. 0.6.0 looked for a class this game version doesn't have, so it showed "experience unknown".
+- **Esc with inspect open:** now closes only the inspect window. The game closed its window on the same key press before we checked, so we now remember a window was open a moment ago.
+- **Red bloom:** strong on every level, not just locked ones; locked levels push it a little further.
+- **Cards:**
+  - One big square picture and two small square ones, so icons are no longer stretched.
+  - The pictures take one item from each of the level's top categories, in this order: Weapons, Backpacks, Rigs, Armor, Headwear, Medical, Food, Other Gear, … and Ammo last.
+  - A 12 px spacing grid, with a bigger badge and title.
+  - The picked card gets an Arena-style orange border and corner glow.
+- **Level headers:** evenly spaced dashes (drawn as a mesh instead of a stretched sprite), bright by the label and fading out to an end tick. Your current level is orange.
+- **Borders:** 3 px on panels and cards (were 1), 2 px on small boxes.
+
 ### 0.6.0
 - **Ranks:** a new rank title every 5 levels, from Scavenger (1–5) to Legend of Tarkov (76–79), each with its own badge colour.
 - **Bloom:** an Arena-style red bloom glows from the right edge and fades to the left. It gets stronger, and the panel borders turn reddish, while the picked level is locked.

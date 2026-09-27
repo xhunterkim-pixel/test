@@ -275,4 +275,50 @@ namespace LevelGate.Progression
             catch (Exception e) { L.Error("loading " + path, e); return null; }
         }
     }
+
+    /// <summary>An Arena-style dotted line: short dashes, bright by the label and fading out toward a small tick
+    /// at the far end. Drawn as its own mesh, so the dashes stay evenly spaced at any size (a stretched sprite didn't).</summary>
+    internal sealed class DottedLine : MaskableGraphic
+    {
+        public bool FadeToRight = true;
+        public float Dash = 4, Gap = 3, Thickness = 2, Tick = 14, Margin = 8;
+
+        public static DottedLine Add(RectTransform rt, bool fadeToRight)
+        {
+            var d = rt.gameObject.AddComponent<DottedLine>();
+            d.FadeToRight = fadeToRight;
+            d.raycastTarget = false;
+            return d;
+        }
+
+        protected override void OnPopulateMesh(VertexHelper vh)
+        {
+            vh.Clear();
+            var r = GetPixelAdjustedRect();
+            float w = r.width - Margin, cy = r.center.y;
+            if (w <= Dash) return;
+            // x measured from the label end outward
+            float X(float d) => FadeToRight ? r.xMin + Margin + d : r.xMax - Margin - d;
+            void Quad(float d0, float d1, float h, float a)
+            {
+                float x0 = X(d0), x1 = X(d1);
+                if (x0 > x1) { var t = x0; x0 = x1; x1 = t; }
+                var c = color; c.a *= a;
+                int i = vh.currentVertCount;
+                vh.AddVert(new Vector3(x0, cy - h / 2), c, Vector2.zero);
+                vh.AddVert(new Vector3(x0, cy + h / 2), c, Vector2.zero);
+                vh.AddVert(new Vector3(x1, cy + h / 2), c, Vector2.zero);
+                vh.AddVert(new Vector3(x1, cy - h / 2), c, Vector2.zero);
+                vh.AddTriangle(i, i + 1, i + 2);
+                vh.AddTriangle(i, i + 2, i + 3);
+            }
+            float end = w - 2;
+            for (float d = 0; d + Dash <= end - Gap; d += Dash + Gap)
+            {
+                float t = d / end;
+                Quad(d, d + Dash, Thickness, Mathf.Lerp(.95f, .12f, Mathf.Pow(t, .7f)));
+            }
+            Quad(end, end + 2, Tick, .45f); // the end tick |
+        }
+    }
 }

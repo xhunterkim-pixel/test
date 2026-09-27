@@ -1,10 +1,11 @@
-# LevelGate Progression (0.6.0, test build)
+# LevelGate Progression (0.7.0, test build)
 
 A Call of Duty style **Progression** screen inside Tarkov's main menu. It adds a
 **PROGRESSION** button to the menu bar next to Character, Trading, Flea Market and the rest.
 
 - **Bottom half:** five level cards per page (16 pages for levels 1–79).
-  - Each card has a rank badge and title (a new rank every 5 levels), the first items and its unlock count.
+  - Each card has an animated rank emblem, a rank title (a new rank every 5 levels), pictures from its top categories and its unlock count.
+  - The emblems are in the `emblems` folder (sprite sheets listed in `emblems.txt`); delete it to get plain diamond badges.
   - Each card also says whether the level is **Unlocked**, your **Current level**, the **Next level** or **Locked**.
 - **Top half:** everything that unlocks at the picked level, grouped by category.
   - The header shows your level, your XP toward the next level and the next level's reward count.

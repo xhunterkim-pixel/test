@@ -316,6 +316,18 @@ namespace LevelGate.Progression
         private static Type _appType;
         private static bool _appTried;
 
+        private static object App()
+        {
+            if (_appType == null) return null;
+            object app = null;
+            var exist = _appType.GetMethods(Refl.All).FirstOrDefault(m => m.Name == "Exist" && m.GetParameters().Length == 1 && m.GetParameters()[0].IsOut);
+            if (exist != null) { var args = new object[] { null }; exist.Invoke(null, args); app = args[0]; }
+            if (app == null && typeof(UnityEngine.Object).IsAssignableFrom(_appType)) app = UnityEngine.Object.FindObjectOfType(_appType);
+            return app;
+        }
+
+        private static object Session(object app) => Refl.Get(app, "Session");
+
         /// <summary>The logged-in PMC profile (null before login).</summary>
         public static object Profile()
         {
@@ -332,7 +344,7 @@ namespace LevelGate.Progression
                 var exist = _appType.GetMethods(Refl.All).FirstOrDefault(m => m.Name == "Exist" && m.GetParameters().Length == 1 && m.GetParameters()[0].IsOut);
                 if (exist != null) { var args = new object[] { null }; exist.Invoke(null, args); app = args[0]; }
                 if (app == null && typeof(UnityEngine.Object).IsAssignableFrom(_appType)) app = UnityEngine.Object.FindObjectOfType(_appType);
-                return Refl.Get(Refl.Get(app, "Session"), "Profile");
+                return Refl.Get(Session(app), "Profile");
             }
             catch (Exception e) { L.ErrorOnce("reading the profile", e); return null; }
         }
@@ -377,29 +389,72 @@ namespace LevelGate.Progression
         }
 
         private static int[] _expTable;
-        private static bool _expLogged, _expTried;
+        private static bool _expTried;
 
         /// <summary>Total experience needed for each level (index 0 = level 1), from the game's globals.</summary>
         private static int[] ExpTable()
         {
             if (_expTable != null || _expTried) return _expTable;
-            _expTried = true; // looked up once: searching all the game's classes every time made the screen lag
-            var singleton = AccessTools.TypeByName("Comfort.Common.Singleton`1");
-            var cfgType = AccessTools.TypeByName("BackendConfigSettingsClass");
-            if (singleton == null || cfgType == null) { if (!_expLogged) { _expLogged = true; L.Debug("BackendConfigSettingsClass not found — no level progress %"); } return null; }
-            object cfg = null;
-            try { cfg = singleton.MakeGenericType(cfgType).GetProperty("Instance", Refl.All)?.GetValue(null, null); } catch { }
-            var rows = Refl.Get(Refl.Get(Refl.Get(cfg, "Experience"), "Level"), "ExpTable") as IEnumerable;
-            if (rows == null) { if (!_expLogged) { _expLogged = true; L.Debug("globals Experience.Level.ExpTable not readable — no level progress %"); } return null; }
-            var steps = new List<int>();
-            foreach (var r in rows) steps.Add(Refl.Get(r, "Experience") is int x ? x : 0);
-            // the table holds the experience of each step; the totals are the running sum
-            var totals = new int[steps.Count];
-            int sum = 0;
-            for (int i = 0; i < steps.Count; i++) { totals[i] = sum; sum += steps[i]; }
-            _expTable = totals;
-            L.Info($"experience table: {totals.Length} levels");
+            try
+            {
+                // 1) the session's backend config: Session.BackEndConfig.Config.Experience.Level.ExpTable
+                Profile(); // makes sure _appType is looked up
+                var session = Session(App());
+                if (session == null) return null; // not logged in yet: try again later
+                object cfg = null;
+                foreach (var n in new[] { "BackEndConfig", "BackendConfig", "BackEndConfigs" })
+                {
+                    var bc = Refl.Get(session, n);
+                    if (bc == null) continue;
+                    cfg = Refl.Get(bc, "Config") ?? bc;
+                    if (Rows(cfg) != null) { L.Info($"experience table from Session.{n}.Config ({cfg.GetType().FullName})"); break; }
+                    cfg = null;
+                }
+                _expTried = true; // from here on, looked up once: searching the game's classes every time made the screen lag
+                // 2) any singleton whose type has Experience.Level.ExpTable (the class name changes between game versions)
+                if (cfg == null) cfg = ScanForConfig();
+                var rows = Rows(cfg);
+                if (rows == null) { L.Info("experience table not found — the XP bar shows 'experience unknown'"); return null; }
+                var steps = new List<int>();
+                foreach (var r in rows) steps.Add(Refl.Get(r, "Experience") is int x ? x : 0);
+                // the table holds the experience of each step; the totals are the running sum
+                var totals = new int[steps.Count];
+                int sum = 0;
+                for (int i = 0; i < steps.Count; i++) { totals[i] = sum; sum += steps[i]; }
+                _expTable = totals;
+                L.Info($"experience table: {totals.Length} levels (level 2 at {(totals.Length > 1 ? totals[1] : 0)} xp)");
+            }
+            catch (Exception e) { _expTried = true; L.ErrorOnce("experience table", e); }
             return _expTable;
+        }
+
+        private static IEnumerable Rows(object cfg) => Refl.Get(Refl.Get(Refl.Get(cfg, "Experience"), "Level"), "ExpTable") as IEnumerable;
+
+        private static object ScanForConfig()
+        {
+            var t0 = DateTime.Now;
+            try
+            {
+                var singleton = AccessTools.TypeByName("Comfort.Common.Singleton`1");
+                var asm = _appType?.Assembly;
+                if (singleton == null || asm == null) return null;
+                Type[] types;
+                try { types = asm.GetTypes(); } catch (System.Reflection.ReflectionTypeLoadException e) { types = e.Types.Where(x => x != null).ToArray(); }
+                foreach (var t in types)
+                {
+                    if (t.IsGenericTypeDefinition || t.IsInterface || t.IsAbstract) continue;
+                    var exp = t.GetField("Experience", Refl.All)?.FieldType ?? t.GetProperty("Experience", Refl.All)?.PropertyType;
+                    if (exp == null || exp.IsPrimitive) continue;
+                    var lvl = exp.GetField("Level", Refl.All)?.FieldType ?? exp.GetProperty("Level", Refl.All)?.PropertyType;
+                    if (lvl == null || (lvl.GetField("ExpTable", Refl.All) == null && lvl.GetProperty("ExpTable", Refl.All) == null)) continue;
+                    object inst = null;
+                    try { inst = singleton.MakeGenericType(t).GetProperty("Instance", Refl.All)?.GetValue(null, null); } catch { }
+                    L.Info($"experience table: candidate {t.FullName}, singleton {(inst == null ? "empty" : "set")} ({(DateTime.Now - t0).TotalMilliseconds:0} ms)");
+                    if (inst != null && Rows(inst) != null) return inst;
+                }
+            }
+            catch (Exception e) { L.ErrorOnce("searching for the experience table", e); }
+            return null;
         }
 
         public static void Dump()
