@@ -25,7 +25,7 @@ namespace LevelGate.Progression
         public const string Guid = "com.kkyangg.levelgate.progression";
         public const string Name = "LevelGate Progression";
         // MAJOR.MINOR.PATCH — see CHANGELOG.md
-        public const string Version = "0.9.29";
+        public const string Version = "0.9.30";
 
         internal static ProgressionPlugin Instance;
         internal static ConfigEntry<KeyboardShortcut> OpenKey;
@@ -52,6 +52,7 @@ namespace LevelGate.Progression
         internal static ConfigEntry<bool> XpAnimation;
         internal static ConfigEntry<float> SoundVolume;
         internal static ConfigEntry<int> ShownXp;
+        internal static ConfigEntry<string> ProfileState;
 
         private void Awake()
         {
@@ -120,6 +121,8 @@ namespace LevelGate.Progression
                 "Write detailed lines to the log (icons, menu objects, screen changes…). Its cost is measured and written in each session line of Progression.log; turn it off if that ever gets noticeable.", 20));
             DumpKey = Config.Bind(A, "DumpKey", new KeyboardShortcut(KeyCode.F10, KeyCode.LeftControl), Desc(
                 "Writes everything the plugin knows (menu bar objects, data, screen state) to the log.", 10));
+            ProfileState = Config.Bind(A, "ProfileState", "", new ConfigDescription(
+                "Per character: the XP and level the screen last showed (XP animation, NEW tags). Set by the plugin.", null, new ConfigurationManagerAttributes { Browsable = false }));
             ShownXp = Config.Bind(A, "ShownXp", 0, new ConfigDescription(
                 "Your total experience the last time the screen showed it (the XP animation plays from here). Set by the plugin.", null, new ConfigurationManagerAttributes { Browsable = false }));
                         LastSeenLevel = Config.Bind(A, "LastSeenLevel", 0, new ConfigDescription(

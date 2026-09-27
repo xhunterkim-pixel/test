@@ -40,6 +40,16 @@ Versions are **MAJOR.MINOR.PATCH**:
 
 ## LevelGate Progression (BepInEx plugin, separate DLL)
 
+### 0.9.30
+- **Every level up plays in full:** no more rushing through the first ones (5 → 23 jumped to 19 in 3 s without sound).
+  - Each level: the bar fills in 0.7 s, Levelup.mp3 peaks on the pop, a short hold, then the next level (~1.25 s a level).
+  - The unlock beat also shows every new level's card, page by page (it was capped at the last two pages).
+- **Fix: a new character's XP never animated.** The saved XP and last seen level were one value for every character: a new character (0 XP) reset it to 0, and 0 counted as "never saved", so its first +10 000 EXP didn't play.
+  - Both are now kept per character (profile id).
+  - A character met for the first time starts where it is at game start / the 30 s check, so what it earns afterwards plays out (from 0 XP too).
+  - The old single value is carried over to the current character only when it fits.
+- **Sounds 2.5× louder:** the MP3s themselves are boosted with a limiter, so they don't clip (level up peaks at -12.4 dB, new rank at -3.8 dB).
+
 ### 0.9.29
 - **Own sounds, and the animation is timed to them.** `sounds\levelup.mp3` (1.46 s, peaks at 0.45 s) and `sounds\emblemup.mp3` (4.28 s, build-up, peaks at 1.45 s) are loaded at start. General > SoundVolume sets their volume. If a file is missing, a game sound is used instead.
   - **Every** full level up plays Levelup.mp3, started so its peak lands on the number's pop. Consecutive level ups are ~1 s apart, so peaks don't collide. After the last one: the sound plays out, then 0.4 s, then the next beat.

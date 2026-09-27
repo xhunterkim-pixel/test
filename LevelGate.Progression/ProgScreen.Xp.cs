@@ -7,7 +7,7 @@ using UnityEngine.UI;
 namespace LevelGate.Progression
 {
     /// <summary>
-    /// The XP animation. The screen remembers the total XP it last showed (Advanced > ShownXp, hidden); when the profile has
+    /// The XP animation. The screen remembers the total XP it last showed, per character (Seen); when the profile has
     /// more on open, it plays out in beats, each one landing before the next starts (a second of stillness in between):
     ///
     ///   1. EARN   the "+N" chip slides in; the bar fills; each level up pops the number (white flash, LEVEL UP caption) and
@@ -56,11 +56,11 @@ namespace LevelGate.Progression
             _xpPending = _xpRunning = false;
             _xpCardLevel = 0;
             ResetXpVisuals();
-            int now = ProgData.TotalExp(), shown = ProgressionPlugin.ShownXp.Value;
-            if (now < 0 || !ProgData.HasExpTable) return; // not known yet: next time (the baseline stays)
-            if (!ProgressionPlugin.XpAnimation.Value || shown <= 0 || now <= shown)
+            int now = ProgData.TotalExp(), shown = SeenState.Xp;
+            if (now < 0 || shown < 0 || !ProgData.HasExpTable) return; // not known yet: next time (the baseline stays)
+            if (!ProgressionPlugin.XpAnimation.Value || now <= shown)
             {
-                if (shown != now) { ProgressionPlugin.ShownXp.Value = now; if (shown > now) L.Info($"xp: shown XP {shown} > profile {now} (new profile?) — reset"); }
+                if (shown != now) { SeenState.Xp = now; if (shown > now) L.Info($"xp: shown XP {shown} > profile {now} — reset"); }
                 return;
             }
             int la = ProgData.LevelOfExp(shown), lb = ProgData.LevelOfExp(now);
@@ -110,31 +110,14 @@ namespace LevelGate.Progression
                 Add(StepKind.Fill, Mathf.Clamp(.5f + (fb - fa) * 1.2f, .6f, 1.6f), la, fa, fb);
                 return;
             }
-            // Every level up gets its sound, and the sound's peak (0.45 s in) lands on the number's pop: the bar's fill
-            // starts the sound 0.45 s before it's full. Levels follow each other ~1 s apart, so no two peaks collide.
-            // More than 5: the first ones rush past (the number ticks up, no sound), the last 5 get the full treatment.
-            const int Full = 5;
-            int rush = Mathf.Max(0, levels - Full);
-            int l0 = la;
-            if (rush > 0)
-            {
-                Add(StepKind.Fill, Mathf.Max(.3f, .45f * (1 - fa)), la, fa, 1);
-                float each = Mathf.Clamp(1.6f / rush, .07f, .16f); // the whole rush: ~1.6 s at most
-                for (int l = la + 1; l <= la + rush; l++)
-                {
-                    Add(StepKind.Rush, each * .35f, l);
-                    Add(StepKind.Fill, each * .65f, l, 0, 1);
-                }
-                l0 = la + rush;
-                fa = 0;
-            }
-            // the first full level's fill (long enough to carry the sound's run-up)
-            Add(StepKind.Fill, Mathf.Max(Sfx.LevelUpPeak + .1f, .9f * (1 - fa)), l0, fa, 1, loud: true);
-            for (int l = l0 + 1; l <= lb; l++)
+            // Every level up gets its moment: the bar fills at a steady pace (0.7 s a level), Levelup.mp3 starts 0.45 s before
+            // it's full so its peak lands on the number's pop, a short hold, the next level. ~1.25 s a level, however many.
+            Add(StepKind.Fill, Mathf.Max(Sfx.LevelUpPeak + .15f, .9f * (1 - fa)), la, fa, 1, loud: true);
+            for (int l = la + 1; l <= lb; l++)
             {
                 bool last = l == lb;
                 Add(StepKind.LevelUp, .55f, l);
-                if (!last) Add(StepKind.Fill, .5f, l, 0, 1, loud: true);
+                if (!last) Add(StepKind.Fill, .7f, l, 0, 1, loud: true);
                 else
                 {
                     float fill = fb > 0 ? Mathf.Clamp(.35f + fb * .8f, .35f, 1.1f) : 0;
@@ -149,10 +132,8 @@ namespace LevelGate.Progression
             // its peak (1.45 s), the settle runs to ~2.35 s — then 1 s of stillness before the cards
             if (TierOf(lb).Name != TierOf(la).Name) Add(StepKind.Rank, RankLead + 1.1f + 1f, lb);
 
-            // ---- 3. UNLOCK: the new levels' cards, left to right, page by page (at most the last two pages)
-            int firstShown = la + 1;
-            int lastPage = (lb - 1) / PerPage;
-            if (lastPage - (firstShown - 1) / PerPage > 1) firstShown = (lastPage - 1) * PerPage + 1;
+            // ---- 3. UNLOCK: the new levels' cards, left to right, page by page
+            int firstShown = la + 1; // every new level's card, page by page
             int shownCount = lb - firstShown + 1;
             float eachCard = shownCount <= 5 ? .34f : .24f;
             int page = (la - 1) / PerPage;
@@ -207,7 +188,7 @@ namespace LevelGate.Progression
                     if (st.Loud && !_xpCued && st.Dur - _xpT <= Sfx.LevelUpPeak) { _xpCued = true; PlayLevelUp(); }
                     bool intoLevelUp = _xpStep + 1 < _xpSteps.Count && (_xpSteps[_xpStep + 1].Kind == StepKind.LevelUp || _xpSteps[_xpStep + 1].Kind == StepKind.Rush);
                     // into a level up: accelerates into it (the sound's swell) · the last one: slows into place
-                    float e = intoLevelUp ? (st.Loud ? k * k : k) : 1 - Mathf.Pow(1 - k, 3);
+                    float e = intoLevelUp ? k * (.6f + .4f * k) : 1 - Mathf.Pow(1 - k, 3); // into a level up: steady, leaning in a little
                     float frac = Mathf.Lerp(st.From, st.To, e);
                     if (ProgData.ExpInLevel(0, st.Level, out _, out int need)) ShowXpState(st.Level, Mathf.RoundToInt(frac * need), need, true);
                     _xpFill.anchorMax = new Vector2(frac, 1);
@@ -411,7 +392,7 @@ namespace LevelGate.Progression
             _xpPending = _xpRunning = false;
             _xpSteps.Clear();
             _xpCardLevel = 0;
-            ProgressionPlugin.ShownXp.Value = _xpTo;
+            SeenState.Xp = _xpTo;
             if (_headTextGroup != null) _headTextGroup.alpha = 1;
             _xpRankPop = -1;
             if (_headBadge != null) _headBadge.Root.localScale = Vector3.one;

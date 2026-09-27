@@ -349,6 +349,13 @@ namespace LevelGate.Progression
             catch (Exception e) { L.ErrorOnce("reading the profile", e); return null; }
         }
 
+        /// <summary>The profile's id (each character keeps its own XP / last seen level), or null.</summary>
+        public static string ProfileId()
+        {
+            var p = Profile();
+            return (Refl.Get(p, "Id") ?? Refl.Get(p, "ProfileId") ?? Refl.Get(Refl.Get(p, "Info"), "Nickname"))?.ToString();
+        }
+
         public static int PlayerLevel()
         {
             var lvl = Refl.Get(Refl.Get(Profile(), "Info"), "Level");

@@ -24,10 +24,10 @@ namespace LevelGate.Progression
 
         public static void Seen(int level)
         {
-            if (level > 0 && ProgressionPlugin.LastSeenLevel.Value != level)
+            if (level > 0 && SeenState.Level != level)
             {
-                L.Info($"NEW: screen opened — last seen level {ProgressionPlugin.LastSeenLevel.Value} → {level} (main-menu NEW tag clears)");
-                ProgressionPlugin.LastSeenLevel.Value = level; _shownSeen = -1;
+                L.Info($"NEW: screen opened — last seen level {SeenState.Level} → {level} (main-menu NEW tag clears)");
+                SeenState.Level = level; _shownSeen = -1;
             }
         }
 
@@ -42,17 +42,18 @@ namespace LevelGate.Progression
             _watchNext = Time.unscaledTime + 30f;
             int level = ProgData.PlayerLevel(), exp = ProgData.TotalExp();
             if (level <= 0) return;
+            SeenState.Ensure(); // a character met for the first time starts here: what it earns from now on plays out
             if (_watchLevel < 0) { _watchLevel = level; _watchExp = exp; L.Info($"profile: level {level}, {exp} total XP"); return; }
             if (level == _watchLevel && exp == _watchExp) return;
             string gained = exp >= 0 && _watchExp >= 0 ? $" (+{exp - _watchExp} XP)" : "";
             if (level != _watchLevel)
             {
                 int items = ProgData.Levels.Values.Count(v => v > _watchLevel && v <= level);
-                L.Info($"profile: LEVEL UP {_watchLevel} → {level}{gained}; {items} item(s) unlocked by it; last seen level {ProgressionPlugin.LastSeenLevel.Value}");
+                L.Info($"profile: LEVEL UP {_watchLevel} → {level}{gained}; {items} item(s) unlocked by it; last seen level {SeenState.Level}");
             }
             else L.Info($"profile: XP {_watchExp} → {exp}{gained}, still level {level}");
-            int shown = ProgressionPlugin.ShownXp.Value;
-            if (ProgressionPlugin.XpAnimation.Value && shown > 0 && exp > shown) L.Info($"xp: +{exp - shown} EXP not shown yet — plays when the Progression screen opens");
+            int shown = SeenState.Xp;
+            if (ProgressionPlugin.XpAnimation.Value && shown >= 0 && exp > shown) L.Info($"xp: +{exp - shown} EXP not shown yet — plays when the Progression screen opens");
             _watchLevel = level; _watchExp = exp;
         }
 
@@ -121,8 +122,7 @@ namespace LevelGate.Progression
         {
             int level = ProgData.PlayerLevel();
             if (level <= 0) return;
-            int seen = ProgressionPlugin.LastSeenLevel.Value;
-            if (seen <= 0) { ProgressionPlugin.LastSeenLevel.Value = seen = level; } // first run: nothing is new yet
+            int seen = SeenState.Level; // a character seen for the first time starts at its level: nothing is new yet
             string xp = ProgData.LevelExp(out int have, out int need) ? $"{Thousands(have)} / {Thousands(need)} EXP" : "";
             if (level == _shownLevel && seen == _shownSeen && xp == _shownXp) return;
             _shownLevel = level; _shownSeen = seen; _shownXp = xp;

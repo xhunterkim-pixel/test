@@ -106,7 +106,7 @@ namespace LevelGate.Progression
                 if (!_built || _canvas == null) { _built = false; Build(); }
                 ProgData.Invalidate(); // names / categories again (the game may have finished loading them since)
                 int player = ProgData.PlayerLevel();
-                int seen = ProgressionPlugin.LastSeenLevel.Value;
+                int seen = SeenState.Level;
                 _newFrom = seen > 0 && seen < player ? seen : 0;
                 _sLevels = _sItems = _sInspects = _sPages = _sSlow = 0; _sSlowMax = 0; _sOpenedAt = Time.unscaledTime;
                 _sLogMs = L.CostMs; _sLogLines = L.CostLines;
