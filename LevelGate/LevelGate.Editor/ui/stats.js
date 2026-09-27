@@ -256,7 +256,7 @@ function statsPage() {
   }[S.statSort.key] || ((a, b) => byName(a, b));
   S.shown = statIds(S.statCat).map(id => S.items.get(id)).sort(cmp);
   const ids = S.shown.map(it => it.i);
-  const head = ([k, t]) => `<div><span class="head-text sortable ${S.statSort.key === k ? 'on' : ''}" data-act="statSortBy" data-arg="${k}">${t}${S.statSort.key === k && k !== 'custom' ? `<span class="sort-arrow">${d > 0 ? '▲' : '▼'}</span>` : ''}</span></div>`;
+  const head = ([k, t], c) => `<div>${c ? grip('st', c) : ''}<span class="head-text sortable ${S.statSort.key === k ? 'on' : ''}" data-act="statSortBy" data-arg="${k}">${t}${S.statSort.key === k && k !== 'custom' ? `<span class="sort-arrow">${d > 0 ? '▲' : '▼'}</span>` : ''}</span></div>`;
   const warn = !S.serverMod
     ? `<div class="warn-line">⚠ The ItemStatEditor server mod wasn't found in ${esc(S.statsFile ? S.statsFile.replace(/[\\/]item_stats\.json$/, '') : 'SPT\\user\\mods\\ItemStatEditor')} — item stat edits are saved but only take effect with it installed (ItemStatEditor.Server.dll from the download).</div>` : '';
   const rows = ids.map((id, i) => {
@@ -269,13 +269,14 @@ function statsPage() {
         <div class="line2">${esc(it.s || '')}</div></div></div>
       <div class="col"><i class="dot" style="--c:${k.color}"></i>${esc(k.name)}</div>
       <div class="col stats chips-col">${statChips(it)}</div>
+      ${noteCell(id)}
       ${levelCell(id)}
     </div>`;
   }).join('');
   return `<div class="toolbar sticky">${warn}
       <span class="muted small">${fmt(ids.length)} shown${S.picked.size > 1 ? ` · ${S.picked.size} picked` : ''} · Ctrl+drag to reorder · edits apply after restarting the SPT server${S.statSources.length ? ` · your edits win over ${esc(S.statSources.map(x => x.replace(/ \(.*/, '')).join(' and '))}` : ''}</span></div>
     ${tagBar(statIds(S.statCat))}
-    <div class="list st"><div class="list-head">${head(['custom', '#'])}${head(['name', 'Item'])}${head(['type', 'Type'])}<div>Effects</div>${head(['level', 'Level'])}</div>${rows || `<div class="empty">${Object.keys(S.meds).length ? 'Nothing matches.' : 'No meds loaded — the stats come from the SPT database (pick the config inside your SPT folder).'}</div>`}</div>`;
+    <div class="list st" data-cols="st" style="--cols:${colsCss('st')}"><div class="list-head">${head(['custom', '#'])}${head(['name', 'Item'], 'item')}${head(['type', 'Type'], 'type')}<div>${grip('st', 'effects')}<span class="head-text">Effects</span></div><div>${grip('st', 'notes')}<span class="head-text">Notes</span></div>${head(['level', 'Level'], 'level')}</div>${rows || `<div class="empty">${Object.keys(S.meds).length ? 'Nothing matches.' : 'No meds loaded — the stats come from the SPT database (pick the config inside your SPT folder).'}</div>`}</div>`;
 }
 
 // ---- the editor (right panel)
@@ -337,6 +338,7 @@ function statsDetails() {
       ${sharing.length && (m.effects_buffs || []).length ? `<div class="hint">These effects are shared with ${esc(sharing.join(', '))} — changing them changes those too.</div>` : (m.effects_buffs || []).length ? '' : '<div class="hint">No effects over time (stims and some food have them). + Add Effect to give it some.</div>'}
       ${buffs || ''}
       ${JSON.stringify(m.effects_buffs || []) !== JSON.stringify(def.effects_buffs || []) ? `<div class="def-list"><div class="def">Escape From Tarkov default:</div>${(def.effects_buffs || []).map(b => `<div>${esc(buffText(b))}</div>`).join('') || '<div>no effects</div>'}</div>` : ''}</div>
+    ${noteCard(id)}
     ${tagCard([id])}`;
   if (keep) d.querySelector(`[data-key="${keep}"]`)?.focus();
 }

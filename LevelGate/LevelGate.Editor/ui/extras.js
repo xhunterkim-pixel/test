@@ -252,3 +252,81 @@ document.addEventListener('mouseup', () => {
 });
 // a drag ends with a click on a row: don't let it change the picks
 document.addEventListener('click', e => { if (suppressRowClick && e.target.closest('#page')) { e.stopImmediatePropagation(); e.preventDefault(); } }, true);
+
+// =====================================================================
+// Resizable columns (like the Custom Trader Creator): each divider only trades width
+// between its two neighbours; double-click a divider to reset. Kept in S.ui.colf.
+// =====================================================================
+
+const COLS = {
+  lg: [['item', 380, 160], ['cat', 140, 70], ['stats', 220, 70], ['notes', 170, 60], ['price', 100, 60], ['level', 110, 100]],
+  st: [['item', 360, 160], ['type', 130, 70], ['effects', 260, 80], ['notes', 200, 60], ['level', 110, 100]],
+};
+function colWeights(list) {
+  const saved = S.ui.colf?.[list] || {};
+  return COLS[list].map(([k, w]) => (saved[k] > 0 ? saved[k] : w));
+}
+const colsCss = list => colWeights(list).map((w, i) => `minmax(${COLS[list][i][2]}px, ${Math.round(w * 100) / 100}fr)`).join(' ');
+/** The divider at the left edge of a header cell (not before the first column). */
+const grip = (list, key) => (COLS[list].findIndex(c => c[0] === key) > 0 ? `<span class="grip" data-grip="${list}|${key}" title="Drag to resize · double-click to reset"></span>` : '');
+function applyCols(list) { document.querySelectorAll(`.list[data-cols="${list}"]`).forEach(el => el.style.setProperty('--cols', colsCss(list))); }
+
+let colDrag = null;
+document.addEventListener('mousedown', e => {
+  const g = e.target.closest('.list-head .grip[data-grip]');
+  if (!g || e.button !== 0) return;
+  e.preventDefault(); e.stopPropagation();
+  const [list, key] = g.dataset.grip.split('|');
+  const cols = COLS[list], i = cols.findIndex(c => c[0] === key);
+  const cells = [...g.closest('.list-head').children].slice(1); // after "#"
+  const px = cols.map((c, n) => cells[n]?.getBoundingClientRect().width || c[1]);
+  S.ui.colf = { ...(S.ui.colf || {}), [list]: Object.fromEntries(cols.map((c, n) => [c[0], px[n]])) };
+  const listEl = g.closest('.list').getBoundingClientRect();
+  const guide = document.createElement('div');
+  guide.className = 'col-guide';
+  Object.assign(guide.style, { left: e.clientX + 'px', top: listEl.top + 'px', height: Math.min(listEl.height, innerHeight - listEl.top) + 'px' });
+  document.body.appendChild(guide);
+  g.classList.add('drag'); document.body.classList.add('col-drag');
+  colDrag = { list, left: cols[i - 1], right: cols[i], lw: px[i - 1], w: px[i], x: e.clientX, guide, g };
+}, true);
+document.addEventListener('mousemove', e => {
+  if (!colDrag) return;
+  const d = colDrag;
+  const dx = clamp(e.clientX - d.x, d.left[2] - d.lw, d.w - d.right[2]);
+  const w = S.ui.colf[d.list];
+  w[d.left[0]] = d.lw + dx; w[d.right[0]] = d.w - dx;
+  d.guide.style.left = (d.x + dx) + 'px';
+  applyCols(d.list);
+});
+document.addEventListener('mouseup', () => {
+  if (!colDrag) return;
+  colDrag.guide.remove(); colDrag.g.classList.remove('drag'); document.body.classList.remove('col-drag');
+  colDrag = null;
+  saveUi();
+});
+document.addEventListener('dblclick', e => {
+  const g = e.target.closest('.list-head .grip[data-grip]');
+  if (!g) return;
+  const list = g.dataset.grip.split('|')[0];
+  if (S.ui.colf) delete S.ui.colf[list];
+  applyCols(list); saveUi(); toast('Column widths reset');
+});
+
+// =====================================================================
+// Notes (per item, only in this editor)
+// =====================================================================
+
+const noteOf = id => S.ui.notes?.[id] || '';
+const noteCell = id => `<div class="col note" data-note-cell="${id}" title="${esc(noteOf(id))}">${esc(noteOf(id))}</div>`;
+function noteCard(id) {
+  return `<div class="card"><h3>Notes</h3><textarea id="noteInput" data-note="${id}" rows="3" spellcheck="true" placeholder="Only you see these (shown in the Notes column).">${esc(noteOf(id))}</textarea></div>`;
+}
+document.addEventListener('input', e => {
+  const el = e.target;
+  if (!el.dataset?.note) return;
+  const id = el.dataset.note, notes = { ...(S.ui.notes || {}) };
+  if (el.value.trim()) notes[id] = el.value; else delete notes[id];
+  S.ui.notes = notes;
+  document.querySelectorAll(`[data-note-cell="${id}"]`).forEach(c => { c.textContent = el.value; c.title = el.value; });
+  saveUi();
+});

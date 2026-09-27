@@ -332,6 +332,7 @@ function rowHtml(it, n) {
       <div class="line2">${esc(it.s || '')}${it.s ? ' · ' : ''}<span class="mono">${id}</span></div></div></div>
     <div class="col"><i class="dot" style="--c:${g?.color || '#888'}"></i>${esc(g?.name || 'Other')}</div>
     <div class="col stats chips-col" title="${esc(statsShort(it))}">${statChips(it)}</div>
+    ${noteCell(id)}
     <div class="col num">${price ? fmt(price) + ' ₽' : '—'}</div>
     ${levelCell(id)}
   </div>`;
@@ -355,10 +356,11 @@ function updateRow(id) {
 }
 
 function listHead() {
-  const cols = [['custom', '#'], ['name', 'Item'], ['cat', 'Category'], ['', 'Stats'], ['price', 'Price'], ['level', 'Level']];
-  return `<div class="list-head">${cols.map(([k, t]) => k && k !== ''
-    ? `<div><span class="head-text sortable ${S.sort.key === k ? 'on' : ''}" data-act="sortBy" data-arg="${k}">${t}${S.sort.key === k ? `<span class="sort-arrow">${S.sort.dir > 0 ? '▲' : '▼'}</span>` : ''}</span></div>`
-    : `<div>${t}</div>`).join('')}</div>`;
+  // [column key, title, sort key]
+  const cols = [['', '#', 'custom'], ['item', 'Item', 'name'], ['cat', 'Category', 'cat'], ['stats', 'Stats', ''], ['notes', 'Notes', ''], ['price', 'Price', 'price'], ['level', 'Level', 'level']];
+  return `<div class="list-head">${cols.map(([c, t, k]) => `<div>${c ? grip('lg', c) : ''}${k
+    ? `<span class="head-text sortable ${S.sort.key === k ? 'on' : ''}" data-act="sortBy" data-arg="${k}">${t}${S.sort.key === k && k !== 'custom' ? `<span class="sort-arrow">${S.sort.dir > 0 ? '▲' : '▼'}</span>` : ''}</span>`
+    : `<span class="head-text">${t}</span>`}</div>`).join('')}</div>`;
 }
 
 function renderPage(keepScroll = true) {
@@ -381,7 +383,7 @@ function renderPage(keepScroll = true) {
       <button class="outline resort ${S.sortStale ? 'stale' : ''}" id="resortBtn" data-act="resort" ${S.sortStale ? '' : 'disabled'} title="Sort the list again (levels you changed stay where they are until then)">⟳ Re-sort</button>
       <span class="muted small">${fmt(list.length)} shown${n ? ` · ${n} picked` : ''}</span>
     </div>${tagBar(catItems(S.cat).filter(it => matches(it, S.search.trim().toLowerCase())).map(it => it.i))}
-    <div class="list lg" data-list="items">${listHead()}${rows || `<div class="empty">${S.items.size || S.levels.size ? 'Nothing matches.' : 'No items loaded — pick the config file with Browse… (the item list comes from the SPT folder above it).'}</div>`}
+    <div class="list lg" data-list="items" data-cols="lg" style="--cols:${colsCss('lg')}">${listHead()}${rows || `<div class="empty">${S.items.size || S.levels.size ? 'Nothing matches.' : 'No items loaded — pick the config file with Browse… (the item list comes from the SPT folder above it).'}</div>`}
     ${list.length > S.limit ? `<button class="more" data-act="more">Show ${fmt(Math.min(300, list.length - S.limit))} more (${fmt(list.length - S.limit)} left)</button>` : ''}</div>`;
   page.scrollTop = keepScroll ? top : 0;
 }
@@ -419,6 +421,7 @@ function renderDetails() {
       <div class="hint">${lvl === undefined ? 'Anyone can use it.' : lvl === 1 ? 'Level 1 = usable from the start, but tracked (green stripes).' : `Players below level ${lvl} can't use, equip or load it (red stripes); from level ${lvl} on it's unlocked (green).`}</div>
     </div>
     ${statsCard(it)}
+    ${noteCard(it.i)}
     ${tagCard([it.i])}
     <div class="card">
       <h3>Item</h3>
