@@ -20,6 +20,9 @@ Versions are **MAJOR.MINOR.PATCH**:
 
 ## Level Gate (BepInEx plugin)
 
+### 1.6.2
+- Tooltip: the `[LOCKED - Lvl 40]` name prefix no longer stays in front of the "LOCKED - Name" header (it happened on guns, ammo, face gear… whenever only the plain name was matched).
+
 ### 1.6.1
 - The tooltip shows on the first hover in the stash and in raid (not only after hovering the checkmark first).
 

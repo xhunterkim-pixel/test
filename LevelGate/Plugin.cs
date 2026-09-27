@@ -27,7 +27,7 @@ namespace LevelGate
     {
         public const string PluginGuid = "com.yourname.levelgate";
         public const string PluginName = "LevelGate";
-        public const string PluginVersion = "1.6.1";
+        public const string PluginVersion = "1.6.2";
 
         internal static ManualLogSource Log;
         internal static ConfigEntry<KeyboardShortcut> ToggleMenuKey;
@@ -2849,7 +2849,7 @@ namespace LevelGate
                         if (kv.Value.Tpl == _hoveredTpl && (key == null || kv.Key.Length > key.Length) && text.IndexOf(kv.Key, StringComparison.Ordinal) >= 0)
                         { key = kv.Key; info = kv.Value; }
                     // or its plain game name (the name may not have gone through the rename yet)
-                    if (key == null && !ItemRenameShared.PlainNames.ContainsKey(_hoveredTpl))
+                    if (key == null)
                     {
                         try { EFT.LocalizationExtensions.Localized(_hoveredTpl + " Name", ""); } catch { } // fills PlainNames / ShownNames
                         foreach (var kv in ItemRenameShared.ShownNames)
@@ -2888,12 +2888,48 @@ namespace LevelGate
                 else return;
 
                 if (text.Contains(levelLine)) return; // already rewritten
-                text = text.Substring(0, at) + header + "\n" + levelLine + text.Substring(at + key.Length);
+                int start = LabelBefore(text, at);
+                text = text.Substring(0, start) + header + "\n" + levelLine + text.Substring(at + key.Length);
             }
             catch (Exception e)
             {
                 LevelGatePlugin.Log.LogError("LevelGate tooltip layout error: " + e);
             }
+        }
+
+        /// <summary>Where the name really starts: when only the plain name matched, LevelGate's own
+        /// "[LOCKED - Lvl 40] " can still sit in front of it — that goes too (the header says it already).</summary>
+        private static int LabelBefore(string text, int at)
+        {
+            int end = at;
+            while (end > 0 && text[end - 1] == ' ') end--;
+            if (end == at || end == 0) return at;
+            int lineStart = text.LastIndexOf('\n', end - 1) + 1;
+            string before = text.Substring(lineStart, end - lineStart);
+            string inner = before;
+            int open = -1;
+            if (before.EndsWith("]"))
+            {
+                open = before.LastIndexOf('[');
+                if (open < 0) return at;
+                inner = before.Substring(open + 1, before.Length - open - 2);
+            }
+            foreach (var label in new[] { LevelGatePlugin.LockedLabel?.Value, LevelGatePlugin.SemiLockedLabel?.Value })
+            {
+                if (string.IsNullOrEmpty(label)) continue;
+                if (open >= 0 ? inner.StartsWith(label, StringComparison.Ordinal) : false) return lineStart + open;
+                // no brackets: "LOCKED - Lvl 40 Name" / "LOCKED Name"
+                if (open < 0)
+                {
+                    int i = before.LastIndexOf(label, StringComparison.Ordinal);
+                    if (i >= 0)
+                    {
+                        string rest = before.Substring(i + label.Length);
+                        if (rest.Length == 0 || System.Text.RegularExpressions.Regex.IsMatch(rest, @"^ - Lvl \d+$")) return lineStart + i;
+                    }
+                }
+            }
+            return at;
         }
 
         private static string StripTags(string s)
