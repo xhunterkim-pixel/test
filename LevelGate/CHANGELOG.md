@@ -40,6 +40,16 @@ Versions are **MAJOR.MINOR.PATCH**:
 
 ## LevelGate Progression (BepInEx plugin, separate DLL)
 
+### 0.3.0
+- **Tab:** left of Character. The icon keeps the original icon size, which also fixes the extra width and spacing.
+- **P** opens and closes the screen (setting General > OpenScreenKey). It does nothing while you're typing in a text box or outside the main menu.
+- **Item icons:** the game's icon loader is found by what it does rather than by name (the old name doesn't exist in this Tarkov version).
+- **Right-click:** checked directly under the mouse (the game doesn't pass right-clicks to our tiles). It opens the game's inspect window using an ItemContext.
+- **Cards:** three item pictures instead of a line of names. States are UNLOCKED, YOUR LEVEL, NEXT LEVEL or LOCKED.
+- **Featured item panel** on the right, like the battle pass: a big picture of the item under the mouse, its category and unlock level.
+- **Page dots:** evenly spaced. The current page is taller, not wider.
+- **Closing:** the screen closes when the game changes screen (EftScreenManager.OnScreenChanged, the same event MoxoPixel's Menu Overhaul uses).
+
 ### 0.2.3
 - Clicking the tab did nothing: the game's tab code handles clicks itself without telling anyone. The tab now has its own click catcher.
 - The tab is copied from Character instead of Handbook (Handbook's counter area made the copy wider than the others). The log shows the sizes of both.

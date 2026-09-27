@@ -18,7 +18,7 @@ namespace LevelGate.Progression
         private const int PerPage = 5;
         private static int Pages => Mathf.CeilToInt(ProgData.MaxLevel / (float)PerPage);
         private static readonly Color Blue = Ui.Hex("#5ab4e6");
-        private static readonly Color Panel = Ui.Hex("#0b1016", .97f);
+        private static readonly Color Panel = Ui.Hex("#0b1016", .93f);
 
         /// <summary>Rank look per level band: name, rim color, light color.</summary>
         private static readonly (int From, string Name, string Rim, string Light)[] Tiers =
@@ -52,6 +52,11 @@ namespace LevelGate.Progression
         private static int _cardsDir;
         private static readonly List<(CanvasGroup Group, RectTransform Rt, float Delay)> _tiles = new List<(CanvasGroup, RectTransform, float)>();
         private static float _wheelAt;
+        private static Image _featPic;
+        private static Component _featKicker, _featShort, _featName, _featInfo;
+        private static string _featTpl;
+        private static object _featIcon;
+        private static readonly List<(RectTransform Rect, ProgItem Item)> _hits = new List<(RectTransform, ProgItem)>();
         private static readonly List<(object Icon, Image Pic, Component Placeholder, string Tpl)> _icons = new List<(object, Image, Component, string)>();
         private static int _frames, _iconsShown;
         private static float _frameTime, _frameLogAt;
@@ -148,7 +153,22 @@ namespace LevelGate.Progression
             _playerLine = Ui.Label(Ui.Rect(top, "Player", new Vector2(.6f, 1), new Vector2(1, 1), new Vector2(0, -170), new Vector2(-40, -140)), "PlayerText", "", 16, Ui.Hex("#cfe6f5"), TextAnchor.UpperRight, true, 3);
 
             // the unlocks: a scrolling list of categories
-            var view = Ui.Rect(top, "Scroll", Vector2.zero, Vector2.one, new Vector2(34, 10), new Vector2(-34, -200));
+            // featured item (like the battle pass): big picture of the item under the mouse, or the level's first
+            var feat = Ui.Rect(top, "Featured", new Vector2(1, 0), new Vector2(1, 1), new Vector2(-470, 10), new Vector2(-34, -212));
+            Ui.Img(feat, Ui.Hex("#0f161d", .92f));
+            Ui.Img(Ui.Rect(feat, "Top", new Vector2(0, 1), Vector2.one, new Vector2(0, -2), Vector2.zero), new Color(Blue.r, Blue.g, Blue.b, .6f));
+            Ui.Img(Ui.Rect(feat, "Glow", new Vector2(0, .25f), Vector2.one, Vector2.zero, Vector2.zero), new Color(.35f, .7f, .9f, .08f), Ui.VerticalFade());
+            _featKicker = Ui.Label(Ui.Rect(feat, "Kicker", new Vector2(0, 1), Vector2.one, new Vector2(20, -40), new Vector2(-20, -14)), "Text", "", 13, Blue, TextAnchor.MiddleLeft, true, 6);
+            _featPic = Ui.Img(Ui.Rect(feat, "Pic", new Vector2(0, .34f), new Vector2(1, 1), new Vector2(30, 0), new Vector2(-30, -48)), Color.white);
+            _featPic.preserveAspect = true;
+            _featPic.enabled = false;
+            _featShort = Ui.Label(Ui.Rect(feat, "Short", new Vector2(0, .34f), new Vector2(1, 1), new Vector2(20, 0), new Vector2(-20, -48)), "Text", "", 40, Color.white, TextAnchor.MiddleCenter, true, 2, true);
+            _featName = Ui.Label(Ui.Rect(feat, "Name", new Vector2(0, 0), new Vector2(1, .34f), new Vector2(20, 60), new Vector2(-20, -6)), "Text", "", 20, Color.white, TextAnchor.UpperLeft, true, 1, true);
+            Ui.SetWrap(_featName, true);
+            _featInfo = Ui.Label(Ui.Rect(feat, "Info", new Vector2(0, 0), new Vector2(1, 0), new Vector2(20, 32), new Vector2(-20, 56)), "Text", "", 14, Ui.Hex("#aab7c2"), TextAnchor.MiddleLeft, true, 2);
+            Ui.Label(Ui.Rect(feat, "Hint", new Vector2(0, 0), new Vector2(1, 0), new Vector2(20, 8), new Vector2(-20, 30)), "Text", "RIGHT-CLICK AN ITEM TO INSPECT IT", 11, Ui.Hex("#5f6b75"), TextAnchor.MiddleLeft, true, 4);
+
+            var view = Ui.Rect(top, "Scroll", Vector2.zero, Vector2.one, new Vector2(34, 10), new Vector2(-490, -212));
             _scroll = view.gameObject.AddComponent<ScrollRect>();
             _scroll.horizontal = false;
             _scroll.scrollSensitivity = 40;
@@ -199,7 +219,7 @@ namespace LevelGate.Progression
 
             // page dots
             var dots = Ui.Rect(bottom, "Dots", new Vector2(.5f, 0), new Vector2(.5f, 0), new Vector2(-300, 24), new Vector2(300, 44));
-            float w = 26, gap = 7, total = Pages * (w + gap) - gap, x0 = -total / 2 + w / 2 - 60;
+            float w = 26, gap = 7, total = Pages * (w + gap) - gap, x0 = -total / 2 + w / 2;
             for (int i = 0; i < Pages; i++)
             {
                 int page = i;
@@ -246,8 +266,9 @@ namespace LevelGate.Progression
             for (int i = 0; i < _dots.Count; i++)
             {
                 _dots[i].color = i == page ? Blue : new Color(1, 1, 1, .2f);
-                _dots[i].rectTransform.sizeDelta = new Vector2(i == page ? 40 : 26, 5);
+                _dots[i].rectTransform.sizeDelta = new Vector2(26, i == page ? 7 : 4);
             }
+            _hits.RemoveAll(h => h.Rect == null || h.Rect.IsChildOf(_bottom));
             for (int i = 0; i < PerPage; i++) _cards[i].Show(first + i);
             _cardsDir = dir;
             _cardsStart = dir != 0 ? Time.unscaledTime : -10;
@@ -281,6 +302,8 @@ namespace LevelGate.Progression
             foreach (Transform ch in _content) UnityEngine.Object.Destroy(ch.gameObject);
             _tiles.Clear();
             _icons.Clear();
+            _hits.RemoveAll(h => h.Rect == null || !h.Rect.IsChildOf(_bottom));
+            Feature(items.FirstOrDefault(), level);
             int max = Mathf.Max(1, ProgressionPlugin.MaxTilesPerCategory.Value), n = 0;
             foreach (var (g, list) in groups)
             {
@@ -334,12 +357,33 @@ namespace LevelGate.Progression
             pic.preserveAspect = true;
             pic.enabled = false;
             _icons.Add((GameItems.IconOf(GameItems.ItemOf(it.Tpl)), pic, shortName, it.Tpl));
-            var click = rt.gameObject.AddComponent<TileClick>();
-            click.Tpl = it.Tpl;
-            click.Name = it.Name;
-            Ui.Img(Ui.Fill(rt, "Hit"), new Color(0, 0, 0, 0), null, true);
+            _hits.Add((rt, it));
             if (!reached) Ui.Img(Ui.Rect(inner, "Lock", new Vector2(1, 1), new Vector2(1, 1), new Vector2(-14, -14), new Vector2(-6, -6)), Ui.Hex("#f15e6c"));
             _tiles.Add((group, inner, Mathf.Min(index, 40) * .012f));
+        }
+
+        /// <summary>The big item panel on the right.</summary>
+        private static void Feature(ProgItem it, int level)
+        {
+            _featTpl = it?.Tpl;
+            _featPic.enabled = false;
+            _featShort.gameObject.SetActive(it != null);
+            if (it == null)
+            {
+                Ui.SetText(_featKicker, "");
+                Ui.SetText(_featName, "");
+                Ui.SetText(_featInfo, "");
+                _featIcon = null;
+                return;
+            }
+            var g = ProgData.Groups.FirstOrDefault(x => x.Key == it.Group);
+            Ui.SetText(_featKicker, (g.Name ?? "Item").ToUpperInvariant());
+            Ui.SetColor(_featKicker, Ui.Hex(g.Color ?? "#5ab4e6"));
+            Ui.SetText(_featShort, it.Short);
+            Ui.SetText(_featName, it.Name);
+            int player = ProgData.PlayerLevel();
+            Ui.SetText(_featInfo, $"UNLOCKS AT LEVEL <color=#ffd24a>{it.Level}</color>" + (player > 0 ? (it.Level <= player ? "   <color=#1ed760>UNLOCKED</color>" : "   <color=#f15e6c>LOCKED</color>") : ""));
+            _featIcon = GameItems.IconOf(GameItems.ItemOf(it.Tpl));
         }
 
         private static void UpdateSelection()
@@ -406,6 +450,24 @@ namespace LevelGate.Progression
                 _icons.RemoveAt(i);
                 if (_iconsShown++ == 0) L.Info($"first item icon shown ({tpl})");
             }
+            // mouse over an item: feature it; right-click: the game's inspect (the game's input doesn't send
+            // right-clicks to our tiles, so the rects are checked here)
+            var mouse = (Vector2)input.mousePosition;
+            ProgItem over = null;
+            foreach (var (rect, item) in _hits)
+                if (rect != null && rect.gameObject.activeInHierarchy && RectTransformUtility.RectangleContainsScreenPoint(rect, mouse, null)) { over = item; break; }
+            if (over != null && over.Tpl != _featTpl) Feature(over, over.Level);
+            if (input.GetMouseButtonDown(1))
+            {
+                L.Debug($"right-click at {mouse} over {(over == null ? "nothing" : over.Name + " (" + over.Tpl + ")")}");
+                if (over != null) GameItems.Inspect(over.Tpl);
+            }
+            if (_featIcon != null && !_featPic.enabled)
+            {
+                var sp = GameItems.SpriteOf(_featIcon);
+                if (sp != null) { _featPic.sprite = sp; _featPic.enabled = true; _featShort.gameObject.SetActive(false); }
+            }
+
             // how smooth it runs while open (every 5 s in the log)
             _frames++; _frameTime += Time.unscaledDeltaTime;
             if (L.Verbose && now > _frameLogAt)
@@ -481,7 +543,10 @@ namespace LevelGate.Progression
             private readonly RectTransform _slot, _body;
             private readonly CanvasGroup _group;
             private readonly Image _bg, _frame, _strip;
-            private readonly Component _title, _tier, _count, _preview, _state;
+            private readonly Component _title, _tier, _count, _more, _state;
+            private readonly Image[] _pics = new Image[3];
+            private readonly Component[] _picNames = new Component[3];
+            private readonly RectTransform[] _picRects = new RectTransform[3];
             private readonly Badge _badge;
             private int _level;
             private bool _picked;
@@ -497,7 +562,18 @@ namespace LevelGate.Progression
                 _title = Ui.Label(Ui.Rect(_body, "Title", new Vector2(0, 1), Vector2.one, new Vector2(0, -44), new Vector2(0, -10)), "Text", "", 24, Blue, TextAnchor.MiddleCenter, true, 4);
                 _badge = new Badge(_body, new Vector2(.5f, 1), new Vector2(0, -98), 96);
                 _tier = Ui.Label(Ui.Rect(_body, "Tier", new Vector2(0, 1), Vector2.one, new Vector2(0, -170), new Vector2(0, -150)), "Text", "", 12, Ui.Hex("#7f8c97"), TextAnchor.MiddleCenter, true, 8);
-                _preview = Ui.Label(Ui.Rect(_body, "Preview", new Vector2(0, 0), new Vector2(1, 0), new Vector2(12, 46), new Vector2(-12, 72)), "Text", "", 13, Ui.Hex("#cfe6f5"), TextAnchor.MiddleCenter, true);
+                // three item pictures (the short name shows until the picture is there) and "+N"
+                for (int i = 0; i < 3; i++)
+                {
+                    var picSlot = Ui.Box(_body, "Pic" + i, new Vector2(.5f, 0), new Vector2(-84 + i * 62, 76), new Vector2(56, 44));
+                    _picRects[i] = picSlot;
+                    Ui.Img(picSlot, new Color(1, 1, 1, .05f));
+                    _picNames[i] = Ui.Label(picSlot, "Name", "", 11, Ui.Hex("#cfe6f5"), TextAnchor.MiddleCenter, true, 0, true);
+                    _pics[i] = Ui.Img(Ui.Fill(picSlot, "Img", 3), Color.white);
+                    _pics[i].preserveAspect = true;
+                    _pics[i].enabled = false;
+                }
+                _more = Ui.Label(Ui.Box(_body, "More", new Vector2(.5f, 0), new Vector2(108, 76), new Vector2(50, 44)), "Text", "", 14, Blue, TextAnchor.MiddleLeft, true);
                 _count = Ui.Label(Ui.Rect(_body, "Count", new Vector2(0, 0), new Vector2(1, 0), new Vector2(0, 24), new Vector2(0, 44)), "Text", "", 12, Ui.Hex("#aab7c2"), TextAnchor.MiddleCenter, true, 6);
                 _state = Ui.Label(Ui.Rect(_body, "State", new Vector2(0, 0), new Vector2(1, 0), new Vector2(0, 6), new Vector2(0, 24)), "Text", "", 11, Ui.Hex("#7f8c97"), TextAnchor.MiddleCenter, true, 6);
                 _strip = Ui.Img(Ui.Rect(_body, "Strip", Vector2.zero, new Vector2(1, 0), Vector2.zero, new Vector2(0, 3)), Color.clear);
@@ -518,8 +594,18 @@ namespace LevelGate.Progression
                 _badge.Set(level, items.Count == 0);
                 Ui.SetText(_tier, TierOf(level).Name.ToUpperInvariant());
                 Ui.SetText(_count, items.Count == 0 ? "NO UNLOCKS" : $"{items.Count} UNLOCK{(items.Count == 1 ? "" : "S")}");
-                var names = items.Take(3).Select(i => i.Short).ToArray();
-                Ui.SetText(_preview, items.Count == 0 ? "" : string.Join("  ·  ", names) + (items.Count > 3 ? $"  <color=#5ab4e6>+{items.Count - 3}</color>" : ""));
+                for (int i = 0; i < 3; i++)
+                {
+                    var it = i < items.Count ? items[i] : null;
+                    _picRects[i].gameObject.SetActive(it != null);
+                    _pics[i].enabled = false;
+                    if (it == null) continue;
+                    Ui.SetText(_picNames[i], it.Short);
+                    _picNames[i].gameObject.SetActive(true);
+                    _icons.Add((GameItems.IconOf(GameItems.ItemOf(it.Tpl)), _pics[i], _picNames[i], it.Tpl));
+                    _hits.Add((_picRects[i], it));
+                }
+                Ui.SetText(_more, items.Count > 3 ? "+" + (items.Count - 3) : "");
                 _group.alpha = items.Count == 0 ? .55f : 1f;
             }
 
@@ -530,7 +616,8 @@ namespace LevelGate.Progression
                 _bg.color = _picked ? Ui.Hex("#1a2a36") : Ui.Hex("#141b22");
                 _strip.color = _picked ? Blue : Color.clear;
                 Ui.SetColor(_title, _picked ? Color.white : Blue);
-                string state = player <= 0 ? "" : _level < player ? "<color=#1ed760>UNLOCKED</color>" : _level == player ? "<color=#ffd24a>YOUR LEVEL</color>" : "LOCKED";
+                string state = player <= 0 ? "" : _level < player ? "<color=#1ed760>UNLOCKED</color>" : _level == player ? "<color=#ffd24a>YOUR LEVEL</color>"
+                    : _level == player + 1 ? "<color=#5ab4e6>NEXT LEVEL</color>" : "LOCKED";
                 Ui.SetText(_state, state);
             }
 
@@ -548,21 +635,6 @@ namespace LevelGate.Progression
                 float s = _picked ? 1f + .035f * Mathf.Sin(now * 2.6f) : 1f;
                 _badge.Root.localScale = new Vector3(s, s, 1);
             }
-        }
-    }
-}
-
-namespace LevelGate.Progression
-{
-    /// <summary>Right-click on a tile: the game's inspect window for the item.</summary>
-    internal sealed class TileClick : MonoBehaviour, UnityEngine.EventSystems.IPointerClickHandler
-    {
-        public string Tpl, Name;
-
-        public void OnPointerClick(UnityEngine.EventSystems.PointerEventData e)
-        {
-            L.Debug($"tile {Name} ({Tpl}) clicked with {e.button}");
-            if (e.button == UnityEngine.EventSystems.PointerEventData.InputButton.Right) GameItems.Inspect(Tpl);
         }
     }
 }

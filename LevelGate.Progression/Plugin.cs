@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using BepInEx;
 using BepInEx.Configuration;
 using BepInEx.Logging;
@@ -24,7 +25,7 @@ namespace LevelGate.Progression
         public const string Guid = "com.kkyangg.levelgate.progression";
         public const string Name = "LevelGate Progression";
         // MAJOR.MINOR.PATCH — see CHANGELOG.md
-        public const string Version = "0.2.3";
+        public const string Version = "0.3.0";
 
         internal static ProgressionPlugin Instance;
         internal static ConfigEntry<KeyboardShortcut> OpenKey;
@@ -44,8 +45,8 @@ namespace LevelGate.Progression
             Instance = this;
             L.Source = Logger;
 
-            OpenKey = Config.Bind("General", "OpenKey", new KeyboardShortcut(KeyCode.F10),
-                "Opens / closes the Progression screen (works even if the menu button couldn't be added).");
+            OpenKey = Config.Bind("General", "OpenScreenKey", new KeyboardShortcut(KeyCode.P),
+                "Opens / closes the Progression screen in the main menu (not while typing in a text box).");
             InjectButton = Config.Bind("Menu Button", "AddButton", true,
                 "Add a PROGRESSION button to the main menu bar (next to Character, Trading, Flea Market…).");
             ButtonTemplate = Config.Bind("Menu Button", "CopyButton", "",
@@ -78,12 +79,24 @@ namespace LevelGate.Progression
             try
             {
                 if (DumpKey.Value.IsDown()) Dump();
-                else if (OpenKey.Value.IsDown()) { L.Info($"open key {OpenKey.Value} pressed"); ProgScreen.Toggle("hotkey"); }
+                else if (OpenKey.Value.IsDown())
+                {
+                    if (Typing()) L.Debug($"open key {OpenKey.Value} ignored: typing in a text box");
+                    else if (!MenuHook.BarVisible && !ProgScreen.IsOpen) L.Debug($"open key {OpenKey.Value} ignored: not in the main menu");
+                    else { L.Info($"open key {OpenKey.Value} pressed"); ProgScreen.Toggle("hotkey"); }
+                }
                 ProgData.Tick();
                 MenuHook.Tick();
                 ProgScreen.Tick();
             }
             catch (Exception e) { L.ErrorOnce("update", e); }
+        }
+
+        /// <summary>Is a text box (search, chat…) focused? Then letter keys are typing, not shortcuts.</summary>
+        private static bool Typing()
+        {
+            var go = UnityEngine.EventSystems.EventSystem.current?.currentSelectedGameObject;
+            return go != null && go.GetComponents<Component>().Any(c => c != null && c.GetType().Name.Contains("InputField"));
         }
 
         internal static void Dump()

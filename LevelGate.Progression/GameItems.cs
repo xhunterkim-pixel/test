@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using HarmonyLib;
+using BepInEx;
 using UnityEngine;
 
 namespace LevelGate.Progression
@@ -22,6 +23,7 @@ namespace LevelGate.Progression
         private static readonly Dictionary<string, object> _items = new Dictionary<string, object>();
         private static readonly Dictionary<Type, Func<object, Sprite>> _spriteGetters = new Dictionary<Type, Func<object, Sprite>>();
         private static int _made, _failed;
+        private static readonly Dictionary<Texture2D, Sprite> _texSprites = new Dictionary<Texture2D, Sprite>();
 
         private static void Init()
         {
@@ -46,22 +48,7 @@ namespace LevelGate.Progression
                     L.Info($"items: create with {(_create == null ? "NOTHING (no icons)" : "ItemFactory." + _create.Name + "(" + Sig(_create) + ")")}, weapon presets with {(_preset == null ? "nothing (bare receivers)" : "ItemFactory." + _preset.Name + "(" + Sig(_preset) + ")")}");
                 }
 
-                var viewFactory = AccessTools.TypeByName("EFT.UI.DragAndDrop.ItemViewFactory");
-                _loadIcon = viewFactory?.GetMethods(BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic).FirstOrDefault(m => m.Name == "LoadItemIcon" && m.GetParameters().Length == 1);
-                if (_loadIcon == null && _itemType != null)
-                {
-                    L.Debug("ItemViewFactory.LoadItemIcon not found by name — searching the game's classes");
-                    foreach (var t in AccessTools.GetTypesFromAssembly(_itemType.Assembly))
-                    {
-                        _loadIcon = t.GetMethods(BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly)
-                            .FirstOrDefault(m => m.Name == "LoadItemIcon" && m.GetParameters().Length == 1);
-                        if (_loadIcon != null) break;
-                    }
-                }
-                L.Info($"items: icons from {(_loadIcon == null ? "NOTHING" : _loadIcon.DeclaringType.FullName + "." + _loadIcon.Name + "(" + Sig(_loadIcon) + ") -> " + _loadIcon.ReturnType.FullName)}");
-                if (_loadIcon != null)
-                    L.Debug("  icon object members: " + string.Join(", ", _loadIcon.ReturnType.GetProperties(Refl.All).Select(p => p.Name + ":" + p.PropertyType.Name)
-                        .Concat(_loadIcon.ReturnType.GetFields(Refl.All).Select(f => f.Name + ":" + f.FieldType.Name)).ToArray()));
+                FindIconCandidates();
 
                 var ui = AccessTools.TypeByName("EFT.UI.ItemUiContext");
                 if (ui != null)
@@ -71,6 +58,53 @@ namespace LevelGate.Progression
             }
             catch (Exception e) { L.Error("looking up the game's item classes", e); }
             L.Debug($"item class lookup took {(Time.realtimeSinceStartup - t0) * 1000:0} ms");
+        }
+
+        // ---------------------------------------------------------------- icons
+
+        private static readonly List<MethodInfo> _iconCandidates = new List<MethodInfo>();
+        private static bool _iconPicked;
+
+        /// <summary>Every method that takes just an Item and gives back something icon-like (name has "Icon", returns a
+        /// Sprite / Texture or an object holding one). Tried in order on the first item until one gives a picture.</summary>
+        private static void FindIconCandidates()
+        {
+            if (_itemType == null) return;
+            var t0 = Time.realtimeSinceStartup;
+            foreach (var t in AccessTools.GetTypesFromAssembly(_itemType.Assembly))
+            {
+                MethodInfo[] ms;
+                try { ms = t.GetMethods(BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly); } catch { continue; }
+                foreach (var m in ms)
+                {
+                    if (m.ContainsGenericParameters || m.ReturnType == typeof(void) || m.Name.IndexOf("Icon", StringComparison.OrdinalIgnoreCase) < 0) continue;
+                    var ps = m.GetParameters();
+                    if (ps.Length < 1 || !ps[0].ParameterType.IsAssignableFrom(_itemType) || ps.Skip(1).Any(p => !p.HasDefaultValue && p.ParameterType != typeof(bool))) continue;
+                    if (!IconLike(m.ReturnType)) continue;
+                    _iconCandidates.Add(m);
+                }
+            }
+            // the old name first, then short names (the plain loader rather than helpers around it)
+            _iconCandidates.Sort((a, b) => (a.Name == "LoadItemIcon" ? 0 : 1).CompareTo(b.Name == "LoadItemIcon" ? 0 : 1) != 0
+                ? (a.Name == "LoadItemIcon" ? 0 : 1).CompareTo(b.Name == "LoadItemIcon" ? 0 : 1) : a.Name.Length.CompareTo(b.Name.Length));
+            L.Info($"items: {_iconCandidates.Count} possible icon loader(s) found in {(Time.realtimeSinceStartup - t0) * 1000:0} ms: " +
+                string.Join(" | ", _iconCandidates.Take(12).Select(m => $"{m.DeclaringType.FullName}.{m.Name}({Sig(m)}) -> {m.ReturnType.Name}").ToArray()));
+        }
+
+        private static bool IconLike(Type t)
+        {
+            if (typeof(Sprite).IsAssignableFrom(t) || typeof(Texture).IsAssignableFrom(t)) return true;
+            if (t.IsPrimitive || t == typeof(string)) return false;
+            return t.GetProperties(Refl.All).Any(p => p.PropertyType == typeof(Sprite)) || t.GetFields(Refl.All).Any(f => f.FieldType == typeof(Sprite));
+        }
+
+        private static object CallIcon(MethodInfo m, object item)
+        {
+            var ps = m.GetParameters();
+            var args = new object[ps.Length];
+            args[0] = item;
+            for (int i = 1; i < ps.Length; i++) args[i] = ps[i].HasDefaultValue ? ps[i].DefaultValue : false;
+            return m.Invoke(null, args);
         }
 
         private static string Sig(MethodInfo m) => string.Join(", ", m.GetParameters().Select(p => p.ParameterType.Name + " " + p.Name).ToArray());
@@ -144,15 +178,38 @@ namespace LevelGate.Progression
         /// <summary>The game's icon object for an item (its sprite may arrive a few frames later), or null.</summary>
         public static object IconOf(object item)
         {
-            if (item == null || _loadIcon == null) return null;
-            try { return _loadIcon.Invoke(null, new[] { item }); }
-            catch (Exception e) { L.ErrorOnce("LoadItemIcon", e); return null; }
+            if (item == null) return null;
+            if (_loadIcon != null)
+            {
+                try { return CallIcon(_loadIcon, item); }
+                catch (Exception e) { L.ErrorOnce("icon loader", e); return null; }
+            }
+            if (_iconPicked) return null;
+            // first item: try the candidates until one gives back an icon object
+            _iconPicked = true;
+            foreach (var m in _iconCandidates)
+            {
+                try
+                {
+                    var icon = CallIcon(m, item);
+                    if (icon == null) { L.Debug($"icon loader {m.DeclaringType.Name}.{m.Name}: returned nothing"); continue; }
+                    _loadIcon = m;
+                    L.Info($"items: icons from {m.DeclaringType.FullName}.{m.Name}({Sig(m)}) -> {icon.GetType().FullName}");
+                    L.Debug("  icon object members: " + string.Join(", ", icon.GetType().GetProperties(Refl.All).Select(p => p.Name + ":" + p.PropertyType.Name)
+                        .Concat(icon.GetType().GetFields(Refl.All).Select(f => f.Name + ":" + f.FieldType.Name)).Take(40).ToArray()));
+                    return icon;
+                }
+                catch (Exception e) { L.Debug($"icon loader {m.DeclaringType.Name}.{m.Name} failed: {e.GetBaseException().GetType().Name}: {e.GetBaseException().Message}"); }
+            }
+            L.Warn($"items: none of the {_iconCandidates.Count} icon loaders worked — tiles show names. The list is above.");
+            return null;
         }
 
         public static Sprite SpriteOf(object icon)
         {
             if (icon == null) return null;
             if (icon is Sprite s) return s;
+            if (icon is Texture2D tex) return _texSprites.TryGetValue(tex, out var ts) ? ts : _texSprites[tex] = Sprite.Create(tex, new Rect(0, 0, tex.width, tex.height), new Vector2(.5f, .5f));
             var t = icon.GetType();
             if (!_spriteGetters.TryGetValue(t, out var get))
             {
@@ -168,6 +225,52 @@ namespace LevelGate.Progression
         // ---------------------------------------------------------------- inspect
 
         private static List<MethodInfo> _inspect;
+        private static List<ConstructorInfo> _ctxCtors;
+
+        /// <summary>An ItemContext for a loose item: any concrete class of that kind with a constructor taking the item
+        /// (other arguments: first enum value, false, null). What was tried is logged.</summary>
+        private static object ContextFor(Type want, object item)
+        {
+            if (_ctxCtors == null)
+            {
+                _ctxCtors = new List<ConstructorInfo>();
+                foreach (var t in AccessTools.GetTypesFromAssembly(want.Assembly))
+                {
+                    if (t.IsAbstract || t.ContainsGenericParameters || !want.IsAssignableFrom(t)) continue;
+                    foreach (var c in t.GetConstructors(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic))
+                        if (c.GetParameters().Any(p => p.ParameterType.IsAssignableFrom(_itemType))) _ctxCtors.Add(c);
+                }
+                _ctxCtors = _ctxCtors.OrderBy(c => c.GetParameters().Length).ToList();
+                L.Info($"inspect: {_ctxCtors.Count} way(s) to make a {want.Name}: " + string.Join(" | ", _ctxCtors.Take(10).Select(c => $"{c.DeclaringType.Name}({string.Join(", ", c.GetParameters().Select(p => p.ParameterType.Name + " " + p.Name).ToArray())})").ToArray()));
+            }
+            foreach (var c in _ctxCtors)
+            {
+                var ps = c.GetParameters();
+                var args = new object[ps.Length];
+                for (int i = 0; i < ps.Length; i++)
+                {
+                    var pt = ps[i].ParameterType;
+                    if (pt.IsAssignableFrom(_itemType)) args[i] = item;
+                    else if (pt.IsEnum)
+                    {
+                        // a view type that fits a read-only look at the item
+                        var names = Enum.GetNames(pt);
+                        var pick = names.FirstOrDefault(n => n.IndexOf("Handbook", StringComparison.OrdinalIgnoreCase) >= 0)
+                            ?? names.FirstOrDefault(n => n.IndexOf("Inspect", StringComparison.OrdinalIgnoreCase) >= 0) ?? names.FirstOrDefault();
+                        args[i] = pick != null ? Enum.Parse(pt, pick) : Activator.CreateInstance(pt);
+                    }
+                    else args[i] = ps[i].HasDefaultValue ? ps[i].DefaultValue : pt.IsValueType ? Activator.CreateInstance(pt) : null;
+                }
+                try
+                {
+                    var ctx = c.Invoke(args);
+                    L.Debug($"inspect: made {c.DeclaringType.Name} ({string.Join(", ", args.Select(a => a?.ToString() ?? "null").ToArray())})");
+                    return ctx;
+                }
+                catch (Exception e) { L.Debug($"inspect: {c.DeclaringType.Name} ctor failed: {e.GetBaseException().GetType().Name}: {e.GetBaseException().Message}"); }
+            }
+            return null;
+        }
 
         /// <summary>Opens the game's item inspect window. Tries every ItemUiContext.Inspect* that can take just the item.</summary>
         public static void Inspect(string tpl)
@@ -177,24 +280,28 @@ namespace LevelGate.Progression
             var uiType = AccessTools.TypeByName("EFT.UI.ItemUiContext");
             var ui = uiType?.GetProperty("Instance", Refl.All)?.GetValue(null, null) ?? SingletonOf(uiType) ?? (uiType != null ? UnityEngine.Object.FindObjectOfType(uiType) : null);
             if (ui == null) { L.Warn("inspect: ItemUiContext not found"); return; }
-            _inspect ??= uiType.GetMethods(Refl.All).Where(m => m.Name.Contains("Inspect") && !m.ContainsGenericParameters && m.GetParameters().Length >= 1).OrderBy(m => m.GetParameters().Length).ToList();
+            _inspect ??= uiType.GetMethods(Refl.All).Where(m => (m.Name == "Inspect" || m.Name == "ShowContextMenu") && !m.ContainsGenericParameters && m.GetParameters().Length >= 1)
+                .OrderBy(m => m.Name == "Inspect" ? 0 : 1).ToList();
             foreach (var m in _inspect)
             {
                 var ps = m.GetParameters();
-                int itemAt = Array.FindIndex(ps, p => p.ParameterType.IsInstanceOfType(item));
-                if (itemAt < 0) continue;
+                // the game wants an ItemContext (the item plus where it is shown), not the item
+                object ctx = ps[0].ParameterType.IsInstanceOfType(item) ? item : ContextFor(ps[0].ParameterType, item);
+                if (ctx == null) continue;
                 var args = new object[ps.Length];
-                for (int i = 0; i < ps.Length; i++)
-                    args[i] = i == itemAt ? item : ps[i].HasDefaultValue ? ps[i].DefaultValue : ps[i].ParameterType.IsValueType ? Activator.CreateInstance(ps[i].ParameterType) : null;
+                args[0] = ctx;
+                for (int i = 1; i < ps.Length; i++)
+                    args[i] = ps[i].ParameterType == typeof(Vector2) ? (object)(Vector2)UnityInput.Current.mousePosition
+                        : ps[i].HasDefaultValue ? ps[i].DefaultValue : ps[i].ParameterType.IsValueType ? Activator.CreateInstance(ps[i].ParameterType) : null;
                 try
                 {
                     m.Invoke(m.IsStatic ? null : ui, args);
-                    L.Info($"inspect {tpl}: opened with ItemUiContext.{m.Name}({Sig(m)})");
+                    L.Info($"inspect {tpl}: opened with ItemUiContext.{m.Name}({Sig(m)}) using {ctx.GetType().Name}");
                     return;
                 }
                 catch (Exception e) { L.Debug($"inspect with {m.Name}({Sig(m)}) failed: {e.GetBaseException().GetType().Name}: {e.GetBaseException().Message}"); }
             }
-            L.Warn($"inspect {tpl}: none of the {_inspect.Count} ItemUiContext.Inspect* methods took just an item (their signatures are in the log above with VerboseLog on).");
+            L.Warn($"inspect {tpl}: nothing worked (tried {_inspect.Count} method(s); the item context attempts are logged above).");
         }
     }
 }

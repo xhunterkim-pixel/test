@@ -61,8 +61,45 @@ namespace LevelGate.Progression
             catch (Exception e) { L.ErrorOnce("MenuTaskBar hook", e); }
         }
 
+        // ---------------------------------------------------------------- game screen changes
+
+        private static bool _screenHooked;
+        private static float _nextScreenTry;
+
+        /// <summary>Close the screen whenever the game changes screen (Character, Trading, Hideout, a raid…):
+        /// EftScreenManager.Instance.OnScreenChanged — the same event MoxoPixel's Menu Overhaul listens to.</summary>
+        private static void HookScreenChanges()
+        {
+            if (_screenHooked || Time.realtimeSinceStartup < _nextScreenTry) return;
+            _nextScreenTry = Time.realtimeSinceStartup + 2f;
+            try
+            {
+                var t = AccessTools.TypeByName("EFT.UI.Screens.EftScreenManager");
+                var mgr = t?.GetProperty("Instance", BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.FlattenHierarchy)?.GetValue(null, null);
+                if (mgr == null) return;
+                var ev = mgr.GetType().GetEvent("OnScreenChanged", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.FlattenHierarchy);
+                if (ev == null) { _screenHooked = true; L.Warn("EftScreenManager.OnScreenChanged not found — the screen closes only on menu bar clicks / Esc / the key"); return; }
+                var invoke = ev.EventHandlerType.GetMethod("Invoke");
+                var ps = invoke.GetParameters().Select(p => System.Linq.Expressions.Expression.Parameter(p.ParameterType, p.Name)).ToArray();
+                var call = System.Linq.Expressions.Expression.Call(typeof(MenuHook).GetMethod(nameof(OnScreenChanged), BindingFlags.Static | BindingFlags.NonPublic),
+                    ps.Length > 0 ? (System.Linq.Expressions.Expression)System.Linq.Expressions.Expression.Convert(ps[0], typeof(object)) : System.Linq.Expressions.Expression.Constant(null));
+                var handler = System.Linq.Expressions.Expression.Lambda(ev.EventHandlerType, call, ps).Compile();
+                ev.AddEventHandler(mgr, handler);
+                _screenHooked = true;
+                L.Info($"listening to the game's screen changes ({t.FullName}.OnScreenChanged)");
+            }
+            catch (Exception e) { _screenHooked = true; L.Error("hooking screen changes", e); }
+        }
+
+        private static void OnScreenChanged(object screen)
+        {
+            L.Debug($"game screen changed to {screen}");
+            if (ProgScreen.IsOpen) ProgScreen.Close("game screen changed to " + screen);
+        }
+
         public static void Tick()
         {
+            HookScreenChanges();
             // the screen closes when the menu bar goes away (raid, loading screen…)
             if (ProgScreen.IsOpen && _bar != null && !_bar.gameObject.activeInHierarchy) ProgScreen.Close("menu bar hidden");
             if (ProgScreen.IsOpen && _bar != null && UnityInput.Current.GetMouseButtonDown(0)) ClickedElsewhereOnBar();
@@ -144,7 +181,7 @@ namespace LevelGate.Progression
                 SetIcon(clone);
                 MakeClickable(clone);
                 clone.transform.SetParent(template.parent, false);
-                clone.transform.SetSiblingIndex(template.GetSiblingIndex() + 1);
+                clone.transform.SetSiblingIndex(template.GetSiblingIndex()); // left of the tab it was copied from
                 UnityEngine.Object.Destroy(holder);
                 Enable(clone, "just added");
                 var layout = template.parent.GetComponent<LayoutGroup>();
@@ -294,7 +331,19 @@ namespace LevelGate.Progression
         {
             var icons = clone.GetComponentsInChildren<Image>(true).Where(i => i.name.IndexOf("icon", StringComparison.OrdinalIgnoreCase) >= 0).ToList();
             L.Debug($"  icon images: {(icons.Count == 0 ? "none named *icon*" : string.Join(", ", icons.Select(i => i.name).ToArray()))}");
-            foreach (var img in icons) { img.sprite = Ui.DiamondSprite(); img.preserveAspect = true; }
+            foreach (var img in icons)
+            {
+                // the layout sizes the icon from its picture: keep the original icon's size (a bit smaller: the diamond is bold)
+                var size = img.rectTransform.rect.size;
+                if (size.x < 4) size = new Vector2(26, 26);
+                img.sprite = Ui.DiamondSprite();
+                img.preserveAspect = true;
+                var le = img.GetComponent<LayoutElement>() ?? img.gameObject.AddComponent<LayoutElement>();
+                le.minWidth = le.preferredWidth = size.x * .8f;
+                le.minHeight = le.preferredHeight = size.y * .8f;
+                le.flexibleWidth = le.flexibleHeight = 0;
+                L.Debug($"  icon '{img.name}' kept at {le.preferredWidth:0}x{le.preferredHeight:0} (original {size.x:0}x{size.y:0})");
+            }
         }
 
         private static void MakeClickable(GameObject clone)
