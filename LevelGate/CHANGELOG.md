@@ -40,6 +40,16 @@ Versions are **MAJOR.MINOR.PATCH**:
 
 ## LevelGate Progression (BepInEx plugin, separate DLL)
 
+### 0.9.28
+- **The XP animation is now four beats, each landing before the next, with ~1 s of stillness between:**
+  1. **Earn:** the "+N" chip slides in; the bar fills; each level up pops the number and restarts the bar.
+     - Many levels accelerate as they go, and the bar beat stays within ~5 s.
+     - The level-up sound plays on the first and last level up only, at most once every 0.6 s. 8 levels at once chimed 8 times, which was too much.
+  2. **Rank** (only if a new rank was reached): the emblem shrinks and swaps at its smallest (the swap hides in the motion), then overshoots and settles in a warm glow. The rank name and page line fade across.
+  3. **Unlock:** the level cards page to the first new level. Left to right, each new card flashes orange, LOCKED turns into NEW, and the CURRENT marker walks along (at most the last two pages; earlier ones unlock off screen).
+  4. **Land:** your new level is selected, so the rewards list shows what just unlocked.
+- The screen opens on your old level while it plays. Its keys (A/D, Q/E, wheel) wait until it's done; click or Space skips to the end, and Esc closes (it finishes too).
+
 ### 0.9.27
 - **XP animation (Graphics > XpAnimation, on by default).** The screen remembers the total XP it last showed. When you have more (a raid, a quest…), the next open plays it out:
   - the bar fills from where you last saw it, with the XP numbers counting and a "+N" in orange after the EXP tag;

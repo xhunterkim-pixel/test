@@ -7,31 +7,46 @@ using UnityEngine.UI;
 namespace LevelGate.Progression
 {
     /// <summary>
-    /// The XP animation (Call of Duty after-action style, in the screen's own look). The screen remembers the total XP it last
-    /// showed (Advanced > ShownXp, hidden). When the profile has more on open, the XP block plays it out:
-    ///   bar fills → level up (the number pops, "LEVEL UP", the bar flashes and starts over) → new rank (the emblem swaps with a
-    ///   glow) → … → the bar stops at your XP now.
-    /// Many levels at once speed up so the whole thing stays within ~7 s. Click or Space skips; closing finishes it.
+    /// The XP animation. The screen remembers the total XP it last showed (Advanced > ShownXp, hidden); when the profile has
+    /// more on open, it plays out in beats, each one landing before the next starts (a second of stillness in between):
+    ///
+    ///   1. EARN   the "+N" chip slides in; the bar fills; each level up pops the number (white flash, LEVEL UP caption) and
+    ///             the bar starts over. Many levels accelerate as they go; the level-up sound plays on the first and the
+    ///             last one only (at most one every 0.6 s — eight chimes in a row was too much).
+    ///   2. RANK   only when a new rank was reached: the emblem shrinks, swaps while it's smallest (the swap hides in the
+    ///             motion), overshoots and settles in a warm glow; the rank name fades across.
+    ///   3. UNLOCK the level cards slide to the first new level; left to right, each new card flashes orange, LOCKED turns
+    ///             into NEW, and the CURRENT marker walks along. Pages forward as needed (at most the last two pages).
+    ///   4. LAND   your new level is selected: the rewards list shows what just unlocked.
+    ///
+    /// Click or Space skips to the end; Esc closes (it finishes too). The screen's own keys wait until it's done.
     /// </summary>
     internal static partial class ProgScreen
     {
-        private enum StepKind { Fill, LevelUp }
+        private enum StepKind { Fill, LevelUp, Pause, Rank, Page, Unlock, Land }
 
         private struct XpStep
         {
             public StepKind Kind;
-            public int Level;        // Fill: the level being filled · LevelUp: the new level
+            public int Level;        // Fill: level being filled · LevelUp / Unlock / Land: that level · Rank: the new rank's level · Page: page
             public float From, To;   // Fill: bar 0..1
             public float Dur;
-            public bool NewRank;     // LevelUp: the rank emblem changes too
+            public bool Loud;        // LevelUp: plays the sound
         }
 
         private static readonly List<XpStep> _xpSteps = new List<XpStep>();
         private static bool _xpPending, _xpRunning;
-        private static int _xpFrom, _xpTo, _xpStep, _xpShownLevel;
-        private static float _xpT, _xpPop = -1, _xpRankPop = -1;
+        private static int _xpFrom, _xpTo, _xpStep, _xpLa, _xpLb;
+        private static float _xpT, _xpPop = -1, _xpRankPop = -1, _xpSoundAt = -10, _xpTickAt = -10;
+        private static bool _xpRankSwapped;
         private static Component _xpGain;
         private static Image _xpRankGlow;
+        private static CanvasGroup _headTextGroup;
+
+        /// <summary>While the unlock beat hasn't reached them, the cards show this level as yours (0: your real level).</summary>
+        private static int _xpCardLevel;
+        /// <summary>The unlock beat pages the cards without selecting a level on each page.</summary>
+        private static bool _xpPaging;
 
         private static bool XpAnimating => _xpPending || _xpRunning;
 
@@ -39,13 +54,8 @@ namespace LevelGate.Progression
         private static void PrepareXpAnim()
         {
             _xpPending = _xpRunning = false;
-            // a pop cut short by closing: back to rest
-            _xpPop = _xpRankPop = -1;
-            if (_xpSquare != null) { _xpSquare.rectTransform.localScale = Vector3.one; _xpSquare.color = Ui.Hex(Orange); }
-            if (_headBadge != null) _headBadge.Root.localScale = Vector3.one;
-            if (_xpRankGlow != null) _xpRankGlow.color = new Color(0, 0, 0, 0);
-            if (_xpCaption != null) Ui.SetText(_xpCaption, "CURRENT LEVEL");
-            if (_xpGain != null) _xpGain.gameObject.SetActive(false);
+            _xpCardLevel = 0;
+            ResetXpVisuals();
             int now = ProgData.TotalExp(), shown = ProgressionPlugin.ShownXp.Value;
             if (now < 0 || !ProgData.HasExpTable) return; // not known yet: next time (the baseline stays)
             if (!ProgressionPlugin.XpAnimation.Value || shown <= 0 || now <= shown)
@@ -55,114 +65,202 @@ namespace LevelGate.Progression
             }
             int la = ProgData.LevelOfExp(shown), lb = ProgData.LevelOfExp(now);
             if (la <= 0 || lb <= 0) return;
+            _xpFrom = shown; _xpTo = now; _xpLa = la; _xpLb = lb;
             BuildXpSteps(shown, now, la, lb);
-            _xpFrom = shown; _xpTo = now;
             _xpPending = true;
-            // the screen opens on the old state; the animation starts once the loading screen / fade-in is done
-            _xpShownLevel = la;
+            // the screen opens on the old state: your old level, its page, the cards before the level ups
+            if (lb > la)
+            {
+                _xpCardLevel = la;
+                _level = la; _page = (la - 1) / PerPage;
+            }
             ShowXpAt(shown, la);
             UpdateHeader(la);
-            L.Info($"xp: +{Thousands(now - shown)} EXP since the screen last showed it ({shown} → {now}); level {la} → {lb}; animation {_xpSteps.Count} step(s)");
+            L.Info($"xp: +{Thousands(now - shown)} EXP since the screen last showed it ({shown} → {now}); level {la} → {lb}; {_xpSteps.Count} step(s), ~{TotalDur():0.0} s");
         }
+
+        private static void ResetXpVisuals()
+        {
+            _xpPop = _xpRankPop = -1;
+            if (_xpSquare != null) { _xpSquare.rectTransform.localScale = Vector3.one; _xpSquare.color = Ui.Hex(Orange); }
+            var fill = _xpFill != null ? _xpFill.GetComponent<Image>() : null;
+            if (fill != null) fill.color = Ui.Hex(Orange);
+            if (_headBadge != null) _headBadge.Root.localScale = Vector3.one;
+            if (_xpRankGlow != null) _xpRankGlow.color = new Color(0, 0, 0, 0);
+            if (_headTextGroup != null) _headTextGroup.alpha = 1;
+            if (_xpCaption != null) Ui.SetText(_xpCaption, "CURRENT LEVEL");
+            if (_xpGain != null) _xpGain.gameObject.SetActive(false);
+        }
+
+        private static float TotalDur() { float t = 0; foreach (var s in _xpSteps) t += s.Dur; return t; }
+
+        private static void Add(StepKind kind, float dur, int level = 0, float from = 0, float to = 0, bool loud = false)
+            => _xpSteps.Add(new XpStep { Kind = kind, Dur = dur, Level = level, From = from, To = to, Loud = loud });
 
         private static void BuildXpSteps(int from, int to, int la, int lb)
         {
             _xpSteps.Clear();
             int levels = lb - la;
-            float full = Mathf.Clamp(1.2f / Mathf.Sqrt(levels + 1), .16f, .9f); // one whole level's fill
-            float pop = levels > 6 ? .22f : .5f;
             float Frac(int exp, int level) => ProgData.ExpInLevel(exp, level, out int h, out int n) ? Mathf.Clamp01(h / (float)n) : 1f;
-            float fa = Frac(from, la);
+            float fa = Frac(from, la), fb = Frac(to, lb);
+
+            // ---- 1. EARN
             if (levels == 0)
             {
-                float fb = Frac(to, lb);
-                _xpSteps.Add(new XpStep { Kind = StepKind.Fill, Level = la, From = fa, To = fb, Dur = Mathf.Clamp(.5f + (fb - fa) * 1.2f, .6f, 1.6f) });
+                Add(StepKind.Fill, Mathf.Clamp(.5f + (fb - fa) * 1.2f, .6f, 1.6f), la, fa, fb);
                 return;
             }
-            _xpSteps.Add(new XpStep { Kind = StepKind.Fill, Level = la, From = fa, To = 1, Dur = Mathf.Max(.2f, full * (1 - fa) + .15f) });
+            // a whole level's fill: slower for a few, quicker for many — and it speeds up as it goes (a ramp, not a metronome)
+            float full = Mathf.Clamp(1.1f / Mathf.Sqrt(levels), .14f, .8f);
+            float pop = levels > 5 ? .16f : .38f;
+            Add(StepKind.Fill, Mathf.Max(.25f, full * 1.2f * (1 - fa) + .1f), la, fa, 1);
             for (int l = la + 1; l <= lb; l++)
             {
-                bool rank = TierOf(l).Name != TierOf(l - 1).Name;
-                _xpSteps.Add(new XpStep { Kind = StepKind.LevelUp, Level = l, Dur = pop + (rank ? .75f : 0), NewRank = rank });
-                float end = l == lb ? Frac(to, lb) : 1;
-                if (l == lb && end <= 0) break;
-                _xpSteps.Add(new XpStep { Kind = StepKind.Fill, Level = l, From = 0, To = end, Dur = l == lb ? Mathf.Clamp(.4f + end * .9f, .4f, 1.3f) : full });
+                int i = l - la;
+                bool loud = i == 1 || l == lb; // the first and the last level up are heard
+                Add(StepKind.LevelUp, l == lb ? .45f : pop, l, loud: loud);
+                if (l < lb) Add(StepKind.Fill, full * Mathf.Lerp(1f, .45f, i / (float)levels), l, 0, 1);
+                else if (fb > 0) Add(StepKind.Fill, Mathf.Clamp(.35f + fb * .9f, .35f, 1.2f), l, 0, fb);
             }
-            // many levels at once: squeezed into ~7 s (rank changes keep at least half a second)
-            float total = 0;
-            foreach (var st in _xpSteps) total += st.Dur;
-            if (total > 7f)
+            // the bar beat stays within ~5 s however many levels
+            float bar = TotalDur();
+            if (bar > 5f)
+                for (int i = 0; i < _xpSteps.Count; i++) { var s = _xpSteps[i]; s.Dur = Mathf.Max(.07f, s.Dur * 5f / bar); _xpSteps[i] = s; }
+
+            // ---- 2. RANK (only when it changed)
+            Add(StepKind.Pause, 1f);
+            if (TierOf(lb).Name != TierOf(la).Name)
             {
-                float k = 7f / total;
-                for (int i = 0; i < _xpSteps.Count; i++)
-                {
-                    var st = _xpSteps[i];
-                    st.Dur = st.NewRank ? Mathf.Max(.5f, st.Dur * k) : Mathf.Max(.08f, st.Dur * k);
-                    _xpSteps[i] = st;
-                }
+                Add(StepKind.Rank, 1.1f, lb);
+                Add(StepKind.Pause, 1f);
             }
+
+            // ---- 3. UNLOCK: the new levels' cards, left to right, page by page (at most the last two pages)
+            int firstShown = la + 1;
+            int lastPage = (lb - 1) / PerPage;
+            if (lastPage - (firstShown - 1) / PerPage > 1) firstShown = (lastPage - 1) * PerPage + 1;
+            int shownCount = lb - firstShown + 1;
+            float each = shownCount <= 5 ? .34f : .24f;
+            int page = (la - 1) / PerPage;
+            if (firstShown > la + 1) Add(StepKind.Unlock, 0, firstShown - 1); // the skipped ones, silently (off screen)
+            for (int l = firstShown; l <= lb; l++)
+            {
+                int p = (l - 1) / PerPage;
+                if (p != page) { Add(StepKind.Page, .55f, p); page = p; }
+                Add(StepKind.Unlock, each, l);
+            }
+
+            // ---- 4. LAND
+            Add(StepKind.Pause, .45f);
+            Add(StepKind.Land, .1f, lb);
         }
 
-        private static void RunXpAnim()
+        /// <summary>Runs the animation (every frame while open). True while it plays: the screen's own keys wait.</summary>
+        private static bool RunXpAnim()
         {
             var input = UnityInput.Current;
+            float dt = Mathf.Min(Time.unscaledDeltaTime, .05f);
+            AnimatePops(dt);
             if (_xpPending)
             {
-                if (Time.unscaledTime - _openedAt < .45f) return; // let the screen fade in first
+                if (Time.unscaledTime - _openedAt < .45f) return true; // the screen fades in first
                 _xpPending = false; _xpRunning = true; _xpStep = 0; _xpT = 0;
                 ShowGain(true);
                 L.Info("xp: animation started");
             }
-            float dt = Mathf.Min(Time.unscaledDeltaTime, .05f);
-            AnimatePops(dt);
-            if (!_xpRunning) { FadeGain(); return; }
-            if (input.GetMouseButtonDown(0) || input.GetKeyDown(KeyCode.Space)) { FinishXpAnim("skipped"); return; }
-            if (_xpStep >= _xpSteps.Count) { FinishXpAnim("done"); return; }
+            if (!_xpRunning) { FadeGain(); return false; }
+            if (input.GetKeyDown(KeyCode.Escape)) { Close("Escape"); return true; }
+            if (input.GetMouseButtonDown(0) || input.GetKeyDown(KeyCode.Space)) { FinishXpAnim("skipped"); return true; }
+            if (_xpStep >= _xpSteps.Count) { FinishXpAnim("done"); return false; }
             var st = _xpSteps[_xpStep];
             bool enter = _xpT == 0;
             _xpT += dt;
             float k = Mathf.Clamp01(_xpT / Mathf.Max(.01f, st.Dur));
-            if (st.Kind == StepKind.Fill)
+            switch (st.Kind)
             {
-                // the last fill slows into place, the ones in between run straight through
-                bool last = _xpStep == _xpSteps.Count - 1;
-                float e = last ? 1 - Mathf.Pow(1 - k, 3) : (_xpStep == 0 ? k * k * (3 - 2 * k) : k);
-                float frac = Mathf.Lerp(st.From, st.To, e);
-                if (ProgData.ExpInLevel(0, st.Level, out _, out int need))
-                    ShowXpState(st.Level, Mathf.RoundToInt(frac * need), need, true);
-                _xpFill.anchorMax = new Vector2(frac, 1);
-                PlaceGain();
-            }
-            else if (enter)
-            {
-                // LEVEL UP: the number pops, the caption says it, the bar flashes full and starts over
-                _xpShownLevel = st.Level;
-                ProgData.ExpInLevel(0, st.Level, out _, out int need);
-                ShowXpState(st.Level, 0, Mathf.Max(1, need), need > 0);
-                _xpPop = 0;
-                Ui.SetText(_xpCaption, $"<color={Orange}>LEVEL UP</color>");
-                Sounds.Play("QuestCompleted", "QuestFinished", "TradeOperationComplete", "ButtonClick");
-                if (st.NewRank)
+                case StepKind.Fill:
                 {
-                    _xpRankPop = 0;
-                    UpdateHeader(st.Level); // new emblem + rank name
-                    Sounds.Play("InsuranceInsured", "DeathmatchWin", "MenuDropdownSelect", "ButtonClick");
-                    L.Info($"xp: new rank {TierOf(st.Level).Name} at level {st.Level}");
+                    // the first fill eases in, the last one slows into place, the ones between run straight through
+                    bool lastFill = _xpStep + 1 >= _xpSteps.Count || _xpSteps[_xpStep + 1].Kind != StepKind.LevelUp;
+                    float e = lastFill ? 1 - Mathf.Pow(1 - k, 3) : (_xpStep == 0 ? k * k : k);
+                    float frac = Mathf.Lerp(st.From, st.To, e);
+                    if (ProgData.ExpInLevel(0, st.Level, out _, out int need)) ShowXpState(st.Level, Mathf.RoundToInt(frac * need), need, true);
+                    _xpFill.anchorMax = new Vector2(frac, 1);
+                    PlaceGain();
+                    break;
                 }
-                else UpdateHeader(st.Level); // the unlocked count grows with each level
-                L.Debug($"xp: level up → {st.Level}");
+                case StepKind.LevelUp:
+                    if (!enter) break;
+                    ProgData.ExpInLevel(0, st.Level, out _, out int n2);
+                    ShowXpState(st.Level, 0, Mathf.Max(1, n2), n2 > 0);
+                    _xpPop = 0;
+                    Ui.SetText(_xpCaption, $"<color={Orange}>LEVEL UP</color>");
+                    if (st.Loud && Time.unscaledTime - _xpSoundAt > .6f) { _xpSoundAt = Time.unscaledTime; Sounds.Play("QuestCompleted", "QuestFinished", "TradeOperationComplete", "ButtonClick"); }
+                    UpdateHeader(st.Level, _xpLa); // the unlocked count climbs; the rank waits for its own beat
+                    L.Debug($"xp: level up → {st.Level}");
+                    break;
+                case StepKind.Rank:
+                    if (enter)
+                    {
+                        _xpRankPop = 0; _xpRankSwapped = false;
+                        Sounds.Play("InsuranceInsured", "DeathmatchWin", "MenuDropdownSelect", "ButtonClick");
+                        L.Info($"xp: new rank {TierOf(st.Level).Name}");
+                    }
+                    // the swap happens while the emblem is smallest (see AnimatePops); the rank name fades across
+                    if (!_xpRankSwapped && _xpRankPop >= .2f) { _xpRankSwapped = true; UpdateHeader(_xpLb, _xpLb); }
+                    HeadText().alpha = k < .2f ? 1 - k / .2f : Mathf.Clamp01((k - .2f) / .35f);
+                    break;
+                case StepKind.Page:
+                    if (!enter) break;
+                    _xpPaging = true;
+                    try { ShowPage(st.Level, 1); } finally { _xpPaging = false; }
+                    break;
+                case StepKind.Unlock:
+                    if (!enter) break;
+                    _xpCardLevel = st.Level;
+                    UpdateSelection();
+                    if (st.Dur > 0)
+                    {
+                        foreach (var c in _cards) if (c.Level == st.Level) c.Flash();
+                        if (Time.unscaledTime - _xpTickAt > .15f) { _xpTickAt = Time.unscaledTime; Sounds.Play("ButtonOver", "ButtonClick"); }
+                    }
+                    break;
+                case StepKind.Land:
+                    if (!enter) break;
+                    _xpCardLevel = 0;
+                    if ((st.Level - 1) / PerPage != _page) { _xpPaging = true; try { ShowPage((st.Level - 1) / PerPage, 1); } finally { _xpPaging = false; } }
+                    Sounds.Click();
+                    ShowLevel(st.Level, true);
+                    break;
             }
             if (k >= 1) { _xpStep++; _xpT = 0; }
+            return true;
         }
 
-        /// <summary>The level square's pop, the bar's flash and the rank emblem's glow (run on after the steps too).</summary>
+        private static CanvasGroup HeadText()
+        {
+            if (_headTextGroup != null) return _headTextGroup;
+            // the rank name and "Page X of 16" fade together: one group over both
+            var go = _headRank.transform.parent.gameObject;
+            var holder = new GameObject("RankText", typeof(RectTransform));
+            holder.transform.SetParent(go.transform, false);
+            var rt = (RectTransform)holder.transform;
+            rt.anchorMin = Vector2.zero; rt.anchorMax = Vector2.one; rt.offsetMin = rt.offsetMax = Vector2.zero;
+            _headRank.transform.SetParent(rt, true);
+            _headNext.transform.SetParent(rt, true);
+            _headTextGroup = holder.AddComponent<CanvasGroup>();
+            _headTextGroup.blocksRaycasts = false;
+            return _headTextGroup;
+        }
+
+        /// <summary>The level square's pop, the bar's flash, the rank emblem's swap and glow, the cards' flashes.</summary>
         private static void AnimatePops(float dt)
         {
             if (_xpPop >= 0)
             {
                 _xpPop += dt;
                 float p = Mathf.Clamp01(_xpPop / .42f);
-                float s = 1 + .28f * Mathf.Sin(p * Mathf.PI) * (1 - p * .5f);
+                float s = 1 + .26f * Mathf.Sin(p * Mathf.PI) * (1 - p * .5f);
                 _xpSquare.rectTransform.localScale = new Vector3(s, s, 1);
                 _xpSquare.color = Color.Lerp(Color.white, Ui.Hex(Orange), Mathf.Clamp01(_xpPop / .3f));
                 var fill = _xpFill.GetComponent<Image>();
@@ -179,15 +277,23 @@ namespace LevelGate.Progression
             if (_xpRankPop >= 0 && _headBadge != null)
             {
                 _xpRankPop += dt;
-                float p = Mathf.Clamp01(_xpRankPop / .7f);
-                // shrinks in, overshoots, settles; a warm glow behind it blooms and fades
-                float s = p < .25f ? Mathf.Lerp(1, .7f, p / .25f) : 1 + .22f * Mathf.Sin((p - .25f) / .75f * Mathf.PI) * (1 - p);
+                // 0–0.2 s: shrinks to 60% (the new emblem goes in at the bottom of it) · 0.2–0.75 s: overshoots to ~118%,
+                // settles · a warm glow blooms behind it and fades by 1.1 s
+                float t = _xpRankPop, s;
+                if (t < .2f) s = Mathf.Lerp(1, .6f, EaseIn(t / .2f));
+                else if (t < .75f) { float u = (t - .2f) / .55f; s = .6f + .58f * EaseOutBack(u); if (u > .6f) s = Mathf.Lerp(1.18f, 1, (u - .6f) / .4f); }
+                else s = 1;
                 _headBadge.Root.localScale = new Vector3(s, s, 1);
                 var glow = RankGlow();
-                if (glow != null) glow.color = new Color(1f, .45f, .2f, .55f * Mathf.Sin(p * Mathf.PI));
-                if (p >= 1) { _xpRankPop = -1; _headBadge.Root.localScale = Vector3.one; if (glow != null) glow.color = new Color(0, 0, 0, 0); }
+                float g = t < .2f ? 0 : Mathf.Clamp01(1 - (t - .2f) / .9f);
+                if (glow != null) glow.color = new Color(1f, .45f, .2f, .6f * g * Mathf.Clamp01((t - .2f) / .12f));
+                if (t >= 1.1f) { _xpRankPop = -1; _headBadge.Root.localScale = Vector3.one; if (glow != null) glow.color = new Color(0, 0, 0, 0); }
             }
+            if (_cards != null) foreach (var c in _cards) c.TickFlash();
         }
+
+        private static float EaseIn(float x) => x * x;
+        private static float EaseOutBack(float x) { const float c = 1.7f; x -= 1; return 1 + (c + 1) * x * x * x + c * x * x; }
 
         private static Image RankGlow()
         {
@@ -200,7 +306,7 @@ namespace LevelGate.Progression
             return _xpRankGlow;
         }
 
-        /// <summary>"+12 400 EXP" after the EXP tag while it plays; fades out after.</summary>
+        /// <summary>"+12 400" after the EXP tag while it plays (slides in from the left); fades out after.</summary>
         private static void ShowGain(bool on)
         {
             if (_xpGain == null && _xpRight != null)
@@ -209,10 +315,12 @@ namespace LevelGate.Progression
             _xpGain.gameObject.SetActive(on);
             if (!on) return;
             Ui.SetText(_xpGain, $"+{Thousands(_xpTo - _xpFrom)}");
-            _xpGainFadeAt = -1;
+            Ui.SetColor(_xpGain, Ui.Hex(Orange));
+            _xpGainFadeAt = -1; _xpGainIn = 0;
+            PlaceGain();
         }
 
-        private static float _xpGainFadeAt = -1;
+        private static float _xpGainFadeAt = -1, _xpGainIn = 1;
 
         private static void FadeGain()
         {
@@ -225,9 +333,12 @@ namespace LevelGate.Progression
         private static void PlaceGain()
         {
             if (_xpGain == null) return;
+            if (_xpGainIn < 1) { _xpGainIn = Mathf.Min(1, _xpGainIn + Time.unscaledDeltaTime / .3f); Ui.SetColor(_xpGain, Ui.Hex(Orange, _xpGainIn)); }
+            float slide = (1 - (1 - Mathf.Pow(1 - _xpGainIn, 3))) * -14f; // eases in from 14 px to the left
             var rt = (RectTransform)_xpGain.transform;
-            rt.offsetMin = new Vector2(_xpTextWidth + 12 + 40 + 12, rt.offsetMin.y);
-            rt.offsetMax = new Vector2(_xpTextWidth + 12 + 40 + 12 + 260, rt.offsetMax.y);
+            float x = _xpTextWidth + 12 + 40 + 12 + slide;
+            rt.offsetMin = new Vector2(x, rt.offsetMin.y);
+            rt.offsetMax = new Vector2(x + 260, rt.offsetMax.y);
         }
 
         /// <summary>Shows a total XP as the XP block would (the animation's start).</summary>
@@ -241,14 +352,28 @@ namespace LevelGate.Progression
         private static void FinishXpAnim(string why)
         {
             if (!XpAnimating) return;
-            bool ran = _xpRunning;
+            bool leveled = _xpLb > _xpLa;
             _xpPending = _xpRunning = false;
             _xpSteps.Clear();
+            _xpCardLevel = 0;
             ProgressionPlugin.ShownXp.Value = _xpTo;
+            if (_headTextGroup != null) _headTextGroup.alpha = 1;
+            if (_xpRankPop >= 0) { _xpRankPop = -1; if (_headBadge != null) _headBadge.Root.localScale = Vector3.one; if (_xpRankGlow != null) _xpRankGlow.color = new Color(0, 0, 0, 0); }
             UpdateXp();
+            if (leveled)
+            {
+                // land on the new level (on close: the next open starts there)
+                int page = (_xpLb - 1) / PerPage;
+                if (why == "screen closed") { _level = _xpLb; _page = page; }
+                else
+                {
+                    if (page != _page) { _xpPaging = true; try { ShowPage(page, 0); } finally { _xpPaging = false; } }
+                    ShowLevel(_xpLb, true);
+                }
+            }
+            else UpdateSelection();
             PlaceGain();
-            if (_xpGain != null && _xpGain.gameObject.activeSelf) { Ui.SetColor(_xpGain, Ui.Hex(Orange)); _xpGainFadeAt = Time.unscaledTime + 1.6f; }
-            if (!ran) { _xpPop = _xpRankPop = -1; }
+            if (_xpGain != null && _xpGain.gameObject.activeSelf) { _xpGainIn = 1; Ui.SetColor(_xpGain, Ui.Hex(Orange)); _xpGainFadeAt = Time.unscaledTime + 1.6f; }
             L.Info($"xp: animation {why}; shown XP now {_xpTo}");
         }
     }

@@ -126,8 +126,8 @@ namespace LevelGate.Progression
                 MenuCamera.Turn(true);
                 Sounds.Open();
                 _frames = 0; _frameTime = 0; _frameLogAt = Time.unscaledTime + 5;
+                PrepareXpAnim(); // may move the screen to your old level first (the animation walks it up)
                 StartLoading(); // first open of this menu visit: pictures drawn behind a short loading screen
-                PrepareXpAnim();
                 ShowPage(_page, 0);
                 ShowLevel(_level, true);
             }
@@ -325,10 +325,11 @@ namespace LevelGate.Progression
         private static Component _headRank, _headNext;
 
         /// <summary>The header shows the player: rank emblem, rank name, levels to the next rank.</summary>
-        private static void UpdateHeader(int player)
+        /// <summary>rankLevel: the level whose rank (emblem, name, page) is shown — the XP animation holds the old one until its rank beat.</summary>
+        private static void UpdateHeader(int player, int rankLevel = 0)
         {
             if (_headRank == null) return;
-            int lv = Mathf.Max(1, player);
+            int lv = Mathf.Max(1, rankLevel > 0 ? rankLevel : player);
             _headBadge.Set(lv);
             var tier = TierOf(lv);
             int index = Array.IndexOf(Tiers, tier) + 1;
@@ -901,7 +902,7 @@ namespace LevelGate.Progression
             if (!changed && dir != 0) { L.Debug($"page {want + 1}: already at the {(want < 0 ? "first" : "last")} page"); return; }
             _page = page;
             if (changed) _sPages++;
-            if (changed && dir != 0) _level = levelAfter > 0 ? levelAfter : page * PerPage + 1;
+            if (changed && dir != 0 && !_xpPaging) _level = levelAfter > 0 ? levelAfter : page * PerPage + 1;
             int first = page * PerPage + 1;
             L.Debug($"page {page + 1}/{Pages} (levels {first}–{Mathf.Min(ProgData.MaxLevel, first + PerPage - 1)}){(dir != 0 ? " slide " + (dir > 0 ? "right" : "left") : "")}");
             _prev.interactable = page > 0;
@@ -912,7 +913,7 @@ namespace LevelGate.Progression
             for (int i = 0; i < PerPage; i++) _cards[i].Show(first + i);
             _cardsDir = dir;
             _cardsStart = dir != 0 ? Time.unscaledTime : -10;
-            if (changed && dir != 0) { Sounds.Page(); ShowLevel(_level); }
+            if (changed && dir != 0) { Sounds.Page(); if (_xpPaging) UpdateSelection(); else ShowLevel(_level); }
             else UpdateSelection();
         }
 
@@ -1554,7 +1555,7 @@ namespace LevelGate.Progression
 
         private static void UpdateSelection()
         {
-            int player = ProgData.PlayerLevel();
+            int player = _xpCardLevel > 0 ? _xpCardLevel : ProgData.PlayerLevel(); // the XP animation walks the cards up
             foreach (var c in _cards) c.Mark(_level, player);
         }
 
@@ -1610,12 +1611,13 @@ namespace LevelGate.Progression
                 if (input.GetKeyDown(KeyCode.Escape)) Close("Escape (while loading)");
                 return;
             }
-            RunXpAnim();
+            bool xpBusy = RunXpAnim();
+            if (!IsOpen) return; // Esc during the animation closed the screen
             bool window = GameWindowOpen();
             // the game may close its window on this same Esc before we look: a window seen a moment ago still owns the key
             if (window) _windowSeenAt = Time.unscaledTime;
             bool windowRecently = window || Time.unscaledTime - _windowSeenAt < .3f;
-            if (!windowRecently)
+            if (!windowRecently && !xpBusy)
             {
                 bool typing = ProgressionPlugin.Typing();
                 if (typing) { }
@@ -1628,11 +1630,11 @@ namespace LevelGate.Progression
                 // Esc closes us only when no game window (inspect…) is open — otherwise it's the window's Esc
                 else if (input.GetKeyDown(KeyCode.Escape)) { Close("Escape"); return; }
             }
-            else if (input.GetKeyDown(KeyCode.Escape)) L.Debug("Esc with a game window open: left to the window");
+            else if (!xpBusy && input.GetKeyDown(KeyCode.Escape)) L.Debug("Esc with a game window open: left to the window");
 
             float now = Time.unscaledTime;
             float wheel = input.mouseScrollDelta.y;
-            if (!window && Mathf.Abs(wheel) > .01f && now - _wheelAt > .3f && MenuHook.Contains(_bottom, input.mousePosition))
+            if (!window && !xpBusy && Mathf.Abs(wheel) > .01f && now - _wheelAt > .3f && MenuHook.Contains(_bottom, input.mousePosition))
             {
                 _wheelAt = now;
                 ShowPage(_page + (wheel < 0 ? 1 : -1), wheel < 0 ? 1 : -1);
@@ -1661,7 +1663,7 @@ namespace LevelGate.Progression
 
             // mouse over an item: feature it; right-click: the game's inspect (checked here: the game's input
             // doesn't send right-clicks to our tiles)
-            if (!window)
+            if (!window && !xpBusy)
             {
                 var mouse = (Vector2)input.mousePosition;
                 ProgItem over = null;
@@ -1783,6 +1785,28 @@ namespace LevelGate.Progression
             private readonly RectTransform _body;
             private readonly CanvasGroup _group;
             private readonly Image _frame, _bg, _glow, _top, _stateLock;
+            private Image _flash;
+            private float _flashAt = -10;
+
+            public int Level => _level;
+
+            /// <summary>Just unlocked (XP animation): an orange flash over the card that fades out.</summary>
+            public void Flash()
+            {
+                if (_flash == null) return;
+                _flashAt = Time.unscaledTime;
+                _flash.enabled = true;
+            }
+
+            public void TickFlash()
+            {
+                if (_flash == null || !_flash.enabled) return;
+                float t = Time.unscaledTime - _flashAt;
+                // up in 0.08 s, out over 0.7 s
+                float a = t < .08f ? t / .08f : Mathf.Clamp01(1 - (t - .08f) / .7f);
+                _flash.color = new Color(.88f, .34f, .18f, .5f * a);
+                if (t > .8f) _flash.enabled = false;
+            }
             private readonly DottedLine _headL, _headR;
             private readonly Component _head, _count, _state, _tier, _empty;
             private readonly Image[] _pics = new Image[3];
@@ -1879,6 +1903,10 @@ namespace LevelGate.Progression
                 button.transition = Selectable.Transition.None;
                 button.onClick.AddListener(() => { L.Debug($"card level {_level} clicked"); Sounds.Click(); ShowLevel(_level); });
                 HoverHook.Add(_frame, on => { if (_hover == on) return; _hover = on; if (on) Sounds.Play("ButtonOver"); Mark(_picked, _player); });
+                // XP animation: a warm flash over the whole card when it unlocks (on top of everything in it)
+                _flash = Ui.Img(Ui.Fill(card, "Flash"), new Color(0, 0, 0, 0), Ui.Radial());
+                _flash.raycastTarget = false;
+                _flash.enabled = false;
             }
 
             public void Show(int level)
