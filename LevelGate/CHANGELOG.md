@@ -41,7 +41,9 @@ Versions are **MAJOR.MINOR.PATCH**:
 ## LevelGate Progression (BepInEx plugin, separate DLL)
 
 ### 0.9.1
-- **Ringleader emblem (levels 56–60):** added. It's made from three still pictures (calm, snarl, roar) that cross-fade in a loop, so it moves like the others.
+- **Emblems:** replaced with your updated set.
+  - A new animated emblem for 46–50 (Blacklisted).
+  - The former 46–50 and 51–55 emblems moved up to 51–55 and 56–60, so all 16 ranks have their own animated emblem.
 - **Versioning:** smaller steps from here on (0.9.x patches); 1.0.0 is kept for the finished screen.
 
 ### 0.9.0
