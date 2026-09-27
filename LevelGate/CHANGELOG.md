@@ -40,6 +40,36 @@ Versions are **MAJOR.MINOR.PATCH**:
 
 ## LevelGate Progression (BepInEx plugin, separate DLL)
 
+### 0.9.32
+- **XP animation (from the animation reviews):**
+  - **A click no longer skips everything:** it acts like a Space tap (next moment), is ignored for the first 0.8 s, and ignores the click that closes F12 (the 0.9.31 log shows two previews lost to it within a second).
+  - **Controls prompt** where the page bar is while it plays: SPACE Next · HOLD SPACE Skip part · ESC Close.
+  - **Focus:** the active part stays bright and everything else dims to 45% (0.3 s ease). A warm light sweeps from one part to the next between beats (level square → emblem → cards).
+  - **Earn:**
+    - "LEVEL 23 → 40" under the numbers, and the "+N" pool drains as the bar takes it.
+    - Each fill is 4% quicker than the last (down to 0.45 s), and the level-up sound goes up a semitone every 3 levels (at most +4; timing follows the pitch).
+    - The new number rolls in from below and lands on the pop. "LEVEL UP" rises over the caption row.
+    - The full bar flashes, clears and starts over instead of snapping to empty.
+    - The last level up pops bigger (1.4×) and flashes the whole XP block.
+  - **Rank:** the glow pulses on Emblemup.mp3's two early hits (0.25 s, 1.05 s) before the swap on its peak.
+  - **Unlock:** "+N ITEMS" floats up out of each card as it unlocks; runs over more than 2 pages go quicker (0.18 s a card, 0.35 s a page).
+  - **Summary banner** over the cards (1.8 s): "17 LEVELS · 254 ITEMS UNLOCKED", with the new rank or "NOW LEVEL N".
+  - **Land:**
+    - The list and preview fade out, switch, and fade in (0.15 + 0.25 s).
+    - The landing level's pictures load while it plays.
+    - It lands on the nearest level with rewards if the new level has none.
+  - **Space jumps catch up in 0.12 s (0.2 s for a part)** instead of cutting, with a tick and a bump on the level square.
+  - **Sound timing:** each sound's start is measured at load (Unity's decoder can add silence in front) and the cues are moved up by it.
+- **UI (from the audit):**
+  - **XP block:** numbers on top, then a 12 px bar right under them, then the next-level link. The EXP tag is outlined instead of a solid orange block.
+  - **Arrows** move one level, like the A / D keycaps under them (pages: Q / E, page bar).
+  - **Page bar:** an orange YOU mark over your own page.
+  - **Locked item:** a band across the bottom of the preview reads "UNLOCKS AT LEVEL 43 · 3 LEVELS AWAY", and the item is a shade darker. The small corner lock is gone.
+  - **Requirement:** a lock / green tick icon instead of a checkbox (it looked clickable).
+  - **Level cards:** "LOCKED" only on the next level's card; later ones are just dimmed.
+  - **Readability:** the dimmest text colour went from #4f575a to #6a7376.
+  - **Centre picture:** no longer stretched a little past its real pixels (shown at its own size when the game drew it up to 1.6× too small).
+
 ### 0.9.31
 - **Space during the XP animation:**
   - Tap: on to the next moment (the next level up, arriving as its sound starts so the peak still lands on the pop; then the rank, the cards, the end).
