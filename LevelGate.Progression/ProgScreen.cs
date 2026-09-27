@@ -85,6 +85,7 @@ namespace LevelGate.Progression
         public static void Open(string why)
         {
             L.Step("Open " + why);
+            if (!IsOpen && MenuHook.GoToMainMenuThen(why)) return;
             try
             {
                 if (!_built || _canvas == null) { _built = false; Build(); }
@@ -417,6 +418,7 @@ namespace LevelGate.Progression
             }
 
             PerfToggle(bottom);
+            RepairButton(bottom);
 
             // page bar like the Arena battle pass: [Q] ▬▬▬▬ … [E], the page numbers under the segments
             var bar = Ui.Rect(bottom, "Pages", new Vector2(.5f, 0), new Vector2(.5f, 0), new Vector2(-560, 14), new Vector2(560, 60));
@@ -464,6 +466,25 @@ namespace LevelGate.Progression
                 L.Info("performance mode " + (Perf ? "on" : "off"));
                 ShowPage(_page, 0);
                 ShowLevel(_level);
+            });
+        }
+
+        private static Component _repairLabel;
+
+        /// <summary>"Fix stash icons" — left of the performance checkbox.</summary>
+        private static void RepairButton(RectTransform bottom)
+        {
+            var rt = Ui.Rect(bottom, "Repair", new Vector2(1, 0), new Vector2(1, 0), new Vector2(-470, 22), new Vector2(-285, 50));
+            var hit = Ui.Img(rt, new Color(0, 0, 0, 0), null, true);
+            _repairLabel = Ui.Label(rt, "Text", "Fix stash icons", 15, Grey, TextAnchor.MiddleRight, false, 1);
+            var b = rt.gameObject.AddComponent<Button>();
+            b.targetGraphic = hit;
+            b.transition = Selectable.Transition.None;
+            b.onClick.AddListener(() =>
+            {
+                if (GameItems.RepairLeft > 0) return;
+                Sounds.Click();
+                GameItems.RepairAll(ProgData.Levels.Keys.ToList());
             });
         }
 
@@ -788,7 +809,7 @@ namespace LevelGate.Progression
             Ui.SetText(_featDesc, desc.Length > 520 ? desc.Substring(0, 520).TrimEnd() + "…" : desc);
             int you = ProgData.PlayerLevel();
             _featLock.enabled = you > 0 && it.Level > you;
-            int featScale = Perf ? 2 : 6;
+            int featScale = Perf ? 2 : 4;
             var kept = GameItems.CopyOf(it.Tpl, featScale);
             if (kept != null) { _featIcon = null; _featPic.sprite = kept; _featPic.enabled = true; _featShort.gameObject.SetActive(false); }
             else _featIcon = GameItems.IconOf(GameItems.ItemOf(it.Tpl), featScale);
@@ -818,7 +839,7 @@ namespace LevelGate.Progression
             // the red glow is the screen's colour on every level; locked levels only push it a little further
             if (_bloom.Count > 0 && _bloom[0] != null) _bloom[0].color = new Color(.85f, .14f, .08f, Mathf.Lerp(.22f, .27f, m));
             if (_bloom.Count > 1 && _bloom[1] != null) _bloom[1].color = new Color(.95f, .2f, .1f, Mathf.Lerp(.18f, .22f, m));
-            var border = Color.Lerp(Border, Ui.Hex("#6a2b25", .95f), m);
+            var border = Border; // the panel borders stay as they are (only the glow turns red)
             foreach (var f in _panelFrames) if (f != null) f.color = border;
         }
 
@@ -839,6 +860,11 @@ namespace LevelGate.Progression
             if (_restoreAgainAt > 0 && Time.unscaledTime > _restoreAgainAt && !IsOpen) { _restoreAgainAt = -1; GameItems.RestoreIcons(); }
             if (!IsOpen) return;
             if (!_xpKnown && ProgData.HasExpTable) { _xpKnown = true; UpdateXp(); } // the SPT server's answer came in
+            if (_repairLabel != null)
+            {
+                int left = GameItems.RepairLeft;
+                Ui.SetText(_repairLabel, left > 0 ? $"<color=#e0562f>Fixing icons {GameItems.RepairTotal - left} / {GameItems.RepairTotal}</color>" : "<u>Fix stash icons</u>");
+            }
             if (_fade != null && _fade.alpha < 1)
             {
                 float f = Mathf.Clamp01((Time.unscaledTime - _openedAt) / .3f);
@@ -904,7 +930,7 @@ namespace LevelGate.Progression
                 if (sp != null)
                 {
                     _featPic.sprite = sp; _featPic.enabled = true; _featShort.gameObject.SetActive(false);
-                    if (!_featIconLogged) { _featIconLogged = true; L.Info($"big picture: {sp.rect.width:0}x{sp.rect.height:0} px (asked the game for 6x)"); }
+                    if (!_featIconLogged) { _featIconLogged = true; L.Info($"big picture: {sp.rect.width:0}x{sp.rect.height:0} px (asked the game for 4x)"); }
                 }
             }
             if (_windowLogAt > 0 && now > _windowLogAt) { _windowLogAt = 0; LogWindows(); }
@@ -1091,7 +1117,7 @@ namespace LevelGate.Progression
                     if (it == null) continue;
                     Ui.SetText(_picNames[i], it.Short);
                     _picNames[i].gameObject.SetActive(true);
-                    RequestIcon(_cardIcons, it.Tpl, i == 0 && !Perf ? 2 : 1, _pics[i], _picNames[i]);
+                    RequestIcon(_cardIcons, it.Tpl, Perf ? 1 : 2, _pics[i], _picNames[i]);
                     _hits.Add((_picRects[i], it));
                 }
                 Ui.SetText(_more, items.Count > 3 ? "+" + (items.Count - 3) : "");

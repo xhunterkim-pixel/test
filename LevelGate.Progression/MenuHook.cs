@@ -6,6 +6,7 @@ using System.Text;
 using BepInEx;
 using HarmonyLib;
 using UnityEngine;
+using UnityEngine.EventSystems;
 using UnityEngine.UI;
 
 namespace LevelGate.Progression
@@ -94,11 +95,49 @@ namespace LevelGate.Progression
         private static void OnScreenChanged(object screen)
         {
             L.Debug($"game screen changed to {screen}");
+            CurrentScreen = screen?.ToString() ?? "";
             if (ProgScreen.IsOpen) ProgScreen.Close("game screen changed to " + screen);
+            if (_pendingOpen != null && CurrentScreen == "MainMenu") _pendingAt = Time.realtimeSinceStartup + .1f; // open just after the menu is back
+        }
+
+        /// <summary>The game screen shown right now (from EftScreenManager), e.g. MainMenu, Inventory, Trader.</summary>
+        public static string CurrentScreen = "MainMenu";
+        private static string _pendingOpen;
+        private static float _pendingAt;
+
+        /// <summary>Opening from another game screen (Character, Traders…): first go back to the main menu like the
+        /// MAIN MENU button does, then open — otherwise that screen stays up under ours. True if it is doing that.</summary>
+        public static bool GoToMainMenuThen(string why)
+        {
+            if (string.IsNullOrEmpty(CurrentScreen) || CurrentScreen == "MainMenu" || _bar == null) return false;
+            try
+            {
+                var btn = _bar.GetComponentsInChildren<Transform>(true).FirstOrDefault(t => t.name == "MainMenuButton");
+                if (btn == null) { L.Debug("MainMenuButton not found — opening on top"); return false; }
+                L.Info($"on {CurrentScreen}: going back to the main menu first, then opening");
+                _pendingOpen = why;
+                _pendingAt = Time.realtimeSinceStartup + 1.5f; // opens anyway if no screen change comes
+                var data = new PointerEventData(EventSystem.current) { button = PointerEventData.InputButton.Left };
+                if (ExecuteEvents.ExecuteHierarchy(btn.gameObject, data, ExecuteEvents.pointerClickHandler) == null)
+                {
+                    var toggle = btn.GetComponentInChildren<Toggle>(true);
+                    if (toggle != null) toggle.isOn = true;
+                    else btn.GetComponentInChildren<Button>(true)?.onClick.Invoke();
+                }
+                return true;
+            }
+            catch (Exception e) { L.ErrorOnce("going back to the main menu", e); _pendingOpen = null; return false; }
         }
 
         public static void Tick()
         {
+            if (_pendingOpen != null && Time.realtimeSinceStartup >= _pendingAt)
+            {
+                var why = _pendingOpen;
+                _pendingOpen = null;
+                CurrentScreen = "MainMenu";
+                ProgScreen.Open(why + ", after going back to the main menu");
+            }
             HookScreenChanges();
             // the screen closes when the menu bar goes away (raid, loading screen…)
             if (ProgScreen.IsOpen && _bar != null && !_bar.gameObject.activeInHierarchy) ProgScreen.Close("menu bar hidden");

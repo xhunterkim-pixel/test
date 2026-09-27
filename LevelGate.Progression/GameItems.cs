@@ -283,10 +283,13 @@ namespace LevelGate.Progression
                 rt = RenderTexture.GetTemporary(src.width, src.height, 0, RenderTextureFormat.ARGB32);
                 Graphics.Blit(src, rt);
                 RenderTexture.active = rt;
-                var dst = new Texture2D((int)r.width, (int)r.height, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Clamp };
-                dst.ReadPixels(new Rect(r.x, r.y, r.width, r.height), 0, 0);
+                // whole pixels only (the game's sprite rects are fractional, e.g. 293.85 wide)
+                int x = Mathf.RoundToInt(r.x), y = Mathf.RoundToInt(r.y);
+                int w = Mathf.Clamp(Mathf.FloorToInt(r.width), 1, src.width - x), h = Mathf.Clamp(Mathf.FloorToInt(r.height), 1, src.height - y);
+                var dst = new Texture2D(w, h, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Clamp };
+                dst.ReadPixels(new Rect(x, y, w, h), 0, 0);
                 dst.Apply(false, true); // no CPU copy kept
-                return Sprite.Create(dst, new Rect(0, 0, r.width, r.height), new Vector2(.5f, .5f), sp.pixelsPerUnit);
+                return Sprite.Create(dst, new Rect(0, 0, w, h), new Vector2(.5f, .5f), sp.pixelsPerUnit);
             }
             catch (Exception e) { L.ErrorOnce("copying an icon", e); return null; }
             finally
@@ -294,6 +297,33 @@ namespace LevelGate.Progression
                 RenderTexture.active = prev;
                 if (rt != null) RenderTexture.ReleaseTemporary(rt);
             }
+        }
+
+        // "Fix stash icons": every item on the level list drawn again at stash size (forced), a few per frame, to clear
+        // big icons an older build left in the game's icon cache.
+        private static readonly Queue<string> _repair = new Queue<string>();
+        public static int RepairLeft => _repair.Count;
+        public static int RepairTotal;
+
+        public static void RepairAll(IEnumerable<string> tpls)
+        {
+            foreach (var t in tpls) _repair.Enqueue(t);
+            RepairTotal = _repair.Count;
+            L.Info($"items: redrawing {RepairTotal} icons at stash size");
+        }
+
+        public static void RepairTick()
+        {
+            if (_repair.Count == 0 || _loadIcon == null) return;
+            var t0 = Time.realtimeSinceStartup;
+            while (_repair.Count > 0 && Time.realtimeSinceStartup - t0 < .012f)
+            {
+                var tpl = _repair.Dequeue();
+                var item = ItemOf(tpl);
+                if (item == null) continue;
+                try { CallIcon(_loadIcon, item, 1, true); } catch (Exception e) { L.ErrorOnce("redrawing an icon", e); }
+            }
+            if (_repair.Count == 0) L.Info($"items: {RepairTotal} icons redrawn at stash size");
         }
 
         public static Sprite SpriteOf(object icon)

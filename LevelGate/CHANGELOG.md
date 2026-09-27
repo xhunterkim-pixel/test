@@ -40,6 +40,14 @@ Versions are **MAJOR.MINOR.PATCH**:
 
 ## LevelGate Progression (BepInEx plugin, separate DLL)
 
+### 0.9.7
+- **Opening from another screen** (Character, Traders…): the game first goes back to the main menu, as the MAIN MENU button does, and then Progression opens. Before, the other screen stayed open underneath.
+- **Big-icon copies actually work now.** The copy failed on the game's fractional sprite sizes (e.g. 293.85 px wide), so the game's enlarged icon was used instead.
+- **"Fix stash icons" button** (bottom-right, next to Performance mode): redraws every item on the level list at stash size, a few per frame, with progress shown. It clears big icons left in the game's icon cache by older builds.
+- **Picture quality:** the list tiles stay at 1x, the card pictures are now all 2x, and the big centre picture is 4x (was 6x). Performance mode lowers these to 1x / 1x / 2x.
+- **Main menu shortcut:** half the size, and the rank emblem now shows in colour (animated) instead of as a dark silhouette.
+- **Panel borders:** no longer turn red on locked levels; only the background glow does.
+
 ### 0.9.6
 - **Main menu shortcut** (bottom-left, like the game's EXPANSIONS block):
   - A red block with your rank emblem as a dark silhouette, **PROGRESSION** in red, and "Level X · Rank | XP / needed EXP" under it.

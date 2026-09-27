@@ -6,7 +6,7 @@ using UnityEngine.UI;
 namespace LevelGate.Progression
 {
     /// <summary>
-    /// A shortcut in the main menu's bottom-left corner, like the game's EXPANSIONS one: a red block with your rank
+    /// A shortcut in the main menu's bottom-left corner, like the game's EXPANSIONS one: a red block with your animated rank
     /// emblem, NEW (after a level-up you haven't looked at yet), PROGRESSION, and your level / XP under it, on a red
     /// glow from the corner. It lives inside the game's main menu, so it shows and hides with it. Click: opens the screen.
     /// </summary>
@@ -52,26 +52,26 @@ namespace LevelGate.Progression
             root.SetAsLastSibling();
 
             // red glow out of the bottom-left corner
-            _glow = Ui.Img(Ui.Box(root, "Glow", Vector2.zero, Vector2.zero, new Vector2(1300, 900)), Ui.Hex(Red, .30f), Ui.Radial());
+            _glow = Ui.Img(Ui.Box(root, "Glow", Vector2.zero, Vector2.zero, new Vector2(700, 480)), Ui.Hex(Red, .30f), Ui.Radial());
             _glow.raycastTarget = false;
 
             // the clickable block, just above the bottom bar
-            var block = Ui.Rect(root, "Block", Vector2.zero, Vector2.zero, new Vector2(52, 84), new Vector2(720, 204));
+            var block = Ui.Rect(root, "Block", Vector2.zero, Vector2.zero, new Vector2(40, 84), new Vector2(400, 144));
             var hit = Ui.Img(block, new Color(0, 0, 0, 0), null, true);
 
             // red icon (top-right corner cut) with the rank emblem as a dark silhouette in it
-            var icon = Ui.Rect(block, "Icon", new Vector2(0, 0), new Vector2(0, 1), new Vector2(0, 4), new Vector2(84, -4));
+            var icon = Ui.Rect(block, "Icon", new Vector2(0, 0), new Vector2(0, 1), new Vector2(0, 2), new Vector2(42, -2));
             Ui.Img(icon, Ui.Hex(Red), Ui.CutCornerTopRight());
-            _emblem = Ui.Img(Ui.Fill(icon, "Emblem", 8), new Color(.08f, .05f, .05f, .9f));
+            _emblem = Ui.Img(Ui.Fill(icon, "Emblem", 2), Color.white);
             _emblem.preserveAspect = true;
             _emblem.raycastTarget = false;
 
             // NEW, PROGRESSION, level / XP
-            _newTag = Ui.Rect(block, "New", new Vector2(0, 1), new Vector2(0, 1), new Vector2(104, -24), new Vector2(160, -2)).gameObject;
+            _newTag = Ui.Rect(block, "New", new Vector2(0, 1), new Vector2(0, 1), new Vector2(52, -13), new Vector2(82, -1)).gameObject;
             Ui.Img((RectTransform)_newTag.transform, Ui.Hex("#6ad13a"));
-            _newText = Ui.Label(_newTag.transform, "Text", "NEW", 15, Ui.Hex("#0e1a08"), TextAnchor.MiddleCenter, true, 1);
-            _title = Ui.Label(Ui.Rect(block, "Title", new Vector2(0, 0), new Vector2(1, 1), new Vector2(102, 34), new Vector2(0, -22)), "Text", "PROGRESSION", 56, Ui.Hex(Red), TextAnchor.MiddleLeft, false, 1);
-            _sub = Ui.Label(Ui.Rect(block, "Sub", new Vector2(0, 0), new Vector2(1, 0), new Vector2(104, 2), new Vector2(0, 34)), "Text", "", 20, Ui.Hex("#c9563f"), TextAnchor.MiddleLeft, false, 1);
+            _newText = Ui.Label(_newTag.transform, "Text", "NEW", 9, Ui.Hex("#0e1a08"), TextAnchor.MiddleCenter, true, 1);
+            _title = Ui.Label(Ui.Rect(block, "Title", new Vector2(0, 0), new Vector2(1, 1), new Vector2(51, 17), new Vector2(0, -11)), "Text", "PROGRESSION", 28, Ui.Hex(Red), TextAnchor.MiddleLeft, false, 1);
+            _sub = Ui.Label(Ui.Rect(block, "Sub", new Vector2(0, 0), new Vector2(1, 0), new Vector2(52, 1), new Vector2(0, 17)), "Text", "", 11, Ui.Hex("#c9563f"), TextAnchor.MiddleLeft, false, 1);
 
             var b = block.gameObject.AddComponent<Button>();
             b.targetGraphic = hit;
@@ -92,7 +92,6 @@ namespace LevelGate.Progression
             if (level == _shownLevel && seen == _shownSeen && xp == _shownXp) return;
             _shownLevel = level; _shownSeen = seen; _shownXp = xp;
             Emblems.Show(_emblem, level);
-            _emblem.color = new Color(.08f, .05f, .05f, .9f);
             _newTag.SetActive(level > seen);
             Ui.SetText(_sub, $"Level {level}  ·  {ProgScreen.TierOf(level).Name}" + (xp != "" ? "   <color=#8a3a2c>|</color>   " + xp : ""));
         }
