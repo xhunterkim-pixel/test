@@ -464,7 +464,10 @@ namespace LevelGate.Progression
             _featName = FlowText(info, "Name", THero, Text, false, 0, wrap: true);             // Item name
             Rule(info, S1);
             _majorRow = Row(info, "Major", S4);                                                 // DAMAGE  PENETRATION …
-            _minorRow = Row(info, "Minor", S4);                                                 // WEIGHT  SIZE  CALIBER
+            // WEIGHT  SIZE  CALIBER (a second line when there are more than fit the grid)
+            _minorRow = Ui.Rect(info, "Minor", Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
+            var mvl = _minorRow.gameObject.AddComponent<VerticalLayoutGroup>();
+            mvl.spacing = S2; mvl.childControlHeight = true; mvl.childControlWidth = true; mvl.childForceExpandHeight = false; mvl.childForceExpandWidth = true;
             BuildRequirement(info);                                                             // REQUIREMENT (right under the item's stats)
             Rule(info, S1);
             // the game's description: scrolls when it's longer than the space left
@@ -1218,12 +1221,20 @@ namespace LevelGate.Progression
             var majors = facts.Where(f => majorKeys.Contains(f.Label)).ToList();
             var minors = new[] { "Weight", "Size", "Caliber" }.Select(k => facts.FirstOrDefault(f => f.Label == k)).Where(f => f.Label != null)
                 .Concat(facts.Where(f => !majorKeys.Contains(f.Label) && f.Label != "Weight" && f.Label != "Size" && f.Label != "Caliber")).ToList();
-            // one grid for both rows: the same number of equal columns (empty cells pad the shorter row), so values align
-            int cols = Mathf.Max(3, Mathf.Max(majors.Count, minors.Count));
+            // one grid of equal columns for every row (3, or more only if there are more big stats): the big stats never get
+            // squeezed ("600 rpm" ran into ERGONOMICS at 4 columns); extra small stats wrap onto another line
+            int cols = Mathf.Max(3, majors.Count);
             foreach (var f in majors) Stat(_majorRow, f.Label, f.Value, true);
             for (int c = majors.Count; c < cols && majors.Count > 0; c++) Stat(_majorRow, "", "", true);
-            foreach (var f in minors) Stat(_minorRow, f.Label, f.Value, false);
-            for (int c = minors.Count; c < cols && minors.Count > 0; c++) Stat(_minorRow, "", "", false);
+            for (int start = 0; start < minors.Count; start += cols)
+            {
+                var line = Row(_minorRow, "Line", S4);
+                for (int c = 0; c < cols; c++)
+                {
+                    var f = start + c < minors.Count ? minors[start + c] : ("", "");
+                    Stat(line, f.Item1, f.Item2, false);
+                }
+            }
             _majorRow.gameObject.SetActive(majors.Count > 0);
             _minorRow.gameObject.SetActive(minors.Count > 0);
             Ui.SetText(_featDesc, ProgData.DescriptionOf(it.Tpl));

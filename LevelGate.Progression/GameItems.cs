@@ -469,7 +469,7 @@ namespace LevelGate.Progression
                 if (Num("MaxHpResource") is int hp && hp > 0) list.Add(("Resource", hp.ToString()));
                 // weapons: the template's own handling numbers (base weapon, before mods)
                 double? D(object v) { try { return v == null || v is string || v is bool ? (double?)null : Convert.ToDouble(v); } catch { return null; } }
-                if (D(Num("bFirerate")) is double rpm && rpm > 0) list.Add(("Fire rate", $"{rpm:0} rpm"));
+                if (D(Num("bFirerate")) is double rpm && rpm > 0) list.Add(("Fire rate", $"{rpm:0}<size=60%> rpm</size>"));
                 if (D(Num("Ergonomics")) is double ergo && ergo > 0) list.Add(("Ergonomics", $"{ergo:0}"));
                 if (D(Num("RecoilForceUp")) is double rec && rec > 0) list.Add(("Recoil", $"{rec:0}"));
                 if (D(Num("bEffDist")) is double eff && eff > 0) list.Add(("Eff. range", $"{eff:0} m"));

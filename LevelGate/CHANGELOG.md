@@ -40,6 +40,9 @@ Versions are **MAJOR.MINOR.PATCH**:
 
 ## LevelGate Progression (BepInEx plugin, separate DLL)
 
+### 0.9.15
+- **Fix: a 3-digit fire rate ran into ERGONOMICS** ("600 rpm30"). The stats now use three equal columns. Small stats wrap onto a second line (effective range goes under weight) instead of squeezing the big stats into four columns. "rpm" is drawn smaller than the number.
+
 ### 0.9.14
 - **A / D move level by level** (like ← →), not while typing. They're shown as keycaps under the ‹ › arrows.
 - **Weapon stats:** fire rate, ergonomics and recoil are the big numbers for weapons; effective range sits with weight / size / caliber. All read from the weapon's template.
