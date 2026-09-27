@@ -40,6 +40,9 @@ Versions are **MAJOR.MINOR.PATCH**:
 
 ## LevelGate Progression (BepInEx plugin, separate DLL)
 
+### 0.9.39
+- **Main-menu shortcut:** the line under PROGRESSION shows only your rank title ("Renegade"). It showed "Level 40 · Renegade | 62 039 / 206 188 EXP"; level and XP are on the screen itself.
+
 ### 0.9.38
 - **Armor class from the game data on disk.** The 0.9.37 log shows the client's armor data has class 0 and no parts: LevelGate (server side) sets it before the game receives it. The plugin now reads SPT_Data/…/templates/items.json once, read-only, on a background thread: each item's own armorClass and its default plates ("Plate" ids in its slots). Armor, armored rigs and helmets show the original class. LevelGate, the server and the file are untouched. The log says where the file was found and how many items have a class.
 - **Tarkov-style section titles** in the rewards list: a dark strip with small caps and a › chevron, like the game's slot titles (the category colour kept as a 2 px edge).

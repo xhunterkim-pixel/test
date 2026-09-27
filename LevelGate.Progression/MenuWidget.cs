@@ -130,7 +130,7 @@ namespace LevelGate.Progression
             bool isNew = level > seen;
             if (_newTag.activeSelf != isNew) L.Info(isNew ? $"NEW: main-menu tag ON — level {level} > last seen {seen}" : $"NEW: main-menu tag off (level {level}, last seen {seen})");
             _newTag.SetActive(isNew);
-            Ui.SetText(_sub, $"Level {level}  ·  {ProgScreen.TierOf(level).Name}" + (xp != "" ? "   <color=#8a3a2c>|</color>   " + xp : ""));
+            Ui.SetText(_sub, ProgScreen.TierOf(level).Name); // just the rank title (level and XP are on the screen itself)
         }
 
         private static string Thousands(int n) => n.ToString("#,0", System.Globalization.CultureInfo.InvariantCulture).Replace(",", " ");
