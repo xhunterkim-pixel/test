@@ -40,6 +40,15 @@ Versions are **MAJOR.MINOR.PATCH**:
 
 ## LevelGate Progression (BepInEx plugin, separate DLL)
 
+### 0.9.35
+- **Fix: sharp (High) pictures dropping to medium after clicking around.**
+  - The centre picture's render size was measured on the picture itself. Since 0.9.32 it shrinks small items to their real size (no stretching), so after any of those the next item was asked for smaller. The log shows the same rifle at 4x, then 3x, then 2x, each kept and shown again later.
+  - It's measured on the stage now, so the size is the same every time.
+- **Right panel:** INSPECT sits at the bottom, level with the rewards list and the preview; the space left goes above it.
+- **More stats for gear** (only when the item's template has them, not zero): Durability, Material, Capacity (grid slots), Movement / Turning / Ergo penalties. Armor class still only shows when it isn't 0 (LevelGate sets armor to 0; LevelGate is untouched).
+- **Removed** the "‹ BACK TO LEVEL X" button (Home still takes you to your level).
+- **PERFORMANCE MODE** box: right-aligned with the card strip's edge and centred on the page bar's row.
+
 ### 0.9.34
 - **Header lined up:** the emblem and the three lines beside it are 8 px lower. The emblem's bottom now meets the level square's, and "Page X of 16" sits on the same line as "Next level …".
 - **Removed:** the summary banner after the XP animation (it didn't fit the game) and the orange YOU mark over the page bar.

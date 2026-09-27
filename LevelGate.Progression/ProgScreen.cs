@@ -562,7 +562,8 @@ namespace LevelGate.Progression
 
             // INSPECT, full width, with its right-click shortcut as a keycap inside it (like Q / E)
             var gap = Ui.Rect(info, "Gap", Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
-            gap.gameObject.AddComponent<LayoutElement>().minHeight = S2; // + the group's 8 = 16 above INSPECT
+            _inspectGap = gap.gameObject.AddComponent<LayoutElement>();
+            _inspectGap.minHeight = S2; // + the group's 8 = 16 above INSPECT; takes what's left, so INSPECT sits at the panel's bottom
             var btn = Ui.Rect(info, "Inspect", Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
             var ble = btn.gameObject.AddComponent<LayoutElement>();
             ble.minHeight = ble.preferredHeight = 40;
@@ -578,7 +579,7 @@ namespace LevelGate.Progression
             b.onClick.AddListener(() => { if (_featTpl != null) Inspect(_featTpl); });
         }
 
-        private static LayoutElement _reqSize, _descSize;
+        private static LayoutElement _reqSize, _descSize, _inspectGap;
         private static Image _reqBg, _reqRed;
         private static GameObject _reqHead;
         private static RectTransform _reqRow;
@@ -589,11 +590,14 @@ namespace LevelGate.Progression
         {
             if (_descSize == null) return;
             _descSize.flexibleHeight = 1; _descSize.preferredHeight = -1;
+            if (_inspectGap != null) _inspectGap.flexibleHeight = 0;
             LayoutRebuilder.ForceRebuildLayoutImmediate(_info);
             float avail = _descView.rect.height;
             float need = Refl.Get(_featDesc, "preferredHeight") is float h ? h : avail;
             _descSize.flexibleHeight = 0;
             _descSize.preferredHeight = Mathf.Min(need + S1, avail);
+            // the space left goes above INSPECT: it lines up with the bottom of the rewards list and the preview
+            if (_inspectGap != null) _inspectGap.flexibleHeight = 1;
             LayoutRebuilder.ForceRebuildLayoutImmediate(_info);
         }
         private static Component _featNote;
@@ -717,7 +721,6 @@ namespace LevelGate.Progression
 
 
             PerfToggle(bottom);
-            BackToYou(bottom);
 
             // page bar like the Arena battle pass: [Q] ▬▬▬▬ … [E], the page numbers under the segments
             // stretches between fixed side insets (1120 px at 1920 wide, narrower on narrower screens), so it never runs into the checkbox
@@ -750,7 +753,8 @@ namespace LevelGate.Progression
         /// <summary>[ ] PERFORMANCE MODE — bottom-right on the page bar's line, quiet small caps like the other secondary labels.</summary>
         private static void PerfToggle(RectTransform bottom)
         {
-            var rt = Ui.Rect(bottom, "Perf", new Vector2(1, 0), new Vector2(1, 0), new Vector2(-Margin - PanelPad - 200, 14), new Vector2(-Margin - PanelPad, 14 + 24));
+            // right-aligned with the card strip's edge, centred on the page bar's row
+            var rt = Ui.Rect(bottom, "Perf", new Vector2(1, 0), new Vector2(1, 0), new Vector2(-Margin - 200, 25), new Vector2(-Margin, 25 + 24));
             var hit = Ui.Img(rt, new Color(0, 0, 0, 0), null, true);
             var box = Ui.Rect(rt, "Box", new Vector2(1, .5f), new Vector2(1, .5f), new Vector2(-14, -7), new Vector2(0, 7));
             var edge = Ui.Img(box, Ui.Hex("#5a6468"));
@@ -777,28 +781,7 @@ namespace LevelGate.Progression
         }
 
         private static GraphicsQuality _beforeLow = GraphicsQuality.Medium;
-        private static GameObject _backBtn;
-        private static Component _backText;
 
-        /// <summary>
-        /// "‹ BACK TO LEVEL 40", bottom-left, only while you're looking at another page than your own: one click home
-        /// (the Home key does the same). Styled like the game's own flat buttons: thin frame, dark face, small caps.
-        /// </summary>
-        private static void BackToYou(RectTransform bottom)
-        {
-            var rt = Ui.Rect(bottom, "BackToYou", Vector2.zero, Vector2.zero, new Vector2(Margin, 22), new Vector2(Margin + 200, 50));
-            var edge = Ui.Img(rt, Ui.Hex("#3a4346"), null, true);
-            var face = Ui.Img(Ui.Fill(rt, "In", 1), Ui.Hex("#0f1315", .92f));
-            Ui.Img(Ui.Rect(rt, "Mark", Vector2.zero, new Vector2(0, 1), Vector2.zero, new Vector2(2, 0)), Ui.Hex(Orange));
-            _backText = Ui.Label(Ui.Rect(rt, "Text", Vector2.zero, Vector2.one, new Vector2(S3, 0), new Vector2(-S2, 0)), "Text", "", TCaps, Text, TextAnchor.MiddleLeft, false, Caps);
-            var b = rt.gameObject.AddComponent<Button>();
-            b.targetGraphic = edge;
-            b.transition = Selectable.Transition.None;
-            b.onClick.AddListener(() => { int p = ProgData.PlayerLevel(); if (p > 0) { Sounds.Click(); ShowLevel(Mathf.Min(p, ProgData.MaxLevel)); } });
-            HoverHook.Add(rt, on => { FadeTo(edge, on ? HoverEdge : Ui.Hex("#3a4346")); FadeTo(face, on ? Ui.Hex("#151b1e", .95f) : Ui.Hex("#0f1315", .92f)); if (on) Sounds.Play("ButtonOver"); });
-            _backBtn = rt.gameObject;
-            _backBtn.SetActive(false);
-        }
 
         private static void LevelKey(RectTransform arrow, string key, Action click)
         {
@@ -1027,12 +1010,7 @@ namespace LevelGate.Progression
             }
             // YOU: an orange mark over your own page, so you can find your way back while browsing
             int mine = player > 0 ? (Mathf.Min(player, ProgData.MaxLevel) - 1) / PerPage : -1;
-            if (_backBtn != null)
-            {
-                bool away = mine >= 0 && _page != mine;
-                if (_backBtn.activeSelf != away) _backBtn.SetActive(away);
-                if (away) Ui.SetText(_backText, $"‹  BACK TO LEVEL {Mathf.Min(player, ProgData.MaxLevel)}");
-            }
+
 
         }
 
@@ -1725,7 +1703,10 @@ namespace LevelGate.Progression
         /// </summary>
         private static int FeatScaleOf(ProgItem it)
         {
-            float px = Mathf.Max(_featPic.rectTransform.rect.width, _featPic.rectTransform.rect.height) * (_featPic.canvas != null ? _featPic.canvas.scaleFactor : 1f);
+            // measured on the stage (the picture's box minus its 40 px padding) — never on the picture itself: FitFeat shrinks
+            // that to small items' real size, and the next item was then asked for smaller (the same rifle at 4x, then 3x, 2x)
+            var box = _featPic.rectTransform.parent is RectTransform pb ? pb.rect.size - new Vector2(80, 80) : Vector2.zero;
+            float px = Mathf.Max(box.x, box.y) * (_featPic.canvas != null ? _featPic.canvas.scaleFactor : 1f);
             if (px >= 64) _featPx = px; else px = _featPx > 0 ? _featPx : 440;
             int featScale = GameItems.ScaleFor(it.Tpl, px);
             if (Perf) featScale = Mathf.Max(2, featScale / 2);

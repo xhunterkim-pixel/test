@@ -541,12 +541,46 @@ namespace LevelGate.Progression
                 if (D(Num("Ergonomics")) is double ergo && ergo > 0) list.Add(("Ergonomics", $"{ergo:0}"));
                 if (D(Num("RecoilForceUp")) is double rec && rec > 0) list.Add(("Recoil", $"{rec:0}"));
                 if (D(Num("bEffDist")) is double eff && eff > 0) list.Add(("Eff. range", $"{eff:0} m"));
+                // gear (only what the template has, not zero): armor, rigs, backpacks, headwear
+                if (D(Num("MaxDurability", "Durability")) is double dur && dur > 0 && !(Num("bFirerate") != null)) list.Add(("Durability", $"{dur:0}"));
+                if (Num("ArmorMaterial") is object mat && mat.ToString() is string ms && ms.Length > 0 && ms != "None") list.Add(("Material", Spaced(ms)));
+                int cap = Capacity(t);
+                if (cap > 0) list.Add(("Capacity", $"{cap}<size=60%> slots</size>"));
+                if (D(Num("speedPenaltyPercent")) is double sp && Math.Abs(sp) >= .5) list.Add(("Movement", $"{sp:+0;-0}%"));
+                if (D(Num("mousePenalty")) is double mp && Math.Abs(mp) >= .5) list.Add(("Turning", $"{mp:+0;-0}%"));
+                if (D(Num("weaponErgonomicPenalty")) is double ep && Math.Abs(ep) >= .5) list.Add(("Ergo penalty", $"{ep:+0;-0}"));
             }
             catch (Exception e) { L.ErrorOnce("item facts", e); }
             return list;
         }
 
         /// <summary>"Caliber366TKM" → the game's own name if it has one, else a readable form: ".366 TKM", "5.56x45 NATO", "9x19 PARA".</summary>
+        /// <summary>"ArmoredSteel" → "Armored steel", "UHMWPE" stays.</summary>
+        private static string Spaced(string s)
+        {
+            if (s == "Titan") return "Titanium";
+            var r = System.Text.RegularExpressions.Regex.Replace(s, "(?<=[a-z])(?=[A-Z])", " ");
+            return r.Length > 1 && r != r.ToUpperInvariant() ? char.ToUpperInvariant(r[0]) + r.Substring(1).ToLowerInvariant() : r;
+        }
+
+        /// <summary>Cells in a container's grids (rigs, backpacks), from its template; 0 if it has none.</summary>
+        private static int Capacity(object template)
+        {
+            try
+            {
+                if (!(Refl.Get(template, "Grids") is System.Collections.IEnumerable grids)) return 0;
+                int n = 0;
+                foreach (var g in grids)
+                {
+                    var props = Refl.Get(g, "Props") ?? Refl.Get(g, "_props") ?? g;
+                    object h = Refl.Get(props, "cellsH") ?? Refl.Get(g, "cellsH"), v = Refl.Get(props, "cellsV") ?? Refl.Get(g, "cellsV");
+                    if (h != null && v != null) n += Convert.ToInt32(h) * Convert.ToInt32(v);
+                }
+                return n;
+            }
+            catch { return 0; }
+        }
+
         public static string CaliberName(string raw)
         {
             var loc = ProgData.Localize(raw);
