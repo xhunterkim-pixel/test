@@ -743,6 +743,7 @@ namespace LevelGate.Progression
 
 
             PerfToggle(bottom);
+            HomeButton(bottom);
 
             // page bar like the Arena battle pass: [Q] ▬▬▬▬ … [E], the page numbers under the segments
             // stretches between fixed side insets (1120 px at 1920 wide, narrower on narrower screens), so it never runs into the checkbox
@@ -803,6 +804,45 @@ namespace LevelGate.Progression
         }
 
         private static GraphicsQuality _beforeLow = GraphicsQuality.Medium;
+        private static Component _homeText;
+        private static Image _homeEdge;
+        private static bool _homeAway, _homeHover;
+
+        /// <summary>
+        /// [HOME] BACK TO LEVEL 40 — bottom-left, the mirror of PERFORMANCE MODE bottom-right: same row, same small caps,
+        /// left-aligned with the card strip's edge. Always there (the two sides balance); dimmed while you're on your own page.
+        /// </summary>
+        private static void HomeButton(RectTransform bottom)
+        {
+            var rt = Ui.Rect(bottom, "Home", Vector2.zero, Vector2.zero, new Vector2(Margin, 25), new Vector2(Margin + 260, 25 + 24));
+            var hit = Ui.Img(rt, new Color(0, 0, 0, 0), null, true);
+            // the keycap, like Q / E: grey rim, dark face, bold caps
+            var cap = Ui.Rect(rt, "Key", new Vector2(0, .5f), new Vector2(0, .5f), new Vector2(0, -11), new Vector2(46, 11));
+            _homeEdge = Ui.Img(cap, Ui.Hex("#5a6468"));
+            Ui.Img(Ui.Fill(cap, "In", 2), Ui.Hex("#161c1f"));
+            Ui.Img(Ui.Rect(cap, "Shine", new Vector2(0, 1), Vector2.one, new Vector2(2, -4), new Vector2(-2, -2)), new Color(1, 1, 1, .08f));
+            Ui.Label(cap, "Text", "HOME", 10, Ui.Hex("#c3ccd0"), TextAnchor.MiddleCenter, true, 1);
+            _homeText = Ui.Label(Ui.Rect(rt, "Text", Vector2.zero, Vector2.one, new Vector2(46 + S2, 0), Vector2.zero), "Text", "", TCaps, Dim, TextAnchor.MiddleLeft, false, Caps);
+            var b = rt.gameObject.AddComponent<Button>();
+            b.targetGraphic = hit;
+            b.transition = Selectable.Transition.None;
+            b.onClick.AddListener(() =>
+            {
+                int p = ProgData.PlayerLevel();
+                if (p <= 0 || !_homeAway) return;
+                Sounds.Click();
+                ShowLevel(Mathf.Min(p, ProgData.MaxLevel));
+            });
+            HoverHook.Add(rt, on => { _homeHover = on; PaintHome(); if (on && _homeAway) Sounds.Play("ButtonOver"); });
+        }
+
+        private static void PaintHome()
+        {
+            if (_homeText == null) return;
+            // away from your page: readable (brighter on hover) · on it: dimmed, nothing to go back to
+            FadeTo(_homeText as Graphic, !_homeAway ? Ui.Hex("#6a7376", .45f) : _homeHover ? Text : Grey);
+            FadeTo(_homeEdge, _homeAway && _homeHover ? HoverEdge : Ui.Hex("#5a6468", _homeAway ? 1f : .45f));
+        }
 
 
         private static void LevelKey(RectTransform arrow, string key, Action click)
@@ -1032,6 +1072,12 @@ namespace LevelGate.Progression
             }
             // YOU: an orange mark over your own page, so you can find your way back while browsing
             int mine = player > 0 ? (Mathf.Min(player, ProgData.MaxLevel) - 1) / PerPage : -1;
+            if (_homeText != null && player > 0)
+            {
+                _homeAway = _page != mine;
+                Ui.SetText(_homeText, $"BACK TO LEVEL {Mathf.Min(player, ProgData.MaxLevel)}");
+                PaintHome();
+            }
 
 
         }

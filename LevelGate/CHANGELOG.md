@@ -40,6 +40,10 @@ Versions are **MAJOR.MINOR.PATCH**:
 
 ## LevelGate Progression (BepInEx plugin, separate DLL)
 
+### 0.9.42
+- **[HOME] BACK TO LEVEL 40**, bottom-left: the mirror of PERFORMANCE MODE bottom-right. Same row, same small caps, left-aligned with the card strip's edge, with a HOME keycap (the Home key does the same).
+  - Always there, so both sides balance. It's readable while you browse another page and dimmed on your own page.
+
 ### 0.9.41
 - **Level cards: one spacing grid.** Measured on 0.9.40, the cards had 13 px left padding, a 39 px gap between the big picture and the small squares, and 43 px empty on the right (the squares floated in a fixed column); 40 px above the pictures, ~20 below.
   - 12 px padding on all sides of the picture area, and 8 px between any two pictures.
