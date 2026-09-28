@@ -40,6 +40,13 @@ Versions are **MAJOR.MINOR.PATCH**:
 
 ## LevelGate Progression (BepInEx plugin, separate DLL)
 
+### 0.9.69 — animation and detail overhaul (MW4 level track)
+- **New-rank splash**: when the XP animation reaches a new rank, the screen goes to MW4's level-up moment, timed to the emblem sound. Build-up: the screen darkens, light streaks and specks rise, the old emblem gathers. Peak: a flash, the new emblem pops in with slowly turning rays, the glow turns the rank's colour. Hold: a perspective grid floor, NEW RANK over a scanline band with the rank's name and level, a LOG_ANALYSIS column top-left. Then it fades out. A skip hides it at once; Reduce Motion / Performance Mode show a still version.
+- **Light wall on the level track**: while the XP animation moves your place along the rail, a tall wall of light rides the front across the cards, everything already reached is washed in its light, and a pool of dotted light sits where it meets the rail.
+- **Waveform track**: the rail under the cards carries MW's waveform band — faint all along and drifting slowly, glowing around your place, flaring while the light wall moves.
+- **LEVEL_ACTIVE**: your level's card carries MW's system tag (LEVEL_ACTIVE // 040) and a crosshair tick on its left edge; both hop along with the XP animation.
+- **Section heads** in the reward list: a faint rule from the name to the count with two dashes before it, and a small dotted grip at the left edge (MW's FEATURED ——— -- 01).
+
 ### 0.9.68
 - **The hero picture gets the most detail** (MW's primary weapon panel): viewfinder corners, faint scanlines over the lit face, a measuring scale along the bottom, a hatch strip top-right; top-left the item's kind in its rank's colour with its short name under it ("Assault rifle / ASh-12"); top-right **rank pips**: five squares for where the level sits in its rank (ranks are five levels), then + and a diamond that lights orange on a rank's last level (the next level is a new rank). All of it follows UI Detailing except the caption and pips.
 - **Version in the bottom-left corner** of the screen, under HOME (so a screenshot says which build it is).

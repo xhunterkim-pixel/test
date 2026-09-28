@@ -22,6 +22,9 @@ namespace LevelGate.Progression
             float k = MotionK;
             TickTracer(k);
             TickMotes(k);
+            TickWave(k);
+            TickWall();
+            TickSplash();
             if (k <= 0) return;
             _lightPhase += Mathf.Min(Time.unscaledDeltaTime, .1f);
             float t = _lightPhase;
@@ -32,6 +35,76 @@ namespace LevelGate.Progression
             if (_featLight != null)
                 _featLight.rectTransform.anchoredPosition = new Vector2(70 * k * Mathf.Sin(t * .17f), 5 * k * Mathf.Sin(t * .29f));
             foreach (var c in _cards) c?.TickLight(t, k);
+        }
+
+        // ---------------------------------------------------------------- the light wall (MW4's level track)
+
+        private static RectTransform _wallLayer;
+        private static Image _wallCore, _wallGlow, _wallWash, _wallFloor;
+        private static float _wallA;
+
+        /// <summary>
+        /// While the XP animation moves your place along the rail: a tall wall of light rides the front across the card row,
+        /// everything already reached is washed in its light (strongest at the wall, fading back to the left), and a pool of
+        /// dotted light sits where it meets the rail. On its own canvas, over the cards; fades out when the fill stops.
+        /// </summary>
+        private static void BuildLightWall(RectTransform bottom)
+        {
+            var layer = Ui.Rect(bottom, "LightWall", new Vector2(0, 0), new Vector2(1, 1), new Vector2(Margin - Gutter / 2, 50), new Vector2(-Margin + Gutter / 2, -S3));
+            Ui.OwnCanvas(layer);
+            layer.gameObject.AddComponent<RectMask2D>();
+            _wallLayer = layer;
+            _wallWash = Ui.Img(Ui.Rect(layer, "Wash", Vector2.zero, new Vector2(0, 1), Vector2.zero, Vector2.zero), new Color(1f, .93f, .8f, 0), Ui.HorizontalFade());
+            _wallGlow = Ui.Img(Ui.Rect(layer, "Glow", Vector2.zero, new Vector2(0, 1), new Vector2(-45, -30), new Vector2(45, 30)), new Color(1f, .9f, .75f, 0), Ui.Radial());
+            _wallCore = Ui.Img(Ui.Rect(layer, "Core", Vector2.zero, new Vector2(0, 1), new Vector2(-1.5f, 0), new Vector2(1.5f, 0)), new Color(1f, .97f, .92f, 0), Ui.VerticalFade());
+            _wallCore.rectTransform.localScale = new Vector3(1, -1, 1); // brightest down at the rail, fading up
+            _wallFloor = Ui.Img(Ui.Box(layer, "Floor", new Vector2(0, 0), new Vector2(0, 21), new Vector2(300, 90)), new Color(1f, .9f, .75f, 0), Ui.HalftoneGlow());
+            foreach (var i in new[] { _wallWash, _wallGlow, _wallCore, _wallFloor }) i.raycastTarget = false;
+            layer.gameObject.SetActive(false);
+        }
+
+        private static void TickWall()
+        {
+            if (_wallLayer == null) return;
+            bool moving = !Calm && XpAnimating && Mathf.Abs(_railShown - _railTarget) > .001f;
+            float dt = Mathf.Min(Time.unscaledDeltaTime, .1f);
+            _wallA = Mathf.MoveTowards(_wallA, moving ? 1f : 0f, dt * (moving ? 5f : 1.6f));
+            bool on = _wallA > .001f && _railShown > 0;
+            if (_wallLayer.gameObject.activeSelf != on) _wallLayer.gameObject.SetActive(on);
+            if (!on) return;
+            float x = Mathf.Clamp01(_railShown);
+            float flick = .9f + .1f * Mathf.Sin(Time.unscaledTime * 31f);
+            _wallWash.rectTransform.anchorMax = new Vector2(x, 1);
+            var at = new Vector2(x, 0);
+            var g = _wallGlow.rectTransform; g.anchorMin = at; g.anchorMax = new Vector2(x, 1);
+            var c = _wallCore.rectTransform; c.anchorMin = at; c.anchorMax = new Vector2(x, 1);
+            var f = _wallFloor.rectTransform; f.anchorMin = f.anchorMax = at; f.anchoredPosition = new Vector2(0, 21);
+            float a = _wallA;
+            _wallWash.color = new Color(1f, .93f, .8f, .14f * a);
+            _wallGlow.color = new Color(1f, .9f, .75f, .3f * a * flick);
+            _wallCore.color = new Color(1f, .97f, .92f, .95f * a * flick);
+            _wallFloor.color = new Color(1f, .9f, .75f, .35f * a);
+            // the waveform's glowing part flares with it
+            if (_waveHot != null) { var wc = _waveHot.color; wc.a = Mathf.Clamp01(.3f * Ui.DetailK + .45f * a * flick); _waveHot.color = wc; }
+        }
+
+        // ---------------------------------------------------------------- the rail's waveform
+
+        /// <summary>The glowing part of the rail's waveform rides the fill's front (your place); the faint band drifts left.</summary>
+        private static void TickWave(float k)
+        {
+            if (_waveHot == null) return;
+            float x = _railShown;
+            bool on = x > .002f && x < .998f;
+            if (_waveHot.enabled != on) _waveHot.enabled = on;
+            if (on)
+            {
+                var hr = _waveHot.rectTransform;
+                if (Mathf.Abs(hr.anchorMin.x - x) > .0001f) { hr.anchorMin = hr.anchorMax = new Vector2(x, .5f); hr.anchoredPosition = Vector2.zero; }
+            }
+            if (k <= 0 || _waveBase == null) return;
+            var br = _waveBase.rectTransform;
+            br.anchoredPosition = new Vector2(-((_lightPhase * 14f * k) % 384f), 0);
         }
 
         // ---------------------------------------------------------------- pictures whose texture is gone

@@ -290,6 +290,7 @@ namespace LevelGate.Progression
             ApplyLook();
             _fade = root.gameObject.AddComponent<CanvasGroup>();
 
+            _splashRoot = root; // the new-rank splash is built here on first use (ProgScreen.Splash)
             // hover tooltip (full item names, setting hints): its own layer, over everything
             var tipLayer = Ui.Rect(root, "TooltipLayer", Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
             SubCanvas(tipLayer);
@@ -1122,6 +1123,14 @@ namespace LevelGate.Progression
             // MW-style timeline rail under the cards: a tick under each level, a light fill up to where you are (your XP
             // inside your level included), a small orange marker at "you"
             var rail = Ui.Rect(bottom, "Rail", new Vector2(0, 0), new Vector2(1, 0), new Vector2(Margin - Gutter / 2, 71), new Vector2(-Margin + Gutter / 2, 77));
+            // MW's XP track: a waveform band along the rail — faint all along (drifting slowly), glowing around your level
+            var wave = Ui.Rect(rail, "Wave", Vector2.zero, Vector2.one, new Vector2(0, -13), new Vector2(0, 13));
+            Ui.OwnCanvas(wave);
+            wave.gameObject.AddComponent<RectMask2D>();
+            _waveBase = Ui.Detail(Ui.Img(Ui.Rect(wave, "Base", Vector2.zero, Vector2.one, Vector2.zero, new Vector2(384, 0)), new Color(1, 1, 1, .07f), Ui.Waveform(false)), .07f);
+            _waveBase.type = Image.Type.Tiled; _waveBase.raycastTarget = false;
+            _waveHot = Ui.Detail(Ui.Img(Ui.Box(wave, "Hot", new Vector2(0, .5f), Vector2.zero, new Vector2(360, 26)), Ui.Hex("#f0c9a8", .3f), Ui.Waveform(true)), .3f);
+            _waveHot.raycastTarget = false;
             Ui.Img(Ui.Rect(rail, "Line", new Vector2(0, .5f), new Vector2(1, .5f), new Vector2(0, 0), new Vector2(0, 1)), Ui.Hex("#3c3e3f", .9f));
             _railFill = Ui.Rect(rail, "Fill", new Vector2(0, .5f), new Vector2(0, .5f), new Vector2(0, -1), new Vector2(0, 1));
             Ui.Img(_railFill, Ui.Hex("#c4c7c8", .85f));
@@ -1144,6 +1153,7 @@ namespace LevelGate.Progression
                 var slot = Ui.Rect(cards, "Slot" + i, new Vector2(a, 0), new Vector2(b, 1), new Vector2(Gutter / 2, 0), new Vector2(-Gutter / 2, 0));
                 _cards[i] = new Card(slot, i == 0) { Slot = i };
             }
+            BuildLightWall(bottom);
 
 
             PerfToggle(bottom);
@@ -1792,6 +1802,25 @@ namespace LevelGate.Progression
                 count, TCaps, dim, TextAnchor.MiddleRight, false, 1);
             var chev = Ui.Rect(head, "Chevron", new Vector2(1, .5f), new Vector2(1, .5f), new Vector2(-22, -8), new Vector2(-8, 8));
             var chevText = Ui.Label(chev, "Text", "›", TStrong + 3, chevInk, TextAnchor.MiddleCenter, false);
+            if (!narrow)
+            {
+                // MW's section heads ("FEATURED ——— -- 01"): a faint rule from the name to the count, two dashes before it,
+                // and a small dotted grip at the left edge
+                float nameEnd = 10 + Ui.PreferredWidth(name, g.Name.ToUpperInvariant()) + 12;
+                float countStart = 26 + Ui.PreferredWidth(countText, count) + 14;
+                var rule = Ui.Rect(head, "Rule", new Vector2(0, .5f), new Vector2(1, .5f), new Vector2(nameEnd, 0), new Vector2(-(countStart + 14), 1));
+                Ui.Detail(Ui.Img(rule, new Color(1, 1, 1, .12f)), .12f).raycastTarget = false;
+                for (int d = 0; d < 2; d++)
+                {
+                    var dash = Ui.Rect(head, "Dash", new Vector2(1, .5f), new Vector2(1, .5f), new Vector2(-(countStart + 10 - d * 5), 0), new Vector2(-(countStart + 7 - d * 5), 1));
+                    Ui.Detail(Ui.Img(dash, new Color(1, 1, 1, .3f)), .3f).raycastTarget = false;
+                }
+                for (int d = 0; d < 3; d++)
+                {
+                    var dot = Ui.Rect(head, "Grip", new Vector2(0, .5f), new Vector2(0, .5f), new Vector2(3, -5 + d * 4), new Vector2(4, -4 + d * 4));
+                    Ui.Detail(Ui.Img(dot, new Color(1, 1, 1, .35f)), .35f).raycastTarget = false;
+                }
+            }
 
             // the box: a 1 px frame, a darker inside, 6 px in from it
             var body = Ui.Rect(section, "Box", Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
@@ -2669,7 +2698,7 @@ namespace LevelGate.Progression
         private static readonly List<Image> _railTicks = new List<Image>();
         private static Image _railYou;
         private static Component _railYouText;
-        private static Image _railBeam;
+        private static Image _railBeam, _waveBase, _waveHot;
         private static float _railTarget, _railShown = -1;
 
         private static void TickRail(float dt)
@@ -3026,6 +3055,8 @@ namespace LevelGate.Progression
             private readonly Image _frame, _bg, _glow, _top, _stateLock, _selDots, _cur, _tagPlate, _cardLock, _stamp, _cardDither, _sheen, _gloss, _bloomFrame, _curScan;
             private readonly RectTransform _ticks;
             private readonly GameObject[] _stack = new GameObject[2];
+            private readonly Component _activeTag;
+            private readonly GameObject _activeMark;
             private readonly GameObject _selLights;
             private readonly Image _selBloom, _selDotLight;
             private float _lightSeed = UnityEngine.Random.value * 10;
@@ -3277,6 +3308,15 @@ namespace LevelGate.Progression
                 _curScan = Ui.Img(Ui.Fill(inner, "Scan"), Ui.Hex(Orange, .045f), Ui.Scanlines());
                 _curScan.type = Image.Type.Tiled; _curScan.raycastTarget = false; _curScan.enabled = false; Ui.Detail(_curScan, .045f);
                 _cur = Ui.Img(Ui.Rect(inner, "Current", new Vector2(0, 1), Vector2.one, new Vector2(10, -3), Vector2.zero), Ui.Hex(Orange));
+                // your level: MW's "LEVEL_ACTIVE" system tag top-right, and a crosshair tick on the card's left edge
+                _activeTag = Ui.Label(Ui.Rect(inner, "Active", new Vector2(.45f, 1), Vector2.one, new Vector2(0, -12), new Vector2(-12, -3)), "Text", "", 8.5f, Ui.Hex(Orange, .85f), TextAnchor.MiddleRight, false, 1.5f);
+                ((Graphic)_activeTag).raycastTarget = false;
+                _activeTag.gameObject.SetActive(false);
+                var mark = Ui.Rect(card, "ActiveMark", new Vector2(0, .5f), new Vector2(0, .5f), new Vector2(-12, -8), new Vector2(1, 8));
+                Ui.Img(Ui.Rect(mark, "V", new Vector2(1, 0), new Vector2(1, 1), new Vector2(-1, 0), Vector2.zero), Ui.Hex(Orange, .9f)).raycastTarget = false;
+                Ui.Img(Ui.Rect(mark, "H", new Vector2(0, .5f), new Vector2(1, .5f), new Vector2(0, 0), new Vector2(0, 1)), Ui.Hex(Orange, .9f)).raycastTarget = false;
+                _activeMark = mark.gameObject;
+                _activeMark.SetActive(false);
                 _newBadge = Ui.NewBadge(card, new Vector2(1, 1), new Vector2(-24, 0), 40, 19, 12.5f).gameObject;
                 _newBadge.SetActive(false);
                 _cur.enabled = false;
@@ -3414,6 +3454,9 @@ namespace LevelGate.Progression
                     _sheen.rectTransform.anchorMin = _sheen.rectTransform.anchorMax = new Vector2(right ? .4f : left ? .6f : .5f, .7f);
                 }
                 _cur.enabled = current;       // a thin orange line: your level
+                if (_activeTag.gameObject.activeSelf != current) _activeTag.gameObject.SetActive(current);
+                if (current) Ui.SetText(_activeTag, $"LEVEL_ACTIVE  //  {_level:000}");
+                if (_activeMark.activeSelf != current) _activeMark.SetActive(current);
                 // the bloom around the border: orange on yours, the rank's colour on the picked one (CoD's coloured selection)
                 var rank = Ui.Hex(TierOf(_level).Rim);
                 var bc = current ? Ui.Hex(Orange) : Color.Lerp(rank, Color.white, .15f); bc.a = _bloomFrame.color.a; _bloomFrame.color = bc;

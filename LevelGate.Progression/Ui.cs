@@ -399,6 +399,45 @@ namespace LevelGate.Progression
             return _glowFrame = Sprite.Create(tex, new Rect(0, 0, n, n), new Vector2(.5f, .5f), 100, 0, SpriteMeshType.FullRect, new Vector4(pad + 6, pad + 6, pad + 6, pad + 6));
         }
 
+        private static Sprite _wave, _waveHot;
+
+        /// <summary>
+        /// MW's XP track: a band of thin vertical bars like an audio waveform, mirrored around the line (1 px bars every 3 px,
+        /// heights from layered noise with the odd spike, brightest at the line). hot: 360 px, fading out to both ends (a glow
+        /// segment); else 384 px and tileable.
+        /// </summary>
+        public static Sprite Waveform(bool hot)
+        {
+            if (hot ? _waveHot != null : _wave != null) return hot ? _waveHot : _wave;
+            int w = hot ? 360 : 384, h = 32;
+            var tex = new Texture2D(w, h, TextureFormat.RGBA32, false) { wrapMode = hot ? TextureWrapMode.Clamp : TextureWrapMode.Repeat, filterMode = FilterMode.Point, name = "LevelGate waveform" };
+            var px = new Color32[w * h];
+            var rnd = new System.Random(hot ? 5 : 3);
+            for (int x = 0; x < w; x += 3)
+            {
+                // tileable noise: sines whose periods divide the width, plus a random jitter and an occasional spike
+                float u = x / (float)w * Mathf.PI * 2;
+                float n = .5f + .22f * Mathf.Sin(u * 3 + 1) + .15f * Mathf.Sin(u * 7 + 2) + .1f * Mathf.Sin(u * 16);
+                n = Mathf.Clamp01(n * (.55f + .45f * (float)rnd.NextDouble()));
+                if (rnd.NextDouble() < .06) n = Mathf.Min(1, n + .45f);
+                float fade = hot ? Mathf.Clamp01(1 - Mathf.Abs(x / (float)w * 2 - 1)) : 1;
+                fade = fade * fade * (3 - 2 * fade);
+                int half = Mathf.RoundToInt(n * (h / 2 - 1));
+                for (int dy = 0; dy <= half; dy++)
+                {
+                    float a = (1 - dy / (float)(h / 2)) * (.45f + .55f * n) * fade;
+                    var c = new Color32(255, 255, 255, (byte)(255 * Mathf.Clamp01(a)));
+                    px[(h / 2 + dy) * w + x] = c;
+                    if (h / 2 - 1 - dy >= 0) px[(h / 2 - 1 - dy) * w + x] = c;
+                }
+            }
+            tex.SetPixels32(px);
+            tex.Apply(false, true);
+            var sp = Sprite.Create(tex, new Rect(0, 0, w, h), new Vector2(.5f, .5f), 100, 0, SpriteMeshType.FullRect);
+            if (hot) _waveHot = sp; else _wave = sp;
+            return sp;
+        }
+
         private static Sprite _ruler;
 
         /// <summary>A measuring scale (tile it along a bottom edge): a tall tick every 50 px, short ones every 10. White.</summary>
