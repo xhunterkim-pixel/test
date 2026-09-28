@@ -257,6 +257,42 @@ namespace LevelGate.Progression
         /// </summary>
         public static RectTransform NewBadge(RectTransform parent, Vector2 anchor, Vector2 pos, float w = 34, float h = 17, float textSize = 11.5f)
         {
+            if (ProgScreen.Polish.Mw4NewTag) return NewBadgeMw4(parent, anchor, pos, w, h, textSize);
+            return NewBadgeOld(parent, anchor, pos, w, h, textSize);
+        }
+
+        /// <summary>
+        /// MW4's NEW (0.9.92): a gold box whose fill is solid on the right and fades out towards the left, a lit edge along its
+        /// top and left, a darker one along the bottom and right, and a second box of the same size behind it, 3 px down-right
+        /// (the "double box"), dark with a faint gold edge. Bright yellow bold NEW on top. No glow.
+        /// </summary>
+        private static RectTransform NewBadgeMw4(RectTransform parent, Vector2 anchor, Vector2 pos, float w, float h, float textSize)
+        {
+            var yellow = Hex("#f7e43a");
+            var gold = Hex("#8a7526");
+            var lit = Hex("#d9bd4a");
+            var root = Box(parent, "New", anchor, pos, new Vector2(w, h));
+            // the box behind: same size, down-right, dark with a faint gold rim
+            var back = Rect(root, "Back", Vector2.zero, Vector2.one, new Vector2(3, -3), new Vector2(3, -3));
+            Img(Fill(back, "Fill"), new Color(.06f, .055f, .03f, .85f)).raycastTarget = false;
+            Img(Fill(back, "Gold"), new Color(gold.r, gold.g, gold.b, .35f), HorizontalFade()).raycastTarget = false;
+            Outline(back, new Color(gold.r, gold.g, gold.b, .55f));
+            // the front box: dark underneath so the text always reads, gold fading from the right to the left
+            Img(Fill(root, "Base"), new Color(.07f, .06f, .025f, .9f)).raycastTarget = false;
+            Img(Fill(root, "Gold"), new Color(gold.r, gold.g, gold.b, .95f), HorizontalFade()).raycastTarget = false;
+            Img(Fill(root, "Floor"), new Color(gold.r, gold.g, gold.b, .28f)).raycastTarget = false; // the left end never goes fully flat
+            // edges: lit top / left, shaded bottom / right
+            Img(Rect(root, "T", new Vector2(0, 1), Vector2.one, new Vector2(0, -1), Vector2.zero), new Color(lit.r, lit.g, lit.b, .9f)).raycastTarget = false;
+            Img(Rect(root, "L", Vector2.zero, new Vector2(0, 1), Vector2.zero, new Vector2(1, 0)), new Color(lit.r, lit.g, lit.b, .95f)).raycastTarget = false;
+            Img(Rect(root, "B", Vector2.zero, new Vector2(1, 0), Vector2.zero, new Vector2(0, 1)), new Color(gold.r * .6f, gold.g * .6f, gold.b * .6f, .9f)).raycastTarget = false;
+            Img(Rect(root, "R", new Vector2(1, 0), Vector2.one, new Vector2(-1, 1), new Vector2(0, -1)), new Color(gold.r * .8f, gold.g * .8f, gold.b * .8f, .7f)).raycastTarget = false;
+            var t = Label(root, "Text", "NEW", textSize, yellow, TextAnchor.MiddleCenter, true, 1.5f);
+            ((Graphic)t).raycastTarget = false;
+            return root;
+        }
+
+        private static RectTransform NewBadgeOld(RectTransform parent, Vector2 anchor, Vector2 pos, float w, float h, float textSize)
+        {
             var yellow = Hex("#f4e23c");
             var root = Box(parent, "New", anchor, pos, new Vector2(w, h));
             var glow = Img(Box(root, "Glow", new Vector2(.5f, .5f), Vector2.zero, new Vector2(w * 2.2f, h * 2.6f)), new Color(yellow.r, yellow.g, yellow.b, .12f), Radial());

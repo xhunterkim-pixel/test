@@ -1,4 +1,4 @@
-# LevelGate Progression (0.9.91, test build)
+# LevelGate Progression (0.9.92, test build)
 
 A Call of Duty style **Progression** screen inside Tarkov's main menu. It adds a
 **PROGRESSION** button to the menu bar next to Character, Trading, Flea Market and the rest.
@@ -18,6 +18,10 @@ A Call of Duty style **Progression** screen inside Tarkov's main menu. It adds a
   - P or Esc closes the screen.
 - It works on its own and never changes LevelGate. It only **reads**
   `BepInEx\plugins\LevelGate\config\level_requirements.json`, and picks up changes to that file while the game runs.
+
+## 0.9.92 (F12 › CURRENTLY TESTING)
+- **Name Reflection** replaces 0.9.91's Name Glow: the big name's letters cast a soft light-grey reflection that falls down (a touch to the right), like MW4's "HAN 86", instead of a halo all round. Dials: Name Reflection, Softness, Distance (0 = right behind the letters).
+- **NEW Tag Look: MW4** — a gold box solid on the right and fading out to the left, lit top/left edges, and a second dark box behind it offset down-right (the double box). No glow. **Old** brings back 0.9.91's tag. The main-menu NEW tag changes after a game restart; the screen's tags on the next open.
 
 ## 0.9.91
 - **Name Glow** (F12 › CURRENTLY TESTING, with Name Glow Softness): a soft light halo hugging the big name's letters, like MW4's weapon names. It's drawn by the text's own underlay; shaders without an underlay get a faint light behind the name instead, and the log says which.

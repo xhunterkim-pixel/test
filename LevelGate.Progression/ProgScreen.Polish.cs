@@ -40,8 +40,11 @@ namespace LevelGate.Progression
             public static bool QuietDuringFx => On && (ProgressionPlugin.TestQuietFx?.Value ?? true);
             // 0.9.91: off — the glow behind the name was wanted, not a line (fixed: a saved 0.9.9 value doesn't bring it back)
             public static HeroLine Subtitle => HeroLine.Off;
-            public static float NameGlowK => On ? Pct(ProgressionPlugin.TestNameGlow, 60) : 0f;
-            public static float NameGlowSoft => Pct(ProgressionPlugin.TestNameGlowSoftness, 85);
+            // 0.9.92: the name's glow became a light reflection falling down (MW4 "HAN 86"); new keys, so the 0.9.91 values don't carry over
+            public static float NameGlowK => On ? Pct(ProgressionPlugin.TestNameShadow, 50) : 0f;
+            public static float NameGlowSoft => Pct(ProgressionPlugin.TestNameShadowSoftness, 55);
+            public static float NameGlowDrop => Pct(ProgressionPlugin.TestNameShadowDistance, 60);
+            public static bool Mw4NewTag => (ProgressionPlugin.TestNewTag?.Value ?? NewTagLook.MW4) == NewTagLook.MW4;
             public static float SubtitleAlpha => Pct(ProgressionPlugin.TestHeroSubtitleOpacity, 70);
             public static float AmbientLightK => On ? Pct(ProgressionPlugin.TestAmbientLight, 140) : 1f;
             public static bool MixedLight => On && (ProgressionPlugin.TestLightHue?.Value ?? LightHue.Mixed) == LightHue.Mixed;
@@ -58,6 +61,7 @@ namespace LevelGate.Progression
 
         public enum HeroLine { Description, FullName, Off }
         public enum LightHue { Mixed, Rank }
+        public enum NewTagLook { MW4, Old }
 
         // ---------------------------------------------------------------- MW4 frames: strong in the middle, fading at the ends
 
@@ -132,33 +136,35 @@ namespace LevelGate.Progression
         // ---------------------------------------------------------------- MW4's soft glow behind the hero's name (0.9.91)
 
         /// <summary>
-        /// A soft light halo hugging the letters (MW4's "HAN 86"), drawn by the text's own underlay pass on an instance of its
-        /// material — no extra graphics. Shaders without an underlay get a faint radial light behind the name instead.
+        /// MW4's "HAN 86": each letter casts a soft light-grey reflection that falls DOWN (a touch to the right) — not a halo
+        /// all round. Drawn by the text's own underlay pass on an instance of its material (no extra graphics), offset
+        /// downwards. Shaders without an underlay get a faint soft strip under the name instead.
         /// </summary>
         private static void NameGlow(Component label)
         {
             float k = Polish.NameGlowK;
             if (label == null || k <= 0) return;
+            float drop = Mathf.Clamp01(Polish.NameGlowDrop);
             try
             {
                 var mat = Refl.Get(label, "fontMaterial") as Material; // the label's own copy: other text keeps its look
                 if (mat != null && mat.HasProperty("_UnderlayColor"))
                 {
                     mat.EnableKeyword("UNDERLAY_ON");
-                    mat.SetColor("_UnderlayColor", new Color(1f, .96f, .88f, Mathf.Clamp01(.42f * k)));
+                    mat.SetColor("_UnderlayColor", new Color(.86f, .85f, .80f, Mathf.Clamp01(.6f * k)));
                     if (mat.HasProperty("_UnderlaySoftness")) mat.SetFloat("_UnderlaySoftness", Mathf.Clamp01(Polish.NameGlowSoft));
-                    if (mat.HasProperty("_UnderlayDilate")) mat.SetFloat("_UnderlayDilate", Mathf.Lerp(.1f, .6f, Mathf.Clamp01(k)));
-                    if (mat.HasProperty("_UnderlayOffsetX")) mat.SetFloat("_UnderlayOffsetX", 0f);
-                    if (mat.HasProperty("_UnderlayOffsetY")) mat.SetFloat("_UnderlayOffsetY", -.2f);
-                    L.Info($"name glow: text underlay on ({mat.shader?.name}), {k * 100:0}%");
+                    if (mat.HasProperty("_UnderlayDilate")) mat.SetFloat("_UnderlayDilate", .05f);
+                    if (mat.HasProperty("_UnderlayOffsetX")) mat.SetFloat("_UnderlayOffsetX", .18f * drop);
+                    if (mat.HasProperty("_UnderlayOffsetY")) mat.SetFloat("_UnderlayOffsetY", -drop);
+                    L.Info($"name reflection: text underlay on ({mat.shader?.name}), {k * 100:0}%, softness {Polish.NameGlowSoft * 100:0}%, drop {drop * 100:0}%");
                     return;
                 }
-                L.Info($"name glow: the text shader ({mat?.shader?.name ?? "none"}) has no underlay — a soft light behind the name instead");
+                L.Info($"name reflection: the text shader ({mat?.shader?.name ?? "none"}) has no underlay — a soft strip under the name instead");
             }
             catch (System.Exception e) { L.ErrorOnce("name glow", e); }
             var rt = ((Component)label).transform as RectTransform;
             if (rt == null) return;
-            var glow = Ui.Img(Ui.Rect(rt, "Glow", new Vector2(0, 0), new Vector2(.5f, 1), new Vector2(-30, -16), new Vector2(40, 16)), new Color(1f, .96f, .88f, .09f * k), Ui.Radial());
+            var glow = Ui.Img(Ui.Rect(rt, "Glow", new Vector2(0, 0), new Vector2(.5f, .6f), new Vector2(-6, -6 * drop - 4), new Vector2(20, -2)), new Color(.86f, .85f, .80f, .07f * k), Ui.Radial());
             glow.raycastTarget = false;
             glow.transform.SetAsFirstSibling();
         }

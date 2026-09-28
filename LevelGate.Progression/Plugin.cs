@@ -26,7 +26,7 @@ namespace LevelGate.Progression
         public const string Guid = "com.kkyangg.levelgate.progression";
         public const string Name = "LevelGate Progression";
         // MAJOR.MINOR.PATCH — see CHANGELOG.md
-        public const string Version = "0.9.91";
+        public const string Version = "0.9.92";
 
         internal static ProgressionPlugin Instance;
         internal static ConfigEntry<KeyboardShortcut> OpenKey;
@@ -39,10 +39,11 @@ namespace LevelGate.Progression
         internal static readonly ConfigEntry<bool>[] TestMw = new ConfigEntry<bool>[11];
         // 0.9.9 polish pass (F12 > CURRENTLY TESTING): Polish off = exactly 0.9.81
         internal static ConfigEntry<bool> TestPolish, TestQuietFx, TestNeutralPips;
-        internal static ConfigEntry<int> TestNameGlow, TestNameGlowSoftness, TestDecorNoise, TestMicroLabels, TestAmbient, TestFlourish, TestBorderFade, TestCardRest, TestCardLocked, TestHeroSubtitleOpacity, TestAmbientLight;
+        internal static ConfigEntry<int> TestNameGlow, TestNameGlowSoftness, TestNameShadow, TestNameShadowSoftness, TestNameShadowDistance, TestDecorNoise, TestMicroLabels, TestAmbient, TestFlourish, TestBorderFade, TestCardRest, TestCardLocked, TestHeroSubtitleOpacity, TestAmbientLight;
         internal static ConfigEntry<float> TestSmallText, TestTipDelay;
         internal static ConfigEntry<ProgScreen.HeroLine> TestHeroSubtitle;
         internal static ConfigEntry<ProgScreen.LightHue> TestLightHue;
+        internal static ConfigEntry<ProgScreen.NewTagLook> TestNewTag;
         internal static bool Mw(int n) => TestMw[n]?.Value ?? true;
         internal static ConfigEntry<float> TestRevealTime;
         internal static ConfigEntry<ProgScreen.LoadInStyle> TestRevealStyle;
@@ -277,7 +278,16 @@ namespace LevelGate.Progression
                 "A soft light halo hugging the big name's letters, like MW4's weapon names, in % (0 = off).", 210, new AcceptableValueRange<int>(0, 200)));
             TestNameGlowSoftness = Config.Bind(T, "NameGlowSoftness", 85, Desc(
                 "How soft (spread out) that glow is, in %.", 209, new AcceptableValueRange<int>(10, 100)));
-            var polishDials = new HashSet<ConfigEntryBase> { TestNameGlow, TestNameGlowSoftness, TestPolish, TestDecorNoise, TestMicroLabels, TestBorderFade, TestAmbient, TestQuietFx, TestFlourish, TestAmbientLight, TestLightHue,
+            // 0.9.92: the name's glow → a reflection falling down, like MW4's "HAN 86" (new keys: 0.9.91's halo values don't carry over)
+            TestNameShadow = Config.Bind(T, "NameReflection", 50, Desc(
+                "The big name's letters cast a soft light reflection falling down, like MW4's weapon names, in % (0 = off).", 208, new AcceptableValueRange<int>(0, 150)));
+            TestNameShadowSoftness = Config.Bind(T, "NameReflectionSoftness", 55, Desc(
+                "How soft (blurred) that reflection is, in %.", 207, new AcceptableValueRange<int>(10, 100)));
+            TestNameShadowDistance = Config.Bind(T, "NameReflectionDistance", 60, Desc(
+                "How far down the reflection falls from the letters, in % (0 = right behind them, a plain glow).", 206, new AcceptableValueRange<int>(0, 100)));
+            TestNewTag = Config.Bind(T, "NewTagLook", ProgScreen.NewTagLook.MW4, Desc(
+                "The NEW tag: MW4 (gold box fading out to the left, a second box behind it) or Old (0.9.91's outlined dark box).", 205));
+            var polishDials = new HashSet<ConfigEntryBase> { TestNameShadow, TestNameShadowSoftness, TestNameShadowDistance, TestNewTag, TestNameGlow, TestNameGlowSoftness, TestPolish, TestDecorNoise, TestMicroLabels, TestBorderFade, TestAmbient, TestQuietFx, TestFlourish, TestAmbientLight, TestLightHue,
                 TestCardRest, TestCardLocked, TestSmallText, TestNeutralPips, TestHeroSubtitle, TestHeroSubtitleOpacity, TestTipDelay };
             var liveDials = new HashSet<ConfigEntryBase> { TestTipDelay, TestAmbient, TestQuietFx, TestFlourish };
             Config.SettingChanged += (_, a) =>
@@ -396,6 +406,7 @@ namespace LevelGate.Progression
                 ["AmbientMotion"] = "Ambient Motion (%)", ["QuietDuringEffects"] = "Quiet During Effects", ["Flourish"] = "Flourish (%)", ["AmbientLight"] = "Ambient Light (%)",
                 ["LightColours"] = "Ambient Light Colours", ["CardRest"] = "Card Rest Opacity (%)", ["CardLocked"] = "Card Locked Opacity (%)", ["SmallText"] = "Small Text Minimum (px)",
                 ["NeutralPips"] = "Neutral Rank Pips", ["HeroSubtitle"] = "Line Under Name", ["HeroSubtitleOpacity"] = "Line Under Name Opacity (%)", ["TooltipDelay"] = "Tooltip Delay (s)", ["NameGlow"] = "Name Glow (%)", ["NameGlowSoftness"] = "Name Glow Softness (%)",
+                ["NameReflection"] = "Name Reflection (%)", ["NameReflectionSoftness"] = "Name Reflection Softness (%)", ["NameReflectionDistance"] = "Name Reflection Distance (%)", ["NewTagLook"] = "NEW Tag Look",
             };
             var titles = new Dictionary<string, string>
             {
@@ -403,8 +414,9 @@ namespace LevelGate.Progression
                 ["5. Testing"] = "5. CURRENTLY TESTING",
             };
             // what most players never touch: under F12's "Advanced settings" (the Preview tools too); the tuning section is hidden
+            // 0.9.92: the 0.9.91 glow is replaced by the reflection below; being tried now: the reflection and the MW4 NEW tag
             // 0.9.91: the 0.9.9 dials are tuned (your values are the defaults: Ambient Motion 50, the line under the name off); being tried now:
-            var testingNow = new HashSet<string> { "NameGlow", "NameGlowSoftness" };
+            var testingNow = new HashSet<string> { "NameReflection", "NameReflectionSoftness", "NameReflectionDistance", "NewTagLook" };
             var advanced = new HashSet<string> { "RefreshIcons", "UseGameSounds", "Vignette", "RedGlow", "BlurBackground", "HideMainMenu", "PatternMotion" };
             foreach (var kv in Config)
             {
