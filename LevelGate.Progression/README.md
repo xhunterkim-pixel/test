@@ -1,4 +1,4 @@
-# LevelGate Progression (0.9.92, test build)
+# LevelGate Progression (0.9.93, test build)
 
 A Call of Duty style **Progression** screen inside Tarkov's main menu. It adds a
 **PROGRESSION** button to the menu bar next to Character, Trading, Flea Market and the rest.
@@ -18,6 +18,9 @@ A Call of Duty style **Progression** screen inside Tarkov's main menu. It adds a
   - P or Esc closes the screen.
 - It works on its own and never changes LevelGate. It only **reads**
   `BepInEx\plugins\LevelGate\config\level_requirements.json`, and picks up changes to that file while the game runs.
+
+## 0.9.93
+- **Panels and cards back to 0.9.81's look** (you preferred it): the soft panel light (inner glow, lit edge, glass, tile / card sheen) is no longer dimmed by Decor Noise, and the cards are back at 100% (locked 85%). New F12 › CURRENTLY TESTING dials if you want to move them: **Panel Light** (100 = 0.9.81), **Card Opacity**, **Locked Card Opacity**. The scanlines / scratches / dither stay at the 0.9.9 Decor Noise level.
 
 ## 0.9.92 (F12 › CURRENTLY TESTING)
 - **Name Reflection** replaces 0.9.91's Name Glow: the big name's letters cast a soft light-grey reflection that falls down (a touch to the right), like MW4's "HAN 86", instead of a halo all round. Dials: Name Reflection, Softness, Distance (0 = right behind the letters).

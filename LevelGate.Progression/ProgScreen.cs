@@ -394,19 +394,19 @@ namespace LevelGate.Progression
                 : mid > .6f ? Ui.Rect(frame, "EdgeLight", new Vector2(0, .08f), new Vector2(0, .92f), new Vector2(0, 0), new Vector2(2, 0))
                 : Ui.Rect(frame, "EdgeLight", new Vector2(.08f, 1), new Vector2(.92f, 1), new Vector2(0, -2), new Vector2(0, 0));
             if (mid >= .4f && mid <= .6f) edge.localEulerAngles = Vector3.zero;
-            var el = Ui.Detail(Ui.Img(edge, new Color(1, 1, 1, .16f), mid >= .4f && mid <= .6f ? Ui.Radial() : Ui.VerticalFade()), .16f);
+            var el = Ui.Detail(Ui.Img(edge, new Color(1, 1, 1, .16f), mid >= .4f && mid <= .6f ? Ui.Radial() : Ui.VerticalFade()), .16f * Polish.PanelLight, false); // 0.9.92: Panel Light, not Decor Noise
             el.raycastTarget = false; el.type = Image.Type.Simple; el.preserveAspect = false;
             var inner = Ui.Fill(frame, "In", BorderWidth);
             Ui.Img(inner, PanelBg);
             // the glow fading inward from the thin line, over the background and under the content
-            var ig = Ui.Detail(Ui.Img(Ui.Fill(inner, "InnerGlow"), new Color(.82f, .88f, .9f, .11f), Ui.InnerGlow()), .11f);
+            var ig = Ui.Detail(Ui.Img(Ui.Fill(inner, "InnerGlow"), new Color(.82f, .88f, .9f, .11f), Ui.InnerGlow()), .11f * Polish.PanelLight, false);
             ig.type = Image.Type.Sliced; ig.raycastTarget = false;
             // 70 / 30: the panel bodies stay calm; the detail sits in the focal 30% (the list's head and tabs, the picked /
             // your card, the picked tile, the XP header). The details panel only keeps a soft glass light (low detail).
             if (mid > .6f)
             {
                 var glass = Ui.Img(Ui.Box(inner, "Glass", new Vector2(.15f, .9f), Vector2.zero, new Vector2(520, 360)), new Color(1, 1, 1, .03f), Ui.Radial());
-                glass.raycastTarget = false; Ui.AddGrit(glass, .03f);
+                glass.raycastTarget = false; Ui.AddGrit(glass, .03f * Polish.PanelLight, false);
             }
             return inner;
         }
@@ -2335,7 +2335,7 @@ namespace LevelGate.Progression
             // like a stash cell / the prestige reward tiles: the picture using the whole tile, its short name top-right over it
             // (no per-item background tint: removed on request)
             var thumb = Ui.Rect(inner, "Thumb", Vector2.zero, Vector2.one, new Vector2(0, 4), new Vector2(0, -TileTop));
-            Ui.Detail(Ui.Img(Ui.Fill(inner, "Light"), new Color(1, 1, 1, .045f), Ui.Radial()), .045f);
+            Ui.Detail(Ui.Img(Ui.Fill(inner, "Light"), new Color(1, 1, 1, .045f), Ui.Radial()), .045f * Polish.PanelLight, false);
             var placeholder = Ui.Label(Ui.Fill(thumb, "Placeholder", S2), "Text", "", TCaps, Dim, TextAnchor.MiddleCenter, false, 0, true);
             AddLoader(placeholder, -2);
             if (Mw(8))
@@ -2373,9 +2373,9 @@ namespace LevelGate.Progression
             v.Dither.raycastTarget = false; v.Dither.enabled = false; Ui.Detail(v.Dither, .16f);
             // picked: a very light reflection (a soft sheen over the upper half, a glossy line down the right edge), like CoD's
             v.Sheen = Ui.Img(Ui.Box(inner, "Sheen", new Vector2(.62f, .66f), Vector2.zero, new Vector2(170, 110)), new Color(1, 1, 1, .07f), Ui.Radial());
-            v.Sheen.raycastTarget = false; v.Sheen.enabled = false; Ui.Detail(v.Sheen, .07f);
+            v.Sheen.raycastTarget = false; v.Sheen.enabled = false; Ui.Detail(v.Sheen, .07f * Polish.PanelLight, false);
             v.Gloss = Ui.Img(Ui.Rect(inner, "Gloss", new Vector2(1, .1f), new Vector2(1, .9f), new Vector2(-3, 0), new Vector2(-2, 0)), new Color(1, 1, 1, .22f), Ui.VerticalFade());
-            v.Gloss.raycastTarget = false; v.Gloss.enabled = false; Ui.Detail(v.Gloss, .22f);
+            v.Gloss.raycastTarget = false; v.Gloss.enabled = false; Ui.Detail(v.Gloss, .22f * Polish.PanelLight, false);
             // the short name, top-right like the game's cells (two lines at most; look-alikes say what sets them apart)
             // a soft dark fade under the name, so two-line names stay readable over the picture
             var nameFade = Ui.Img(Ui.Rect(inner, "NameFade", new Vector2(0, 1), Vector2.one, new Vector2(0, -40), Vector2.zero), new Color(0, 0, 0, .5f), Ui.VerticalFade());
@@ -3819,9 +3819,9 @@ namespace LevelGate.Progression
                 _cardDither = Ui.Img(Ui.Rect(inner, "Dither", new Vector2(0, 1), new Vector2(.6f, 1), new Vector2(10, -12), new Vector2(0, -3)), new Color(1, 1, 1, .12f), Ui.Dither());
                 _cardDither.raycastTarget = false; _cardDither.enabled = false; Ui.Detail(_cardDither, .12f);
                 _sheen = Ui.Img(Ui.Box(inner, "Sheen", new Vector2(.6f, .7f), Vector2.zero, new Vector2(320, 170)), new Color(1, 1, 1, .06f), Ui.Radial());
-                _sheen.raycastTarget = false; _sheen.enabled = false; Ui.Detail(_sheen, .06f);
+                _sheen.raycastTarget = false; _sheen.enabled = false; Ui.Detail(_sheen, .06f * Polish.PanelLight, false);
                 _gloss = Ui.Img(Ui.Rect(inner, "Gloss", new Vector2(1, .12f), new Vector2(1, .88f), new Vector2(-4, 0), new Vector2(-3, 0)), new Color(1, 1, 1, .2f), Ui.VerticalFade());
-                _gloss.raycastTarget = false; _gloss.enabled = false; Ui.Detail(_gloss, .2f);
+                _gloss.raycastTarget = false; _gloss.enabled = false; Ui.Detail(_gloss, .2f * Polish.PanelLight, false);
                 _curScan = Ui.Img(Ui.Fill(inner, "Scan"), Ui.Hex(Orange, .045f), Ui.Scanlines());
                 _curScan.type = Image.Type.Tiled; _curScan.raycastTarget = false; _curScan.enabled = false; Ui.Detail(_curScan, .045f);
                 _cur = Ui.Img(Ui.Rect(inner, "Current", new Vector2(0, 1), Vector2.one, new Vector2(10, -3), Vector2.zero), Ui.Hex(Orange));

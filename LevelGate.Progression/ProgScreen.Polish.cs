@@ -33,8 +33,11 @@ namespace LevelGate.Progression
             public static float AmbientK => On ? Pct(ProgressionPlugin.TestAmbient, 50) : 1f; // 0.9.91: your pick (was 40)
             public static float FlourishK => On ? Pct(ProgressionPlugin.TestFlourish, 65) : 1f;
             public static float BorderFade => On ? Pct(ProgressionPlugin.TestBorderFade, 70) : 0f;
-            public static float CardRest => On ? Pct(ProgressionPlugin.TestCardRest, 90) : 1f;
-            public static float CardLocked => On ? Pct(ProgressionPlugin.TestCardLocked, 72) : .85f;
+            // 0.9.92: back to 0.9.81's panels and cards (you preferred them): new keys so the saved 90 / 72 don't stick
+            public static float CardRest => On ? Pct(ProgressionPlugin.TestCardOpacity, 100) : 1f;
+            public static float CardLocked => On ? Pct(ProgressionPlugin.TestCardLockedOpacity, 85) : .85f;
+            /// <summary>The panels' and cards' soft light layers (inner glow, lit edge, glass, sheen, gloss); 100 = 0.9.81.</summary>
+            public static float PanelLight => On ? Pct(ProgressionPlugin.TestPanelLight, 100) : 1f;
             public static float SmallText => On ? (ProgressionPlugin.TestSmallText?.Value ?? 10.5f) : 0f;
             public static bool NeutralPips => On && (ProgressionPlugin.TestNeutralPips?.Value ?? true);
             public static bool QuietDuringFx => On && (ProgressionPlugin.TestQuietFx?.Value ?? true);

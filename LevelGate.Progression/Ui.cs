@@ -1097,10 +1097,10 @@ namespace LevelGate.Progression
         internal static float GritK => 2f * DetailK;
 
         /// <summary>A scratch / smudge / grain layer: registered and shown at the current detailing (culled at 0).</summary>
-        internal static Image AddGrit(Image img, float alpha)
+        internal static Image AddGrit(Image img, float alpha, bool decor = true)
         {
             if (Grits.Count > 3000) Grits.RemoveAll(x => x.Img == null);
-            alpha *= ProgScreen.Polish.DecorK; // 0.9.9 Decor Noise
+            if (decor) alpha *= ProgScreen.Polish.DecorK; // 0.9.9 Decor Noise (panel light has its own dial)
             Grits.Add((img, alpha));
             Fade(img, alpha * GritK);
             return img;

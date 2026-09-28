@@ -26,7 +26,7 @@ namespace LevelGate.Progression
         public const string Guid = "com.kkyangg.levelgate.progression";
         public const string Name = "LevelGate Progression";
         // MAJOR.MINOR.PATCH — see CHANGELOG.md
-        public const string Version = "0.9.92";
+        public const string Version = "0.9.93";
 
         internal static ProgressionPlugin Instance;
         internal static ConfigEntry<KeyboardShortcut> OpenKey;
@@ -39,7 +39,7 @@ namespace LevelGate.Progression
         internal static readonly ConfigEntry<bool>[] TestMw = new ConfigEntry<bool>[11];
         // 0.9.9 polish pass (F12 > CURRENTLY TESTING): Polish off = exactly 0.9.81
         internal static ConfigEntry<bool> TestPolish, TestQuietFx, TestNeutralPips;
-        internal static ConfigEntry<int> TestNameGlow, TestNameGlowSoftness, TestNameShadow, TestNameShadowSoftness, TestNameShadowDistance, TestDecorNoise, TestMicroLabels, TestAmbient, TestFlourish, TestBorderFade, TestCardRest, TestCardLocked, TestHeroSubtitleOpacity, TestAmbientLight;
+        internal static ConfigEntry<int> TestNameGlow, TestNameGlowSoftness, TestNameShadow, TestNameShadowSoftness, TestNameShadowDistance, TestPanelLight, TestCardOpacity, TestCardLockedOpacity, TestDecorNoise, TestMicroLabels, TestAmbient, TestFlourish, TestBorderFade, TestCardRest, TestCardLocked, TestHeroSubtitleOpacity, TestAmbientLight;
         internal static ConfigEntry<float> TestSmallText, TestTipDelay;
         internal static ConfigEntry<ProgScreen.HeroLine> TestHeroSubtitle;
         internal static ConfigEntry<ProgScreen.LightHue> TestLightHue;
@@ -285,9 +285,15 @@ namespace LevelGate.Progression
                 "How soft (blurred) that reflection is, in %.", 207, new AcceptableValueRange<int>(10, 100)));
             TestNameShadowDistance = Config.Bind(T, "NameReflectionDistance", 60, Desc(
                 "How far down the reflection falls from the letters, in % (0 = right behind them, a plain glow).", 206, new AcceptableValueRange<int>(0, 100)));
+            TestPanelLight = Config.Bind(T, "PanelLight", 100, Desc(
+                "The panels' and cards' soft light (inner glow, lit edge, glass, sheen), in % of 0.9.81 (0.9.9–0.9.91 had it at 55).", 204, new AcceptableValueRange<int>(0, 150)));
+            TestCardOpacity = Config.Bind(T, "CardOpacity", 100, Desc(
+                "Level cards that aren't picked / current, in % (0.9.81 = 100; 0.9.9–0.9.91 had 90).", 203, new AcceptableValueRange<int>(50, 100)));
+            TestCardLockedOpacity = Config.Bind(T, "CardLockedOpacity", 85, Desc(
+                "Locked level cards, in % (0.9.81 = 85; 0.9.9–0.9.91 had 72).", 202, new AcceptableValueRange<int>(40, 100)));
             TestNewTag = Config.Bind(T, "NewTagLook", ProgScreen.NewTagLook.MW4, Desc(
                 "The NEW tag: MW4 (gold box fading out to the left, a second box behind it) or Old (0.9.91's outlined dark box).", 205));
-            var polishDials = new HashSet<ConfigEntryBase> { TestNameShadow, TestNameShadowSoftness, TestNameShadowDistance, TestNewTag, TestNameGlow, TestNameGlowSoftness, TestPolish, TestDecorNoise, TestMicroLabels, TestBorderFade, TestAmbient, TestQuietFx, TestFlourish, TestAmbientLight, TestLightHue,
+            var polishDials = new HashSet<ConfigEntryBase> { TestNameShadow, TestNameShadowSoftness, TestNameShadowDistance, TestNewTag, TestPanelLight, TestCardOpacity, TestCardLockedOpacity, TestNameGlow, TestNameGlowSoftness, TestPolish, TestDecorNoise, TestMicroLabels, TestBorderFade, TestAmbient, TestQuietFx, TestFlourish, TestAmbientLight, TestLightHue,
                 TestCardRest, TestCardLocked, TestSmallText, TestNeutralPips, TestHeroSubtitle, TestHeroSubtitleOpacity, TestTipDelay };
             var liveDials = new HashSet<ConfigEntryBase> { TestTipDelay, TestAmbient, TestQuietFx, TestFlourish };
             Config.SettingChanged += (_, a) =>
@@ -406,7 +412,7 @@ namespace LevelGate.Progression
                 ["AmbientMotion"] = "Ambient Motion (%)", ["QuietDuringEffects"] = "Quiet During Effects", ["Flourish"] = "Flourish (%)", ["AmbientLight"] = "Ambient Light (%)",
                 ["LightColours"] = "Ambient Light Colours", ["CardRest"] = "Card Rest Opacity (%)", ["CardLocked"] = "Card Locked Opacity (%)", ["SmallText"] = "Small Text Minimum (px)",
                 ["NeutralPips"] = "Neutral Rank Pips", ["HeroSubtitle"] = "Line Under Name", ["HeroSubtitleOpacity"] = "Line Under Name Opacity (%)", ["TooltipDelay"] = "Tooltip Delay (s)", ["NameGlow"] = "Name Glow (%)", ["NameGlowSoftness"] = "Name Glow Softness (%)",
-                ["NameReflection"] = "Name Reflection (%)", ["NameReflectionSoftness"] = "Name Reflection Softness (%)", ["NameReflectionDistance"] = "Name Reflection Distance (%)", ["NewTagLook"] = "NEW Tag Look",
+                ["NameReflection"] = "Name Reflection (%)", ["NameReflectionSoftness"] = "Name Reflection Softness (%)", ["NameReflectionDistance"] = "Name Reflection Distance (%)", ["NewTagLook"] = "NEW Tag Look", ["PanelLight"] = "Panel Light (%)", ["CardOpacity"] = "Card Opacity (%)", ["CardLockedOpacity"] = "Locked Card Opacity (%)",
             };
             var titles = new Dictionary<string, string>
             {
@@ -416,7 +422,7 @@ namespace LevelGate.Progression
             // what most players never touch: under F12's "Advanced settings" (the Preview tools too); the tuning section is hidden
             // 0.9.92: the 0.9.91 glow is replaced by the reflection below; being tried now: the reflection and the MW4 NEW tag
             // 0.9.91: the 0.9.9 dials are tuned (your values are the defaults: Ambient Motion 50, the line under the name off); being tried now:
-            var testingNow = new HashSet<string> { "NameReflection", "NameReflectionSoftness", "NameReflectionDistance", "NewTagLook" };
+            var testingNow = new HashSet<string> { "NameReflection", "NameReflectionSoftness", "NameReflectionDistance", "NewTagLook", "PanelLight", "CardOpacity", "CardLockedOpacity" };
             var advanced = new HashSet<string> { "RefreshIcons", "UseGameSounds", "Vignette", "RedGlow", "BlurBackground", "HideMainMenu", "PatternMotion" };
             foreach (var kv in Config)
             {
