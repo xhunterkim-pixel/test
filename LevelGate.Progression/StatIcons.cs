@@ -38,6 +38,7 @@ namespace LevelGate.Progression
             { "Caliber", new[] { "Caliber", "AmmoCaliber" } },
             { "Durability", new[] { "Durability", "MaxDurability" } },
             { "Material", new[] { "ArmorMaterial", "Material" } },
+            { "Container size", new[] { "ContainerSize" } },
             { "Capacity", new[] { "ContainerSize", "Capacity", "GridSize" } },
             { "Movement", new[] { "ChangeMovementSpeed", "MovementSpeed", "SpeedPenalty" } },
             { "Turning", new[] { "ChangeTurningSpeed", "TurningSpeed", "MouseSensitivity", "MousePenalty" } },

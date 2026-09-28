@@ -40,6 +40,14 @@ Versions are **MAJOR.MINOR.PATCH**:
 
 ## LevelGate Progression (BepInEx plugin, separate DLL)
 
+### 0.9.52
+- **Backpacks (and rigs) lead with CONTAINER SIZE**: how many cells they hold, as a big stat with its meter (it was a small "Capacity … slots" strip).
+- **Mouse wheel over the cards moves one level** at a time (it jumped a whole page); the page turns when you scroll past its edge.
+- **F12 Preview shows NEW tags** too: the previewed levels' rewards and cards are tagged NEW like a real level-up (for the preview only, nothing saved).
+- **Locked level cards are darker** than reached ones (their pictures dimmed, a little less when hovered / picked).
+- **New unlock animation on the cards**: the orange flash is gone; each newly unlocked card now lifts to a soft white and eases back to its unlocked look (with a small 2% lift), one per unlock.
+- A stim's long list of effects no longer squeezes the category and name together at the top of the right panel (effect rows a little shorter, the title keeps its height).
+
 ### 0.9.51
 - **NEW tags stay until you deal with them** (they used to vanish as soon as the screen closed): every reward from levels you reached since your last visit is tagged NEW and keeps it (across visits and game restarts, per character) until you click it. Each of those level cards shows NEW in its bottom-right corner (your current level's too) until you pick that level yourself or click all its new rewards. Kept in a hidden setting (NewState).
 

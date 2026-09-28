@@ -922,6 +922,7 @@ namespace LevelGate.Progression
                 _xpPending = true;
                 _openedAt = Mathf.Min(_openedAt, Time.unscaledTime - 1); // no fade-in wait
                 L.Info($"preview: {kind} — level {la} → {lb} ({from} → {to} XP, made up; nothing is saved); {_xpSteps.Count} step(s), ~{TotalDur():0.0} s");
+                NewTags.Preview(la, lb); // the previewed levels' rewards and cards show NEW, like a real level-up (not saved)
                 if (ProgressionPlugin.ConfigWindowOpen()) Toast.Show("Preview ready — close F12 to watch it");
             }
             catch (Exception e) { L.Error("preview", e); }
@@ -951,6 +952,7 @@ namespace LevelGate.Progression
         {
             if (!_xpSim && _simLevel == 0) return;
             _xpSim = false; _simLevel = 0; _simXp = 0; _xpCardLevel = 0;
+            NewTags.EndPreview();
             L.Info("preview: ended — back to your real level / XP");
         }
 

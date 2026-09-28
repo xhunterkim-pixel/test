@@ -110,13 +110,31 @@ namespace LevelGate.Progression
             return n;
         }
 
-        public static bool Item(string tpl) => tpl != null && Mine().Items.Contains(tpl);
-        public static bool Level(int level) => Mine().Levels.Contains(level);
+        // an F12 preview's levels: NEW for the preview only (never saved, gone when it ends)
+        private static readonly HashSet<string> _simItems = new HashSet<string>();
+        private static readonly HashSet<int> _simLevels = new HashSet<int>();
+
+        public static void Preview(int from, int to)
+        {
+            _simItems.Clear(); _simLevels.Clear();
+            foreach (var kv in ProgData.Levels) if (kv.Value > from && kv.Value <= to) _simItems.Add(kv.Key);
+            for (int l = from + 1; l <= to; l++) if (ProgData.CountAt(l) > 0) _simLevels.Add(l);
+        }
+
+        public static void EndPreview() { _simItems.Clear(); _simLevels.Clear(); }
+
+        public static bool Item(string tpl) => tpl != null && (_simItems.Contains(tpl) || Mine().Items.Contains(tpl));
+        public static bool Level(int level) => _simLevels.Contains(level) || Mine().Levels.Contains(level);
         public static int Count => Mine().Items.Count;
 
         /// <summary>A reward clicked: no longer NEW; its level's card too once none of that level's rewards are NEW.</summary>
         public static bool ClearItem(string tpl, int level)
         {
+            if (_simItems.Remove(tpl))
+            {
+                if (!ProgData.Levels.Any(kv => kv.Value == level && _simItems.Contains(kv.Key))) _simLevels.Remove(level);
+                return true;
+            }
             var m = Mine();
             if (!m.Items.Remove(tpl)) return false;
             if (!ProgData.Levels.Any(kv => kv.Value == level && m.Items.Contains(kv.Key))) m.Levels.Remove(level);
@@ -126,6 +144,7 @@ namespace LevelGate.Progression
 
         public static bool ClearLevel(int level)
         {
+            if (_simLevels.Remove(level)) return true;
             if (!Mine().Levels.Remove(level)) return false;
             Save();
             return true;

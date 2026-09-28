@@ -561,7 +561,7 @@ namespace LevelGate.Progression
                 if (D(Num("MaxDurability", "Durability")) is double dur && dur > 0 && !(Num("bFirerate") != null)) list.Add(("Durability", $"{dur:0}"));
                 if (Num("ArmorMaterial") is object mat && mat.ToString() is string ms && ms.Length > 0 && ms != "None") list.Add(("Material", Spaced(ms)));
                 int cap = Capacity(t);
-                if (cap > 0) list.Add(("Capacity", $"{cap}<size=60%> slots</size>"));
+                if (cap > 0) list.Add(("Container size", cap.ToString())); // how many cells it holds, as the game's inspect says it
                 if (D(Num("speedPenaltyPercent")) is double sp && Math.Abs(sp) >= .5) list.Add(("Movement", $"{sp:+0;-0}<size=65%>%</size>"));
                 if (D(Num("mousePenalty")) is double mp && Math.Abs(mp) >= .5) list.Add(("Turning", $"{mp:+0;-0}<size=65%>%</size>"));
                 if (D(Num("weaponErgonomicPenalty")) is double ep && Math.Abs(ep) >= .5) list.Add(("Ergo penalty", $"{ep:+0;-0}"));

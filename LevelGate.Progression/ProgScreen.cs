@@ -544,6 +544,9 @@ namespace LevelGate.Progression
 
             _featType = FlowText(info, "Category", TCaps, Grey, false, Caps);                  // CATEGORY
             _featName = FlowText(info, "Name", THero, Text, false, 0, wrap: true);             // Item name
+            // never squeezed when a long list of stats fills the panel (the name slid up into the category)
+            ((Component)_featType).gameObject.AddComponent<LayoutElement>().minHeight = 15;
+            ((Component)_featName).gameObject.AddComponent<LayoutElement>().minHeight = 28;
             Rule(info, S1);
             _majorRow = Row(info, "Major", S4);                                                 // DAMAGE  PENETRATION …
             // WEIGHT  SIZE  CALIBER (a second line when there are more than fit the grid)
@@ -784,6 +787,7 @@ namespace LevelGate.Progression
                 case "Penetration": return n / 70f;
                 case "Damage": return n / 200f;
                 case "Durability": return n / 100f;
+                case "Container size": return n / 50f;
                 default: return null;
             }
         }
@@ -824,7 +828,7 @@ namespace LevelGate.Progression
         {
             var cell = Ui.Rect(row, label.Length > 0 ? label : "Empty", Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
             var le = cell.gameObject.AddComponent<LayoutElement>();
-            le.minWidth = 0; le.preferredWidth = 0; le.flexibleWidth = 1; le.minHeight = le.preferredHeight = 28;
+            le.minWidth = 0; le.preferredWidth = 0; le.flexibleWidth = 1; le.minHeight = le.preferredHeight = game ? 23 : 28;
             if (label.Length == 0) return;
             Ui.Img(cell, Ui.Hex("#0b1012", .75f));
             Ui.Img(Ui.Rect(cell, "Edge", Vector2.zero, new Vector2(1, 0), Vector2.zero, new Vector2(0, 1)), Ui.Hex("#2b3438", .7f));
@@ -1937,7 +1941,7 @@ namespace LevelGate.Progression
             Ui.SetSize(_featName, it.Name.Length > 34 ? TTitle - 2 : it.Name.Length > 26 ? TTitle : THero); // long names: smaller, not a lone word on line 2
             // stats: damage / penetration / armor class / resource big; weight / size / caliber small (nothing invented, nothing dropped)
             var facts = GameItems.Facts(it.Tpl);
-            var majorKeys = new[] { "Damage", "Penetration", "Armor class", "Resource", "Energy", "Hydration", "Fire rate", "Ergonomics", "Recoil" };
+            var majorKeys = new[] { "Container size", "Damage", "Penetration", "Armor class", "Resource", "Energy", "Hydration", "Fire rate", "Ergonomics", "Recoil" };
             // armor: durability sits next to the class as a big stat (the class alone looked lost)
             if (facts.Any(f => f.Label == "Armor class")) majorKeys = majorKeys.Concat(new[] { "Durability" }).ToArray();
             var majors = facts.Where(f => majorKeys.Contains(f.Label)).ToList();
@@ -2194,10 +2198,12 @@ namespace LevelGate.Progression
 
             float now = Time.unscaledTime;
             float wheel = input.mouseScrollDelta.y;
-            if (!window && !xpBusy && Mathf.Abs(wheel) > .01f && now - _wheelAt > .3f && MenuHook.Contains(_bottom, input.mousePosition))
+            if (!window && !xpBusy && Mathf.Abs(wheel) > .01f && now - _wheelAt > .12f && MenuHook.Contains(_bottom, input.mousePosition))
             {
                 _wheelAt = now;
-                ShowPage(_page + (wheel < 0 ? 1 : -1), wheel < 0 ? 1 : -1);
+                // one level per notch (it used to jump a whole page); ShowLevel turns the page when it has to
+                int to = Mathf.Clamp(_level + (wheel < 0 ? 1 : -1), 1, ProgData.MaxLevel);
+                if (to != _level) { ShowLevel(to); Sounds.Click(); }
             }
 
             // cards slide in from the side you went to (only while sliding: touching them every frame costs)
@@ -2427,13 +2433,13 @@ namespace LevelGate.Progression
                 TickFloat();
                 if (_flash == null || !_flash.enabled) return;
                 float t = Time.unscaledTime - _flashAt;
-                // up in 0.08 s, out over 0.7 s
-                float a = t < .08f ? t / .08f : Mathf.Clamp01(1 - (t - .08f) / .7f);
-                _flash.color = new Color(.88f, .34f, .18f, .5f * a);
-                // and a small punch: up to 104% and back in 0.3 s
-                float sc = 1 + .04f * Mathf.Sin(Mathf.Clamp01(t / .3f) * Mathf.PI);
+                // unlocked: the card lifts to a soft white (0.12 s, eased) and settles back to its unlocked look over 0.9 s
+                float a = t < .12f ? 1 - Mathf.Pow(1 - t / .12f, 2) : Mathf.Pow(Mathf.Clamp01(1 - (t - .12f) / .9f), 2.2f);
+                _flash.color = new Color(1f, 1f, 1f, .24f * a);
+                // and a gentle lift: up to 102% and back in 0.35 s
+                float sc = 1 + .02f * Mathf.Sin(Mathf.Clamp01(t / .35f) * Mathf.PI);
                 _body.localScale = new Vector3(sc, sc, 1);
-                if (t > .8f) { _flash.enabled = false; _body.localScale = Vector3.one; }
+                if (t > 1.05f) { _flash.enabled = false; _body.localScale = Vector3.one; }
             }
 
             private void TickFloat()
@@ -2606,6 +2612,9 @@ namespace LevelGate.Progression
                 FadeTo(_frame, sel ? Select : _hover ? HoverEdge : Border);
                 _top.enabled = sel;
                 FadeTo(_bg, sel ? Ui.Hex("#172024", .96f) : _hover ? Ui.Hex("#141b1e", .94f) : locked ? Ui.Hex("#0b0e10", .96f) : Ui.Hex("#11171a", .92f));
+                // locked levels sit clearly darker than reached ones: their pictures dimmed (a little less while hovered / picked)
+                var tint = !locked ? Color.white : sel || _hover ? new Color(.7f, .7f, .7f, 1) : new Color(.48f, .48f, .48f, 1);
+                foreach (var pic in _pics) if (pic != null) pic.color = tint;
                 _glow.color = new Color(0, 0, 0, 0); // the orange header is enough for the current level
                 Ui.SetColor(_tier, locked ? Dim : Grey);
                 Ui.SetColor(_count, sel || current ? Text : Grey); // counts stay readable, only the viewing / current one is bright
