@@ -40,6 +40,14 @@ Versions are **MAJOR.MINOR.PATCH**:
 
 ## LevelGate Progression (BepInEx plugin, separate DLL)
 
+### 0.9.49
+- **Grenades, meds and stims show their details** in the right panel, straight from the game's own inspect rows with their icons: explosion delay, contact delay, radius, fragments, damage per fragment; use time, every effect with its duration / strength (SKILL "ATTENTION" Dur. 240sec (+30)…) and the side effects (hands tremor, energy loss…). The first item of each category logs its rows (verbose) so names / values can be checked.
+- **Semi-autos no longer say "Bolt action"** (Desert Eagle…): only the game's own bolt-action flag makes a weapon bolt action; a low template rate reads "Semi-auto".
+- **No lone half strip**: a small stat without a partner (or with a long value) gets the whole line.
+- **Look-alike items are told apart** in the reward list: "Bastion (OD Green)" / "Bastion (MultiCam)" instead of full names cut off right where they differ.
+- **Armor**: durability sits next to the armor class as a big stat with its meter.
+- **Random pattern**: the last 3 worked-out patterns are kept, so one that comes up again shows at once (Marble took ~0.65 s each time).
+
 ### 0.9.48
 - The right panel no longer shows the item's SIZE (grid cells).
 

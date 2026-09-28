@@ -783,8 +783,20 @@ namespace LevelGate.Progression
                 case "Armor class": return n / 6f;
                 case "Penetration": return n / 70f;
                 case "Damage": return n / 200f;
+                case "Durability": return n / 100f;
                 default: return null;
             }
+        }
+
+        /// <summary>An icon from one of the game's own inspect rows (its space kept when there is none).</summary>
+        private static void GameIcon(RectTransform parent, Sprite sp, float size)
+        {
+            var rt = Ui.Rect(parent, "Icon", Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
+            var le = rt.gameObject.AddComponent<LayoutElement>();
+            le.minWidth = le.preferredWidth = le.minHeight = le.preferredHeight = size;
+            if (sp == null) return;
+            var img = Ui.Img(rt, Grey, sp);
+            img.preserveAspect = true;
         }
 
         /// <summary>The game's own icon for a stat (as in its inspect window), or nothing when it has none.</summary>
@@ -804,7 +816,11 @@ namespace LevelGate.Progression
         /// One small stat as the game's inspect window shows them (CALIBER · 762x51, EFFECTIVE DISTANCE · 500 meters):
         /// a dark strip, icon and caps label on the left, the value on the right.
         /// </summary>
-        private static void StatStrip(RectTransform row, string label, string value)
+        /// <summary>A strip that fits half the panel: short label and value (else it gets a whole line).</summary>
+        private static bool StripFitsHalf((string Label, string Value, Sprite Icon, bool Game) f)
+            => (f.Label?.Length ?? 0) <= 13 && System.Text.RegularExpressions.Regex.Replace(f.Value ?? "", "<[^>]+>", "").Length <= 12;
+
+        private static void StatStrip(RectTransform row, string label, string value, Sprite icon = null, bool game = false)
         {
             var cell = Ui.Rect(row, label.Length > 0 ? label : "Empty", Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
             var le = cell.gameObject.AddComponent<LayoutElement>();
@@ -815,7 +831,7 @@ namespace LevelGate.Progression
             var hl = cell.gameObject.AddComponent<HorizontalLayoutGroup>();
             hl.padding = new RectOffset(7, 8, 0, 0); hl.spacing = 6; hl.childAlignment = TextAnchor.MiddleLeft;
             hl.childControlWidth = hl.childControlHeight = true; hl.childForceExpandWidth = hl.childForceExpandHeight = false;
-            StatIcon(cell, label, 15);
+            if (game) GameIcon(cell, icon, 15); else StatIcon(cell, label, 15);
             var l = FlowText(cell, "Label", TCaps - 1, Grey, false, 1);
             Ui.SetText(l, label.ToUpperInvariant());
             var lle = ((Component)l).gameObject.AddComponent<LayoutElement>();
@@ -1243,7 +1259,7 @@ namespace LevelGate.Progression
             int cols = Mathf.Clamp(Mathf.FloorToInt((width + S2) / (TileMin + S2)), 2, 6);
             float cell = Mathf.Floor((width - (cols - 1) * S2) / cols);
             // names that collide at this level (e.g. three "Stich Profi Ches…") show their full name instead
-            var dupes = new HashSet<string>(items.GroupBy(x => x.Short).Where(x => x.Count() > 1).Select(x => x.Key));
+            var dupes = TileNames(items);
             // small levels (a handful of items over several categories): one grid, the category as a label on each tile,
             // instead of a one-tile section per category (a single column with the panel ¾ empty)
             bool compact = items.Count <= 8 && groups.Count > 1;
@@ -1262,7 +1278,7 @@ namespace LevelGate.Progression
                 gl.constraint = GridLayoutGroup.Constraint.FixedColumnCount;
                 gl.constraintCount = cols;
                 foreach (var (g, list) in groups)
-                    foreach (var it in list) Tile(grid, it, level <= player || player <= 0, dupes.Contains(it.Short), n++, g);
+                    foreach (var it in list) Tile(grid, it, level <= player || player <= 0, dupes.TryGetValue(it.Tpl, out var dn1) ? dn1 : null, n++, g);
             }
             else foreach (var (g, list) in groups)
             {
@@ -1322,7 +1338,7 @@ namespace LevelGate.Progression
                     FadeTo(tabFace, on ? Ui.Hex("#2d3538", .97f) : Ui.Hex("#232a2d", .97f));
                     FadeTo(chevText as Graphic, on ? Text : Ui.Hex("#aab2b5"));
                 });
-                foreach (var it in list.Take(max)) Tile(grid, it, level <= player || player <= 0, dupes.Contains(it.Short), n++);
+                foreach (var it in list.Take(max)) Tile(grid, it, level <= player || player <= 0, dupes.TryGetValue(it.Tpl, out var dn2) ? dn2 : null, n++);
             }
             if (groups.Count == 0)
             {
@@ -1343,6 +1359,28 @@ namespace LevelGate.Progression
         private const int BoxPad = 6;        // a category box's inner padding
         private const float TileMin = 118;   // smallest tile width before a column is dropped
         private const float TileLabel = 34;  // name area under the thumbnail (two lines of 12 px)
+
+        /// <summary>
+        /// Tile names for items whose short names collide (three "Bastion" helmets): the short name plus what tells them
+        /// apart, i.e. the full names minus the start they share ("Bastion (OD Green)"), instead of full names that got cut
+        /// off right where the difference is.
+        /// </summary>
+        private static Dictionary<string, string> TileNames(List<ProgItem> items)
+        {
+            var r = new Dictionary<string, string>();
+            foreach (var grp in items.GroupBy(x => x.Short).Where(x => x.Count() > 1))
+            {
+                var names = grp.Select(x => x.Name ?? "").ToList();
+                int common = names.Aggregate(names[0].Length, (n, s) => { int i = 0; while (i < n && i < s.Length && s[i] == names[0][i]) i++; return i; });
+                while (common > 0 && names[0][common - 1] != ' ') common--; // back to a word boundary
+                foreach (var it in grp)
+                {
+                    string tail = (it.Name ?? "").Length > common ? it.Name.Substring(common).Trim() : "";
+                    r[it.Tpl] = common == 0 ? it.Name : tail.Length == 0 ? it.Short : $"{it.Short} {tail}";
+                }
+            }
+            return r;
+        }
 
         /// <summary>One reward tile's parts, so hover / selection / locked can be restyled without rebuilding it.</summary>
         private sealed class TileView
@@ -1370,7 +1408,7 @@ namespace LevelGate.Progression
         private static int _newFrom; // your level when you last opened the screen: rewards above it (up to yours) are new
 
         /// <summary>An inventory-style tile: thin frame, dark lit surface, big centred thumbnail, the name under it.</summary>
-        private static void Tile(RectTransform grid, ProgItem it, bool reached, bool fullName, int index, (string Key, string Name, string Color, string[] Ids)? category = null)
+        private static void Tile(RectTransform grid, ProgItem it, bool reached, string shownName, int index, (string Key, string Name, string Color, string[] Ids)? category = null)
         {
             var rt = Ui.Rect(grid, "Tile", Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
             var group = rt.gameObject.AddComponent<CanvasGroup>();
@@ -1393,7 +1431,7 @@ namespace LevelGate.Progression
             v.Top.enabled = false;
             // name: two lines of 12 px, the full name when short names collide
             v.Name = Ui.Label(Ui.Rect(inner, "Name", Vector2.zero, new Vector2(1, 0), new Vector2(S2, S1), new Vector2(-S2, TileLabel - S1)), "Text",
-                fullName ? it.Name : it.Short, TCaps, Grey, TextAnchor.MiddleLeft, false, 0, true);
+                shownName ?? it.Short, TCaps, Grey, TextAnchor.MiddleLeft, false, 0, true);
             Ui.SetWrap(v.Name, true);
             Refl.Set(v.Name, "lineSpacing", -8f);
             // compact list: the category on the tile itself (its colour bar + small caps), top-left
@@ -1864,27 +1902,37 @@ namespace LevelGate.Progression
             // stats: damage / penetration / armor class / resource big; weight / size / caliber small (nothing invented, nothing dropped)
             var facts = GameItems.Facts(it.Tpl);
             var majorKeys = new[] { "Damage", "Penetration", "Armor class", "Resource", "Energy", "Hydration", "Fire rate", "Ergonomics", "Recoil" };
+            // armor: durability sits next to the class as a big stat (the class alone looked lost)
+            if (facts.Any(f => f.Label == "Armor class")) majorKeys = majorKeys.Concat(new[] { "Durability" }).ToArray();
             var majors = facts.Where(f => majorKeys.Contains(f.Label)).ToList();
             facts.RemoveAll(f => f.Label == "Size"); // removed on request: not needed here
             var minors = new[] { "Weight", "Caliber" }.Select(k => facts.FirstOrDefault(f => f.Label == k)).Where(f => f.Label != null)
                 .Concat(facts.Where(f => !majorKeys.Contains(f.Label) && f.Label != "Weight" && f.Label != "Size" && f.Label != "Caliber")).ToList();
             // one grid of equal columns for every row (3, or more only if there are more big stats): the big stats never get
-            // squeezed ("600 rpm" ran into ERGONOMICS at 4 columns); extra small stats wrap onto another line
+            // squeezed ("600 rpm" ran into ERGONOMICS at 4 columns)
             int cols = Mathf.Max(3, majors.Count);
             foreach (var f in majors) Stat(_majorRow, f.Label, f.Value, true);
             for (int c = majors.Count; c < cols && majors.Count > 0; c++) Stat(_majorRow, "", "", true);
-            // the small stats: the game's inspect strips, two to a line (every line the same two columns)
-            for (int start = 0; start < minors.Count; start += 2)
+            // the small stats: the game's inspect strips, two to a line; a long one (or the odd one out) gets the whole line
+            var strips = minors.Select(f => (f.Label, f.Value, (Sprite)null, false)).ToList();
+            // grenades, meds and stims: the game's own inspect rows too (explosion delay, fragments; use time, effects, side effects)
+            if (it.Group == "Grenades" || it.Group == "Medical")
+            {
+                var have = new HashSet<string>(facts.Select(f => f.Label.ToUpperInvariant()));
+                foreach (var (name, value, id) in GameItems.GameAttributes(it.Tpl))
+                    if (!have.Contains(name.ToUpperInvariant())) strips.Add((name, value, StatIcons.OfId(id), true));
+            }
+            for (int i = 0; i < strips.Count;)
             {
                 var line = Row(_minorRow, "Line", S1);
-                for (int c = 0; c < 2; c++)
-                {
-                    var f = start + c < minors.Count ? minors[start + c] : ("", "");
-                    StatStrip(line, f.Item1, f.Item2);
-                }
+                var a1 = strips[i];
+                bool pair = i + 1 < strips.Count && StripFitsHalf(a1) && StripFitsHalf(strips[i + 1]);
+                StatStrip(line, a1.Item1, a1.Item2, a1.Item3, a1.Item4);
+                if (pair) StatStrip(line, strips[i + 1].Item1, strips[i + 1].Item2, strips[i + 1].Item3, strips[i + 1].Item4);
+                i += pair ? 2 : 1;
             }
+            _minorRow.gameObject.SetActive(strips.Count > 0);
             _majorRow.gameObject.SetActive(majors.Count > 0);
-            _minorRow.gameObject.SetActive(minors.Count > 0);
             Ui.SetText(_featDesc, ProgData.DescriptionOf(it.Tpl));
             _descScroll.verticalNormalizedPosition = 1;
             // requirement: the primary (and only red) locked signal

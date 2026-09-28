@@ -18,6 +18,9 @@ namespace LevelGate.Progression
         private static Image _img;
         private static string _want;           // the pattern asked for (null = the dots, nothing to do here)
         private static PatternCore _core;      // built field of _want (main thread's copy)
+        // the last few worked-out patterns (~7 MB each), so Random / switching back shows one again at once
+        private static readonly System.Collections.Generic.List<PatternCore> _kept = new System.Collections.Generic.List<PatternCore>();
+        private const int Keep = 3;
         private static Texture2D _tex;
         private static Sprite _sprite;
         private static string _shown;          // the pattern the texture holds now
@@ -67,10 +70,19 @@ namespace LevelGate.Progression
                 if (_jobGen == _gen)
                 {
                     _core = _jobCore;
+                    _kept.Remove(_core); _kept.Insert(0, _core);
+                    while (_kept.Count > Keep) _kept.RemoveAt(_kept.Count - 1);
                     Upload();
                 }
             }
-            if (_core == null) { Start(null, 0); return; } // build first (usually during the loading screen)
+            if (_core == null)
+            {
+                // worked out before (kept): straight to drawing it; else build first (usually during the loading screen)
+                var kept = _kept.Find(c => c.Kind == _want);
+                if (kept != null) L.Debug($"background pattern '{_want}': kept from before");
+                Start(kept, _t);
+                return;
+            }
             if (motion <= 0 || Time.unscaledTime < _nextAt) return;
             _nextAt = Time.unscaledTime + (ProgressionPlugin.Low ? .2f : .1f) / Mathf.Clamp(motion, 1f, 2f);
             Start(_core, _t);
@@ -129,7 +141,7 @@ namespace LevelGate.Progression
         public static void Release()
         {
             string keep = _want;
-            _core = null; _gen++;
+            _core = null; _gen++; _kept.Clear();
             if (_img != null) _img.enabled = false;
             if (_sprite != null) UnityEngine.Object.Destroy(_sprite);
             if (_tex != null) UnityEngine.Object.Destroy(_tex);

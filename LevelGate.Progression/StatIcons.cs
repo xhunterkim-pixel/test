@@ -44,6 +44,22 @@ namespace LevelGate.Progression
             { "Ergo penalty", new[] { "ChangeWeaponErgonomics", "Ergonomics" } },
         };
 
+        private static readonly Dictionary<string, Sprite> _byId = new Dictionary<string, Sprite>();
+
+        /// <summary>The game's icon for one of its own attribute ids (any enum it uses: item attributes, buffs…), or null.</summary>
+        public static Sprite OfId(object id)
+        {
+            if (!(id is Enum e)) return null;
+            string key = e.GetType().Name + "." + e;
+            if (_byId.TryGetValue(key, out var s)) return s;
+            Find();
+            s = null;
+            if (_get != null)
+                try { s = _get.Invoke(_get.IsStatic ? null : _inst, new object[] { e }) as Sprite; } catch { }
+            _byId[key] = s;
+            return s;
+        }
+
         public static Sprite Of(string label)
         {
             if (string.IsNullOrEmpty(label)) return null;

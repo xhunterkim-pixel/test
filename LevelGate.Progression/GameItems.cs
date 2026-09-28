@@ -551,8 +551,9 @@ namespace LevelGate.Progression
                 double? D(object v) { try { return v == null || v is string || v is bool ? (double?)null : Convert.ToDouble(v); } catch { return null; } }
                 // bolt-actions: "30 rpm" read like a bug — the action instead
                 bool bolt = Num("BoltAction") is bool ba && ba;
+                // semi-autos (a Desert Eagle's template rate is low) read "Semi-auto", not "Bolt action": only the game's own flag says bolt
                 if (D(Num("bFirerate")) is double rpm && rpm > 0)
-                    list.Add(("Fire rate", bolt || rpm < 100 ? "Bolt<size=60%> action</size>" : $"{rpm:0}<size=60%> rpm</size>"));
+                    list.Add(("Fire rate", bolt ? "Bolt<size=60%> action</size>" : rpm < 100 ? "Semi-auto" : $"{rpm:0}<size=60%> rpm</size>"));
                 if (D(Num("Ergonomics")) is double ergo && ergo > 0) list.Add(("Ergonomics", $"{ergo:0}"));
                 if (D(Num("RecoilForceUp")) is double rec && rec > 0) list.Add(("Recoil", $"{rec:0}"));
                 if (D(Num("bEffDist")) is double eff && eff > 0) list.Add(("Eff. range", $"{eff:0}<size=65%> m</size>"));
@@ -567,6 +568,51 @@ namespace LevelGate.Progression
             }
             catch (Exception e) { L.ErrorOnce("item facts", e); }
             return list;
+        }
+
+        private static readonly HashSet<string> _attrDumped = new HashSet<string>();
+
+        /// <summary>
+        /// The item's own inspect rows, as the game's inspect window lists them (grenades: EXPLOSION DELAY, FRAGMENTS COUNT…;
+        /// meds / stims: USE TIME, SKILL "ATTENTION"  Dur. 240sec (+30), HANDS TREMOR…): name, value and the attribute id (for
+        /// its icon). Read from item.Attributes; the first item of each category is dumped to the log (verbose).
+        /// </summary>
+        public static List<(string Name, string Value, object Id)> GameAttributes(string tpl)
+        {
+            var list = new List<(string, string, object)>();
+            try
+            {
+                var item = ItemOf(tpl);
+                if (!(Refl.Get(item, "Attributes") is System.Collections.IEnumerable attrs)) return list;
+                string grp = ProgData.GroupOf(tpl);
+                bool dump = L.Verbose && _attrDumped.Add(grp ?? "");
+                foreach (var a in attrs)
+                {
+                    if (a == null) continue;
+                    var id = Refl.Get(a, "Id");
+                    string raw = Text(Refl.Get(a, "DisplayName")) ?? Text(Refl.Get(a, "Name")) ?? id?.ToString();
+                    string name = raw;
+                    var loc = string.IsNullOrEmpty(raw) ? null : ProgData.Localize(raw);
+                    if (!string.IsNullOrEmpty(loc) && loc != raw) name = loc;
+                    string value = Text(Refl.Get(a, "StringValue")) ?? Text(Refl.Get(a, "FullStringValue"));
+                    if (string.IsNullOrEmpty(value) && Refl.Get(a, "Base") is Delegate bf)
+                        try { var b = bf.DynamicInvoke(); if (b is float f) value = f.ToString("0.##"); } catch { }
+                    if (dump) L.Debug($"attributes of {tpl} ({grp}): id {id} ({id?.GetType().Name}), name '{raw}' → '{name}', value '{value}'");
+                    if (string.IsNullOrEmpty(name) || string.IsNullOrEmpty(value) || id?.ToString() == "Weight" || id?.ToString() == "Undefined") continue;
+                    list.Add((name.Trim(), value.Trim(), id));
+                }
+            }
+            catch (Exception e) { L.ErrorOnce("item attributes", e); }
+            return list;
+        }
+
+        /// <summary>A string, or what a no-argument string function returns.</summary>
+        private static string Text(object o)
+        {
+            if (o is string s) return s;
+            if (o is Func<string> f) { try { return f(); } catch { return null; } }
+            if (o is Delegate d && d.Method.ReturnType == typeof(string) && d.Method.GetParameters().Length == 0) { try { return d.DynamicInvoke() as string; } catch { return null; } }
+            return null;
         }
 
         /// <summary>"Caliber366TKM" → the game's own name if it has one, else a readable form: ".366 TKM", "5.56x45 NATO", "9x19 PARA".</summary>
