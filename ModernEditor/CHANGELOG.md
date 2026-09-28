@@ -1,5 +1,11 @@
 # Modern Editor changelog
 
+## 2.0.7 (server mod only)
+- Quieter SPT server console. One line when the traders load, one when the item stats apply, plus any real warnings:
+  `[ModernEditor] 2.0.7 ready — 5 traders · 41 offers · 21 quests (17 follow Level Gate levels) · details: user\mods\ModernEditor\logs\server_….log`
+  `[ModernEditor] 58 item stat edits applied (meds, stims, food).`
+  Everything that used to be printed goes to the log file: every trader, quest, icon, dynamic level move, switched-off trader and required mod.
+
 ## 2.0.6
 - Fixed the false "can't be worn (not gear)" warning for chest rigs and backpacks. In Tarkov's item tree they don't sit under Equipment, so the editor filed them as "Other". They now count as gear, in the check and in the "wearing" item picker. The game's wearing check covers every equipment slot: helmet, earpiece, face cover, eyewear, armband, armor, rig, backpack, and the weapon and melee slots.
 - "Must Be Wearing": a new **Full Set** switch. Off (the old behaviour): any one of the listed items is enough. On: all of them at once, e.g. a helmet and an armor together. It uses the same format as the game's own quests.

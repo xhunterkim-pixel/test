@@ -73,7 +73,7 @@ public class ItemStatsMod(
                 logger.MeError($"[ModernEditor] item_stats.json: {tpl} not changed — {e.Message}");
             }
         }
-        logger.MeInfo($"[ModernEditor] Item stats: {done} item(s) changed from item_stats.json.");
+        logger.MeInfo($"[ModernEditor] {done} item stat edit{(done == 1 ? "" : "s")} applied (meds, stims, food).");
         return Task.CompletedTask;
     }
 

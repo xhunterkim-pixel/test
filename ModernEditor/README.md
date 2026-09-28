@@ -1,4 +1,4 @@
-# Modern Editor v2.0.6 — traders, level limits, item stats and progression in one (SPT 4.1)
+# Modern Editor v2.0.7 — traders, level limits, item stats and progression in one (SPT 4.1)
 
 Modern Editor replaces three tools:
 

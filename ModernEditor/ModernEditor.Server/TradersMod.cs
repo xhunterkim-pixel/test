@@ -106,7 +106,8 @@ public class CustomTradersMod(
                 var trader = TraderFile.Load(file);
                 if (!trader.Enabled)
                 {
-                    LogBlue($"[ModernEditor] {trader.Name}: switched off in the editor — not loaded.");
+                    ModLog.Detail($"[ModernEditor] {trader.Name}: switched off in the editor — not loaded.");
+                    _tradersOff++;
                     continue;
                 }
                 if (EnsureIds(trader)) trader.Save(file); // give new offers/quests stable ids once
@@ -119,8 +120,8 @@ public class CustomTradersMod(
         }
 
         // quests whose level follows an item's Level Gate level (read only from Level Gate's own file)
-        if (config.LevelGate) DynamicLevels.Apply(traders.Select(t => t.Trader), modFolder, logger);
-        else ModLog.Detail("[ModernEditor] Level Gate is switched off in Modern Editor — dynamic quests keep their saved level.");
+        int dynamic = config.LevelGate ? DynamicLevels.Apply(traders.Select(t => t.Trader), modFolder, logger) : 0;
+        if (!config.LevelGate) ModLog.Detail("[ModernEditor] Level Gate is switched off in Modern Editor — dynamic quests keep their saved level.");
 
         foreach (var (trader, _) in traders)
         foreach (var quest in trader.Quests.Where(q => Ids.IsValid(q.Id) && q.Enabled))
@@ -146,7 +147,12 @@ public class CustomTradersMod(
         foreach (var (trader, folder) in traders)
             ModLog.Detail($"[ModernEditor] {trader.Name} ({Path.GetFileName(folder)}): {trader.Offers.Count} offer(s) ({trader.Offers.Count(o => o.Enabled)} on), {trader.Quests.Count} quest(s) ({trader.Quests.Count(q => q.Enabled)} on, {trader.Quests.Count(q => !string.IsNullOrEmpty(q.LevelFromItem))} dynamic)");
 
-        LogBlue($"[ModernEditor] Loaded {loaded} trader(s) from {tradersFolder}");
+        ModLog.Detail($"[ModernEditor] Loaded {loaded} trader(s) from {tradersFolder}");
+        // the one line in the server console; everything else is in the log file
+        LogBlue($"[ModernEditor] {ModLog.ModVersion} ready — {Plural(loaded, "trader")} · {Plural(_offersLoaded, "offer")} · {Plural(_questsLoaded, "quest")}" +
+                (dynamic > 0 ? $" ({dynamic} follow Level Gate levels)" : "") +
+                (_tradersOff > 0 ? $" · {_tradersOff} switched off" : "") +
+                (ModLog.ShortPath.Length > 0 ? $" · details: {ModLog.ShortPath}" : ""));
         return Task.CompletedTask;
     }
 
@@ -159,7 +165,7 @@ public class CustomTradersMod(
         _requiredMods = file.RequiredMods ?? new List<string>();
         if (file.Priority > 0) TraderPriorities[file.Id] = file.Priority;
         if (_requiredMods.Count > 0)
-            LogBlue($"[ModernEditor] {file.Name} uses items from other mods: {string.Join(", ", _requiredMods)} (those offers / quests need the mods installed).");
+            ModLog.Detail($"[ModernEditor] {file.Name} uses items from other mods: {string.Join(", ", _requiredMods)} (those offers / quests need the mods installed).");
         MongoId traderId = file.Id;
         if (tradersTable.ContainsKey(traderId))
         {
@@ -178,7 +184,7 @@ public class CustomTradersMod(
         {
             avatarKey += "_" + FileFingerprint(avatarPath);
             imageRouter.AddRoute(avatarKey, avatarPath);
-            LogBlue($"[ModernEditor] {file.Name}: icon {file.Avatar} (version {avatarKey[(avatarKey.LastIndexOf('_') + 1)..]})");
+            ModLog.Detail($"[ModernEditor] {file.Name}: icon {file.Avatar} (version {avatarKey[(avatarKey.LastIndexOf('_') + 1)..]})");
         }
         else
         {
@@ -230,11 +236,13 @@ public class CustomTradersMod(
         int quests = 0;
         foreach (var quest in file.Quests)
         {
-            if (!quest.Enabled) { LogBlue($"[ModernEditor] {file.Name}: quest '{quest.Name}' is switched off — skipped."); continue; }
+            if (!quest.Enabled) { ModLog.Detail($"[ModernEditor] {file.Name}: quest '{quest.Name}' is switched off — skipped."); continue; }
             if (AddQuest(file, quest, folder)) quests++;
         }
 
-        LogBlue($"[ModernEditor] {file.Name}: {file.Offers.Count} offer(s), {quests} quest(s)");
+        ModLog.Detail($"[ModernEditor] {file.Name}: {file.Offers.Count} offer(s), {quests} quest(s)");
+        _offersLoaded += file.Offers.Count(o => o.Enabled);
+        _questsLoaded += quests;
         return true;
     }
 
@@ -586,7 +594,7 @@ public class CustomTradersMod(
                                "(deleted, or its trader is switched off) — it will NEVER unlock.");
             }
         }
-        LogBlue($"[ModernEditor]   {file.Name} › {def.Name}: level {Math.Max(1, def.MinLevel)}, {ways}" +
+        ModLog.Detail($"[ModernEditor]   {file.Name} › {def.Name}: level {Math.Max(1, def.MinLevel)}, {ways}" +
                 (after.Count > 0 ? $", unlocks after {string.Join(" + ", after)}" : ""));
     }
 
@@ -1147,7 +1155,7 @@ public class CustomTradersMod(
         if (hooked == 0)
             logger.MeWarning($"[ModernEditor] {file.Name}: unlocks after quest {file.UnlockQuestId}, which isn't loaded — the trader will stay locked.");
         else
-            LogBlue($"[ModernEditor] {file.Name}: locked at start, unlocked by completing '{QuestName(file.UnlockQuestId!)}'.");
+            ModLog.Detail($"[ModernEditor] {file.Name}: locked at start, unlocked by completing '{QuestName(file.UnlockQuestId!)}'.");
     }
 
     private string QuestName(string id)
@@ -1172,6 +1180,9 @@ public class CustomTradersMod(
     /// Normal CustomTraders messages in bright blue so they stand out in the
     /// busy server console. Warnings stay yellow and errors red.
     /// </summary>
+    private int _offersLoaded, _questsLoaded, _tradersOff;
+    private static string Plural(int n, string word) => $"{n} {word}{(n == 1 ? "" : "s")}";
+
     private void LogBlue(string message) =>
         logger.MeBlue(message);
 

@@ -10,7 +10,7 @@ namespace ModernEditor.Server;
 /// </summary>
 public static class ModLog
 {
-    public const string ModVersion = "2.0.6";
+    public const string ModVersion = "2.0.7";
     private static readonly object Gate = new();
     private static string? _file;
 
@@ -29,6 +29,18 @@ public static class ModLog
             }
             catch { _file = ""; }
             return _file == "" ? null : _file;
+        }
+    }
+
+    /// <summary>This start's log file, from the SPT folder on (user\mods\ModernEditor\logs\server_….log), for the console summary.</summary>
+    public static string ShortPath
+    {
+        get
+        {
+            var f = File;
+            if (f == null) return "";
+            int i = f.IndexOf(Path.DirectorySeparatorChar + "user" + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
+            return i >= 0 ? f[(i + 1)..] : f;
         }
     }
 

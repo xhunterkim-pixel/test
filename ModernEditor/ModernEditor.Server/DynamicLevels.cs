@@ -12,24 +12,25 @@ namespace ModernEditor.Server;
 /// </summary>
 public static class DynamicLevels
 {
-    public static void Apply<T>(IEnumerable<TraderFile> traders, string modFolder, ISptLogger<T> logger)
+    /// <summary>Returns how many quests follow an item's level (0 when none, or Level Gate's file wasn't found).</summary>
+    public static int Apply<T>(IEnumerable<TraderFile> traders, string modFolder, ISptLogger<T> logger)
     {
         var quests = traders.SelectMany(t => t.Quests.Select(q => (Trader: t, Quest: q)))
             .Where(x => Ids.IsValid(x.Quest.LevelFromItem)).ToList();
-        if (quests.Count == 0) return;
+        if (quests.Count == 0) return 0;
         var config = FindLevelGateConfig(modFolder);
         if (config == null)
         {
             logger.MeWarning($"[ModernEditor] {quests.Count} quest(s) follow an item's Level Gate level, but Level Gate's level_requirements.json " +
                            "wasn't found — they keep the level saved in the editor.");
-            return;
+            return 0;
         }
         Dictionary<string, int> levels;
         try { levels = ReadLevels(config); }
         catch (Exception e)
         {
             logger.MeWarning($"[ModernEditor] Level Gate's levels couldn't be read ({e.Message}) — dynamic quests keep the level saved in the editor.");
-            return;
+            return 0;
         }
         int moved = 0;
         foreach (var (trader, quest) in quests)
@@ -38,13 +39,14 @@ public static class DynamicLevels
             int level = Math.Clamp(itemLevel + quest.LevelOffset, 1, 79);
             if (level != quest.MinLevel)
             {
-                logger.MeInfo($"[ModernEditor]   {trader.Name} › {quest.Name}: level {quest.MinLevel} → {level} (follows its item, Level Gate level {itemLevel}" +
+                ModLog.Detail($"[ModernEditor]   {trader.Name} › {quest.Name}: level {quest.MinLevel} → {level} (follows its item, Level Gate level {itemLevel}" +
                             (quest.LevelOffset != 0 ? $" {quest.LevelOffset:+#;-#}" : "") + ")");
                 moved++;
             }
             quest.MinLevel = level;
         }
-        logger.MeInfo($"[ModernEditor] Dynamic levels: {quests.Count} quest(s) follow their item's Level Gate level ({moved} moved since the last save).");
+        ModLog.Detail($"[ModernEditor] Dynamic levels: {quests.Count} quest(s) follow their item's Level Gate level ({moved} moved since the last save).");
+        return quests.Count;
     }
 
     /// <summary>{ "items": { "&lt;tpl&gt;": level } } — numbers or numeric strings.</summary>
