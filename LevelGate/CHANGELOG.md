@@ -40,6 +40,9 @@ Versions are **MAJOR.MINOR.PATCH**:
 
 ## LevelGate Progression (BepInEx plugin, separate DLL)
 
+### 0.9.76
+- **Fixed: an orange glow outside the reward list** (under the panel): with MW 1 (additive glow) on, the picked tile's item bloom used the game's additive particle shader, which ignores the UI's clipping — a picked tile scrolled half out of the list glowed below the panel. Glows inside clipped areas (the list's tiles, the track's waveform) keep normal blending now; the light wall's glow stays inside its strip.
+
 ### 0.9.75
 - **Your F12 picks are the new defaults**: Damascus 1 pattern at 82% moving at 2.5, sound 100%, Hover Glitch 23%, Motion Speed 145%, Picture Load-In 0.2 s at 100% randomness, Item Bloom 166% / 120%, Light Wall 122%, MW 1–5, 7, 9, 10 on, MW 6 (screen flashes) and MW 8 (row pips) off. Existing settings files keep their values.
 - **Fixed: picking an item cost frames** (most of the 0.9.74 log's "Feature" slow frames): the item-bloom colour was read back from the graphics card and waited for. It's read in the background now (the colour arrives a frame or two later).

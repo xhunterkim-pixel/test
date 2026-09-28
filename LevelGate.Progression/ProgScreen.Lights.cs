@@ -77,7 +77,7 @@ namespace LevelGate.Progression
             _wallEq = Ui.Img(Ui.Box(layer, "Eq", Vector2.zero, new Vector2(0, 24), new Vector2(240, 64)), new Color(1f, .93f, .8f, 0), Ui.Waveform(true));
             _wallCrossH = Ui.Img(Ui.Box(layer, "CrossH", Vector2.zero, new Vector2(0, 24), new Vector2(34, 1)), new Color(1, 1, 1, 0));
             _wallCrossV = Ui.Img(Ui.Box(layer, "CrossV", Vector2.zero, new Vector2(0, 24), new Vector2(1, 34)), new Color(1, 1, 1, 0));
-            _wallGlow = Ui.Img(Ui.Rect(layer, "Glow", Vector2.zero, new Vector2(0, 1), new Vector2(-55, -30), new Vector2(55, 30)), new Color(1f, .9f, .75f, 0), Ui.Radial());
+            _wallGlow = Ui.Img(Ui.Rect(layer, "Glow", Vector2.zero, new Vector2(0, 1), new Vector2(-55, 0), new Vector2(55, 0)), new Color(1f, .9f, .75f, 0), Ui.Radial()); // inside its strip (additive ignores clipping)
             _wallCore = Ui.Img(Ui.Rect(layer, "Core", Vector2.zero, new Vector2(0, 1), new Vector2(-1.5f, 0), new Vector2(1.5f, 0)), new Color(1f, .97f, .92f, 0), Ui.VerticalFade());
             _wallCore.rectTransform.localScale = new Vector3(1, -1, 1); // brightest down at the rail, fading up
             for (int i = 0; i < Trail; i++)

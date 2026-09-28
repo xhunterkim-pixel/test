@@ -53,7 +53,11 @@ namespace LevelGate.Progression
             return _addMat;
         }
 
-        /// <summary>Registers a glow: it becomes additive while MW 1 is on.</summary>
+        /// <summary>
+        /// Registers a glow: it becomes additive while MW 1 is on. Only for glows that are never inside a clipped area
+        /// (a scroll list, a RectMask2D / Mask): the game's additive particle shader ignores UI clipping, so a clipped
+        /// glow would draw outside its panel.
+        /// </summary>
         private static void Glow(Image img)
         {
             if (img == null) return;

@@ -1145,8 +1145,7 @@ namespace LevelGate.Progression
             _waveBase = Ui.Detail(Ui.Img(Ui.Rect(wave, "Base", Vector2.zero, Vector2.one, Vector2.zero, new Vector2(384, 0)), new Color(1, 1, 1, .07f), Ui.Waveform(false)), .07f);
             _waveBase.type = Image.Type.Tiled; _waveBase.raycastTarget = false;
             _waveHot = Ui.Detail(Ui.Img(Ui.Box(wave, "Hot", new Vector2(0, .5f), Vector2.zero, new Vector2(360, 26)), Ui.Hex("#f0c9a8", .3f), Ui.Waveform(true)), .3f);
-            _waveHot.raycastTarget = false;
-            Glow(_waveHot);
+            _waveHot.raycastTarget = false; // (not additive: it sits in a clipped strip, see Glow)
             Ui.Img(Ui.Rect(rail, "Line", new Vector2(0, .5f), new Vector2(1, .5f), new Vector2(0, 0), new Vector2(0, 1)), Ui.Hex("#3c3e3f", .9f));
             _railFill = Ui.Rect(rail, "Fill", new Vector2(0, .5f), new Vector2(0, .5f), new Vector2(0, -1), new Vector2(0, 1));
             Ui.Img(_railFill, Ui.Hex("#c4c7c8", .85f));
@@ -2068,7 +2067,8 @@ namespace LevelGate.Progression
             }
             v.Bloom = Ui.Img(Ui.Box(thumb, "ItemBloom", new Vector2(.5f, .5f), Vector2.zero, new Vector2(150, 110)), new Color(1, 1, 1, 0), Ui.Radial());
             v.Bloom.raycastTarget = false; v.Bloom.enabled = false;
-            Glow(v.Bloom);
+            // (not additive: the additive shader ignores the list's clipping, so a picked tile scrolled half out of the list
+            // glowed outside the panel — 0.9.75)
             v.Pic = Ui.Img(Ui.Fill(thumb, "Icon", 0), Color.white);
             var prt = v.Pic.rectTransform;
             // long guns take the full width (they came out tiny at 80% of a box)
