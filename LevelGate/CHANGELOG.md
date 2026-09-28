@@ -40,6 +40,11 @@ Versions are **MAJOR.MINOR.PATCH**:
 
 ## LevelGate Progression (BepInEx plugin, separate DLL)
 
+### 0.9.79
+- **The Dogtag rank-up opens your real dogtag**: on the emblem sound's peak, a fresh game dogtag of your faction (USEC / BEAR) with your nickname, level, the date and the new rank written into it opens in the game's own inspect window — the real tag, the real rows. The log lists which dogtag fields were filled. If the game won't make the item, the drawn window from 0.9.78 is shown instead.
+- **Selection border's bottom edge like MW's**: a dense strip of tiny 1–2 px dots and short dashes packed around the line, twinkling (frames cycled on the shared clock) — replacing 0.9.78's few big dots. One image per border.
+- **Item bloom 35% less saturated.**
+
 ### 0.9.78
 - **Fixed: cards stayed lit after a preview** (and looked different from yours): cards unlocked during a level up were kept lit until the screen closed, on top of the NEW rule. Now a card is lit only while its level has NEW rewards — the same in a preview and for real, and it goes once they've all been clicked.
 - **Pips by progression**: the big picture's (and row) pips step through Tarkov's loot order every three pages — grey (levels 1–15), green (16–30), blue (31–45), purple (46–60), red (61+).

@@ -37,7 +37,7 @@ namespace LevelGate.Progression
             catch (System.Exception e) { L.ErrorOnce("new-rank moment", e); HideRankViews(); }
         }
 
-        private static void HideRankViews() { foreach (var v in _rankViews) if (v?.Root != null && v.Root.gameObject.activeSelf) v.Root.gameObject.SetActive(false); }
+        private static void HideRankViews() { _dtForLevel = -1; foreach (var v in _rankViews) if (v?.Root != null && v.Root.gameObject.activeSelf) v.Root.gameObject.SetActive(false); }
 
         private static void TickRankViews()
         {

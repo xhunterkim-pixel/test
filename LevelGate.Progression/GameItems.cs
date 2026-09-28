@@ -460,7 +460,8 @@ namespace LevelGate.Progression
             var avg = new Color(wr / wsum, wg / wsum, wb / wsum);
             Color.RGBToHSV(avg, out float h, out float s2, out float v);
             float colourful = satSum / aSum;
-            return colourful < .12f ? new Color(1f, .93f, .82f) : Color.HSVToRGB(h, Mathf.Clamp01(s2 * 1.3f + .1f), Mathf.Max(v, .85f));
+            // 35% less saturated than 0.9.71–0.9.78 (asked for: the item colours were too strong behind the pictures)
+            return colourful < .12f ? new Color(1f, .93f, .82f) : Color.HSVToRGB(h, Mathf.Clamp01((s2 * 1.3f + .1f) * .65f), Mathf.Max(v, .85f));
         }
 
         private static Sprite Copy(Sprite sp)
@@ -926,9 +927,66 @@ namespace LevelGate.Progression
         {
             var item = ItemOf(tpl);
             if (item == null) { L.Warn($"inspect {tpl}: no game item"); return; }
+            InspectObject(item, tpl);
+        }
+
+        /// <summary>
+        /// The rank-up dogtag: a fresh game dogtag of your faction (USEC 59f32c3b86f77472a31742f0 / BEAR
+        /// 59f32bb586f774757e1e8442) with your nickname, level, the date and the new rank written into its dogtag data, opened
+        /// in the game's own inspect window (the real tag, the real rows). False: it couldn't be made (the caller falls back).
+        /// </summary>
+        public static bool InspectDogtag(bool bear, string nickname, int level, string rank)
+        {
+            try
+            {
+                Init();
+                if (_factory == null) _factory = SingletonOf(AccessTools.TypeByName("EFT.ItemFactory"));
+                if (_factory == null || _create == null) { L.Info("dogtag: no item factory"); return false; }
+                string tpl = bear ? "59f32bb586f774757e1e8442" : "59f32c3b86f77472a31742f0";
+                var ps = _create.GetParameters();
+                var args = new object[ps.Length];
+                args[0] = Id(ps[0].ParameterType, NewHex());
+                args[1] = Id(ps[1].ParameterType, tpl);
+                for (int i = 2; i < ps.Length; i++) args[i] = ps[i].HasDefaultValue ? ps[i].DefaultValue : null;
+                var item = _create.Invoke(_factory, args);
+                if (item == null) { L.Info("dogtag: the game made no item"); return false; }
+                // its dogtag data: the item's Dogtag, or the component in its Components that is one
+                object tag = Refl.Get(item, "Dogtag");
+                if (tag == null && Refl.Get(item, "Components") is System.Collections.IEnumerable comps)
+                    foreach (var c in comps) if (c != null && c.GetType().Name.IndexOf("Dogtag", StringComparison.OrdinalIgnoreCase) >= 0) { tag = c; break; }
+                if (tag == null) { L.Info($"dogtag: no dogtag data on {item.GetType().Name}"); return false; }
+                var profile = ProgData.Profile();
+                var values = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["Nickname"] = nickname, ["Side"] = bear ? "Bear" : "Usec", ["Level"] = level, ["Time"] = DateTime.Now,
+                    ["Status"] = "Promoted", ["KillerName"] = rank, ["WeaponName"] = rank,
+                    ["ProfileId"] = ProgData.ProfileId() ?? "", ["AccountId"] = Refl.Get(profile, "AccountId")?.ToString() ?? "",
+                };
+                var set = new List<string>();
+                foreach (var m in tag.GetType().GetMembers(Refl.All))
+                {
+                    if (!values.TryGetValue(m.Name, out var val)) continue;
+                    Type t = m is FieldInfo f ? f.FieldType : m is PropertyInfo p && p.CanWrite ? p.PropertyType : null;
+                    if (t == null) continue;
+                    try
+                    {
+                        object v = t.IsEnum ? Enum.Parse(t, val.ToString(), true) : t == typeof(string) ? val.ToString() : Convert.ChangeType(val, t);
+                        if (m is FieldInfo fi) fi.SetValue(tag, v); else ((PropertyInfo)m).SetValue(tag, v, null);
+                        set.Add(m.Name);
+                    }
+                    catch (Exception e) { L.Debug($"dogtag: {m.Name} not set: {e.GetBaseException().Message}"); }
+                }
+                L.Info($"dogtag: {(bear ? "BEAR" : "USEC")} tag for {nickname}, level {level} ({rank}) — set {string.Join(", ", set.ToArray())}");
+                return InspectObject(item, tpl);
+            }
+            catch (Exception e) { L.Info("dogtag: " + e.GetBaseException().Message); return false; }
+        }
+
+        private static bool InspectObject(object item, string tpl)
+        {
             var uiType = AccessTools.TypeByName("EFT.UI.ItemUiContext");
             var ui = uiType?.GetProperty("Instance", Refl.All)?.GetValue(null, null) ?? SingletonOf(uiType) ?? (uiType != null ? UnityEngine.Object.FindObjectOfType(uiType) : null);
-            if (ui == null) { L.Warn("inspect: ItemUiContext not found"); return; }
+            if (ui == null) { L.Warn("inspect: ItemUiContext not found"); return false; }
             _inspect ??= uiType.GetMethods(Refl.All).Where(m => (m.Name == "Inspect" || m.Name == "ShowContextMenu") && !m.ContainsGenericParameters && m.GetParameters().Length >= 1)
                 .OrderBy(m => m.Name == "Inspect" ? 0 : 1).ToList();
             foreach (var m in _inspect)
@@ -946,11 +1004,12 @@ namespace LevelGate.Progression
                 {
                     m.Invoke(m.IsStatic ? null : ui, args);
                     L.Info($"inspect {tpl}: opened with ItemUiContext.{m.Name}({Sig(m)}) using {ctx.GetType().Name}");
-                    return;
+                    return true;
                 }
                 catch (Exception e) { L.Debug($"inspect with {m.Name}({Sig(m)}) failed: {e.GetBaseException().GetType().Name}: {e.GetBaseException().Message}"); }
             }
             L.Warn($"inspect {tpl}: nothing worked (tried {_inspect.Count} method(s); the item context attempts are logged above).");
+            return false;
         }
     }
 }

@@ -225,9 +225,25 @@ namespace LevelGate.Progression
             Refl.Set(_dtDesc, "enableWordWrapping", true);
         }
 
+        private static int _dtForLevel = -1;
+        private static bool _dtReal;
+
         private static void DrawDogtag(RankView v, int level, float t, float dur, float after, bool still, string name)
         {
-            var (nick, _) = Me2();
+            var (nick, side) = Me2();
+            // on the peak: your real dogtag in the game's own inspect window (the real tag, the real rows); the drawn
+            // window below is only the fallback if the game won't make the item
+            if (_dtForLevel != level) { _dtForLevel = level; _dtReal = false; if (!still) _dtWin.gameObject.SetActive(false); }
+            if ((after >= 0 || still) && !_dtReal && !_dtWin.gameObject.activeSelf)
+            {
+                _dtReal = GameItems.InspectDogtag(side == "BEAR", nick, level, TierOf(level).Name);
+                if (!_dtReal) { _dtWin.gameObject.SetActive(true); L.Info("dogtag: showing the drawn window instead"); }
+            }
+            if (_dtReal || !_dtWin.gameObject.activeSelf)
+            {
+                v.Veil.color = new Color(0, 0, 0, .4f); // behind the game's window
+                return;
+            }
             v.Veil.color = new Color(0, 0, 0, .55f);
             // the window opens like the game's: a quick fade and settle
             float o = still ? 1 : Motion.Eval(Motion.Ease.OutCubic, t / .2f);

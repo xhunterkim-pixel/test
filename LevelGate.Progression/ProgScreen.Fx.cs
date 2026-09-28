@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
@@ -118,8 +119,8 @@ namespace LevelGate.Progression
         private sealed class SelFrame
         {
             public Image Img;
-            public RectTransform Bush;                 // the breathing dots along the bottom edge
-            public Image[] Dots; public float[] DotSize, DotPhase, DotA;
+            public RectTransform Bush;                 // the twinkling dot strip along the bottom edge
+            public Image Strip;
             public float Shown;                        // 0–1: how far it has drawn in (the dots follow it)
             private bool _on;
             public bool On
@@ -146,25 +147,56 @@ namespace LevelGate.Progression
         private static readonly List<SelFrame> _selFrames = new List<SelFrame>();
         private static readonly System.Random _selRng = new System.Random(3);
 
+        private const int DotStripFrames = 5;
+        private static readonly Sprite[] _dotStrip = new Sprite[DotStripFrames];
+
+        /// <summary>
+        /// The bottom edge's dot strip: 128x12, tiles sideways — most columns carry a tiny dot (1–2 px, a few short dashes)
+        /// packed around the line (3 px down from its top), brightness varying; frame f pulses each dot on its own phase.
+        /// </summary>
+        private static Sprite DotStrip(int f)
+        {
+            f = ((f % DotStripFrames) + DotStripFrames) % DotStripFrames;
+            if (_dotStrip[f] != null) return _dotStrip[f];
+            const int w = 128, h = 12, line = 8; // the line: 3 px below the top edge of the strip… (y counts up from the bottom)
+            var tex = new Texture2D(w, h, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Repeat, filterMode = FilterMode.Point, name = "LevelGate dotstrip" };
+            var px = new Color32[w * h];
+            var rnd = new System.Random(29);
+            for (int x = 0; x < w; x++)
+            {
+                for (int k = 0; k < 2; k++)
+                {
+                    if (rnd.NextDouble() > (k == 0 ? .8 : .35)) continue;
+                    // mostly on or just below the line, a few further
+                    double g = (rnd.NextDouble() + rnd.NextDouble() + rnd.NextDouble() - 1.5) * 2.2;
+                    int y = Mathf.Clamp(line + (int)Math.Round(g) - (rnd.NextDouble() < .3 ? 1 : 0), 0, h - 1);
+                    int len = rnd.NextDouble() < .12 ? 2 + rnd.Next(3) : 1;      // a few short dashes
+                    float a0 = .3f + (float)rnd.NextDouble() * .7f, ph = (float)rnd.NextDouble() * 6.28f;
+                    float a = a0 * (.35f + .65f * (.5f + .5f * Mathf.Sin(ph + f / (float)DotStripFrames * 6.28f)));
+                    for (int d = 0; d < len && x + d < w; d++)
+                    {
+                        var c = px[y * w + x + d];
+                        px[y * w + x + d] = new Color32(255, 255, 255, (byte)Mathf.Max(c.a, 255 * a));
+                    }
+                }
+            }
+            tex.SetPixels32(px);
+            tex.Apply(false, true);
+            return _dotStrip[f] = Sprite.Create(tex, new Rect(0, 0, w, h), new Vector2(.5f, .5f), 100, 0, SpriteMeshType.FullRect);
+        }
+
         private static SelFrame MakeSelFrame(RectTransform around, float outset)
         {
             var img = Ui.Img(Ui.Rect(around, "SelFrame", Vector2.zero, Vector2.one, new Vector2(-outset, -outset), new Vector2(outset, outset)), new Color(1, 1, 1, 0), Ui.DashFrame(0));
             img.type = Image.Type.Tiled; img.raycastTarget = false; img.enabled = false;
             var f = new SelFrame { Img = img };
-            // a bush of dots along the bottom edge (MW's broken bottom): scattered around the line, bigger ones sparser,
-            // each breathing on its own phase — on its own canvas, so only it redraws
-            var bush = Ui.Rect(img.rectTransform, "Bush", new Vector2(0, 0), new Vector2(1, 0), new Vector2(outset + 2, -9), new Vector2(-outset - 10, 9));
+            // MW's bottom edge: a dense strip of tiny dots and dashes packed around the line, twinkling (frames cycled on the
+            // shared clock) — one tiled image on its own canvas
+            var bush = Ui.Rect(img.rectTransform, "Bush", new Vector2(0, 0), new Vector2(1, 0), new Vector2(outset + 1, -6), new Vector2(-outset - 10, 6)); // its line row lands on the border's bottom line
             Ui.OwnCanvas(bush);
-            const int n = 26;
-            f.Bush = bush; f.Dots = new Image[n]; f.DotSize = new float[n]; f.DotPhase = new float[n]; f.DotA = new float[n];
-            for (int i = 0; i < n; i++)
-            {
-                float x = (float)_selRng.NextDouble(), y = (float)(_selRng.NextDouble() * _selRng.NextDouble()) * (_selRng.NextDouble() < .7 ? -1 : 1); // mostly just below the line
-                float size = 2 + (float)_selRng.NextDouble() * 2.5f;
-                var d = Ui.Img(Ui.Rect(bush, "Dot", new Vector2(x, .5f + y * .5f), new Vector2(x, .5f + y * .5f), Vector2.zero, Vector2.zero), new Color(1, 1, 1, 0));
-                d.rectTransform.sizeDelta = new Vector2(size, size); d.raycastTarget = false;
-                f.Dots[i] = d; f.DotSize[i] = size; f.DotPhase[i] = (float)_selRng.NextDouble() * 6.28f; f.DotA[i] = .45f + (float)_selRng.NextDouble() * .55f;
-            }
+            f.Bush = bush;
+            f.Strip = Ui.Img(bush, new Color(1, 1, 1, 0), DotStrip(0));
+            f.Strip.type = Image.Type.Tiled; f.Strip.raycastTarget = false;
             bush.gameObject.SetActive(false);
             _selFrames.Add(f);
             return f;
@@ -177,19 +209,16 @@ namespace LevelGate.Progression
 
         private static void TickSelection()
         {
-            // the bottom edge's dots breathe (size and brightness), each on its own phase of the shared clock
+            // the bottom edge's dot strip twinkles: its frames cycle on the shared clock (each dot pulses on its own phase)
             _selFrames.RemoveAll(f => f.Img == null);
-            float now = Motion.Now;
+            int frame = Motion.Still ? 0 : Mathf.FloorToInt(Motion.Now / .09f) % DotStripFrames;
             foreach (var f in _selFrames)
             {
                 if (f.Bush == null || !f.Bush.gameObject.activeSelf) continue;
-                for (int i = 0; i < f.Dots.Length; i++)
-                {
-                    float b = Motion.Still ? .7f : .5f + .5f * Mathf.Sin(now * 2.6f + f.DotPhase[i]);
-                    float sz = f.DotSize[i] * (.55f + .65f * b);
-                    f.Dots[i].rectTransform.sizeDelta = new Vector2(sz, sz);
-                    f.Dots[i].color = new Color(1, 1, 1, f.DotA[i] * (.3f + .7f * b) * f.Shown);
-                }
+                var sp = DotStrip(frame);
+                if (f.Strip.sprite != sp) f.Strip.sprite = sp;
+                var c = new Color(1, 1, 1, .95f * f.Shown);
+                if (f.Strip.color != c) f.Strip.color = c;
             }
             // the section light: moves when the pick moves to another section (Motion: Slow in, Base out)
             string lit = _featTpl != null ? ProgData.GroupOf(_featTpl) : null;
