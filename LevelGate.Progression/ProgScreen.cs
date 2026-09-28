@@ -250,6 +250,7 @@ namespace LevelGate.Progression
             _bottom = Ui.Rect(root, "Bottom", Vector2.zero, new Vector2(1, .30f), Vector2.zero, Vector2.zero);
             SubCanvas(_bottom);
             BuildBottom(_bottom);
+            BuildMicroText();
 
             // vignette over everything (its own canvas, so it draws last), and the whole screen fades in on open
             var vig = Ui.Rect(root, "Vignette", Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
@@ -314,9 +315,33 @@ namespace LevelGate.Progression
         {
             var frame = Ui.Rect(parent, name, aMin, aMax, oMin, oMax);
             _panelFrames.Add(Ui.Img(frame, Border));
+            Ui.CornerMarks(frame, Ui.Hex("#6f7375", .55f)); // CoD-style registration marks at the corners
             var inner = Ui.Fill(frame, "In", BorderWidth);
             Ui.Img(inner, PanelBg);
             return inner;
+        }
+
+        // CoD's HUD micro-text: tiny, faint system labels near panel edges (texture, not information you need to read)
+        private static Component _microList, _microStage, _microSide;
+
+        private static void BuildMicroText()
+        {
+            Color c = Ui.Hex("#7d8285", .42f);
+            Component Micro(RectTransform parent, string name, Vector2 aMin, Vector2 aMax, Vector2 oMin, Vector2 oMax, TextAnchor al)
+            {
+                var l = Ui.Label(Ui.Rect(parent, name, aMin, aMax, oMin, oMax), "Text", "", 8.5f, c, al, false, 2);
+                ((Graphic)l).raycastTarget = false;
+                return l;
+            }
+            if (_focusList != null) _microList = Micro(_focusList, "Micro", Vector2.zero, new Vector2(1, 0), new Vector2(PanelPad, -1), new Vector2(-PanelPad, 9), TextAnchor.LowerLeft);
+            if (_focusStage != null) _microStage = Micro(_focusStage, "Micro", new Vector2(0, 1), new Vector2(1, 1), new Vector2(S3, -16), new Vector2(-S3, -4), TextAnchor.UpperLeft);
+            if (_focusSide != null)
+            {
+                var st = Ui.Rect(_focusSide, "Stats", new Vector2(1, .5f), new Vector2(1, .5f), new Vector2(-60, -6), new Vector2(0, 6));
+                st.localEulerAngles = new Vector3(0, 0, -90); st.anchoredPosition = new Vector2(-4, 40);
+                _microSide = Ui.Label(st, "Text", "STATS  —", 8.5f, c, TextAnchor.MiddleCenter, false, 2);
+                ((Graphic)_microSide).raycastTarget = false;
+            }
         }
 
         private static void BuildHeader(RectTransform top)
@@ -841,7 +866,9 @@ namespace LevelGate.Progression
             var rt = Ui.Rect(parent, "Rule", Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
             var le = rt.gameObject.AddComponent<LayoutElement>();
             le.minHeight = le.preferredHeight = 1 + gap * 2;
-            Ui.Img(Ui.Rect(rt, "Line", new Vector2(0, .5f), new Vector2(1, .5f), new Vector2(0, 0), new Vector2(0, 1)), Border);
+            var line = Ui.Rect(rt, "Line", new Vector2(0, .5f), new Vector2(1, .5f), new Vector2(0, 0), new Vector2(0, 1));
+            line.localScale = new Vector3(-1, 1, 1); // solid at the start, fading out to the right, like CoD's rules
+            Ui.Img(line, Ui.Hex("#5a5e60", .9f), Ui.HorizontalFade());
         }
 
         private static RectTransform Row(RectTransform parent, string name, float spacing)
@@ -1525,6 +1552,7 @@ namespace LevelGate.Progression
             // the reward list
             var groups = ProgData.Groups.Select(g => (g, list: items.Where(it => it.Group == g.Key).ToList())).Where(x => x.list.Count > 0).ToList();
             Ui.SetText(_listTitle, $"LEVEL {level}");
+            if (_microList != null) Ui.SetText(_microList, $"SYS_ONLINE  //  LVL {level:00} / {ProgData.MaxLevel}  //  {items.Count:00} ITEMS");
             Ui.SetText(_listRank, TierOf(level).Name.ToUpperInvariant());
             Ui.SetText(_listState, $"{items.Count} ITEM{(items.Count == 1 ? "" : "S")}");
             // the chip: ✓ LEVEL ACHIEVED · ● YOUR LEVEL · 🔒 LOCKED · 3 LEVELS AWAY
@@ -1748,7 +1776,7 @@ namespace LevelGate.Progression
         {
             public ProgItem Item;
             public RectTransform Rt;
-            public Image Frame, Face, Top, Pic;
+            public Image Frame, Face, Top, Pic, Dither;
             public Component Name;
             public bool Locked, Hover;
             public GameObject NewTag;
@@ -1794,6 +1822,11 @@ namespace LevelGate.Progression
             // selection: a 2 px light bar along the top (so selected isn't told by colour alone)
             v.Top = Ui.Img(Ui.Rect(inner, "Top", new Vector2(0, 1), Vector2.one, new Vector2(9, -2), Vector2.zero), Select); // clear of the cut corner
             v.Top.enabled = false;
+            // texture: light from above and a fine grit on the face; picked: a pixel dissolve along the top edge
+            Ui.Img(Ui.Rect(inner, "TopLight", new Vector2(0, .5f), Vector2.one, Vector2.zero, Vector2.zero), new Color(1, 1, 1, .025f), Ui.VerticalFade()).raycastTarget = false;
+            Ui.Grit(inner, _gritSeed++, .045f);
+            v.Dither = Ui.Img(Ui.Rect(inner, "Dither", new Vector2(0, 1), new Vector2(.7f, 1), new Vector2(9, -8), new Vector2(0, -2)), new Color(1, 1, 1, .28f), Ui.Dither());
+            v.Dither.raycastTarget = false; v.Dither.enabled = false;
             // the short name, top-right like the game's cells (two lines at most; look-alikes say what sets them apart)
             // a soft dark fade under the name, so two-line names stay readable over the picture
             var nameFade = Ui.Img(Ui.Rect(inner, "NameFade", new Vector2(0, 1), Vector2.one, new Vector2(0, -40), Vector2.zero), new Color(0, 0, 0, .5f), Ui.VerticalFade());
@@ -1842,6 +1875,7 @@ namespace LevelGate.Progression
             FadeTo(v.Frame, sel ? Select : v.Hover ? HoverEdge : Border, instant);
             FadeTo(v.Face, sel ? FaceSelect : v.Hover ? FaceHover : Face, instant);
             v.Top.enabled = sel;
+            if (v.Dither != null) v.Dither.enabled = sel;
             v.Pic.rectTransform.localScale = Vector3.one * (v.Hover ? 1.04f : 1f); // a slight lift on hover
             float pa = v.Locked ? (v.Hover || sel ? .8f : .6f) : 1f;
             FadeTo(v.Pic, new Color(1, 1, 1, pa), instant);
@@ -2278,6 +2312,7 @@ namespace LevelGate.Progression
             string path = it.Group == "Weapons" ? null : GameText.CategoryPath(it.Tpl);
             Ui.SetText(_featType, (path ?? g.Name ?? "Item").ToUpperInvariant());
             Ui.SetText(_featName, it.Name);
+            if (_microStage != null) Ui.SetText(_microStage, $"ID - {it.Tpl.Substring(Mathf.Max(0, it.Tpl.Length - 6)).ToUpperInvariant()}  //  LV {it.Level:00}");
             Ui.SetSize(_featName, it.Name.Length > 34 ? TTitle - 2 : it.Name.Length > 26 ? TTitle : THero); // long names: smaller, not a lone word on line 2
             // stats: damage / penetration / armor class / resource big; weight / size / caliber small (nothing invented, nothing dropped)
             var facts = GameItems.Facts(it.Tpl);
@@ -2792,7 +2827,7 @@ namespace LevelGate.Progression
         {
             private readonly RectTransform _body;
             private readonly CanvasGroup _group;
-            private readonly Image _frame, _bg, _glow, _top, _stateLock, _selDots, _cur, _tagPlate, _cardLock, _stamp;
+            private readonly Image _frame, _bg, _glow, _top, _stateLock, _selDots, _cur, _tagPlate, _cardLock, _stamp, _cardDither;
             private readonly Badge _cardBadge;
             private readonly RectTransform _tag;
             private readonly Component _tagText, _typeLine;
@@ -2988,6 +3023,8 @@ namespace LevelGate.Progression
                 _stamp = Ui.Img(Ui.Box(pics, "Stamp", new Vector2(.5f, .5f), Vector2.zero, new Vector2(96, 96)), new Color(1, 1, 1, 0), Ui.HollowTick());
                 _stamp.raycastTarget = false; _stamp.enabled = false;
                 // your level: one thin orange line along the top (orange only ever means "you")
+                _cardDither = Ui.Img(Ui.Rect(inner, "Dither", new Vector2(0, 1), new Vector2(.6f, 1), new Vector2(10, -12), new Vector2(0, -3)), new Color(1, 1, 1, .22f), Ui.Dither());
+                _cardDither.raycastTarget = false; _cardDither.enabled = false;
                 _cur = Ui.Img(Ui.Rect(inner, "Current", new Vector2(0, 1), Vector2.one, new Vector2(10, -3), Vector2.zero), Ui.Hex(Orange));
                 _cur.enabled = false;
                 for (int i = 0; i < 3; i++) _picRects[i] = Ui.Rect(pics, "Pic" + i, Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
@@ -3108,6 +3145,7 @@ namespace LevelGate.Progression
                 bool fresh = reached && NewTags.Level(_level); // kept until you pick the level or click its new rewards
                 FadeTo(_frame, sel ? Select : _hover ? HoverEdge : Border);
                 _top.enabled = sel && !current;
+                _cardDither.enabled = sel;
                 _cur.enabled = current;       // a thin orange line: your level
                 _cardBadge.Still = !(sel || current); // five emblems playing at once was busy (and cost frames)
                 _selDots.enabled = sel;       // the picked card's dot-matrix fill

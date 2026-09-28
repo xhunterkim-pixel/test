@@ -216,7 +216,43 @@ namespace LevelGate.Progression
         private static Sprite _hatch;
 
         /// <summary>Diagonal stripes like the game's empty slots (a 16 px tile, white; tint it faint and tile it).</summary>
-        private static Sprite _chamfer, _plate, _leader, _grain, _hollowTick;
+        private static Sprite _chamfer, _plate, _leader, _grain, _hollowTick, _dither;
+
+        /// <summary>
+        /// CoD's pixel dissolve: white dots on an ordered (Bayer) dither, dense on the left and thinning out to nothing on the
+        /// right. 64 x 8, point-filtered; stretch it along an edge.
+        /// </summary>
+        public static Sprite Dither()
+        {
+            if (_dither != null) return _dither;
+            const int w = 64, h = 8;
+            int[,] bayer = { { 0, 8, 2, 10 }, { 12, 4, 14, 6 }, { 3, 11, 1, 9 }, { 15, 7, 13, 5 } };
+            var tex = new Texture2D(w, h, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Clamp, filterMode = FilterMode.Point };
+            var px = new Color32[w * h];
+            for (int y = 0; y < h; y++)
+                for (int x = 0; x < w; x++)
+                {
+                    float density = Mathf.Pow(1 - x / (float)(w - 1), 1.4f) * (1 - y / (float)h * .6f);
+                    bool on = (bayer[y % 4, x % 4] + .5f) / 16f < density;
+                    px[y * w + x] = new Color32(255, 255, 255, (byte)(on ? 255 : 0));
+                }
+            tex.SetPixels32(px);
+            tex.Apply(false, true);
+            _dither = Sprite.Create(tex, new Rect(0, 0, w, h), new Vector2(.5f, .5f), 100, 0, SpriteMeshType.FullRect);
+            return _dither;
+        }
+
+        /// <summary>Registration marks: a small "+" just outside each corner of a panel (CoD's HUD framing).</summary>
+        public static void CornerMarks(RectTransform frame, Color color, float arm = 5, float gap = 6)
+        {
+            var corners = new[] { new Vector2(0, 0), new Vector2(1, 0), new Vector2(0, 1), new Vector2(1, 1) };
+            foreach (var c in corners)
+            {
+                var off = new Vector2(c.x == 0 ? -gap : gap, c.y == 0 ? -gap : gap);
+                var h = Box(frame, "MarkH", c, off, new Vector2(arm * 2 + 1, 1)); Img(h, color).raycastTarget = false;
+                var v = Box(frame, "MarkV", c, off, new Vector2(1, arm * 2 + 1)); Img(v, color).raycastTarget = false;
+            }
+        }
 
         /// <summary>A hollow check mark (outline only), white, 256 px, antialiased: the unlock stamp.</summary>
         public static Sprite HollowTick()

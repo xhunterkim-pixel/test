@@ -40,6 +40,14 @@ Versions are **MAJOR.MINOR.PATCH**:
 
 ## LevelGate Progression (BepInEx plugin, separate DLL)
 
+### 0.9.59
+More texture, the CoD way (all drawn once, no per-frame cost):
+- Registration marks: a small "+" just outside each corner of the three main panels.
+- HUD micro-text: tiny faint system labels ("SYS_ONLINE // LVL 38 / 79 // 24 ITEMS" under the reward list, "ID - 7009 // LV 38" on the picture, a sideways "STATS —" on the details panel).
+- Pixel dissolve: a dithered dot fade along the top of the picked card and the picked tile.
+- Tiles get a light from above and a fine grit (follows Wear And Scratches).
+- Divider lines start solid and fade out instead of running hard edge to edge.
+
 ### 0.9.58
 - **Performance regression fixed**: 0.9.57's character-screen emblem searched every object in the game every 2 s until you first opened the Character screen (60–90 ms frames, most of that log's 92 slow frames). It now looks the screen up by its path, only while the Character screen is up.
 - **Character > Overall emblem** sits under the USEC / BEAR logo (in the column's own spacing) with the rank name under it, instead of next to the ✕.
