@@ -1260,85 +1260,44 @@ namespace LevelGate.Progression
             float cell = Mathf.Floor((width - (cols - 1) * S2) / cols);
             // names that collide at this level (e.g. three "Stich Profi Ches…") show their full name instead
             var dupes = TileNames(items);
-            // small levels (a handful of items over several categories): one grid, the category as a label on each tile,
-            // instead of a one-tile section per category (a single column with the panel ¾ empty)
+            // small levels (a handful of items over several categories): the categories sit side by side as small slots,
+            // each its own tab over a box just as wide as its items, like the game's gear slots (EARPIECE › · HEADWEAR ›),
+            // instead of a stack of one-tile sections down a ¾-empty panel
             bool compact = items.Count <= 8 && groups.Count > 1;
             // three or fewer: three bigger tiles across (at 4 across, 3 items left most of the panel empty)
             if (compact && items.Count <= 3 && cols > 3) { cols = 3; cell = Mathf.Floor((width - (cols - 1) * S2) / cols); }
             _tileCell = cell;
-            // inside a category's framed box (1 px frame + 6 px each side) the same columns, a little narrower
-            float boxCell = Mathf.Floor((width - 2 * (BoxPad + 1) - (cols - 1) * S2) / cols);
+            const int Frame = 2 * (BoxPad + 1); // a box's frame + padding, both sides
+            bool reachedLevel = level <= player || player <= 0;
+            void AddTile(RectTransform grid, ProgItem it) => Tile(grid, it, reachedLevel, dupes.TryGetValue(it.Tpl, out var dn) ? dn : null, n++);
             if (compact)
             {
-                var grid = Ui.Rect(_content, "Grid", Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
-                var gl = grid.gameObject.AddComponent<GridLayoutGroup>();
-                gl.cellSize = new Vector2(cell, Mathf.Round(cell * .78f) + TileLabel); // 4:3 thumbnails
-                gl.spacing = new Vector2(S2, S2);
-                gl.startCorner = GridLayoutGroup.Corner.UpperLeft;
-                gl.constraint = GridLayoutGroup.Constraint.FixedColumnCount;
-                gl.constraintCount = cols;
+                // tiles sized so `cols` one-item slots fit across; a slot of k items is k tiles wide
+                float slotCell = Mathf.Floor((width - cols * Frame - (cols - 1) * S2) / cols);
+                RectTransform row = null; float used = 0;
                 foreach (var (g, list) in groups)
-                    foreach (var it in list) Tile(grid, it, level <= player || player <= 0, dupes.TryGetValue(it.Tpl, out var dn1) ? dn1 : null, n++, g);
-            }
-            else foreach (var (g, list) in groups)
-            {
-                var section = Ui.Rect(_content, "Cat_" + g.Key, Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
-                var sl = section.gameObject.AddComponent<VerticalLayoutGroup>();
-                sl.spacing = 0; sl.childControlHeight = true; sl.childControlWidth = true; sl.childForceExpandHeight = false; sl.childForceExpandWidth = true;
-
-                // like the game's slot / container titles (EARPIECE ›, TACTICAL RIG ⌄): one full-width grey tab, bold caps on
-                // the left, count and chevron on the right, the tiles in a framed box attached under it. Click: fold / open.
-                var head = Ui.Rect(section, "Head", Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
-                head.gameObject.AddComponent<LayoutElement>().preferredHeight = 26;
-                var tabFace = Ui.Img(head, Ui.Hex("#232a2d", .97f), null, true);
-                Ui.Img(Ui.Rect(head, "Top", new Vector2(0, 1), Vector2.one, new Vector2(0, -1), Vector2.zero), Ui.Hex("#3f494d"));
-                Ui.Img(Ui.Rect(head, "Shade", Vector2.zero, new Vector2(1, .5f), Vector2.zero, Vector2.zero), new Color(0, 0, 0, .18f));
-                Ui.Label(Ui.Rect(head, "Name", Vector2.zero, Vector2.one, new Vector2(10, 0), new Vector2(-90, 0)), "Text",
-                    g.Name.ToUpperInvariant(), TCaps + 1, Ui.Hex("#d0d5d7"), TextAnchor.MiddleLeft, true, 1);
-                Ui.Label(Ui.Rect(head, "Count", new Vector2(1, 0), Vector2.one, new Vector2(-150, 0), new Vector2(-28, 0)), "Text",
-                    list.Count > max ? $"{max} of {list.Count}" : list.Count.ToString(), TCaps, Ui.Hex("#7d8588"), TextAnchor.MiddleRight, false, 1);
-                var chev = Ui.Rect(head, "Chevron", new Vector2(1, .5f), new Vector2(1, .5f), new Vector2(-22, -8), new Vector2(-8, 8));
-                var chevText = Ui.Label(chev, "Text", "›", TStrong + 3, Ui.Hex("#aab2b5"), TextAnchor.MiddleCenter, false);
-
-                // the box: a 1 px frame, a darker inside, 6 px in from it
-                var body = Ui.Rect(section, "Box", Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
-                Ui.Img(body, Ui.Hex("#2b3438", .9f));
-                var boxIn = Ui.Img(Ui.Fill(body, "In", 1), Ui.Hex("#0a0e10", .7f));
-                boxIn.gameObject.AddComponent<LayoutElement>().ignoreLayout = true;
-                var bl = body.gameObject.AddComponent<VerticalLayoutGroup>();
-                bl.padding = new RectOffset(BoxPad + 1, BoxPad + 1, BoxPad + 1, BoxPad + 1); bl.childControlHeight = true; bl.childControlWidth = true;
-                bl.childForceExpandHeight = false; bl.childForceExpandWidth = true;
-                var grid = Ui.Rect(body, "Grid", Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
-                var gl = grid.gameObject.AddComponent<GridLayoutGroup>();
-                gl.cellSize = new Vector2(boxCell, Mathf.Round(boxCell * .78f) + TileLabel); // 4:3 thumbnails
-                gl.spacing = new Vector2(S2, S2);
-                gl.startCorner = GridLayoutGroup.Corner.UpperLeft;
-                gl.constraint = GridLayoutGroup.Constraint.FixedColumnCount;
-                gl.constraintCount = cols;
-
-                string catKey = g.Key;
-                void ShowFolded()
                 {
-                    bool folded = _foldedCats.Contains(catKey);
-                    body.gameObject.SetActive(!folded);
-                    chev.localRotation = Quaternion.Euler(0, 0, folded ? 0 : -90); // › folded, pointing down while open
+                    int k = Mathf.Min(list.Count, cols);
+                    float w = k * slotCell + (k - 1) * S2 + Frame;
+                    if (row == null || used + S2 + w > width + .5f)
+                    {
+                        row = Ui.Rect(_content, "Slots", Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
+                        var hl = row.gameObject.AddComponent<HorizontalLayoutGroup>();
+                        hl.spacing = S2; hl.childAlignment = TextAnchor.UpperLeft;
+                        hl.childControlWidth = hl.childControlHeight = true; hl.childForceExpandWidth = hl.childForceExpandHeight = false;
+                        used = -S2;
+                    }
+                    used += S2 + w;
+                    var unit = CategoryBlock(row, g, list, list.Count, k, slotCell, true, AddTile);
+                    var ule = unit.gameObject.AddComponent<LayoutElement>();
+                    ule.minWidth = ule.preferredWidth = w;
                 }
-                ShowFolded();
-                var hb = head.gameObject.AddComponent<Button>();
-                hb.targetGraphic = tabFace; hb.transition = Selectable.Transition.None;
-                hb.onClick.AddListener(() =>
-                {
-                    if (!_foldedCats.Remove(catKey)) _foldedCats.Add(catKey);
-                    Sounds.Click();
-                    ShowFolded();
-                    L.Debug($"category {catKey} {(_foldedCats.Contains(catKey) ? "folded" : "opened")}");
-                });
-                HoverHook.Add(tabFace, on =>
-                {
-                    FadeTo(tabFace, on ? Ui.Hex("#2d3538", .97f) : Ui.Hex("#232a2d", .97f));
-                    FadeTo(chevText as Graphic, on ? Text : Ui.Hex("#aab2b5"));
-                });
-                foreach (var it in list.Take(max)) Tile(grid, it, level <= player || player <= 0, dupes.TryGetValue(it.Tpl, out var dn2) ? dn2 : null, n++);
+            }
+            else
+            {
+                // inside a category's framed box (1 px frame + 6 px each side) the same columns, a little narrower
+                float boxCell = Mathf.Floor((width - Frame - (cols - 1) * S2) / cols);
+                foreach (var (g, list) in groups) CategoryBlock(_content, g, list, max, cols, boxCell, false, AddTile);
             }
             if (groups.Count == 0)
             {
@@ -1354,11 +1313,86 @@ namespace LevelGate.Progression
             L.Debug($"level {level}: {items.Count} item(s) in {groups.Count} categories, {n} tiles drawn in {(Time.realtimeSinceStartup - t0) * 1000:0} ms");
         }
 
+        /// <summary>
+        /// One reward category like the game's slot / container titles (EARPIECE ›, TACTICAL RIG ⌄): a grey tab (bold caps on
+        /// the left, count and chevron on the right) over a framed box of its tiles. Hover: the tab lights up pale with dark
+        /// text, like the game's. Click: fold / open. Narrow: a small slot (a few tiles wide) instead of the panel's width.
+        /// </summary>
+        private static RectTransform CategoryBlock(RectTransform parent, (string Key, string Name, string Color, string[] Ids) g, List<ProgItem> list,
+            int max, int tileCols, float tileCell, bool narrow, Action<RectTransform, ProgItem> addTile)
+        {
+            var section = Ui.Rect(parent, "Cat_" + g.Key, Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
+            var sl = section.gameObject.AddComponent<VerticalLayoutGroup>();
+            sl.spacing = 0; sl.childControlHeight = true; sl.childControlWidth = true; sl.childForceExpandHeight = false; sl.childForceExpandWidth = true;
+
+            var head = Ui.Rect(section, "Head", Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
+            head.gameObject.AddComponent<LayoutElement>().preferredHeight = 26;
+            Color face = Ui.Hex("#232a2d", .97f), faceHover = Ui.Hex("#c4c9cb"), ink = Ui.Hex("#d0d5d7"), inkHover = Ui.Hex("#15191b");
+            Color dim = Ui.Hex("#7d8588"), dimHover = Ui.Hex("#3a4245"), chevInk = Ui.Hex("#aab2b5");
+            var tabFace = Ui.Img(head, face, null, true);
+            var top = Ui.Img(Ui.Rect(head, "Top", new Vector2(0, 1), Vector2.one, new Vector2(0, -1), Vector2.zero), Ui.Hex("#3f494d"));
+            var shade = Ui.Img(Ui.Rect(head, "Shade", Vector2.zero, new Vector2(1, .5f), Vector2.zero, Vector2.zero), new Color(0, 0, 0, .18f));
+            string count = list.Count > max ? $"{max} of {list.Count}" : list.Count.ToString();
+            float countW = narrow ? 12 : 120;
+            var name = Ui.Label(Ui.Rect(head, "Name", Vector2.zero, Vector2.one, new Vector2(narrow ? 7 : 10, 0), new Vector2(-(countW + 30), 0)), "Text",
+                g.Name.ToUpperInvariant(), narrow ? TCaps : TCaps + 1, ink, TextAnchor.MiddleLeft, true, narrow ? .5f : 1, true);
+            var countText = Ui.Label(Ui.Rect(head, "Count", new Vector2(1, 0), Vector2.one, new Vector2(-28 - countW, 0), new Vector2(-26, 0)), "Text",
+                count, TCaps, dim, TextAnchor.MiddleRight, false, 1);
+            var chev = Ui.Rect(head, "Chevron", new Vector2(1, .5f), new Vector2(1, .5f), new Vector2(-22, -8), new Vector2(-8, 8));
+            var chevText = Ui.Label(chev, "Text", "›", TStrong + 3, chevInk, TextAnchor.MiddleCenter, false);
+
+            // the box: a 1 px frame, a darker inside, 6 px in from it
+            var body = Ui.Rect(section, "Box", Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
+            Ui.Img(body, Ui.Hex("#2b3438", .9f));
+            var boxIn = Ui.Img(Ui.Fill(body, "In", 1), Ui.Hex("#0a0e10", .7f));
+            boxIn.gameObject.AddComponent<LayoutElement>().ignoreLayout = true;
+            var bl = body.gameObject.AddComponent<VerticalLayoutGroup>();
+            bl.padding = new RectOffset(BoxPad + 1, BoxPad + 1, BoxPad + 1, BoxPad + 1); bl.childControlHeight = true; bl.childControlWidth = true;
+            bl.childForceExpandHeight = false; bl.childForceExpandWidth = true;
+            var grid = Ui.Rect(body, "Grid", Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
+            var gl = grid.gameObject.AddComponent<GridLayoutGroup>();
+            gl.cellSize = new Vector2(tileCell, Mathf.Round(tileCell * .78f) + TileLabel); // 4:3 thumbnails
+            gl.spacing = new Vector2(S2, S2);
+            gl.startCorner = GridLayoutGroup.Corner.UpperLeft;
+            gl.constraint = GridLayoutGroup.Constraint.FixedColumnCount;
+            gl.constraintCount = tileCols;
+
+            string catKey = g.Key;
+            void ShowFolded()
+            {
+                bool folded = _foldedCats.Contains(catKey);
+                body.gameObject.SetActive(!folded);
+                chev.localRotation = Quaternion.Euler(0, 0, folded ? 0 : -90); // › folded, pointing down while open
+            }
+            ShowFolded();
+            var hb = head.gameObject.AddComponent<Button>();
+            hb.targetGraphic = tabFace; hb.transition = Selectable.Transition.None;
+            hb.onClick.AddListener(() =>
+            {
+                if (!_foldedCats.Remove(catKey)) _foldedCats.Add(catKey);
+                Sounds.Click();
+                ShowFolded();
+                L.Debug($"category {catKey} {(_foldedCats.Contains(catKey) ? "folded" : "opened")}");
+            });
+            HoverHook.Add(tabFace, on =>
+            {
+                if (on) Sounds.Play("ButtonOver");
+                FadeTo(tabFace, on ? faceHover : face, true);
+                FadeTo(top, on ? Ui.Hex("#e1e5e6") : Ui.Hex("#3f494d"), true);
+                FadeTo(shade, new Color(0, 0, 0, on ? .08f : .18f), true);
+                FadeTo(name as Graphic, on ? inkHover : ink, true);
+                FadeTo(countText as Graphic, on ? dimHover : dim, true);
+                FadeTo(chevText as Graphic, on ? inkHover : chevInk, true);
+            });
+            foreach (var it in list.Take(max)) addTile(grid, it);
+            return section;
+        }
+
         private static readonly HashSet<string> _foldedCats = new HashSet<string>(); // categories folded away (click their title)
 
         private const int BoxPad = 6;        // a category box's inner padding
         private const float TileMin = 118;   // smallest tile width before a column is dropped
-        private const float TileLabel = 34;  // name area under the thumbnail (two lines of 12 px)
+        private const float TileLabel = 40;  // name area under the thumbnail (two lines of 13.5 px)
 
         /// <summary>
         /// Tile names for items whose short names collide (three "Bastion" helmets): the short name plus what tells them
@@ -1431,7 +1465,7 @@ namespace LevelGate.Progression
             v.Top.enabled = false;
             // name: two lines of 12 px, the full name when short names collide
             v.Name = Ui.Label(Ui.Rect(inner, "Name", Vector2.zero, new Vector2(1, 0), new Vector2(S2, S1), new Vector2(-S2, TileLabel - S1)), "Text",
-                shownName ?? it.Short, TCaps, Grey, TextAnchor.MiddleLeft, false, 0, true);
+                shownName ?? it.Short, 13.5f, Grey, TextAnchor.MiddleLeft, false, 0, true);
             Ui.SetWrap(v.Name, true);
             Refl.Set(v.Name, "lineSpacing", -8f);
             // compact list: the category on the tile itself (its colour bar + small caps), top-left

@@ -40,6 +40,11 @@ Versions are **MAJOR.MINOR.PATCH**:
 
 ## LevelGate Progression (BepInEx plugin, separate DLL)
 
+### 0.9.50
+- **Category tabs light up like the game's**: hovering a title (WEAPONS ›, AMMO ›) turns it pale grey with dark text, like EYEWEAR › in the inventory (it used to only get a shade lighter).
+- **Small levels look like the gear slots**: with a handful of items, each category is a small slot side by side (its own tab over a box as wide as its items) instead of one grid with a coloured label on each tile.
+- **Bigger item names in the tiles** (13.5 px, was 12; the name area is taller to fit two lines).
+
 ### 0.9.49
 - **Grenades, meds and stims show their details** in the right panel, straight from the game's own inspect rows with their icons: explosion delay, contact delay, radius, fragments, damage per fragment; use time, every effect with its duration / strength (SKILL "ATTENTION" Dur. 240sec (+30)…) and the side effects (hands tremor, energy loss…). The first item of each category logs its rows (verbose) so names / values can be checked.
 - **Semi-autos no longer say "Bolt action"** (Desert Eagle…): only the game's own bolt-action flag makes a weapon bolt action; a low template rate reads "Semi-auto".
