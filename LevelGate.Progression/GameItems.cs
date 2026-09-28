@@ -190,6 +190,10 @@ namespace LevelGate.Progression
             {
                 try
                 {
+                    // already being drawn at this size (a card and the pre-loader asking for the same picture): share that request
+                    // instead of having the game draw it again — 0.9.70 logs showed ~11% of all draws were such repeats
+                    string key = scale != 1 ? Refl.Get(item, "TemplateId")?.ToString() + "@" + scale : null;
+                    if (key != null && _inflight.TryGetValue(key, out var inf) && inf != null && _pending.ContainsKey(inf)) return inf;
                     if (scale != 1) { _scaled.Add(item); L.Debug($"icon: asking the game for {Refl.Get(item, "TemplateId")} ({ProgData.GroupOf(Refl.Get(item, "TemplateId")?.ToString() ?? "")}) at {scale}x"); }
                     L.Step($"icon: {Refl.Get(item, "TemplateId") ?? item.GetType().Name} at {scale}x");
                     var before = scale != 1 ? SpriteOf(CallIcon(_loadIcon, item, 1, false)) : null; // what the stash has now
@@ -200,6 +204,7 @@ namespace LevelGate.Progression
                         var (w, h) = CellsOf(item);
                         float expect = PxPerCell * Mathf.Max(w, h) * scale;
                         _pending[icon] = (before, Time.realtimeSinceStartup + 6f, item, scale, expect);
+                        _inflight[key] = icon;
                     }
                     return icon;
                 }
@@ -313,6 +318,8 @@ namespace LevelGate.Progression
         }
         private static readonly Dictionary<string, Sprite> _copies = new Dictionary<string, Sprite>();
         private static readonly Queue<string> _copyOrder = new Queue<string>();
+        private static readonly Dictionary<string, object> _inflight = new Dictionary<string, object>();
+        private static readonly Dictionary<object, (Sprite Copy, float At)> _madeFrom = new Dictionary<object, (Sprite, float)>();
 
         /// <summary>Our own copy of a bigger render of this item, if we made one already.</summary>
         public static Sprite CopyOf(string tpl, int scale) => _copies.TryGetValue(tpl + "@" + scale, out var sp) && sp != null && sp.texture != null ? sp : null;
@@ -324,7 +331,12 @@ namespace LevelGate.Progression
             done = false;
             var sp = SpriteOf(icon);
             if (sp == null) return null;
-            if (icon == null || !_pending.TryGetValue(icon, out var p)) { done = true; return sp; }
+            if (icon == null || !_pending.TryGetValue(icon, out var p))
+            {
+                // a shared request another asker already finished: the copy made from it (the game's own is back at stash size)
+                if (icon != null && _madeFrom.TryGetValue(icon, out var mf) && mf.Copy != null && mf.Copy.texture != null && Time.realtimeSinceStartup - mf.At < 10f) { done = true; return mf.Copy; }
+                done = true; return sp;
+            }
             // only the render we asked for counts: at least ~70% of the expected size. The first picture to arrive is often
             // the game's stash-size one (64 px a cell) — taking that one made the big preview a stretched thumbnail.
             float longSide = Mathf.Max(sp.rect.width, sp.rect.height);
@@ -340,6 +352,11 @@ namespace LevelGate.Progression
                 return sp;
             }
             var copy = Copy(sp);
+            if (copy != null)
+            {
+                _madeFrom[icon] = (copy, Time.realtimeSinceStartup);
+                if (_madeFrom.Count > 300) foreach (var k in _madeFrom.Where(x => Time.realtimeSinceStartup - x.Value.At > 10f).Select(x => x.Key).ToList()) _madeFrom.Remove(k);
+            }
             try { CallIcon(_loadIcon, p.Item, 1, true); } catch (Exception e) { L.ErrorOnce("putting an icon back to stash size", e); }
             if (copy == null) return sp;
             var key = tpl + "@" + p.Scale;
@@ -348,6 +365,7 @@ namespace LevelGate.Progression
             if (_copies.TryGetValue(key, out var had) && had != null && had.texture != null)
             {
                 UnityEngine.Object.Destroy(copy.texture);
+                _madeFrom[icon] = (had, Time.realtimeSinceStartup);
                 L.Debug($"icon: {tpl} at {p.Scale}x was already kept — using that one");
                 return had;
             }
@@ -383,6 +401,58 @@ namespace LevelGate.Progression
                 _copies.Remove(old);
             }
             foreach (var k in back) _copyOrder.Enqueue(k);
+        }
+
+        private static readonly Dictionary<Sprite, Color> _bloomColors = new Dictionary<Sprite, Color>();
+        private static Texture2D _probe;
+
+        /// <summary>
+        /// The colour an item's picture glows in: its picture shrunk to 16x16 on the GPU and read back; opaque, colourful
+        /// pixels count most (a red item blooms red), then brightened for light. Mostly grey: a neutral warm light.
+        /// Cached per picture; null when it can't be read.
+        /// </summary>
+        public static Color? BloomColor(Sprite sp)
+        {
+            if (sp == null || sp.texture == null) return null;
+            if (_bloomColors.TryGetValue(sp, out var have)) return have;
+            RenderTexture rt = null, prev = RenderTexture.active;
+            try
+            {
+                const int n = 16;
+                var src = sp.texture; var r = sp.textureRect;
+                rt = RenderTexture.GetTemporary(n, n, 0, RenderTextureFormat.ARGB32);
+                Graphics.Blit(src, rt, new Vector2(r.width / src.width, r.height / src.height), new Vector2(r.x / src.width, r.y / src.height));
+                RenderTexture.active = rt;
+                if (_probe == null) _probe = new Texture2D(n, n, TextureFormat.RGBA32, false);
+                _probe.ReadPixels(new Rect(0, 0, n, n), 0, 0);
+                _probe.Apply(false, false);
+                float wr = 0, wg = 0, wb = 0, wsum = 0, satSum = 0, aSum = 0;
+                foreach (var c in _probe.GetPixels32())
+                {
+                    float a = c.a / 255f; if (a < .2f) continue;
+                    Color.RGBToHSV(new Color32(c.r, c.g, c.b, 255), out _, out float sat, out float val);
+                    float w = a * (.15f + sat * sat * 3f) * (.3f + val);
+                    wr += c.r / 255f * w; wg += c.g / 255f * w; wb += c.b / 255f * w; wsum += w; satSum += sat * a; aSum += a;
+                }
+                Color col;
+                if (wsum <= 0 || aSum <= 0) col = new Color(1f, .93f, .82f);
+                else
+                {
+                    var avg = new Color(wr / wsum, wg / wsum, wb / wsum);
+                    Color.RGBToHSV(avg, out float h, out float s2, out float v);
+                    float colourful = satSum / aSum; // how colourful the item is overall
+                    col = colourful < .12f ? new Color(1f, .93f, .82f) : Color.HSVToRGB(h, Mathf.Clamp01(s2 * 1.3f + .1f), Mathf.Max(v, .85f));
+                }
+                if (_bloomColors.Count > 600) _bloomColors.Clear();
+                _bloomColors[sp] = col;
+                return col;
+            }
+            catch (Exception e) { L.ErrorOnce("item bloom colour", e); return null; }
+            finally
+            {
+                RenderTexture.active = prev;
+                if (rt != null) RenderTexture.ReleaseTemporary(rt);
+            }
         }
 
         private static Sprite Copy(Sprite sp)
@@ -449,7 +519,7 @@ namespace LevelGate.Progression
             var all = new HashSet<Sprite>(_copies.Values.Where(x => x != null));
             try { Dropping?.Invoke(all); } catch (Exception e) { L.ErrorOnce("letting go of pictures", e); }
             foreach (var sp in all) { UnityEngine.Object.Destroy(sp.texture); n++; }
-            _copies.Clear(); _copyOrder.Clear(); _pending.Clear();
+            _copies.Clear(); _copyOrder.Clear(); _pending.Clear(); _inflight.Clear(); _madeFrom.Clear();
             L.Info($"items: {n} kept picture(s) cleared");
             return n;
         }

@@ -70,9 +70,12 @@ namespace LevelGate.Progression
             return f;
         }
 
+        /// <summary>F12 > CURRENTLY TESTING > Hover Glitch, as a multiple of 0.9.70's strength (default 50%).</summary>
+        private static float GlitchK => (ProgressionPlugin.TestGlitch?.Value ?? 50) / 100f;
+
         private static void PlayGlitch(RectTransform host)
         {
-            if (host == null || Calm || Ui.DetailK <= 0) return;
+            if (host == null || Calm || Ui.DetailK <= 0 || GlitchK <= 0) return;
             var f = FxOf(host); f.GlitchAt = Time.unscaledTime; f.Glitch.enabled = true;
         }
 
@@ -98,7 +101,7 @@ namespace LevelGate.Progression
                     {
                         // slides across, flickering, and fades
                         float fl = (Mathf.Sin(now * 70f) > -.2f ? 1f : .35f);
-                        f.Glitch.color = new Color(1, 1, 1, .55f * (1 - t) * fl);
+                        f.Glitch.color = new Color(1, 1, 1, .55f * GlitchK * (1 - t) * fl);
                         f.Glitch.rectTransform.anchoredPosition = new Vector2(Mathf.Lerp(-18, 22, t), (t < .5f ? 0 : 2));
                     }
                 }
@@ -119,12 +122,63 @@ namespace LevelGate.Progression
             _fxDead.Clear();
         }
 
+        // ---------------------------------------------------------------- item bloom
+
+        private static float _bloomAt;
+
+        private static float BloomOpacity => Ui.DetailK * (ProgressionPlugin.TestBloomOpacity?.Value ?? 100) / 100f;
+        private static float BloomSize => (ProgressionPlugin.TestBloomSize?.Value ?? 100) / 100f;
+
+        /// <summary>
+        /// Five times a second: the glow behind the big picture, the picked tile and the picked card takes the colours of
+        /// the item it's behind (a red item blooms red). Only writes when something changed.
+        /// </summary>
+        private static void TickBloom()
+        {
+            if (Time.unscaledTime < _bloomAt) return;
+            _bloomAt = Time.unscaledTime + .2f;
+            float op = BloomOpacity, sz = BloomSize;
+            if (_heroBloom != null)
+            {
+                var src = _featPic != null && _featPic.enabled ? _featPic.sprite : null;
+                var c = src != null ? GameItems.BloomColor(src) : null;
+                var col = c ?? new Color(1, 1, 1, 0);
+                col.a = c.HasValue ? Mathf.Clamp01(.28f * op) : 0;
+                if (_heroBloom.color != col) _heroBloom.color = col;
+                var want = new Vector2(760, 440) * sz;
+                if (_heroBloom.rectTransform.sizeDelta != want) _heroBloom.rectTransform.sizeDelta = want;
+            }
+            foreach (var v in _tileOrder)
+            {
+                if (v?.Bloom == null) continue;
+                bool sel = v.Item.Tpl == _featTpl && v.Pic.enabled && op > 0;
+                if (v.Bloom.enabled != sel) v.Bloom.enabled = sel;
+                if (!sel) continue;
+                var c = GameItems.BloomColor(v.Pic.sprite);
+                if (!c.HasValue) continue;
+                var col = c.Value; col.a = Mathf.Clamp01(.3f * op);
+                if (v.Bloom.color != col) v.Bloom.color = col;
+                var want = new Vector2(150, 110) * sz;
+                if (v.Bloom.rectTransform.sizeDelta != want) v.Bloom.rectTransform.sizeDelta = want;
+            }
+            foreach (var card in _cards)
+            {
+                if (card == null || !card.Picked) continue;
+                var sp = card.MainPicture;
+                card.ItemBloom(sp != null ? GameItems.BloomColor(sp) : null, Mathf.Clamp01(.14f * op), sz);
+            }
+        }
+
         // ---------------------------------------------------------------- the big picture's load-in
 
         private static Image _revealMask, _revealLines;
         private static float _revealAt = -10;
         private static bool _revealWanted;
-        private const float RevealTime = .6f;
+        private static int _revealVariant;
+        private static float _revealNextSwap;
+        private static readonly System.Random _revealRng = new System.Random();
+        private static float RevealTime => Mathf.Max(.1f, ProgressionPlugin.TestRevealTime?.Value ?? .6f);   // F12 > CURRENTLY TESTING
+        private static float RevealRandom => Mathf.Clamp01((ProgressionPlugin.TestRevealRandom?.Value ?? 60) / 100f);
 
         private static void BuildReveal()
         {
@@ -147,6 +201,11 @@ namespace LevelGate.Progression
             if (Calm || _revealMask == null) { EndReveal(); return; }
             _revealAt = Time.unscaledTime;
             _revealMask.transform.gameObject.SetActive(true);
+            // the mask is a copy of the picture: always the current sprite, always on (0.9.70: clearing pictures on a
+            // Performance Mode switch emptied it, and an empty mask let the lines cover the whole box as a flat band)
+            _revealMask.sprite = _featPic.sprite; _revealMask.enabled = true;
+            _revealVariant = _revealRng.Next(4); _revealNextSwap = 0;
+            SetRevealLines();
             _featPic.type = Image.Type.Filled;
             _featPic.fillMethod = Image.FillMethod.Vertical;
             _featPic.fillOrigin = (int)Image.OriginVertical.Top;
@@ -160,6 +219,16 @@ namespace LevelGate.Progression
             if (_revealMask != null) _revealMask.transform.gameObject.SetActive(false);
         }
 
+        private static void SetRevealLines()
+        {
+            _revealLines.sprite = Ui.RevealStreaks(_revealVariant);
+            float rk = RevealRandom;
+            var lr = _revealLines.rectTransform;
+            float shift = (float)(_revealRng.NextDouble() * 2 - 1) * 40 * rk;
+            lr.offsetMin = new Vector2(-40 * rk + shift, lr.offsetMin.y); lr.offsetMax = new Vector2(40 * rk + shift, lr.offsetMax.y);
+            lr.localScale = new Vector3(rk > 0 && _revealRng.NextDouble() < .5 ? -1 : 1, 1, 1);
+        }
+
         private static void TickReveal()
         {
             if (_revealAt < 0 || _featPic == null) return;
@@ -168,6 +237,16 @@ namespace LevelGate.Progression
             float r = EaseOutCubic(t);
             _featPic.fillAmount = r;
             if (_revealMask.sprite != _featPic.sprite) _revealMask.sprite = _featPic.sprite; // the sharper render may arrive mid-way
+            if (!_revealMask.enabled) _revealMask.enabled = true;
+            if (_revealMask.sprite == null) { EndReveal(); return; } // no shape to draw the lines on: never a flat band
+            // randomness: the lines swap pattern, shift and flip while it plays (0 = one fixed pattern)
+            float rk = RevealRandom;
+            if (rk > 0 && Time.unscaledTime >= _revealNextSwap)
+            {
+                _revealNextSwap = Time.unscaledTime + Mathf.Lerp(.25f, .03f, rk);
+                _revealVariant = _revealRng.Next(4);
+                SetRevealLines();
+            }
             // the lines hang from the front down over the part still coming, in the item's rank colour
             var lr = _revealLines.rectTransform;
             float front = 1 - r;

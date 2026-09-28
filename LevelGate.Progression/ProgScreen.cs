@@ -71,6 +71,7 @@ namespace LevelGate.Progression
         // centre + right: the featured item
         private static Image _featPic, _featLock, _featLight;
         private static int _featLevel;
+        private static Image _heroBloom;
         private static Component _featShort, _featType, _featName, _featReq, _featReqValue, _featStatus;
         private static Image _featCheck;
         private static Component _featDesc;
@@ -686,6 +687,9 @@ namespace LevelGate.Progression
             Ui.Img(floorL, new Color(1, 1, 1, .06f), Ui.HorizontalFade());
             floorL.localScale = new Vector3(-1, 1, 1); // fades out to both sides
             Ui.Img(Ui.Rect(picFace, "Shadow", new Vector2(.2f, .14f), new Vector2(.8f, .26f), Vector2.zero, Vector2.zero), new Color(0, 0, 0, .5f), Ui.Radial());
+            // item bloom: a glow in the picked item's own colours behind it (F12 > CURRENTLY TESTING > Item Bloom)
+            _heroBloom = Ui.Img(Ui.Box(picFace, "ItemBloom", new Vector2(.5f, .52f), Vector2.zero, new Vector2(760, 440)), new Color(1, 1, 1, 0), Ui.Radial());
+            _heroBloom.raycastTarget = false;
             _featPic = Ui.Img(Ui.Fill(picFace, "Pic", 40), Color.white);
             _featPic.preserveAspect = true;
             _featPic.enabled = false;
@@ -1932,7 +1936,7 @@ namespace LevelGate.Progression
         {
             public ProgItem Item;
             public RectTransform Rt;
-            public Image Frame, Face, Top, Pic, Dither, Sheen, Gloss;
+            public Image Frame, Face, Top, Pic, Dither, Sheen, Gloss, Bloom;
             public Component Name;
             public bool Locked, Hover, WasSel;
             public GameObject NewTag;
@@ -1998,6 +2002,8 @@ namespace LevelGate.Progression
             Ui.Detail(Ui.Img(Ui.Fill(inner, "Light"), new Color(1, 1, 1, .045f), Ui.Radial()), .045f);
             var placeholder = Ui.Label(Ui.Fill(thumb, "Placeholder", S2), "Text", "", TCaps, Dim, TextAnchor.MiddleCenter, false, 0, true);
             AddLoader(placeholder, -2);
+            v.Bloom = Ui.Img(Ui.Box(thumb, "ItemBloom", new Vector2(.5f, .5f), Vector2.zero, new Vector2(150, 110)), new Color(1, 1, 1, 0), Ui.Radial());
+            v.Bloom.raycastTarget = false; v.Bloom.enabled = false;
             v.Pic = Ui.Img(Ui.Fill(thumb, "Icon", 0), Color.white);
             var prt = v.Pic.rectTransform;
             // long guns take the full width (they came out tiny at 80% of a box)
@@ -3070,6 +3076,18 @@ namespace LevelGate.Progression
             private readonly GameObject _selLights;
             private readonly Image _selBloom, _selDotLight;
             private float _lightSeed = UnityEngine.Random.value * 10;
+
+            /// <summary>The picked card's inner bloom takes its main item's colours (item bloom); null: back to the rank's.</summary>
+            public void ItemBloom(Color? c, float alpha, float size)
+            {
+                if (_selBloom == null || !_selLights.activeSelf) return;
+                if (c.HasValue) { var col = c.Value; col.a = alpha; if (_selBloom.color != col) _selBloom.color = col; }
+                var want = new Vector2(460, 300) * size;
+                if (_selBloom.rectTransform.sizeDelta != want) _selBloom.rectTransform.sizeDelta = want;
+            }
+
+            public Sprite MainPicture => _pics[0] != null && _pics[0].enabled ? _pics[0].sprite : null;
+            public bool Picked => _selLights != null && _selLights.activeSelf;
 
             /// <summary>Every frame (only the picked card has its lights on): they drift slowly, F12 Detail Animation.</summary>
             public void TickLight(float phase, float amount)

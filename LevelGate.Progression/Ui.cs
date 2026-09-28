@@ -454,7 +454,8 @@ namespace LevelGate.Progression
             return sp;
         }
 
-        private static Sprite _hstreaks, _vstreaks;
+        private static Sprite _hstreaks;
+        private static readonly Sprite[] _vstreaks = new Sprite[4];
 
         /// <summary>MW's hover glitch: thin horizontal streaks of random length and brightness, broken up. White.</summary>
         public static Sprite HStreaks()
@@ -484,17 +485,19 @@ namespace LevelGate.Progression
         /// MW's picture load-in: lines hanging down from the top edge, one every 2 px, of uneven length; the longer a line,
         /// the more it breaks up (gaps, brighter flecks). Fades toward each line's end. Tiles sideways. White.
         /// </summary>
-        public static Sprite RevealStreaks()
+        public static Sprite RevealStreaks(int variant = 0)
         {
-            if (_vstreaks != null) return _vstreaks;
+            variant = ((variant % 4) + 4) % 4;
+            if (_vstreaks[variant] != null) return _vstreaks[variant];
             const int w = 256, h = 256;
             var tex = new Texture2D(w, h, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Repeat, filterMode = FilterMode.Point, name = "LevelGate reveal" };
             var px = new Color32[w * h];
-            var rnd = new System.Random(59);
+            var rnd = new System.Random(59 + variant * 101);
+            float ph = variant * 1.7f; // each variant's long / short stretches fall elsewhere
             for (int x = 0; x < w; x += 2)
             {
                 // lengths: mostly short, some very long (a smooth ridge plus noise, so neighbours roughly agree)
-                float ridge = .5f + .3f * Mathf.Sin(x * .045f) + .2f * Mathf.Sin(x * .13f + 1);
+                float ridge = .5f + .3f * Mathf.Sin(x * .045f + ph) + .2f * Mathf.Sin(x * .13f + 1 + ph * 2);
                 int len = Mathf.Clamp((int)(h * Mathf.Pow((float)rnd.NextDouble(), 1.6f) * (.4f + .8f * ridge)), 6, h);
                 float broken = len / (float)h; // longer = more artifacts
                 for (int d = 0; d < len; d++)
@@ -509,7 +512,7 @@ namespace LevelGate.Progression
             }
             tex.SetPixels32(px);
             tex.Apply(false, true);
-            return _vstreaks = Sprite.Create(tex, new Rect(0, 0, w, h), new Vector2(.5f, .5f), 100, 0, SpriteMeshType.FullRect);
+            return _vstreaks[variant] = Sprite.Create(tex, new Rect(0, 0, w, h), new Vector2(.5f, .5f), 100, 0, SpriteMeshType.FullRect);
         }
 
         private static Sprite _ruler;

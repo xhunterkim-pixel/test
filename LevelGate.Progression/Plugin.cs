@@ -26,13 +26,16 @@ namespace LevelGate.Progression
         public const string Guid = "com.kkyangg.levelgate.progression";
         public const string Name = "LevelGate Progression";
         // MAJOR.MINOR.PATCH — see CHANGELOG.md
-        public const string Version = "0.9.70";
+        public const string Version = "0.9.71";
 
         internal static ProgressionPlugin Instance;
         internal static ConfigEntry<KeyboardShortcut> OpenKey;
         internal static ConfigEntry<KeyboardShortcut> DumpKey;
         internal static ConfigEntry<bool> InjectButton, CharacterEmblem, ReduceMotion;
         internal static ConfigEntry<int> TextSize, Detailing, PatternOpacity, DetailAnimation;
+        // 5. CURRENTLY TESTING: new animation features to tune in game; the chosen values become the defaults after the patch
+        internal static ConfigEntry<int> TestGlitch, TestRevealRandom, TestBloomOpacity, TestBloomSize, TestWallBrightness;
+        internal static ConfigEntry<float> TestRevealTime;
         internal static ConfigEntry<string> ButtonTemplate;
         internal static ConfigEntry<string> ButtonLabel;
         internal static ConfigEntry<bool> VerboseLog;
@@ -156,6 +159,21 @@ namespace LevelGate.Progression
                 RefreshPictures(true);
             };
 
+            // 5. CURRENTLY TESTING — animation features being tuned; their values here become the defaults after the patch
+            const string T = "5. Testing";
+            TestGlitch = Config.Bind(T, "HoverGlitch", 50, Desc(
+                "Hover: how strong the burst of glitch streaks across a tile or card is, in % of 0.9.70's (0 = off).", 100, new AcceptableValueRange<int>(0, 200)));
+            TestRevealTime = Config.Bind(T, "RevealTime", .6f, Desc(
+                "The big picture's load-in: how long it takes to appear from the top down, in seconds.", 90, new AcceptableValueRange<float>(.2f, 2.5f)));
+            TestRevealRandom = Config.Bind(T, "RevealRandom", 60, Desc(
+                "The big picture's load-in: how much the lines of light vary and flicker while it appears (0 = one fixed pattern, 100 = changing every frame).", 85, new AcceptableValueRange<int>(0, 100)));
+            TestBloomOpacity = Config.Bind(T, "BloomOpacity", 100, Desc(
+                "Item bloom: how strong the glow in the picked item's own colours is (behind the big picture, the picked tile and card), in %. 0 = off.", 80, new AcceptableValueRange<int>(0, 250)));
+            TestBloomSize = Config.Bind(T, "BloomSize", 100, Desc(
+                "Item bloom: how far the glow spreads, in %.", 75, new AcceptableValueRange<int>(40, 250)));
+            TestWallBrightness = Config.Bind(T, "LightWall", 100, Desc(
+                "The light wall on the level track during level ups: brightness of the wall, its wash and trail, in %.", 70, new AcceptableValueRange<int>(0, 250)));
+
             // 4. Preview: plays the XP animation with made-up numbers — nothing real changes (closing the screen brings yours back)
             const string P = "4. Preview";
             PreviewLevels = Config.Bind(P, "Levels", 1, Desc("How many levels the preview buttons below play.", 100, new AcceptableValueRange<int>(1, 40)));
@@ -246,7 +264,8 @@ namespace LevelGate.Progression
                 ["HideMainMenu"] = "Hide Main Menu While Open", ["BlurBackground"] = "Blur Background", ["SoundVolume"] = "Sound Volume",
                 ["UseGameSounds"] = "Use Game Sounds", ["CharacterEmblem"] = "Rank Emblem On Character Screen", ["TextSize"] = "Text Size (%)", ["ReduceMotion"] = "Reduce Motion",
                 ["Quality"] = "Picture Quality", ["XpAnimation"] = "Level Up Animation", ["RefreshIcons"] = "Redraw All Item Pictures",
-                ["Pattern"] = "Background Pattern", ["PatternMotion"] = "Pattern Animation Speed", ["UIDetailing"] = "UI Detailing (%)", ["DetailAnimation"] = "Detail Animation (%)", ["PatternOpacity"] = "Background Pattern Opacity (%)",
+                ["Pattern"] = "Background Pattern", ["PatternMotion"] = "Pattern Animation Speed", ["UIDetailing"] = "UI Detailing (%)", ["HoverGlitch"] = "Hover Glitch (%)", ["RevealTime"] = "Picture Load-In Time (s)",
+                ["RevealRandom"] = "Picture Load-In Randomness (%)", ["BloomOpacity"] = "Item Bloom Opacity (%)", ["BloomSize"] = "Item Bloom Size (%)", ["LightWall"] = "Light Wall Brightness (%)", ["DetailAnimation"] = "Detail Animation (%)", ["PatternOpacity"] = "Background Pattern Opacity (%)",
                 ["Vignette"] = "Dark Corners", ["RedGlow"] = "Red Glow",
                 ["Levels"] = "Levels To Play", ["PlayLevelUp"] = "Play Level Ups", ["PlayNextRank"] = "Play Next Rank", ["PlayUnlock"] = "Play Card Unlocks",
                 ["ButtonLabel"] = "Menu Button Text", ["CopyButton"] = "Copy Look Of Button", ["TopMargin"] = "Top Margin", ["BottomMargin"] = "Bottom Margin",
@@ -257,6 +276,7 @@ namespace LevelGate.Progression
             var titles = new Dictionary<string, string>
             {
                 ["1. General"] = "1. General", ["2. Graphics"] = "2. Look & Graphics", ["4. Preview"] = "3. Preview (Test The Animations)", ["3. Advanced"] = "4. Advanced",
+                ["5. Testing"] = "5. CURRENTLY TESTING",
             };
             var advanced = new HashSet<string> { "RefreshIcons", "UseGameSounds", "Vignette", "RedGlow" };
             foreach (var kv in Config)

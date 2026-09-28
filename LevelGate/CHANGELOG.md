@@ -40,6 +40,16 @@ Versions are **MAJOR.MINOR.PATCH**:
 
 ## LevelGate Progression (BepInEx plugin, separate DLL)
 
+### 0.9.71
+- **New F12 section: 5. CURRENTLY TESTING** — the animation features being tuned, with sliders: Hover Glitch (%, now 50% of 0.9.70's), Picture Load-In Time (s), Picture Load-In Randomness (%), Item Bloom Opacity (%), Item Bloom Size (%), Light Wall Brightness (%). The values chosen there become the defaults after the patch.
+- **Fixed: the big picture's load-in drew its lines as a flat band over the whole picture box** after a Performance Mode switch (or when a picture was redrawn): clearing pictures also emptied the invisible copy of the picture that limits the lines to the item's shape. It's restored every time the load-in plays, and without a shape the lines don't draw at all.
+- **The load-in's lines are randomized**: four patterns, a random one each time, swapping, shifting and flipping while it plays (Randomness 0 = one fixed pattern).
+- **Item bloom**: a glow in the picked item's own colours behind the big picture, the picked tile's picture and inside the picked card — a red item blooms red, a grey one gets a neutral warm light. Its colour is read once per picture from a 16x16 copy on the graphics card.
+- **Light wall, more lights (MW4)**: everything reached lights up as a dot matrix, twice the trail specks, an equalizer burst at the wall's foot and a crosshair where it meets the rail.
+- **New-rank splash, more tactical**: a RANK_SYNC bar filling to the emblem's peak with status lines (PROMOTION // AUTHORIZED, CLEARANCE, RANK), crosshair lines through the emblem out to the edges with a target readout (ACQUIRING → LOCKED), the rank name typed in with a cursor, a ticking hex data column under LOG_ANALYSIS, a ruler under the band, faint scanlines over it all.
+- **Rank emblem on the Character > Overall screen in raid too** (it only showed in the menu).
+- **Fewer item pictures drawn twice**: a picture already being drawn at a size is shared instead of asked for again (the 0.9.70 log had 232 repeats in 2,092 draws, each a potential slow frame).
+
 ### 0.9.70
 - **Fixed: the XP animation stopped at a new rank until clicked**, the emblem sound got cut off and the splash's text stayed on screen: the new-rank splash crashed while being built (two images on one object), every frame, so the rank beat never ended; the click was a skip, which stops the sounds. Fixed, and the splash can no longer hold the animation up whatever happens.
 - **Splash, MW tactical instead of a spotlight**: the rays are gone; viewfinder brackets snap in around the new emblem at the peak (RANK_UP // PROMOTION), a denser curtain of thin light lines, the rank's name big and vertical down the right side, a striped band under NEW RANK, a quieter glow.

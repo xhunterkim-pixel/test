@@ -27,6 +27,13 @@ namespace LevelGate.Progression
         private static readonly Vector2[] _spSpeckP = new Vector2[SpSpecks];
         private static readonly float[] _spSpeckV = new float[SpSpecks], _spSpeckA = new float[SpSpecks];
         private static int _splashFrame = -10, _splashLevel;
+        // the tactical HUD: sync bar, status lines, crosshair + coordinates, typed name, ticking data, ruler, scanlines
+        private static CanvasGroup _spHud;
+        private static RectTransform _spSyncFill;
+        private static Component _spSyncPct, _spStatus, _spTgt;
+        private static string _spLogBase = "", _spNameText = "";
+        private static float _spLogAt;
+        private static readonly System.Random _spRng = new System.Random();
         private static bool _splashPopped;
 
         private static void BuildSplash()
@@ -87,9 +94,41 @@ namespace LevelGate.Progression
             _spLevel = Ui.Label(Ui.Rect(layer, "Level", new Vector2(0, .22f), new Vector2(1, .22f), new Vector2(0, -74), new Vector2(0, -44)), "Text", "", 16, Color.white, TextAnchor.MiddleCenter, false, 4);
             // log micro text, top-left (MW's LOG_ANALYSIS column)
             _spLog = Ui.Label(Ui.Rect(layer, "Log", new Vector2(0, 1), new Vector2(0, 1), new Vector2(40, -260), new Vector2(360, -40)), "Text", "", 9, Color.white, TextAnchor.UpperLeft, false, 1.5f);
+            BuildSplashHud(layer);
             _spFlash = Ui.Img(Ui.Fill(layer, "Flash"), new Color(1, 1, 1, 0)); // its own object (0.9.69 put it on the veil's: one image per object — it crashed and stalled the animation)
             foreach (var g in layer.GetComponentsInChildren<Graphic>(true)) g.raycastTarget = false;
             layer.gameObject.SetActive(false);
+        }
+
+        private static void BuildSplashHud(RectTransform layer)
+        {
+            var hud = Ui.Fill(layer, "Hud");
+            _spHud = hud.gameObject.AddComponent<CanvasGroup>();
+            var tint = new Color(.85f, .9f, .92f, 1);
+            // faint scanlines over everything
+            var scan = Ui.Img(Ui.Fill(hud, "Scan"), new Color(1, 1, 1, .05f), Ui.Scanlines()); scan.type = Image.Type.Tiled;
+            // crosshair lines through the emblem out to the edges, a gap around it
+            var c = new Vector2(.5f, .6f);
+            foreach (var (aMin, aMax, oMin, oMax) in new[] {
+                (new Vector2(0, c.y), new Vector2(c.x, c.y), new Vector2(0, 0), new Vector2(-230, 1)),
+                (new Vector2(c.x, c.y), new Vector2(1, c.y), new Vector2(230, 0), new Vector2(0, 1)),
+                (new Vector2(c.x, 0), new Vector2(c.x, c.y), new Vector2(0, 0), new Vector2(1, -230)),
+                (new Vector2(c.x, c.y), new Vector2(c.x, 1), new Vector2(0, 230), new Vector2(1, 0)) })
+                Ui.Img(Ui.Rect(hud, "Cross", aMin, aMax, oMin, oMax), new Color(1, 1, 1, .16f));
+            _spTgt = Ui.Label(Ui.Rect(hud, "Tgt", c, c, new Vector2(186, 178), new Vector2(520, 194)), "Text", "", 9, tint, TextAnchor.MiddleLeft, false, 2);
+            // top-right: RANK_SYNC bar filling to the peak, status lines under it
+            var sync = Ui.Rect(hud, "Sync", new Vector2(1, 1), new Vector2(1, 1), new Vector2(-340, -92), new Vector2(-40, -60));
+            Ui.Label(Ui.Rect(sync, "Label", new Vector2(0, 1), new Vector2(1, 1), new Vector2(0, -12), Vector2.zero), "Text", "RANK_SYNC", 9, tint, TextAnchor.MiddleLeft, true, 2);
+            _spSyncPct = Ui.Label(Ui.Rect(sync, "Pct", new Vector2(0, 1), new Vector2(1, 1), new Vector2(0, -12), Vector2.zero), "Text", "0%", 9, tint, TextAnchor.MiddleRight, false, 2);
+            var track = Ui.Rect(sync, "Track", new Vector2(0, 0), new Vector2(1, 0), new Vector2(0, 2), new Vector2(0, 8));
+            Ui.Img(track, new Color(1, 1, 1, .12f));
+            _spSyncFill = Ui.Rect(track, "Fill", Vector2.zero, new Vector2(0, 1), Vector2.zero, Vector2.zero);
+            Ui.Img(_spSyncFill, new Color(1, 1, 1, .85f));
+            for (int k = 1; k < 10; k++) { float x = k / 10f; Ui.Img(Ui.Rect(track, "Tick", new Vector2(x, 0), new Vector2(x, 1), new Vector2(-.5f, 0), new Vector2(.5f, 0)), new Color(0, 0, 0, .6f)); }
+            _spStatus = Ui.Label(Ui.Rect(hud, "Status", new Vector2(1, 1), new Vector2(1, 1), new Vector2(-340, -150), new Vector2(-40, -98)), "Text", "", 9, tint, TextAnchor.UpperLeft, false, 2);
+            // a ruler under the band
+            var ruler = Ui.Img(Ui.Rect(hud, "Ruler", new Vector2(.1f, .22f), new Vector2(.9f, .22f), new Vector2(0, -44), new Vector2(0, -35)), new Color(1, 1, 1, .35f), Ui.Ruler());
+            ruler.type = Image.Type.Tiled;
         }
 
         /// <summary>One frame of the splash: t seconds into the rank beat (dur long), the peak at `peak`.</summary>
@@ -110,10 +149,13 @@ namespace LevelGate.Progression
                 _splash.SetAsLastSibling();
                 _splashLevel = level; _splashPopped = false;
                 var tier = TierOf(level);
-                Ui.SetText(_spName, tier.Name.ToUpperInvariant());
+                _spNameText = tier.Name.ToUpperInvariant();
+                Ui.SetText(_spName, "");
                 Ui.SetText(_spSide, tier.Name.ToUpperInvariant());
                 Ui.SetText(_spLevel, $"LEVEL  {level}");
-                Ui.SetText(_spLog, $"LOG_ANALYSIS\nRANK_ID  {System.Array.IndexOf(Tiers, tier) + 1:00}\nLV_FROM  {tier.From:000}\nLV_NOW   {level:000}\nSTATE    PROMOTED\n\nSYS_ONLINE // SYNC OK");
+                _spLogBase = $"LOG_ANALYSIS\nRANK_ID  {System.Array.IndexOf(Tiers, tier) + 1:00}\nLV_FROM  {tier.From:000}\nLV_NOW   {level:000}\nSTATE    PROMOTED\n\nSYS_ONLINE // SYNC OK\n";
+                Ui.SetText(_spLog, _spLogBase);
+                Ui.SetText(_spStatus, $"PROMOTION  //  AUTHORIZED\nCLEARANCE  LV {level:000}\nRANK  {tier.Name.ToUpperInvariant()}");
                 Emblems.Show(_spEmblem, level - 1); // the old one gathers first; the new one swaps in at the peak
             }
             _splashFrame = Time.frameCount;
@@ -154,6 +196,22 @@ namespace LevelGate.Progression
             Ui.SetColor(_spName, new Color(1, 1, 1, ta * vis));
             Ui.SetColor(_spLevel, new Color(.85f, .88f, .9f, Mathf.Clamp01((after - .35f) / .3f) * vis * (still ? 0 : 1) + (still ? vis : 0)));
             Ui.SetColor(_spLog, new Color(light.r, light.g, light.b, .45f * vis));
+            // the HUD: sync bar fills to the peak; the name types in after it; the data column ticks
+            _spHud.alpha = vis;
+            float sync = still ? 1 : Mathf.Clamp01(t / Mathf.Max(.01f, peak));
+            _spSyncFill.anchorMax = new Vector2(sync, 1);
+            Ui.SetText(_spSyncPct, $"{Mathf.RoundToInt(sync * 100)}%");
+            Ui.SetText(_spTgt, after < 0 ? $"TGT  {.5f + Mathf.Sin(t * 9) * .02f:0.000} / {.6f + Mathf.Cos(t * 7) * .02f:0.000}  //  ACQUIRING" : "TGT  0.500 / 0.600  //  LOCKED");
+            int n = still ? _spNameText.Length : Mathf.Clamp(Mathf.FloorToInt(_spNameText.Length * Mathf.Clamp01((after - .1f) / .5f)), 0, _spNameText.Length);
+            Ui.SetText(_spName, _spNameText.Substring(0, n) + (n < _spNameText.Length && after >= 0 && (Time.unscaledTime * 8 % 2) < 1 ? "_" : ""));
+            if (!still && Time.unscaledTime >= _spLogAt)
+            {
+                _spLogAt = Time.unscaledTime + .07f;
+                var sb = new System.Text.StringBuilder(_spLogBase);
+                for (int k = 0; k < 7; k++)
+                    sb.Append($"\n0x{_spRng.Next(0x1000, 0xFFFF):X4}  {_spRng.Next(256):X2} {_spRng.Next(256):X2} {_spRng.Next(256):X2} {_spRng.Next(256):X2}");
+                Ui.SetText(_spLog, sb.ToString());
+            }
             // streaks rise and flicker; specks drift up (build-up and hold alike)
             float dt = Mathf.Min(Time.unscaledDeltaTime, .1f);
             float sw = _splash.rect.width, sh = _splash.rect.height;

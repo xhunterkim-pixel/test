@@ -28,6 +28,7 @@ namespace LevelGate.Progression
             TickLoaders();
             TickFx();
             TickReveal();
+            TickBloom();
             if (k <= 0) return;
             _lightPhase += Mathf.Min(Time.unscaledDeltaTime, .1f);
             float t = _lightPhase;
@@ -43,9 +44,9 @@ namespace LevelGate.Progression
         // ---------------------------------------------------------------- the light wall (MW4's level track)
 
         private static RectTransform _wallLayer;
-        private static Image _wallCore, _wallGlow, _wallWash;
+        private static Image _wallCore, _wallGlow, _wallWash, _wallDots, _wallEq, _wallCrossH, _wallCrossV;
         private static float _wallA, _wallSpawn;
-        private const int Trail = 90;
+        private const int Trail = 180;
         private static readonly RectTransform[] _trail = new RectTransform[Trail];
         private static readonly Image[] _trailImg = new Image[Trail];
         private static readonly Vector2[] _trailP = new Vector2[Trail], _trailV = new Vector2[Trail];
@@ -65,6 +66,13 @@ namespace LevelGate.Progression
             layer.gameObject.AddComponent<RectMask2D>();
             _wallLayer = layer;
             _wallWash = Ui.Img(Ui.Rect(layer, "Wash", Vector2.zero, new Vector2(0, 1), Vector2.zero, Vector2.zero), new Color(1f, .93f, .8f, 0), Ui.HorizontalFade());
+            // MW4: everything reached lights up as a dot matrix
+            _wallDots = Ui.Img(Ui.Rect(layer, "Dots", Vector2.zero, new Vector2(0, 1), Vector2.zero, Vector2.zero), new Color(1f, .93f, .8f, 0), Ui.DotGrid());
+            _wallDots.type = Image.Type.Tiled;
+            // an equalizer burst at the wall's foot, and a crosshair where it meets the rail
+            _wallEq = Ui.Img(Ui.Box(layer, "Eq", Vector2.zero, new Vector2(0, 24), new Vector2(240, 64)), new Color(1f, .93f, .8f, 0), Ui.Waveform(true));
+            _wallCrossH = Ui.Img(Ui.Box(layer, "CrossH", Vector2.zero, new Vector2(0, 24), new Vector2(34, 1)), new Color(1, 1, 1, 0));
+            _wallCrossV = Ui.Img(Ui.Box(layer, "CrossV", Vector2.zero, new Vector2(0, 24), new Vector2(1, 34)), new Color(1, 1, 1, 0));
             _wallGlow = Ui.Img(Ui.Rect(layer, "Glow", Vector2.zero, new Vector2(0, 1), new Vector2(-55, -30), new Vector2(55, 30)), new Color(1f, .9f, .75f, 0), Ui.Radial());
             _wallCore = Ui.Img(Ui.Rect(layer, "Core", Vector2.zero, new Vector2(0, 1), new Vector2(-1.5f, 0), new Vector2(1.5f, 0)), new Color(1f, .97f, .92f, 0), Ui.VerticalFade());
             _wallCore.rectTransform.localScale = new Vector3(1, -1, 1); // brightest down at the rail, fading up
@@ -96,15 +104,20 @@ namespace LevelGate.Progression
             var at = new Vector2(x, 0);
             var g = _wallGlow.rectTransform; g.anchorMin = at; g.anchorMax = new Vector2(x, 1);
             var c = _wallCore.rectTransform; c.anchorMin = at; c.anchorMax = new Vector2(x, 1);
-            float a = _wallA;
-            _wallWash.color = new Color(1f, .93f, .8f, .22f * a);
-            _wallGlow.color = new Color(1f, .9f, .75f, .5f * a * flick);
-            _wallCore.color = new Color(1f, .98f, .94f, a * flick);
+            float a = _wallA * (ProgressionPlugin.TestWallBrightness?.Value ?? 100) / 100f; // F12 > CURRENTLY TESTING > Light Wall
+            _wallWash.color = new Color(1f, .93f, .8f, Mathf.Clamp01(.22f * a));
+            _wallDots.rectTransform.anchorMax = new Vector2(x, 1);
+            _wallDots.color = new Color(1f, .93f, .8f, Mathf.Clamp01(.14f * a));
+            foreach (var img in new[] { _wallEq, _wallCrossH, _wallCrossV }) { var r = img.rectTransform; r.anchorMin = r.anchorMax = at; r.anchoredPosition = new Vector2(0, 24); }
+            _wallEq.color = new Color(1f, .93f, .8f, Mathf.Clamp01(.7f * a * flick));
+            _wallCrossH.color = _wallCrossV.color = new Color(1, 1, 1, Mathf.Clamp01(.9f * a));
+            _wallGlow.color = new Color(1f, .9f, .75f, Mathf.Clamp01(.5f * a * flick));
+            _wallCore.color = new Color(1f, .98f, .94f, Mathf.Clamp01(a * flick));
             // the trail: specks shed at the wall while it moves (faster = more), left in place to drift and fade
             const float railY = 24; // the rail's line inside this layer
             if (moving)
             {
-                _wallSpawn += dt * 140f;
+                _wallSpawn += dt * 280f * Mathf.Clamp(_wallA * (ProgressionPlugin.TestWallBrightness?.Value ?? 100) / 100f, 0, 2);
                 while (_wallSpawn >= 1)
                 {
                     _wallSpawn -= 1;
@@ -130,7 +143,7 @@ namespace LevelGate.Progression
                 _trailP[i] += _trailV[i] * dt;
                 _trail[i].anchoredPosition = _trailP[i];
                 float fl = .75f + .25f * Mathf.Sin((Time.unscaledTime + i) * 17f);
-                _trailImg[i].color = new Color(1f, .92f, .78f, _trailA[i] * Mathf.Pow(1 - u, 1.5f) * fl);
+                _trailImg[i].color = new Color(1f, .92f, .78f, Mathf.Clamp01(_trailA[i] * Mathf.Pow(1 - u, 1.5f) * fl * (ProgressionPlugin.TestWallBrightness?.Value ?? 100) / 100f));
             }
             // the waveform's glowing part flares with the wall
             if (_waveHot != null) { var wc = _waveHot.color; wc.a = Mathf.Clamp01(.3f * Ui.DetailK + .6f * a * flick); _waveHot.color = wc; }

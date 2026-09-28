@@ -29,7 +29,7 @@ namespace LevelGate.Progression
             _next = Time.unscaledTime + .5f;
             bool on = ProgressionPlugin.CharacterEmblem?.Value ?? true;
             if (_root != null && _root.gameObject.activeSelf != on) _root.gameObject.SetActive(on);
-            if (!on || _gaveUp || MenuHook.InRaid()) return;
+            if (!on || _gaveUp) return; // in raid too: the character screen (Tab / inventory > Overall) shows it there as well
             if (!_typeTried)
             {
                 _typeTried = true;
