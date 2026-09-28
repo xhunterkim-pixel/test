@@ -504,13 +504,7 @@ namespace LevelGate.Progression
             for (int y = L + c; y <= top; y++) Put(right, y, .92f);                       // right (above the bottom-right cut)
             for (int k = 0; k <= c; k++) { Put(L + k, top - c + k, .92f); }                // the top-left cut
             for (int k = 0; k <= c; k++) { Put(right - c + k, L + k, .7f); }               // the bottom-right cut (part of the broken bottom)
-            bool on = true; int run = 0;
-            for (int x = L; x <= right - c; x++)                                            // bottom: broken, stray dots below it
-            {
-                if (run-- <= 0) { on = !on; run = on ? 2 + rnd.Next(9) : 1 + rnd.Next(4); }
-                if (on) Put(x, L, .7f + .3f * (float)rnd.NextDouble());
-                if (rnd.NextDouble() < .14) Put(x, L - 1 - rnd.Next(2), .55f + .45f * (float)rnd.NextDouble());
-            }
+            for (int x = L; x <= right - c; x++) Put(x, L, .35f);                          // bottom: a faint steady line (the breathing dots live on it)
             tex.SetPixels32(px);
             tex.Apply(false, true);
             return _dashFrames[variant] = Sprite.Create(tex, new Rect(0, 0, n, n), new Vector2(.5f, .5f), 100, 0, SpriteMeshType.FullRect, new Vector4(b, b, b, b));

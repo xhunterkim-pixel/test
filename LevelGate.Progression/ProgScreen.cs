@@ -617,6 +617,23 @@ namespace LevelGate.Progression
         /// keycards…), violet: very valuable (LEDX, bitcoin…), blue: intel, documents, keycards, green: task and military
         /// items, orange / yellow: the game's other marked items. Null for ordinary (grey / default / black) ones.
         /// </summary>
+        /// <summary>
+        /// The pips' colour by how far into the progression a level is — Tarkov's loot order, three pages (15 levels) each:
+        /// grey (1–15), green (16–30), blue (31–45), purple (46–60), red (61+).
+        /// </summary>
+        private static Color TierColor(int level)
+        {
+            int band = Mathf.Clamp((Mathf.Max(1, level) - 1) / (PerPage * 3), 0, 4);
+            switch (band)
+            {
+                case 0: return Ui.Hex("#b9bec1");
+                case 1: return Ui.Hex("#6fae54");
+                case 2: return Ui.Hex("#5a9ad8");
+                case 3: return Ui.Hex("#9a6ae0");
+                default: return Ui.Hex("#d04a44");
+            }
+        }
+
         private static Color? LootColor(string tpl)
         {
             switch ((GameItems.BackgroundOf(tpl) ?? "").ToLowerInvariant())
@@ -678,7 +695,7 @@ namespace LevelGate.Progression
                 _heroPips[i].enabled = true;
                 // the pips in Tarkov's own loot colour for the item (red / violet / blue / green / orange / yellow, from its
                 // background in the stash); ordinary items keep the rank's colour
-                var pip = LootColor(it.Tpl) ?? Color.Lerp(light, Color.white, .1f);
+                var pip = TierColor(it.Level); // Tarkov's loot order across the pages: grey → green → blue → purple → red
                 _heroPips[i].color = i < into ? pip : new Color(1, 1, 1, .12f);
             }
             // the diamond: the next rank — lit (orange) on a rank's last level, where the next level up is a new rank
@@ -2085,7 +2102,7 @@ namespace LevelGate.Progression
                 // MW 8: where its level sits in its rank (5 pips) and the level itself, along the tile's foot
                 var tier = TierOf(Mathf.Max(1, it.Level));
                 int into = Mathf.Clamp(it.Level - tier.From + 1, 1, 5);
-                var tl = LootColor(it.Tpl) ?? Ui.Hex(tier.Light); // Tarkov's loot colour, else the rank's
+                var tl = TierColor(it.Level); // Tarkov's loot order across the pages
                 for (int k = 0; k < 5; k++)
                     Ui.Img(Ui.Rect(inner, "Pip", Vector2.zero, Vector2.zero, new Vector2(8 + k * 6, 5), new Vector2(12 + k * 6, 9)), k < into ? new Color(tl.r, tl.g, tl.b, .85f) : new Color(1, 1, 1, .14f)).raycastTarget = false;
                 ((Graphic)Ui.Label(Ui.Rect(inner, "Lv", new Vector2(1, 0), new Vector2(1, 0), new Vector2(-48, 2), new Vector2(-7, 13)), "Text", $"LV {it.Level}", 9, Dim, TextAnchor.MiddleRight, false, 1)).raycastTarget = false;
@@ -3188,7 +3205,7 @@ namespace LevelGate.Progression
             {
                 // MW 2: lit while the level still has NEW rewards (goes once they've all been clicked), and for levels just
                 // unlocked in this visit's level up
-                bool want = Mw(2) && (_fresh || _flooded.Contains(_level));
+                bool want = Mw(2) && _fresh; // only while the level has NEW rewards (a preview's too) — the same in a preview and for real
                 if (want == _floodOn) return;
                 _floodOn = want;
                 var light = Ui.Hex(TierOf(Mathf.Max(1, _level)).Light);

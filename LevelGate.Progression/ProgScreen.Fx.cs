@@ -118,6 +118,9 @@ namespace LevelGate.Progression
         private sealed class SelFrame
         {
             public Image Img;
+            public RectTransform Bush;                 // the breathing dots along the bottom edge
+            public Image[] Dots; public float[] DotSize, DotPhase, DotA;
+            public float Shown;                        // 0–1: how far it has drawn in (the dots follow it)
             private bool _on;
             public bool On
             {
@@ -130,6 +133,8 @@ namespace LevelGate.Progression
                     {
                         bool show = a > .001f && Ui.DetailK > 0;
                         if (img.enabled != show) img.enabled = show;
+                        Shown = a;
+                        if (Bush != null && Bush.gameObject.activeSelf != show) Bush.gameObject.SetActive(show);
                         img.color = new Color(1, 1, 1, .85f * a);
                         float sc = 1 + .035f * (1 - a); // draws in from a little outside
                         img.rectTransform.localScale = new Vector3(sc, sc, 1);
@@ -139,14 +144,28 @@ namespace LevelGate.Progression
             }
         }
         private static readonly List<SelFrame> _selFrames = new List<SelFrame>();
-        private static float _selSwapAt;
-        private static int _selVariant;
+        private static readonly System.Random _selRng = new System.Random(3);
 
         private static SelFrame MakeSelFrame(RectTransform around, float outset)
         {
             var img = Ui.Img(Ui.Rect(around, "SelFrame", Vector2.zero, Vector2.one, new Vector2(-outset, -outset), new Vector2(outset, outset)), new Color(1, 1, 1, 0), Ui.DashFrame(0));
             img.type = Image.Type.Tiled; img.raycastTarget = false; img.enabled = false;
             var f = new SelFrame { Img = img };
+            // a bush of dots along the bottom edge (MW's broken bottom): scattered around the line, bigger ones sparser,
+            // each breathing on its own phase — on its own canvas, so only it redraws
+            var bush = Ui.Rect(img.rectTransform, "Bush", new Vector2(0, 0), new Vector2(1, 0), new Vector2(outset + 2, -9), new Vector2(-outset - 10, 9));
+            Ui.OwnCanvas(bush);
+            const int n = 26;
+            f.Bush = bush; f.Dots = new Image[n]; f.DotSize = new float[n]; f.DotPhase = new float[n]; f.DotA = new float[n];
+            for (int i = 0; i < n; i++)
+            {
+                float x = (float)_selRng.NextDouble(), y = (float)(_selRng.NextDouble() * _selRng.NextDouble()) * (_selRng.NextDouble() < .7 ? -1 : 1); // mostly just below the line
+                float size = 2 + (float)_selRng.NextDouble() * 2.5f;
+                var d = Ui.Img(Ui.Rect(bush, "Dot", new Vector2(x, .5f + y * .5f), new Vector2(x, .5f + y * .5f), Vector2.zero, Vector2.zero), new Color(1, 1, 1, 0));
+                d.rectTransform.sizeDelta = new Vector2(size, size); d.raycastTarget = false;
+                f.Dots[i] = d; f.DotSize[i] = size; f.DotPhase[i] = (float)_selRng.NextDouble() * 6.28f; f.DotA[i] = .45f + (float)_selRng.NextDouble() * .55f;
+            }
+            bush.gameObject.SetActive(false);
             _selFrames.Add(f);
             return f;
         }
@@ -158,13 +177,19 @@ namespace LevelGate.Progression
 
         private static void TickSelection()
         {
-            // the broken bottoms crawl: one shared step for every border on screen
-            if (!Motion.Still && Time.unscaledTime >= _selSwapAt)
+            // the bottom edge's dots breathe (size and brightness), each on its own phase of the shared clock
+            _selFrames.RemoveAll(f => f.Img == null);
+            float now = Motion.Now;
+            foreach (var f in _selFrames)
             {
-                _selSwapAt = Time.unscaledTime + Motion.Micro * 1.4f;
-                _selVariant++;
-                _selFrames.RemoveAll(f => f.Img == null);
-                foreach (var f in _selFrames) if (f.Img.enabled) f.Img.sprite = Ui.DashFrame(_selVariant);
+                if (f.Bush == null || !f.Bush.gameObject.activeSelf) continue;
+                for (int i = 0; i < f.Dots.Length; i++)
+                {
+                    float b = Motion.Still ? .7f : .5f + .5f * Mathf.Sin(now * 2.6f + f.DotPhase[i]);
+                    float sz = f.DotSize[i] * (.55f + .65f * b);
+                    f.Dots[i].rectTransform.sizeDelta = new Vector2(sz, sz);
+                    f.Dots[i].color = new Color(1, 1, 1, f.DotA[i] * (.3f + .7f * b) * f.Shown);
+                }
             }
             // the section light: moves when the pick moves to another section (Motion: Slow in, Base out)
             string lit = _featTpl != null ? ProgData.GroupOf(_featTpl) : null;
@@ -243,7 +268,7 @@ namespace LevelGate.Progression
         private static RectTransform _revealHost;
         private static readonly Image[] _stripPic = new Image[Strips], _stripHot = new Image[Strips], _stripMask = new Image[Strips], _stripLight = new Image[Strips];
         private static readonly float[] _stripDelay = new float[Strips];
-        private static float _revealAt = -10;
+        private static float _revealAt = -10, _revealEnd = 1;
         private static bool _revealWanted;
         private static float _revealFrameAt;
         private static int _revealFrame;
@@ -261,7 +286,8 @@ namespace LevelGate.Progression
             {
                 // a strip of the picture's width: a full-size copy clipped to it, and the light on the item's shape
                 var strip = Ui.Rect(_revealHost, "Strip", new Vector2(i / (float)Strips, 0), new Vector2((i + 1) / (float)Strips, 1), Vector2.zero, Vector2.zero);
-                strip.gameObject.AddComponent<RectMask2D>();
+                // clipped to its strip, 1 px wider each side: neighbouring strips overlap, no hairline seams between them
+                strip.gameObject.AddComponent<RectMask2D>().padding = new Vector4(-1, 0, -1, 0);
                 var full = new Vector2(-i, 0); var fullMax = new Vector2(Strips - i, 1); // the whole picture, in this strip's units
                 _stripPic[i] = Ui.Img(Ui.Rect(strip, "Pic", full, fullMax, Vector2.zero, Vector2.zero), Color.white);
                 _stripPic[i].preserveAspect = true;
@@ -289,11 +315,13 @@ namespace LevelGate.Progression
             if (Motion.Still || _revealHost == null || _featPic.sprite == null) { EndReveal(); return; }
             _revealAt = Motion.Now;
             float rk = RevealRandom;
+            _revealEnd = 1;
             for (int i = 0; i < Strips; i++)
             {
                 // ragged front: each strip waits a little (neighbours roughly agree, plus noise)
                 float ridge = .5f + .5f * Mathf.Sin(i * .31f + (float)_revealRng.NextDouble() * 6.28f);
                 _stripDelay[i] = rk * .45f * Mathf.Clamp01(.6f * ridge + .4f * (float)_revealRng.NextDouble());
+                _revealEnd = Mathf.Max(_revealEnd, 1 + _stripDelay[i]);
             }
             _revealHost.gameObject.SetActive(true);
             _featPic.canvasRenderer.SetAlpha(0); // the strips draw it while it comes in
@@ -323,7 +351,8 @@ namespace LevelGate.Progression
             if (_revealAt < 0 || _featPic == null) return;
             float dur = RevealTime;
             float t = (Motion.Now - _revealAt) / dur;
-            if (t >= 1.45f || !_featPic.enabled || _featPic.sprite == null) { EndReveal(); return; }
+            // done the moment the last strip is in: the real picture takes over in the same frame (identical by then), no pop
+            if (t >= _revealEnd || !_featPic.enabled || _featPic.sprite == null) { EndReveal(); return; }
             SyncStrips();
             // breathing: the light's frames cycle (each dot pulses its size and brightness)
             if (Motion.Now >= _revealFrameAt) { _revealFrameAt = Motion.Now + Motion.Micro * .9f; _revealFrame = (_revealFrame + 1) % DotFrames; }

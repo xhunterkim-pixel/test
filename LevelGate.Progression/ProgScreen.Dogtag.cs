@@ -5,82 +5,112 @@ using UnityEngine.UI;
 namespace LevelGate.Progression
 {
     /// <summary>
-    /// The Dogtag rank-up (after Tarkov's own dogtags): a brushed, scratched metal tag with a pressed rim and a punched
-    /// hole, hanging on a bead chain that loops up out of view. Everything on it is embossed — dark letters with a light
-    /// lower edge. It drops in on the chain and swings to rest with a slight turn; on the emblem sound's peak the new rank
-    /// emblem is stamped in (a jolt, a small flash) and a glint crosses the metal.
+    /// The Dogtag rank-up, the way the game itself would show it: Tarkov's item inspect window — "Dogtag USEC / BEAR",
+    /// the breadcrumb, the picture on the inspect window's diagonal-striped background, then the property grid (NICKNAME,
+    /// FACTION, LEVEL, RANK, DATE, STATUS) and a line of description. The tag is your faction's: BEAR — an oval stamped tag
+    /// with vertical lettering and a rule (like "ВС РОССИИ / P-048119"); USEC — a rounded tag with lines of small engraved
+    /// text. Dull, worn steel on a small bead chain looping like the photos. On the emblem sound's peak the RANK row
+    /// changes, the new rank emblem appears in the picture's corner, and a glint crosses the tag.
     /// </summary>
     internal static partial class ProgScreen
     {
-        private const float TagW = 250, TagH = 390;
-        private static Image _tagSheen;
-        private static Component[] _tagName, _tagLine, _tagLv;
-        private static RectTransform _tagEmblemBox;
+        private const float WinW = 560, WinH = 610, PicH = 330;
+        private static RectTransform _dtWin, _dtTag, _dtEmblemBox;
+        private static Image _dtGlint;
+        private static Component _dtTitle, _dtRankValue, _dtDesc;
+        private static readonly List<Component> _dtEngrave = new List<Component>();
+        private static bool _dtBear;
+        private static Sprite _dtPlateBear, _dtPlateUsec, _dtBead, _dtStripes;
 
-        private static Sprite _tagPlate, _tagBall;
-
-        /// <summary>The tag: rounded, brushed cool metal, a light gradient, scratches, a pressed rim, the hole. 250x390, own colours.</summary>
-        private static Sprite TagPlate()
+        private static (string Nick, string Side) Me2()
         {
-            if (_tagPlate != null) return _tagPlate;
-            const int w = 250, h = 390, ss = 2;
-            const float r = 46, rim = 9;
-            var tex = new Texture2D(w, h, TextureFormat.RGBA32, true) { wrapMode = TextureWrapMode.Clamp, filterMode = FilterMode.Trilinear, name = "LevelGate dogtag" };
+            var info = Refl.Get(ProgData.Profile(), "Info");
+            string nick = Refl.Get(info, "Nickname")?.ToString() ?? "OPERATOR";
+            string side = Refl.Get(info, "Side")?.ToString() ?? "Usec";
+            return (nick, side.ToUpperInvariant().Contains("BEAR") ? "BEAR" : "USEC");
+        }
+
+        /// <summary>Tarkov's inspect background: dark, with wide soft diagonal stripes. Tiles.</summary>
+        private static Sprite InspectStripes()
+        {
+            if (_dtStripes != null) return _dtStripes;
+            const int n = 64;
+            var tex = new Texture2D(n, n, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Repeat, filterMode = FilterMode.Bilinear };
+            var px = new Color32[n * n];
+            for (int y = 0; y < n; y++)
+                for (int x = 0; x < n; x++)
+                {
+                    float d = ((x + y) % 32) / 32f;                      // 45° bands, 32 px period
+                    float a = Mathf.Clamp01(1 - Mathf.Abs(d - .5f) * 4); // soft stripe
+                    px[y * n + x] = new Color32(255, 255, 255, (byte)(255 * a));
+                }
+            tex.SetPixels32(px); tex.Apply(false, true);
+            return _dtStripes = Sprite.Create(tex, new Rect(0, 0, n, n), new Vector2(.5f, .5f), 100, 0, SpriteMeshType.FullRect);
+        }
+
+        /// <summary>
+        /// A tag plate: dull, worn steel (a soft diagonal sheen, grime, fine scratches, a slight bevel) with its hole.
+        /// oval: BEAR's stadium tag (fully round ends); else USEC's rounded rectangle. 180x300, own colours.
+        /// </summary>
+        private static Sprite TagPlateOf(bool oval)
+        {
+            if (oval && _dtPlateBear != null) return _dtPlateBear;
+            if (!oval && _dtPlateUsec != null) return _dtPlateUsec;
+            const int w = 180, h = 300, ss = 2;
+            float r = oval ? w / 2f : 30;
+            var tex = new Texture2D(w, h, TextureFormat.RGBA32, true) { wrapMode = TextureWrapMode.Clamp, filterMode = FilterMode.Trilinear, name = "LevelGate tag" };
             var px = new Color32[w * h];
-            var rnd = new System.Random(5);
-            // scratches: short straight lines, a few long ones
+            var rnd = new System.Random(oval ? 11 : 13);
             var scratch = new float[w * h];
-            for (int k = 0; k < 90; k++)
+            for (int k = 0; k < 70; k++)
             {
-                float x0 = (float)rnd.NextDouble() * w, y0 = (float)rnd.NextDouble() * h;
-                float ang = (float)(rnd.NextDouble() * Mathf.PI), len = k < 12 ? 60 + (float)rnd.NextDouble() * 120 : 6 + (float)rnd.NextDouble() * 30;
-                float s = ((float)rnd.NextDouble() < .5 ? .06f : -.05f) * (.4f + .6f * (float)rnd.NextDouble()); // fine, uneven
+                float x0 = (float)rnd.NextDouble() * w, y0 = (float)rnd.NextDouble() * h, ang = (float)(rnd.NextDouble() * Mathf.PI);
+                float len = 5 + (float)rnd.NextDouble() * 35, s = (float)(rnd.NextDouble() < .5 ? .05 : -.04) * (.3f + .7f * (float)rnd.NextDouble());
                 for (float d = 0; d < len; d += .7f)
                 {
                     int x = (int)(x0 + Mathf.Cos(ang) * d), y = (int)(y0 + Mathf.Sin(ang) * d);
                     if (x >= 0 && x < w && y >= 0 && y < h) scratch[y * w + x] += s;
                 }
             }
-            float Dist(float x, float y) // signed distance to the rounded rect's edge (negative inside)
+            float Dist(float x, float y)
             {
                 float qx = Mathf.Abs(x - w / 2f) - (w / 2f - r), qy = Mathf.Abs(y - h / 2f) - (h / 2f - r);
                 return Mathf.Sqrt(Mathf.Max(qx, 0) * Mathf.Max(qx, 0) + Mathf.Max(qy, 0) * Mathf.Max(qy, 0)) + Mathf.Min(Mathf.Max(qx, qy), 0) - r;
             }
-            float hx = w / 2f, hy = h - 30, hr = 12;
+            float hx = w / 2f, hy = h - (oval ? 34 : 22), hr = 8;
             for (int y = 0; y < h; y++)
-            {
-                float brush = (Mathf.PerlinNoise(0, y * .9f) - .5f) * .06f; // brushed: fine horizontal grain
                 for (int x = 0; x < w; x++)
                 {
                     float cover = 0;
                     for (int j = 0; j < ss; j++) for (int i = 0; i < ss; i++)
                     {
                         float fx = x + (i + .5f) / ss, fy = y + (j + .5f) / ss;
-                        float dh = Mathf.Sqrt((fx - hx) * (fx - hx) + (fy - hy) * (fy - hy));
-                        if (Dist(fx, fy) <= 0 && dh > hr) cover += 1f / (ss * ss);
+                        if (Dist(fx, fy) <= 0 && (fx - hx) * (fx - hx) + (fy - hy) * (fy - hy) > hr * hr) cover += 1f / (ss * ss);
                     }
                     if (cover <= 0) continue;
-                    float d = -Dist(x + .5f, y + .5f);          // depth inside the edge
-                    float dHole = Mathf.Sqrt((x + .5f - hx) * (x + .5f - hx) + (y + .5f - hy) * (y + .5f - hy)) - hr;
-                    float v = .74f + .14f * (y / (float)h) - .07f * (x / (float)w) + brush + scratch[y * w + x];
-                    v += (Mathf.PerlinNoise(x * .05f, y * .05f) - .5f) * .08f; // wear
-                    // the pressed rim: a dark groove then a light ridge, like a stamped tag
-                    if (d < rim) v *= d < 2 ? .55f : d < 4 ? .8f : d < 6.5f ? 1.12f : .9f;
-                    if (dHole < 4) v *= dHole < 1.5f ? .45f : .75f; // the hole's edge
+                    float d = -Dist(x + .5f, y + .5f);
+                    // dull steel: a soft diagonal sheen, broad grime, fine scratches, a slight bevel at the edge
+                    float u = (x / (float)w + (1 - y / (float)h)) * .5f;
+                    float sheen = .1f * Mathf.Exp(-Mathf.Pow((u - .42f) / .16f, 2));
+                    float v = .58f + sheen + (Mathf.PerlinNoise(x * .03f + (oval ? 7 : 0), y * .03f) - .5f) * .14f + (Mathf.PerlinNoise(x * .2f, y * .2f) - .5f) * .04f + scratch[y * w + x];
+                    v *= 1 - .2f * (1 - Mathf.Clamp01(d / 26f)); // darker toward the edges, like the photos
+                    if (d < 3) v *= d < 1.2f ? .6f : 1.12f;
+                    float dh = Mathf.Sqrt((x + .5f - hx) * (x + .5f - hx) + (y + .5f - hy) * (y + .5f - hy)) - hr;
+                    if (dh < 2.5f) v *= .7f;
                     v = Mathf.Clamp01(v);
-                    px[y * w + x] = new Color32((byte)(255 * v * .93f), (byte)(255 * v * .95f), (byte)(255 * v * .97f), (byte)(255 * cover));
+                    px[y * w + x] = new Color32((byte)(255 * v * .94f), (byte)(255 * v * .96f), (byte)(255 * v), (byte)(255 * cover));
                 }
-            }
-            tex.SetPixels32(px);
-            tex.Apply(true, true);
-            return _tagPlate = Sprite.Create(tex, new Rect(0, 0, w, h), new Vector2(.5f, .5f));
+            tex.SetPixels32(px); tex.Apply(true, true);
+            var sp = Sprite.Create(tex, new Rect(0, 0, w, h), new Vector2(.5f, .5f));
+            if (oval) _dtPlateBear = sp; else _dtPlateUsec = sp;
+            return sp;
         }
 
-        /// <summary>One bead of the chain: a shaded metal ball (light top-left). 16x16.</summary>
-        private static Sprite TagBall()
+        /// <summary>A small steel bead (ball chain). 10x10.</summary>
+        private static Sprite Bead()
         {
-            if (_tagBall != null) return _tagBall;
-            const int n = 16;
+            if (_dtBead != null) return _dtBead;
+            const int n = 10;
             var tex = new Texture2D(n, n, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Clamp, filterMode = FilterMode.Bilinear };
             var px = new Color32[n * n];
             for (int y = 0; y < n; y++)
@@ -88,106 +118,141 @@ namespace LevelGate.Progression
                 {
                     float dx = (x + .5f) / n * 2 - 1, dy = (y + .5f) / n * 2 - 1, rr = dx * dx + dy * dy;
                     if (rr > 1) continue;
-                    float hl = Mathf.Clamp01(1 - ((dx + .35f) * (dx + .35f) + (dy - .35f) * (dy - .35f)) * 1.6f);
-                    float v = .35f + .45f * Mathf.Sqrt(1 - rr) + .45f * hl * hl;
-                    float a = Mathf.Clamp01((1 - rr) * 6);
-                    px[y * n + x] = new Color32((byte)(255 * Mathf.Clamp01(v * .92f)), (byte)(255 * Mathf.Clamp01(v * .95f)), (byte)(255 * Mathf.Clamp01(v)), (byte)(255 * a));
+                    float hl = Mathf.Clamp01(1 - ((dx + .3f) * (dx + .3f) + (dy - .3f) * (dy - .3f)) * 2.2f);
+                    float v = Mathf.Clamp01(.28f + .35f * Mathf.Sqrt(1 - rr) + .45f * hl * hl);
+                    px[y * n + x] = new Color32((byte)(255 * v * .95f), (byte)(255 * v * .97f), (byte)(255 * v), (byte)(255 * Mathf.Clamp01((1 - rr) * 5)));
                 }
-            tex.SetPixels32(px);
-            tex.Apply(false, true);
-            return _tagBall = Sprite.Create(tex, new Rect(0, 0, n, n), new Vector2(.5f, .5f));
+            tex.SetPixels32(px); tex.Apply(false, true);
+            return _dtBead = Sprite.Create(tex, new Rect(0, 0, n, n), new Vector2(.5f, .5f));
         }
 
-        /// <summary>Embossed text: a light copy 1 px down-right under dark letters.</summary>
-        private static Component[] Emboss(RectTransform parent, string name, Vector2 aMin, Vector2 aMax, Vector2 oMin, Vector2 oMax, float size, float spacing)
+        /// <summary>Engraved text: dark letters with a light lower edge (pressed into the metal).</summary>
+        private static void Engrave(RectTransform parent, Vector2 aMin, Vector2 aMax, Vector2 oMin, Vector2 oMax, string text, float size, float spacing, TextAnchor align)
         {
-            var hiRt = Ui.Rect(parent, name + "Hi", aMin, aMax, oMin + new Vector2(1, -1), oMax + new Vector2(1, -1));
-            var hi = Ui.Label(hiRt, "Text", "", size, new Color(1, 1, 1, .45f), TextAnchor.MiddleCenter, true, spacing);
-            var lo = Ui.Label(Ui.Rect(parent, name, aMin, aMax, oMin, oMax), "Text", "", size, Ui.Hex("#23282a", .92f), TextAnchor.MiddleCenter, true, spacing);
-            return new[] { lo, hi };
+            var hi = Ui.Label(Ui.Rect(parent, "Hi", aMin, aMax, oMin + new Vector2(.8f, -.8f), oMax + new Vector2(.8f, -.8f)), "Text", text, size, new Color(1, 1, 1, .32f), align, true, spacing);
+            var lo = Ui.Label(Ui.Rect(parent, "Lo", aMin, aMax, oMin, oMax), "Text", text, size, new Color(.12f, .13f, .14f, .8f), align, true, spacing);
+            _dtEngrave.Add(hi); _dtEngrave.Add(lo);
         }
-
-        private static void SetEmboss(Component[] c, string text) { foreach (var x in c) Ui.SetText(x, text); }
 
         private static void BuildDogtag(RankView v, RectTransform root)
         {
-            // hangs from a point high above: the holder's pivot is up the chain, so the swing turns about it
-            var holder = Ui.Box(root, "Tag", new Vector2(.5f, .5f), Vector2.zero, new Vector2(TagW, TagH));
-            v.Body = holder;
-            holder.pivot = new Vector2(.5f, 2.1f);
-            // the bead chain: from the hole up and around in a loop, off the top of the screen
-            var pts = new List<Vector2> { new Vector2(0, TagH / 2 - 30), new Vector2(-10, TagH / 2 + 40), new Vector2(40, TagH / 2 + 130), new Vector2(120, TagH / 2 + 150), new Vector2(110, TagH / 2 + 70),
-                                          new Vector2(30, TagH / 2 + 110), new Vector2(-30, TagH / 2 + 250), new Vector2(-10, TagH / 2 + 480), new Vector2(0, TagH / 2 + 900) };
-            var ballSp = TagBall();
-            float acc = 0; Vector2 last = pts[0];
+            var (nick, side) = Me2();
+            _dtBear = side == "BEAR";
+            // the window
+            var win = Ui.Box(root, "InspectWindow", new Vector2(.5f, .5f), Vector2.zero, new Vector2(WinW, WinH));
+            _dtWin = win; v.Body = win;
+            Ui.Img(win, Ui.Hex("#0d1011", .98f));
+            Ui.Outline(win, Ui.Hex("#3a4245"));
+            var head = Ui.Rect(win, "Head", new Vector2(0, 1), Vector2.one, new Vector2(1, -30), new Vector2(-1, -1));
+            Ui.Img(head, Ui.Hex("#1b2022"));
+            _dtTitle = Ui.Label(Ui.Rect(head, "Title", Vector2.zero, Vector2.one, new Vector2(12, 0), new Vector2(-12, 0)), "Text", $"Dogtag {side}", 15, Ui.Hex("#e1e4e5"), TextAnchor.MiddleLeft, false, .5f);
+            Ui.Label(Ui.Rect(win, "Crumb", new Vector2(0, 1), Vector2.one, new Vector2(12, -52), new Vector2(-12, -32)), "Text", "Progression  ›  Rank", 12, Ui.Hex("#7d8588"), TextAnchor.MiddleLeft, false, .5f);
+            Ui.Label(Ui.Rect(win, "Weight", new Vector2(0, 1), Vector2.one, new Vector2(12, -52), new Vector2(-12, -32)), "Text", "0.010 kg", 12, Ui.Hex("#aab2b5"), TextAnchor.MiddleRight, false, .5f);
+            // the picture: the inspect window's striped background
+            var pic = Ui.Rect(win, "Picture", new Vector2(0, 1), Vector2.one, new Vector2(1, -54 - PicH), new Vector2(-1, -54));
+            Ui.Img(pic, Ui.Hex("#15191a"));
+            var st = Ui.Img(Ui.Fill(pic, "Stripes"), new Color(1, 1, 1, .035f), InspectStripes()); st.type = Image.Type.Tiled;
+            pic.gameObject.AddComponent<RectMask2D>();
+            // the tag, a little turned, on its chain
+            var tag = Ui.Box(pic, "Tag", new Vector2(.5f, .47f), Vector2.zero, new Vector2(150, 250));
+            tag.localEulerAngles = new Vector3(0, 0, _dtBear ? -22 : -14);
+            _dtTag = tag;
+            var holePos = new Vector2(0, 125 - (_dtBear ? 28 : 18));
+            var pts = new List<Vector2> { holePos, holePos + new Vector2(-20, 40), holePos + new Vector2(-95, 80), holePos + new Vector2(-150, 40), holePos + new Vector2(-120, -20),
+                                          holePos + new Vector2(-60, 10), holePos + new Vector2(-40, 90), holePos + new Vector2(-80, 170), holePos + new Vector2(-60, 260) };
+            float acc = 0; Vector2 last = pts[0]; var bead = Bead();
             for (int seg = 0; seg < pts.Count - 1; seg++)
             {
                 Vector2 p0 = pts[Mathf.Max(0, seg - 1)], p1 = pts[seg], p2 = pts[seg + 1], p3 = pts[Mathf.Min(pts.Count - 1, seg + 2)];
-                for (float u = 0; u < 1; u += .01f)
+                for (float u = 0; u < 1; u += .02f)
                 {
-                    // Catmull-Rom through the points
                     float u2 = u * u, u3 = u2 * u;
                     var p = .5f * (2 * p1 + (-p0 + p2) * u + (2 * p0 - 5 * p1 + 4 * p2 - p3) * u2 + (-p0 + 3 * p1 - 3 * p2 + p3) * u3);
                     acc += (p - last).magnitude; last = p;
-                    if (acc < 6.5f) continue;
+                    if (acc < 4.2f) continue;
                     acc = 0;
-                    var b = Ui.Img(Ui.Box(holder, "Bead", new Vector2(.5f, .5f), p, new Vector2(7, 7)), Color.white, ballSp);
-                    b.transform.SetAsFirstSibling(); // behind the tag
+                    var b = Ui.Img(Ui.Box(tag, "Bead", new Vector2(.5f, .5f), p, new Vector2(4.4f, 4.4f)), Color.white, bead);
+                    b.transform.SetAsFirstSibling();
                 }
             }
-            // a soft shadow under the tag, then the tag
-            var sh = Ui.Img(Ui.Box(holder, "Shadow", new Vector2(.5f, .5f), new Vector2(10, -14), new Vector2(TagW + 40, TagH + 40)), new Color(0, 0, 0, .55f), Ui.Radial());
-            var plate = Ui.Img(Ui.Fill(holder, "Plate"), Color.white, TagPlate());
-            // the glint: a light band crossing the metal, only on the tag (masked by its shape)
-            var maskRt = Ui.Fill(holder, "GlintMask");
-            var mi = Ui.Img(maskRt, Color.white, TagPlate());
-            maskRt.gameObject.AddComponent<Mask>().showMaskGraphic = false;
-            _tagSheen = Ui.Img(Ui.Rect(maskRt, "Glint", new Vector2(0, 0), new Vector2(0, 1), new Vector2(-50, -60), new Vector2(50, 60)), new Color(1, 1, 1, 0), Ui.Radial());
-            _tagSheen.rectTransform.localEulerAngles = new Vector3(0, 0, -18);
-            // stamped on it: PROMOTED, the emblem (pressed into a shallow well), the rank, a rule, level and date
-            SetEmboss(Emboss(holder, "Top", new Vector2(0, 1), new Vector2(1, 1), new Vector2(20, -80), new Vector2(-20, -56), 13, 7), "PROMOTED");
-            var well = Ui.Box(holder, "Well", new Vector2(.5f, .58f), Vector2.zero, new Vector2(150, 130));
-            Ui.Img(well, new Color(0, 0, 0, .12f), Ui.Radial());
-            _tagEmblemBox = well;
-            v.Emblem = Ui.Img(Ui.Fill(well, "Emblem", 6), Color.white); v.Emblem.preserveAspect = true;
-            v.Flash = Ui.Img(Ui.Box(well, "Flash", new Vector2(.5f, .5f), Vector2.zero, new Vector2(190, 170)), new Color(1, 1, 1, 0), Ui.Radial());
-            _tagName = Emboss(holder, "Name", new Vector2(0, .3f), new Vector2(1, .3f), new Vector2(14, -18), new Vector2(-14, 18), 26, 4);
-            var rule = Ui.Rect(holder, "Rule", new Vector2(.2f, .23f), new Vector2(.8f, .23f), new Vector2(0, 0), new Vector2(0, 1));
-            Ui.Img(rule, Ui.Hex("#23282a", .6f));
-            Ui.Img(Ui.Rect(holder, "RuleHi", new Vector2(.2f, .23f), new Vector2(.8f, .23f), new Vector2(1, -1), new Vector2(1, 0)), new Color(1, 1, 1, .35f));
-            _tagLv = Emboss(holder, "Lv", new Vector2(0, .16f), new Vector2(1, .16f), new Vector2(14, -14), new Vector2(-14, 14), 18, 5);
-            _tagLine = Emboss(holder, "Date", new Vector2(0, .09f), new Vector2(1, .09f), new Vector2(14, -10), new Vector2(-14, 10), 12, 4);
+            Ui.Img(Ui.Box(tag, "Shadow", new Vector2(.5f, .5f), new Vector2(8, -10), new Vector2(190, 290)), new Color(0, 0, 0, .5f), Ui.Radial());
+            Ui.Img(Ui.Fill(tag, "Plate"), Color.white, TagPlateOf(_dtBear)).preserveAspect = true;
+            // the stamping
+            if (_dtBear)
+            {
+                // like "ВС РОССИИ / P-048119": vertical lettering either side of a rule
+                var col = Ui.Rect(tag, "Col", new Vector2(.5f, .45f), new Vector2(.5f, .45f), new Vector2(-110, -26), new Vector2(110, 26));
+                col.localEulerAngles = new Vector3(0, 0, -90);
+                Engrave(col, new Vector2(0, .5f), new Vector2(1, 1), Vector2.zero, Vector2.zero, "ВС РОССИИ", 17, 3, TextAnchor.MiddleCenter);
+                Engrave(col, new Vector2(0, 0), new Vector2(1, .5f), Vector2.zero, Vector2.zero, $"{nick.ToUpperInvariant()}", 15, 2, TextAnchor.MiddleCenter);
+                var rule = Ui.Rect(tag, "Rule", new Vector2(.5f, .1f), new Vector2(.5f, .78f), new Vector2(-.6f, 0), new Vector2(.6f, 0));
+                Ui.Img(rule, new Color(.12f, .13f, .14f, .7f));
+            }
+            else
+            {
+                // US style: lines of small engraved text
+                var lines = new[] { nick.ToUpperInvariant(), "USEC PMC", "ID " + Mathf.Abs((nick + "usec").GetHashCode() % 1000000).ToString("000000"), "O POS", "NO PREF" };
+                for (int i = 0; i < lines.Length; i++)
+                    Engrave(tag, new Vector2(.14f, .72f - i * .1f), new Vector2(.94f, .8f - i * .1f), Vector2.zero, Vector2.zero, lines[i], 12, 1.5f, TextAnchor.MiddleLeft);
+            }
+            // the glint: a soft band crossing the tag once, only on its shape
+            var gm = Ui.Fill(tag, "GlintMask");
+            Ui.Img(gm, Color.white, TagPlateOf(_dtBear)).preserveAspect = true;
+            gm.gameObject.AddComponent<Mask>().showMaskGraphic = false;
+            _dtGlint = Ui.Img(Ui.Rect(gm, "Glint", new Vector2(0, 0), new Vector2(0, 1), new Vector2(-30, -40), new Vector2(30, 40)), new Color(1, 1, 1, 0), Ui.Radial());
+            _dtGlint.rectTransform.localEulerAngles = new Vector3(0, 0, -20);
+            // the new rank's emblem, top-right of the picture (like an item's badge)
+            var eb = Ui.Rect(pic, "Emblem", new Vector2(1, 1), new Vector2(1, 1), new Vector2(-104, -104), new Vector2(-12, -12));
+            _dtEmblemBox = eb;
+            Ui.Brackets(eb, 0, 10, new Color(1, 1, 1, .5f));
+            v.Emblem = Ui.Img(Ui.Fill(eb, "Img", 6), Color.white); v.Emblem.preserveAspect = true;
+            v.Flash = Ui.Img(Ui.Box(eb, "Flash", new Vector2(.5f, .5f), Vector2.zero, new Vector2(140, 140)), new Color(1, 1, 1, 0), Ui.Radial());
+            // the property grid, like the game's inspect rows (two per line)
+            var grid = Ui.Rect(win, "Rows", new Vector2(0, 0), new Vector2(1, 0), new Vector2(10, 70), new Vector2(-10, 70 + 3 * 30));
+            string date = System.DateTime.Now.ToString("dd.MM.yyyy HH:mm");
+            var rows = new[] { ("NICKNAME", nick), ("FACTION", side), ("LEVEL", "—"), ("RANK", "—"), ("DATE", date), ("STATUS", "Promoted") };
+            for (int i = 0; i < rows.Length; i++)
+            {
+                int r = i / 2, c = i % 2;
+                var row = Ui.Rect(grid, "Row", new Vector2(c * .5f, 1), new Vector2(c * .5f + .5f, 1), new Vector2(c == 0 ? 0 : 4, -(r + 1) * 30 + 2), new Vector2(c == 0 ? -4 : 0, -r * 30));
+                Ui.Img(row, Ui.Hex("#1a1f21", .95f));
+                Ui.Label(Ui.Rect(row, "K", Vector2.zero, Vector2.one, new Vector2(10, 0), new Vector2(-10, 0)), "Text", rows[i].Item1, 11, Ui.Hex("#8e979a"), TextAnchor.MiddleLeft, true, 1);
+                var val = Ui.Label(Ui.Rect(row, "V", Vector2.zero, Vector2.one, new Vector2(10, 0), new Vector2(-10, 0)), "Text", rows[i].Item2, 13, Ui.Hex("#e1e4e5"), TextAnchor.MiddleRight, false, .5f);
+                if (rows[i].Item1 == "RANK") _dtRankValue = val;
+                if (rows[i].Item1 == "LEVEL") v.Line = val;
+            }
+            _dtDesc = Ui.Label(Ui.Rect(win, "Desc", new Vector2(0, 0), new Vector2(1, 0), new Vector2(14, 12), new Vector2(-14, 64)), "Text", "", 12, Ui.Hex("#b9c0c3"), TextAnchor.UpperLeft, false, .3f);
+            Refl.Set(_dtDesc, "enableWordWrapping", true);
         }
 
         private static void DrawDogtag(RankView v, int level, float t, float dur, float after, bool still, string name)
         {
-            v.Veil.color = new Color(0, 0, 0, .5f);
-            SetEmboss(_tagName, name);
-            SetEmboss(_tagLv, $"LV {level:000}");
-            SetEmboss(_tagLine, System.DateTime.Now.ToString("dd.MM.yyyy"));
-            // drops in on its chain, swings to rest with a slight turn (the tag isn't flat to the screen while it swings)
-            const float lift = (2.1f - .5f) * TagH; // the pivot sits up the chain
-            float drop = still ? 1 : Motion.Eval(Motion.Ease.OutCubic, t / .5f);
-            v.Body.anchoredPosition = new Vector2(0, Mathf.Lerp(700, 0, drop) + lift - 10);
-            float swing = still ? 0 : 7 * Mathf.Exp(-t * 1.8f) * Mathf.Sin(t * 5.2f + .4f);
-            v.Body.localEulerAngles = new Vector3(0, 0, swing);
-            float turn = still ? 1 : 1 - .12f * Mathf.Exp(-t * 1.6f) * Mathf.Abs(Mathf.Sin(t * 3.1f));
-            v.Body.localScale = new Vector3(turn, 1, 1);
-            // the stamp on the peak: the emblem is pressed in (from a little big, with a jolt)
-            float st = still || after < 0 ? 1 : Mathf.Lerp(1.3f, 1f, Motion.Eval(Motion.Ease.OutQuint, after / .16f));
-            _tagEmblemBox.localScale = new Vector3(st, st, 1);
-            v.Emblem.color = new Color(.92f, .94f, .96f, still || after >= 0 ? 1 : .55f); // the old one faint, the new one pressed in
-            if (!still && after >= 0 && after < .15f) v.Body.anchoredPosition += new Vector2(0, -4 * (1 - after / .15f));
-            // the glint crosses the metal once, just after the stamp
-            float g = still ? -1 : (after - .12f) / .6f;
+            var (nick, _) = Me2();
+            v.Veil.color = new Color(0, 0, 0, .55f);
+            // the window opens like the game's: a quick fade and settle
+            float o = still ? 1 : Motion.Eval(Motion.Ease.OutCubic, t / .2f);
+            _dtWin.localScale = Vector3.one * Mathf.Lerp(.97f, 1, o);
+            Ui.SetText(v.Line, level.ToString());
+            string rank = after >= 0 || still ? TierOf(level).Name : TierOf(Mathf.Max(1, level - 1)).Name;
+            Ui.SetText(_dtRankValue, rank);
+            Ui.SetColor(_dtRankValue, after >= 0 && after < .6f && !still ? Color.Lerp(Ui.Hex("#e0c24a"), Ui.Hex("#e1e4e5"), after / .6f) : Ui.Hex("#e1e4e5"));
+            Ui.SetText(_dtDesc, $"Military dogtag, reissued on promotion to {TierOf(level).Name}. It belongs to operator {nick}.");
+            // the tag hangs still, then shifts a little on the peak (as if picked up)
+            float swing = still || after < 0 ? 0 : 3 * Mathf.Exp(-after * 3) * Mathf.Sin(after * 9);
+            _dtTag.localEulerAngles = new Vector3(0, 0, (_dtBear ? -22 : -14) + swing);
+            // the emblem appears on the peak
+            float es = still || after < 0 ? 0 : Motion.Eval(Motion.Ease.OutBack, after / .3f);
+            _dtEmblemBox.localScale = new Vector3(es, es, 1);
+            // the glint crosses the tag once, just after
+            float g = still ? -1 : (after - .1f) / .7f;
             if (g >= 0 && g <= 1)
             {
-                var r = _tagSheen.rectTransform;
+                var r = _dtGlint.rectTransform;
                 float x = Mathf.Lerp(-.3f, 1.3f, Motion.Eval(Motion.Ease.InOutSine, g));
                 r.anchorMin = new Vector2(x, 0); r.anchorMax = new Vector2(x, 1);
-                _tagSheen.color = new Color(1, 1, 1, .45f * Motion.Eval(Motion.Ease.Pulse, g));
+                _dtGlint.color = new Color(1, 1, 1, .4f * Motion.Eval(Motion.Ease.Pulse, g));
             }
-            else _tagSheen.color = new Color(1, 1, 1, 0);
+            else _dtGlint.color = new Color(1, 1, 1, 0);
         }
     }
 }

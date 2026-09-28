@@ -40,6 +40,13 @@ Versions are **MAJOR.MINOR.PATCH**:
 
 ## LevelGate Progression (BepInEx plugin, separate DLL)
 
+### 0.9.78
+- **Fixed: cards stayed lit after a preview** (and looked different from yours): cards unlocked during a level up were kept lit until the screen closed, on top of the NEW rule. Now a card is lit only while its level has NEW rewards — the same in a preview and for real, and it goes once they've all been clicked.
+- **Pips by progression**: the big picture's (and row) pips step through Tarkov's loot order every three pages — grey (levels 1–15), green (16–30), blue (31–45), purple (46–60), red (61+).
+- **Picture load-in without seams**: each strip clips 1 px wider so the 48 strips overlap (no hairline gaps), and the real picture takes over the moment the last strip is in (nothing pops off at the end).
+- **Selection border's bottom edge**: a faint steady line with a bush of ~26 bigger dots scattered along and around it, each breathing (size and brightness) on its own phase (their own canvas: only they redraw).
+- **Dogtag, as the game would show it**: Tarkov's item inspect window — "Dogtag USEC / BEAR", the breadcrumb and weight, the picture on the inspect window's diagonal stripes, then the property rows (NICKNAME, FACTION, LEVEL, RANK, DATE, STATUS) and a line of description. Your faction's tag in dull, worn steel on a small bead chain: BEAR an oval stamped tag with vertical lettering either side of a rule (ВС РОССИИ / your name), USEC a rounded tag with lines of engraved text. On the peak the RANK row changes (a brief gold), the new emblem appears in the picture's corner and a glint crosses the tag.
+
 ### 0.9.77
 - **F12 cleaned up**: the CURRENTLY TESTING section is hidden (your tuned values are the defaults: Selection Shine 285% / width 157%, load-in style Lines, rank-up Dogtag …); Blur Background, Hide Main Menu, Pattern Animation Speed and the Preview tools moved under F12's "Advanced settings". What's left is what players use.
 - **Dogtag rank-up rebuilt after Tarkov's tags**: brushed, scratched metal with a pressed rim and a punched hole, on a real bead chain looping up out of view; everything embossed (dark letters, light lower edge) — PROMOTED, the rank emblem pressed into a shallow well, the rank name, a rule, LV and the date. It drops in on the chain, swings to rest with a slight turn; on the emblem sound's peak the new emblem is stamped in (a jolt, a small flash) and a glint crosses the metal. Now the default rank-up.
