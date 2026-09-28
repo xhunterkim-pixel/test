@@ -258,10 +258,11 @@ namespace LevelGate.Progression
                 for (int x = 0; x < w; x++)
                 {
                     float d = Mathf.Min(Mathf.Min(x, w - 1 - x), Mathf.Min(y, h - 1 - y));
-                    float erode = 1.2f + 4.2f * Mathf.PerlinNoise(x * .19f + 3.1f, y * .19f + 7.7f) * Mathf.PerlinNoise(x * .05f, y * .05f + 11f) * 1.6f;
-                    float a = Mathf.Clamp01((d - erode) / 1.4f);
-                    if (d < 7 && Mathf.PerlinNoise(x * .6f + 40, y * .6f) > .78f) a *= .25f; // chips near the edge
-                    float dirt = .8f + .2f * Mathf.PerlinNoise(x * .08f + 20, y * .08f + 5) - .06f * Mathf.PerlinNoise(x * .5f, y * .5f + 30);
+                    // lighter wear than before (VIEWING / "41–45" read as smudges): ragged edges, a few chips, a solid middle
+                    float erode = .8f + 2.2f * Mathf.PerlinNoise(x * .19f + 3.1f, y * .19f + 7.7f) * Mathf.PerlinNoise(x * .05f, y * .05f + 11f) * 1.6f;
+                    float a = Mathf.Clamp01((d - erode) / 1.2f);
+                    if (d < 4 && Mathf.PerlinNoise(x * .6f + 40, y * .6f) > .82f) a *= .35f; // chips near the edge
+                    float dirt = .86f + .14f * Mathf.PerlinNoise(x * .08f + 20, y * .08f + 5) - .04f * Mathf.PerlinNoise(x * .5f, y * .5f + 30);
                     float v = dirt * scratch;
                     px[y * w + x] = new Color32((byte)(232 * v), (byte)(229 * v), (byte)(219 * v), (byte)(255 * a));
                 }

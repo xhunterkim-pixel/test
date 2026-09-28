@@ -312,16 +312,40 @@ namespace LevelGate.Progression
             // LevelGate blanks locked items' short names: the game data's own (read from disk) instead of a cut-off full name
             var disk = GameText.Short(tpl);
             if (disk != null) return disk;
+            // a modded variant without a short name ("… SR-25 7.62x51 marksman rifle (Taupe)"): the short name of the item whose
+            // full name it starts with, plus what's left ("SR-25 (Taupe)")
+            if (_borrowed.TryGetValue(tpl, out var known)) return known;
+            var full = NameOf(tpl) ?? "";
+            string bestShort = null; int bestLen = 0;
+            foreach (var other in Levels.Keys)
+            {
+                if (other == tpl) continue;
+                var on = NameOf(other);
+                if (on == null || on.Length <= bestLen || on.Length < 8 || on.Length >= full.Length || !full.StartsWith(on, StringComparison.Ordinal)) continue;
+                var os = GameText.Short(other) ?? ShortLocalized(other);
+                if (string.IsNullOrEmpty(os)) continue;
+                bestShort = os; bestLen = on.Length;
+            }
+            if (bestShort != null) return _borrowed[tpl] = (bestShort + " " + full.Substring(bestLen).Trim()).Trim();
             if (_noShort++ < 5) L.Debug($"no short name for {tpl} — shortened from its full name{(GameText.Ready ? "" : " (game data names not read yet)")}");
-            return Shorten(NameOf(tpl));
+            var sh = Shorten(NameOf(tpl));
+            if (GameText.Ready) _borrowed[tpl] = sh; // settled once the game data is read
+            return sh;
         }
 
         private static int _noShort;
+        private static readonly Dictionary<string, string> _borrowed = new Dictionary<string, string>();
+
+        private static string ShortLocalized(string tpl)
+        {
+            var s = Localize(tpl + " ShortName");
+            return string.IsNullOrEmpty(s) || s == tpl + " ShortName" ? null : LevelGateLabel.Replace(s, "");
+        }
 
         // what the type already says on the tile (its category label) doesn't need repeating in the name
         private static readonly string[] _typeWords =
         {
-            " bolt-action sniper rifle", " bolt-action rifle", " sniper rifle", " marksman rifle", " assault rifle", " assault carbine",
+            " special assault rifle", " bolt-action sniper rifle", " bolt-action rifle", " sniper rifle", " marksman rifle", " assault rifle", " assault carbine",
             " carbine", " submachine gun", " machine pistol", " machine gun", " light machine gun", " pump-action shotgun", " shotgun",
             " pistol", " revolver", " grenade launcher", " armored rig", " plate carrier", " body armor", " bulletproof helmet",
             " helmet", " backpack", " stimulant injector", " injector", " armband",
@@ -336,7 +360,9 @@ namespace LevelGate.Progression
                 int i = name.IndexOf(w, StringComparison.OrdinalIgnoreCase);
                 if (i > 3) { name = (name.Substring(0, i) + name.Substring(i + w.Length)).Trim(); break; }
             }
-            return name;
+            // and without its calibre ("Custom Guns NL545 (DI) 5.45x39" → "Custom Guns NL545 (DI)")
+            var trimmed = Regex.Replace(name, @"\s+\.?\d+(\.\d+)?x\d+(mm|R)?(\s+(NATO|PARA|SR|Magnum))?\b", "").Trim();
+            return trimmed.Length >= 3 ? trimmed : name;
         }
 
         // ---------------------------------------------------------------- the player

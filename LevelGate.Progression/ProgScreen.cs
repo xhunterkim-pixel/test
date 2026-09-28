@@ -481,11 +481,11 @@ namespace LevelGate.Progression
             Ui.Img(Ui.Rect(panel, "Bracket", new Vector2(0, 1), new Vector2(0, 1), new Vector2(PanelPad, -HeadH + 12), new Vector2(PanelPad + 1, -12)), Ui.Hex("#8a8e90", .8f));
             Ui.Img(Ui.Rect(panel, "BracketTick", new Vector2(0, 1), new Vector2(0, 1), new Vector2(PanelPad - 6, -21), new Vector2(PanelPad, -20)), Ui.Hex("#8a8e90", .8f));
             float hx = PanelPad + 12;
-            var chip = Ui.Rect(panel, "Chip", new Vector2(0, 1), new Vector2(0, 1), new Vector2(hx, -30), new Vector2(hx + 200, -12));
+            var chip = Ui.Rect(panel, "Chip", new Vector2(0, 1), new Vector2(0, 1), new Vector2(hx, -33), new Vector2(hx + 200, -11));
             _listChipEdge = Ui.Img(chip, Ui.Hex("#6a6e70"));
             Ui.Img(Ui.Fill(chip, "In", 1), Ui.Hex("#141516", .95f));
-            _listChipIcon = Ui.Img(Ui.Rect(chip, "Icon", new Vector2(0, .5f), new Vector2(0, .5f), new Vector2(5, -6), new Vector2(17, 6)), Ui.Hex(Green), Ui.Tick());
-            _listChipText = Ui.Label(Ui.Rect(chip, "Text", Vector2.zero, Vector2.one, new Vector2(21, 0), new Vector2(-6, 0)), "Text", "", TCaps - 1, Text, TextAnchor.MiddleLeft, false, 1);
+            _listChipIcon = Ui.Img(Ui.Rect(chip, "Icon", new Vector2(0, .5f), new Vector2(0, .5f), new Vector2(6, -7), new Vector2(20, 7)), Ui.Hex(Green), Ui.Tick());
+            _listChipText = Ui.Label(Ui.Rect(chip, "Text", Vector2.zero, Vector2.one, new Vector2(25, 0), new Vector2(-7, 0)), "Text", "", TCaps, Text, TextAnchor.MiddleLeft, false, 1);
             _listChip = chip;
             _listTitle = Ui.Label(Ui.Rect(panel, "Title", new Vector2(0, 1), Vector2.one, new Vector2(hx, -62), new Vector2(-PanelPad, -32)), "Text", "", TTitle + 6, Ui.Hex("#e6e8e9"), TextAnchor.MiddleLeft, false, 1);
             _listRank = Ui.Label(Ui.Rect(panel, "Rank", new Vector2(0, 1), Vector2.one, new Vector2(hx, -HeadH + 6), new Vector2(-PanelPad, -62)), "Text", "", TCaps, Grey, TextAnchor.MiddleLeft, false, 3);
@@ -494,6 +494,7 @@ namespace LevelGate.Progression
             Ui.Img(Ui.Rect(panel, "Rule", new Vector2(0, 1), Vector2.one, new Vector2(0, -HeadH - 1), new Vector2(0, -HeadH)), Border);
 
             var view = Ui.Rect(panel, "Scroll", Vector2.zero, Vector2.one, new Vector2(PanelPad, S2), new Vector2(-S2, -HeadH - S2));
+            SubCanvas(view); // its own drawing layer: tile fades / hovers redraw only the list, not the whole screen
             var scroll = view.gameObject.AddComponent<ScrollRect>();
             scroll.horizontal = false;
             scroll.scrollSensitivity = 40;
@@ -674,6 +675,18 @@ namespace LevelGate.Progression
         private static RectTransform _info, _descView;
 
         /// <summary>The description takes the height it needs (up to what's left, then it scrolls), so INSPECT follows the text.</summary>
+        private static string _featWantTpl;
+        private static int _featWantScale;
+        private static float _featWantAt;
+
+        /// <summary>The big picture asked for once the selection has settled (not in the same frame as the click / scroll).</summary>
+        private static void FeatureDeferred()
+        {
+            if (_featWantTpl == null || Time.unscaledTime < _featWantAt || Browsing) return;
+            if (_featWantTpl == _featTpl && _featIcon == null) _featIcon = GameItems.IconOf(GameItems.ItemOf(_featWantTpl), _featWantScale);
+            _featWantTpl = null;
+        }
+
         private static void FitDescription()
         {
             if (_descSize == null) return;
@@ -943,10 +956,11 @@ namespace LevelGate.Progression
             LevelKey(_next.GetComponent<RectTransform>(), "D", () => { ShowLevel(_level + 1); Sounds.Click(); });
 
             // cards share the panels' left/right guides (the slots' inner 8 px sit on the margin); arrows live outside, in the margin
-            var cards = Ui.Rect(bottom, "Cards", Vector2.zero, Vector2.one, new Vector2(Margin - Gutter / 2, 78), new Vector2(-Margin + Gutter / 2, -S3));
+            var cards = Ui.Rect(bottom, "Cards", Vector2.zero, Vector2.one, new Vector2(Margin - Gutter / 2, 84), new Vector2(-Margin + Gutter / 2, -S3));
+            _cardsRt = cards;
             // MW-style timeline rail under the cards: a tick under each level, a light fill up to where you are (your XP
             // inside your level included), a small orange marker at "you"
-            var rail = Ui.Rect(bottom, "Rail", new Vector2(0, 0), new Vector2(1, 0), new Vector2(Margin - Gutter / 2, 66), new Vector2(-Margin + Gutter / 2, 72));
+            var rail = Ui.Rect(bottom, "Rail", new Vector2(0, 0), new Vector2(1, 0), new Vector2(Margin - Gutter / 2, 71), new Vector2(-Margin + Gutter / 2, 77));
             Ui.Img(Ui.Rect(rail, "Line", new Vector2(0, .5f), new Vector2(1, .5f), new Vector2(0, 0), new Vector2(0, 1)), Ui.Hex("#3c3e3f", .9f));
             _railFill = Ui.Rect(rail, "Fill", new Vector2(0, .5f), new Vector2(0, .5f), new Vector2(0, -1), new Vector2(0, 1));
             Ui.Img(_railFill, Ui.Hex("#c4c7c8", .85f));
@@ -1286,9 +1300,11 @@ namespace LevelGate.Progression
             L.Step($"ShowPage {page}");
             int want = page;
             page = Mathf.Clamp(page, 0, Pages - 1);
-            bool changed = page != _page;
+            bool changed = page != _page || _first != page * PerPage + 1; // a dragged row (44–48) re-aligns to its page
             if (!changed && dir != 0) { L.Debug($"page {want + 1}: already at the {(want < 0 ? "first" : "last")} page"); return; }
             _page = page;
+            _first = page * PerPage + 1;
+            _shiftStart = -10; SetCardOffset(0);
             if (changed) _sPages++;
             if (changed && dir != 0 && !_xpPaging) _level = levelAfter > 0 ? levelAfter : page * PerPage + 1;
             int first = page * PerPage + 1;
@@ -1298,7 +1314,7 @@ namespace LevelGate.Progression
             UpdatePageBar();
             _hits.RemoveAll(h => h.Rect == null || h.Rect.IsChildOf(_bottom));
             Adopt(_cardIcons); DropRequests(_cardIcons);
-            for (int i = 0; i < PerPage; i++) _cards[i].Show(first + i);
+            for (int i = 0; i < PerPage; i++) _cards[i].Show(_first + i);
             _cardsDir = dir;
             _cardsStart = dir != 0 ? Time.unscaledTime : -10;
             if (changed && dir != 0) { Sounds.Page(); if (_xpPaging) UpdateSelection(); else ShowLevel(_level); }
@@ -1306,6 +1322,84 @@ namespace LevelGate.Progression
         }
 
         private static int _segHover = -1;
+
+        // ---------------------------------------------------------------- the card row as a sliding window (drag / one-card steps)
+        private static int _first = 1;             // the first level in the card row (44 → 44–48); pages align it to 1, 6, 11…
+        private static RectTransform _cardsRt;
+        private static bool _fastTiles;
+        private static float _shiftStart = -10, _shiftFrom;
+        private static bool _shiftFade;
+        private static bool _dragArmed, _dragging;
+        private static float _dragBase, _dragSuppressUntil, _lastScrollAt;
+
+        /// <summary>You're flying through levels (drag / wheel / keys in the last 0.35 s): pictures and effects hold back.</summary>
+        private static bool Browsing => _dragging || Time.unscaledTime - _lastScrollAt < .35f;
+
+        private static bool InWindow(int level) => level >= _first && level < _first + PerPage;
+        private static int MaxFirst => Mathf.Max(1, ProgData.MaxLevel - PerPage + 1);
+        private static float SlotWidth => _cardsRt != null ? _cardsRt.rect.width / PerPage : 300;
+
+        private static void SetCardOffset(float x) { foreach (var c in _cards) c?.Offset(x); }
+
+        /// <summary>
+        /// Shows levels first … first+4 in the card row. animate: the cards glide over from where they were by one card
+        /// (and the one coming in fades in). The page bar marks the page the row's middle is on.
+        /// </summary>
+        private static void ShiftWindow(int first, bool animate)
+        {
+            first = Mathf.Clamp(first, 1, MaxFirst);
+            int delta = first - _first;
+            if (delta == 0) return;
+            _first = first;
+            _page = Mathf.Clamp((_first + PerPage / 2 - 1) / PerPage, 0, Pages - 1);
+            _lastScrollAt = Time.unscaledTime;
+            _hits.RemoveAll(h => h.Rect == null || h.Rect.IsChildOf(_bottom));
+            Adopt(_cardIcons); DropRequests(_cardIcons);
+            for (int i = 0; i < PerPage; i++) _cards[i].Show(_first + i);
+            _cardsStart = -10;
+            if (animate) { _shiftFrom = Mathf.Sign(delta) * SlotWidth; _shiftStart = Time.unscaledTime; _shiftFade = true; }
+            UpdatePageBar();
+            UpdateSelection();
+        }
+
+        /// <summary>
+        /// Drag the card row with the mouse: it follows the pointer, a level comes in each time it passes half a card
+        /// (so the row can show 44–48, not only pages), and it settles into place when let go. A drag is never a click.
+        /// </summary>
+        private static void DragCards(BepInEx.IInputSystem input, bool blocked)
+        {
+            if (_cardsRt == null) return;
+            var canvas = _cardsRt.GetComponentInParent<Canvas>();
+            var cam = canvas != null && canvas.renderMode != RenderMode.ScreenSpaceOverlay ? canvas.worldCamera : null;
+            Vector2 local;
+            bool inside = RectTransformUtility.ScreenPointToLocalPointInRectangle(_cardsRt, input.mousePosition, cam, out local);
+            if (input.GetMouseButtonDown(0) && !blocked && inside && _cardsRt.rect.Contains(local)) { _dragArmed = true; _dragging = false; _dragBase = local.x; }
+            if (_dragArmed && input.GetMouseButton(0))
+            {
+                float dx = local.x - _dragBase;
+                if (!_dragging && Mathf.Abs(dx) > 10) { _dragging = true; _shiftStart = -10; _cardsStart = -10; L.Debug("cards: drag"); }
+                if (_dragging)
+                {
+                    float slot = SlotWidth;
+                    // dragging left brings later levels in, right brings earlier ones; resistance at the ends
+                    while (dx < -slot / 2 && _first < MaxFirst) { ShiftWindow(_first + 1, false); _dragBase -= slot; dx += slot; Sounds.Play("ButtonOver"); }
+                    while (dx > slot / 2 && _first > 1) { ShiftWindow(_first - 1, false); _dragBase += slot; dx -= slot; Sounds.Play("ButtonOver"); }
+                    if ((dx < 0 && _first >= MaxFirst) || (dx > 0 && _first <= 1)) dx *= .3f;
+                    SetCardOffset(dx);
+                    _shiftFrom = dx;
+                }
+            }
+            if (_dragArmed && !input.GetMouseButton(0))
+            {
+                if (_dragging)
+                {
+                    _dragSuppressUntil = Time.unscaledTime + .2f; // the release isn't a click on a card
+                    _shiftStart = Time.unscaledTime; _shiftFade = false; // settle from where it was let go
+                    L.Debug($"cards: dropped at levels {_first}–{Mathf.Min(ProgData.MaxLevel, _first + PerPage - 1)}");
+                }
+                _dragArmed = _dragging = false;
+            }
+        }
 
         private static Image _pagePlate;
 
@@ -1349,12 +1443,20 @@ namespace LevelGate.Progression
         {
             L.Step("ShowLevel " + level);
             level = Mathf.Clamp(level, 1, ProgData.MaxLevel);
-            if (!force && level == _shownLevel && (level - 1) / PerPage == _page) { _level = level; UpdateSelection(); return; } // already showing it
+            if (!force && level == _shownLevel && InWindow(level)) { _level = level; UpdateSelection(); return; } // already showing it
             int page = (level - 1) / PerPage;
             _level = level;
-            if (page != _page) { ShowPage(page, page > _page ? 1 : -1, level); return; }
+            // one step past the row's edge (wheel, A / D, the arrows): the row slides by one card; further: the whole page
+            if (!InWindow(level))
+            {
+                if (!XpAnimating && (level == _first - 1 || level == _first + PerPage)) ShiftWindow(level < _first ? level : level - PerPage + 1, true);
+                else { ShowPage(page, page > _page ? 1 : -1, level); return; }
+            }
             // (a card's NEW goes when you click that card, or once all its new rewards are clicked — not when you merely
             // scroll / arrow past it: scrolling one level per notch cleared every card on the way)
+            bool fast = Time.unscaledTime - _lastScrollAt < .4f; // levels changing quickly: tiles show at once, no stagger
+            _lastScrollAt = Time.unscaledTime;
+            _fastTiles = fast;
             float t0 = Time.realtimeSinceStartup;
             var items = ProgData.ItemsAt(level);
             int player = Me;
@@ -1377,7 +1479,7 @@ namespace LevelGate.Progression
                 _listChipIcon.sprite = lockedLv ? Ui.Lock() : Ui.Tick();
                 _listChipIcon.color = lockedLv ? Ui.Hex(Red, .9f) : level == player ? Ui.Hex(Orange) : Ui.Hex(Green);
                 FadeTo(_listChipEdge, lockedLv ? Ui.Hex(Red, .6f) : level == player ? Ui.Hex(Orange, .8f) : Ui.Hex("#6a6e70"), true);
-                float cw = 21 + Ui.PreferredWidth(_listChipText, chipText) + 8;
+                float cw = 25 + Ui.PreferredWidth(_listChipText, chipText) + 10;
                 _listChip.offsetMax = new Vector2(_listChip.offsetMin.x + cw, _listChip.offsetMax.y);
             }
 
@@ -1561,6 +1663,7 @@ namespace LevelGate.Progression
         private static string KindOf(string tpl)
         {
             var k = (GameText.CategoryPath(tpl) ?? "").Split('›').Last().Trim();
+            if (k.Length == 0) k = GameItems.WeaponClassOf(tpl) ?? ""; // modded guns the handbook doesn't list
             if (k.Length > 3 && k.EndsWith("s") && !k.EndsWith("ss")) k = k.Substring(0, k.Length - 1);
             return k;
         }
@@ -1663,7 +1766,8 @@ namespace LevelGate.Progression
             });
             _tileViews[it.Tpl] = v;
             ApplyTile(v, true);
-            _tiles.Add((group, inner, Mathf.Min(index, 40) * .012f));
+            if (_fastTiles) group.alpha = 1; // browsing: no one-by-one fade (it flickered while scrolling)
+            else _tiles.Add((group, inner, Mathf.Min(index, 40) * .012f));
         }
 
         /// <summary>normal: neutral · hover: brighter edge and surface · selected: light edge + top bar + bright name · locked: muted.</summary>
@@ -1740,7 +1844,7 @@ namespace LevelGate.Progression
         private static void RunIconRequests()
         {
             if (_iconRequests.Count == 0) return;
-            int budget = Perf ? 2 : 4;
+            int budget = Browsing ? 1 : Perf ? 2 : 4; // one picture a frame while flying through levels (each can cost 60–140 ms)
             var t0 = Time.realtimeSinceStartup;
             // cards first
             _iconRequests.Sort((a, b) => (a.Target == _cardIcons ? 0 : 1).CompareTo(b.Target == _cardIcons ? 0 : 1));
@@ -2020,6 +2124,7 @@ namespace LevelGate.Progression
 
         private static void Prefetch()
         {
+            if (Browsing) return; // pre-loading waits until you stop
 
             // pictures asked for earlier: take them once drawn (bigger ones become our own copy)
             for (int i = _prefetching.Count - 1; i >= 0; i--)
@@ -2193,7 +2298,7 @@ namespace LevelGate.Progression
             var kept = GameItems.CopyOf(it.Tpl, featScale);
             FitFeat(null);
             if (kept != null) { _featIcon = null; _featPic.sprite = kept; _featPic.enabled = true; _featShort.gameObject.SetActive(false); FitFeat(kept); LogSharpness(kept, "kept"); }
-            else if (!_loading) _featIcon = GameItems.IconOf(GameItems.ItemOf(it.Tpl), featScale);
+            else if (!_loading) { _featWantTpl = it.Tpl; _featWantScale = featScale; _featWantAt = Time.unscaledTime + (Browsing ? .3f : .02f); } // drawn a moment later (it cost up to 136 ms right in the click)
             MarkSelectedTile();
         }
 
@@ -2298,20 +2403,32 @@ namespace LevelGate.Progression
         private static RectTransform _rail, _railFill;
         private static readonly List<Image> _railTicks = new List<Image>();
         private static Image _railYou;
+        private static float _railTarget, _railShown = -1;
+
+        private static void TickRail(float dt)
+        {
+            if (_railFill == null) return;
+            if (_railShown < 0) _railShown = _railTarget;
+            if (Mathf.Abs(_railShown - _railTarget) < .0005f) { if (_railFill.anchorMax.x != _railTarget) _railFill.anchorMax = new Vector2(_railTarget, .5f); return; }
+            _railShown = Mathf.Lerp(_railShown, _railTarget, 1 - Mathf.Exp(-dt * 9));
+            _railFill.anchorMax = new Vector2(_railShown, .5f);
+        }
 
         /// <summary>The rail under the cards: filled up to your place on this page (your XP into your level included).</summary>
         private static void RefreshRail()
         {
             if (_rail == null) return;
-            int me = Me, first = _page * PerPage + 1;
+            int me = Me, first = _first;
             float prog = _xpCardLevel > 0 ? 0 : Mathf.Clamp01(ProgData.LevelProgress());
             float x = me <= 0 ? 0 : (me - first) + .5f + prog;
             float f = Mathf.Clamp01(x / PerPage);
-            _railFill.anchorMax = new Vector2(f, .5f);
+            _railTarget = f; // eased there in Tick (it jumped during the XP animation)
             for (int i = 0; i < _railTicks.Count; i++)
             {
                 int lv = first + i;
                 _railTicks[i].color = lv <= me ? Ui.Hex("#d9dcdd") : Ui.Hex("#55595b");
+                var tr = _railTicks[i].rectTransform; float th = lv == me ? 6 : 2; // your level's tick stands taller
+                tr.offsetMin = new Vector2(tr.offsetMin.x, -th); tr.offsetMax = new Vector2(tr.offsetMax.x, th);
                 _railTicks[i].gameObject.SetActive(lv <= ProgData.MaxLevel);
             }
             bool here = me >= first && me < first + PerPage;
@@ -2412,6 +2529,20 @@ namespace LevelGate.Progression
                 if (to != _level) { ShowLevel(to); Sounds.Click(); }
             }
 
+            DragCards(input, window || xpBusy);
+            TickRail(Time.unscaledDeltaTime);
+            // the row slid by one card (or was let go after a drag): ease the cards back into their places
+            if (!_dragging && _shiftStart > 0)
+            {
+                float t = Mathf.Clamp01((now - _shiftStart) / .26f), e = 1 - Mathf.Pow(1 - t, 3);
+                float x = _shiftFrom * (1 - e);
+                for (int i = 0; i < PerPage; i++)
+                {
+                    bool incoming = _shiftFrom > 0 ? i == PerPage - 1 : i == 0; // the card that just came into the row fades in
+                    _cards[i].Offset(x, _shiftFade && incoming ? e : 1f);
+                }
+                if (t >= 1) _shiftStart = -10;
+            }
             // cards slide in from the side you went to (only while sliding: touching them every frame costs)
             if (now - _cardsStart < 1f)
                 for (int i = 0; i < PerPage; i++)
@@ -2454,6 +2585,7 @@ namespace LevelGate.Progression
                     if (over != null) Inspect(over.Tpl);
                 }
             }
+            FeatureDeferred();
             if (_featIcon != null)
             {
                 var sp = GameItems.TakeSprite(_featIcon, _featTpl, out bool done);
@@ -2536,6 +2668,9 @@ namespace LevelGate.Progression
 
             public RectTransform Root => _root;
 
+            /// <summary>Still: the emblem stands on its first frame (only the picked / your card's emblem plays).</summary>
+            public bool Still { set { var pl = _emblem.GetComponent<EmblemPlayer>(); if (pl != null && pl.Still != value) { pl.Still = value; } } }
+
             public bool Visible { set { if (_root.gameObject.activeSelf != value) _root.gameObject.SetActive(value); } }
 
             public void Set(int level, bool dim = false)
@@ -2567,7 +2702,7 @@ namespace LevelGate.Progression
             private readonly Badge _cardBadge;
             private readonly RectTransform _tag;
             private readonly Component _tagText, _typeLine;
-            private const float HeadH = 42;
+            private const float HeadH = 46;
             private Image _flash;
             private float _flashAt = -10;
 
@@ -2697,14 +2832,14 @@ namespace LevelGate.Progression
                 var head = Ui.Rect(_body, "Head", new Vector2(0, 1), Vector2.one, new Vector2(0, -HeadH), Vector2.zero);
                 var numRow = Ui.Rect(head, "NumRow", new Vector2(0, 1), Vector2.one, new Vector2(0, -26), Vector2.zero);
                 _head = Ui.Label(numRow, "Text", "", TTitle, Grey, TextAnchor.MiddleCenter, true);
-                _cardBadge = new Badge(numRow, new Vector2(.5f, .5f), new Vector2(-30, 0), 24);
+                _cardBadge = new Badge(numRow, new Vector2(.5f, .5f), new Vector2(-30, 0), 30);
                 _headL = DottedLine.Add(Ui.Rect(numRow, "L", new Vector2(0, 0), new Vector2(.5f, 1), Vector2.zero, new Vector2(-46, 0)), false);
                 _headR = DottedLine.Add(Ui.Rect(numRow, "R", new Vector2(.5f, 0), new Vector2(1, 1), new Vector2(46, 0), Vector2.zero), true);
                 foreach (var d in new[] { _headL, _headR }) { d.Dash = 6; d.Gap = 0; d.Thickness = 1; } // gap 0: a continuous line that still fades out
-                _tag = Ui.Rect(head, "Tag", new Vector2(.5f, 0), new Vector2(.5f, 0), new Vector2(-40, 2), new Vector2(40, 16));
+                _tag = Ui.Rect(head, "Tag", new Vector2(.5f, 0), new Vector2(.5f, 0), new Vector2(-40, 0), new Vector2(40, 18));
                 _tagPlate = Ui.Img(_tag, Color.white, Ui.WornPlate());
                 _tagPlate.type = Image.Type.Sliced; _tagPlate.raycastTarget = false;
-                _tagText = Ui.Label(_tag, "Text", "", 10, Grey, TextAnchor.MiddleCenter, true, 2);
+                _tagText = Ui.Label(_tag, "Text", "", 11, Grey, TextAnchor.MiddleCenter, true, 1.5f);
 
                 var card = Ui.Rect(_body, "Box", Vector2.zero, Vector2.one, Vector2.zero, new Vector2(0, -HeadH - 4));
                 // cut top-left / bottom-right corners like the game's prestige tiles (frame + face 2 px in = a cut outline)
@@ -2725,7 +2860,7 @@ namespace LevelGate.Progression
                 //   12 px padding on all four sides of the picture area · 8 px between any two pictures · the small squares'
                 //   size comes from the height ((h - 8) / 2), they sit flush right · the big picture takes all the rest.
                 // The first card's rank emblem sits on its big picture (top-left), so no card needs a row of its own.
-                const float Pad = S3, Foot = 44;
+                const float Pad = S3, Foot = 48;
                 var pics = Ui.Rect(inner, "Pics", Vector2.zero, Vector2.one, new Vector2(Pad, Foot), new Vector2(-Pad, -Pad));
                 _picsArea = pics;
                 // selected: a 2 px light bar along the top edge (shape, not only colour)
@@ -2776,8 +2911,8 @@ namespace LevelGate.Progression
                 // footer: "147 unlocks" left, the level's state right in small caps (one small lock for future levels)
                 // footer like MW's cards: the main reward's name bold, its kind + the rest in small spaced caps under it;
                 // the level's state (NEW / LOCKED) on the right of the name
-                _count = Ui.Label(Ui.Rect(inner, "Name", new Vector2(0, 0), new Vector2(.72f, 0), new Vector2(Pad, 20), new Vector2(0, Foot - 4)), "Text", "", TBody + 1, Text, TextAnchor.MiddleLeft, true, 0, true);
-                _typeLine = Ui.Label(Ui.Rect(inner, "Type", new Vector2(0, 0), new Vector2(1, 0), new Vector2(Pad, 5), new Vector2(-Pad, 20)), "Text", "", 10, Grey, TextAnchor.MiddleLeft, false, 2, true);
+                _count = Ui.Label(Ui.Rect(inner, "Name", new Vector2(0, 0), new Vector2(.72f, 0), new Vector2(Pad, 23), new Vector2(0, Foot - 5)), "Text", "", TBody + 1, Text, TextAnchor.MiddleLeft, true, 0, true);
+                _typeLine = Ui.Label(Ui.Rect(inner, "Type", new Vector2(0, 0), new Vector2(1, 0), new Vector2(Pad, 7), new Vector2(-Pad, 22)), "Text", "", 10, Grey, TextAnchor.MiddleLeft, false, 2, true);
                 _state = Ui.Label(Ui.Rect(inner, "State", new Vector2(.5f, 0), new Vector2(1, 0), new Vector2(0, 20), new Vector2(-Pad, Foot - 4)), "Text", "", TCaps, Grey, TextAnchor.MiddleRight, false, Caps);
                 _stateLock = Ui.Img(Ui.Rect(inner, "StateLock", new Vector2(1, 0), new Vector2(1, 0), new Vector2(-Pad - 68 - 12, 26), new Vector2(-Pad - 68, 38)), Grey, Ui.Lock());
                 _stateLock.enabled = false;
@@ -2786,6 +2921,7 @@ namespace LevelGate.Progression
                 button.transition = Selectable.Transition.None;
                 button.onClick.AddListener(() =>
                 {
+                    if (_dragging || Time.unscaledTime < _dragSuppressUntil) return; // that was the end of a drag
                     L.Debug($"card level {_level} clicked");
                     Sounds.Click();
                     if (NewTags.ClearLevel(_level)) L.Debug($"NEW: level {_level} card clicked");
@@ -2821,6 +2957,7 @@ namespace LevelGate.Progression
                 // the main reward (the big picture's) by name; its kind and the rest under it: "ASSAULT RIFLE  ·  +29 ITEMS"
                 var main = picks.Count > 0 ? picks[0] : null;
                 Ui.SetText(_count, main == null ? "" : main.Short);
+                Ui.SetSize(_count, main != null && main.Short.Length > 22 ? TBody - 1 : TBody + 1); // long names a size down
                 string kind = main == null ? "" : KindOf(main.Tpl);
                 if (main != null && kind.Length == 0) kind = ProgData.Groups.FirstOrDefault(x => x.Key == main.Group).Name ?? "";
                 int more = items.Count - 1;
@@ -2855,6 +2992,7 @@ namespace LevelGate.Progression
                 FadeTo(_frame, sel ? Select : _hover ? HoverEdge : Border);
                 _top.enabled = sel && !current;
                 _cur.enabled = current;       // a thin orange line: your level
+                _cardBadge.Still = !(sel || current); // five emblems playing at once was busy (and cost frames)
                 _selDots.enabled = sel;       // the picked card's dot-matrix fill
                 FadeTo(_bg, sel ? Ui.Hex("#1b1d1e", .92f) : _hover ? Ui.Hex("#161718", .9f) : locked ? Ui.Hex("#08090a", .94f) : Ui.Hex("#111213", .88f));
                 _glow.color = new Color(0, 0, 0, 0);
@@ -2865,8 +3003,8 @@ namespace LevelGate.Progression
                 Ui.SetColor(_head, head);
                 _headL.color = _headR.color = new Color(head.r, head.g, head.b, current || sel ? .7f : .35f);
                 float nw = Ui.PreferredWidth(_head, _level.ToString());
-                ((RectTransform)_cardBadge.Root).anchoredPosition = new Vector2(-(nw / 2 + 16), 0);
-                float hw = nw / 2 + 36; // clear of the emblem on the left, the same on the right
+                ((RectTransform)_cardBadge.Root).anchoredPosition = new Vector2(-(nw / 2 + 22), 0);
+                float hw = nw / 2 + 44; // clear of the emblem on the left, the same on the right
                 _headL.rectTransform.offsetMax = new Vector2(-hw, _headL.rectTransform.offsetMax.y);
                 _headR.rectTransform.offsetMin = new Vector2(hw - 20, _headR.rectTransform.offsetMin.y);
                 // the role tag under the number: VIEWING on the worn pale plate (dark text), CURRENT in orange, NEXT in grey
@@ -2877,7 +3015,7 @@ namespace LevelGate.Progression
                     Ui.SetText(_tagText, role);
                     _tagPlate.enabled = sel;
                     Ui.SetColor(_tagText, sel ? Ui.Hex("#1a1b1c") : current ? Ui.Hex(Orange) : Grey);
-                    float tw = Ui.PreferredWidth(_tagText, role) / 2 + 10;
+                    float tw = Ui.PreferredWidth(_tagText, role) / 2 + 12;
                     _tag.offsetMin = new Vector2(-tw, _tag.offsetMin.y); _tag.offsetMax = new Vector2(tw, _tag.offsetMax.y);
                 }
                 bool empty = ProgData.CountAt(_level) == 0;
@@ -2901,6 +3039,14 @@ namespace LevelGate.Progression
                 float lum = !locked ? 1f : sel || _hover ? .7f : .48f;
                 foreach (var pic in _pics) FadeTo(pic, new Color(lum, lum, lum, pa));
                 _group.alpha = _baseAlpha;
+            }
+
+            /// <summary>The whole card moved sideways (drag / one-card slide); fade: its alpha factor (the card coming in).</summary>
+            public void Offset(float x, float fade = 1f)
+            {
+                if (!_body.gameObject.activeSelf) return;
+                _body.anchoredPosition = new Vector2(x, 0);
+                _group.alpha = _baseAlpha * fade;
             }
 
             public void Animate(float e, int dir)

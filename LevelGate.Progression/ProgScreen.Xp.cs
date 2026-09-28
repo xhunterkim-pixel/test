@@ -578,7 +578,7 @@ namespace LevelGate.Progression
             if (_barResetT >= 0 && fill != null)
             {
                 _barResetT += dt;
-                var c = Color.Lerp(Color.white, XpFillColor, Mathf.Clamp01(_barResetT / .08f));
+                var c = Color.Lerp(Color.Lerp(Color.white, Ui.Hex(Orange), .55f), XpFillColor, Mathf.Clamp01(_barResetT / .08f)); // a warm flash: visible on the light grey bar
                 c.a = _barResetT < .08f ? 1 : Mathf.Clamp01(1 - (_barResetT - .08f) / .15f);
                 fill.color = c;
                 if (_barResetT >= .23f)

@@ -47,6 +47,12 @@ namespace LevelGate.Progression
         {
             if (_img == null) return;
             bool ready = _tex != null && _shown == _want;
+            if (ready && !_img.enabled)
+            {
+                // fades in over 0.3 s when it's ready (it popped in)
+                _img.canvasRenderer.SetAlpha(0);
+                _img.CrossFadeAlpha(1, .3f, true);
+            }
             if (ready)
             {
                 if (_img.sprite != _sprite) _img.sprite = _sprite;

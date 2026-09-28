@@ -124,6 +124,7 @@ namespace LevelGate.Progression
     {
         public Sprite[] Sprites;
         public int Ms = 33;
+        public bool Still; // stands on its first frame (card emblems that aren't picked / yours)
         private Image _img;
         private int _shown = -1;
 
@@ -132,7 +133,7 @@ namespace LevelGate.Progression
             if (Sprites == null || Sprites.Length == 0) return;
             if (_img == null) _img = GetComponent<Image>();
             // performance mode: the emblem stands still on its first frame
-            int f = ProgressionPlugin.Low ? 0 : (int)(Time.unscaledTime * 1000f / Ms) % Sprites.Length;
+            int f = ProgressionPlugin.Low || Still ? 0 : (int)(Time.unscaledTime * 1000f / Ms) % Sprites.Length;
             if (f == _shown && _img.sprite == Sprites[f]) return;
             _shown = f;
             _img.sprite = Sprites[f];

@@ -40,6 +40,13 @@ Versions are **MAJOR.MINOR.PATCH**:
 
 ## LevelGate Progression (BepInEx plugin, separate DLL)
 
+### 0.9.56
+- **Drag the level cards with the mouse**: the row follows the pointer, a level comes in each time it passes half a card (so it can show 44–48, not only pages), and it settles into place when let go; a drag is never a click. The mouse wheel, A / D and the arrows slide the row by one card at its edges (a gentle slide, the new card fading in) instead of flipping a whole page; Q / E and the page bar still jump by pages (and line the row up again). The page bar marks the page the row's middle is on.
+- **Names**: modded variants without a short name borrow their base item's ("SR-25 (Taupe)" instead of "Knight's Armament Company SR-25 7…"); fallback names lose their calibre and "special" ("AS VAL MOD.4", "Custom Guns NL545 (DI)"); modded guns the handbook doesn't list say their kind from the game data (ASSAULT RIFLE…) instead of "WEAPONS".
+- **Animation**: only the picked card's and your card's emblems play (five at once was busy); tiles don't fade in one by one while you fly through levels; the XP bar's level-up flash is warm again (it vanished on the grey bar); the timeline rail eases to its new fill; background patterns fade in when ready.
+- **Look**: the worn pale plates are readable (lighter wear, taller, bold 11 px: VIEWING, the page's range); bigger emblems in the card heads with even rules either side; the rail sits a little higher with your level's tick taller; the list head's chip is bigger; card footers have more room (long names a size down).
+- **Performance**: while dragging / scrolling, one picture is drawn per frame and pre-loading waits until you stop (the game's picture drawing caused 13 of 17 slow frames); the big picture is asked for a moment after a click instead of inside it (a 136 ms frame); the reward list draws on its own layer (its fades and hovers no longer redraw the whole screen).
+
 ### 0.9.55
 - Locked reward tiles show just a small lock bottom-left (the "LV 42" text is gone; the list head already says the level).
 

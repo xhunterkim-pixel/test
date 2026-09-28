@@ -572,6 +572,31 @@ namespace LevelGate.Progression
             return list;
         }
 
+        /// <summary>A weapon's kind from its template's weapClass ("assaultRifle" → "Assault rifle"), for modded guns the handbook
+        /// doesn't list; null if it has none.</summary>
+        public static string WeaponClassOf(string tpl)
+        {
+            try
+            {
+                var c = Refl.Get(Refl.Get(ItemOf(tpl), "Template"), "weapClass")?.ToString();
+                switch ((c ?? "").ToLowerInvariant())
+                {
+                    case "assaultrifle": return "Assault rifle";
+                    case "assaultcarbine": return "Assault carbine";
+                    case "smg": return "Submachine gun";
+                    case "pistol": return "Pistol";
+                    case "marksmanrifle": return "Marksman rifle";
+                    case "sniperrifle": return "Sniper rifle";
+                    case "shotgun": return "Shotgun";
+                    case "machinegun": return "Machine gun";
+                    case "grenadelauncher": return "Grenade launcher";
+                    case "specialweapon": return "Special weapon";
+                    default: return null;
+                }
+            }
+            catch { return null; }
+        }
+
         private static readonly Dictionary<string, string> _bg = new Dictionary<string, string>();
 
         /// <summary>The template's BackgroundColor ("violet", "yellow"…), the tint the game's cells give it; null if unknown.</summary>
