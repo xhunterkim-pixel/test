@@ -10,7 +10,7 @@ namespace ModernEditor.Server;
 /// </summary>
 public static class ModLog
 {
-    public const string ModVersion = "2.0.3";
+    public const string ModVersion = "2.0.5";
     private static readonly object Gate = new();
     private static string? _file;
 

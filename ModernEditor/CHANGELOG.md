@@ -1,5 +1,17 @@
 # Modern Editor changelog
 
+## 2.0.5
+- New quest writer (✨ Generate). It writes the way Tarkov's traders talk: short, in character, a story rather than a checklist (the game lists the objectives under it anyway).
+  - An opener that knows the quest chain ("…went well. Don't let it go to your head.") and the player's level.
+  - Why the trader wants it, from the items asked for, the targets and the maps.
+  - The job in one plain line; several ways become "…Or…Your call."
+  - What's in it: shop unlocks, money, items and standing.
+  - Hardcore as a warning, and a sign-off with attitude.
+  - The trader's voice comes from what they sell: medic, gunsmith, outfitter, fixer or broker.
+  - The completed message thanks the player for what was done and hands over the rewards.
+  - Each ✨ click gives another version, and the same version comes back the same way.
+- **Keep Text Up to Date** (quest editor): the description and completed message rewrite themselves when objectives or rewards change. Typing your own words switches it off. Generating over text you wrote asks first (Ctrl+Z also brings it back).
+
 ## 2.0.4 (editor only)
 - Right-click copying:
   - Offers: Copy Item Name, Copy Short Name, Copy Item ID.

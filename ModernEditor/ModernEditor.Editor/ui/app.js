@@ -1625,8 +1625,11 @@ function detailsQuest() {
       ${others ? `<div class="switches" style="margin-top:8px">${others}</div>` : ''}
       ${S.gameQuests.size ? '' : '<div class="toolbar" style="margin-top:8px"><button class="outline" data-act="addGamePrereq">+ Game Quest by Id…</button></div>'}`)}
     ${card('q-text', 'Text & Picture', `
-      ${ui.area('Description', () => q.description, v => { q.description = v; }, { extra: '<br><button class="outline gen" data-act="genText" data-arg="description" title="Write it from the objectives">✨ Generate</button>', placeholder: 'Empty = a description is made from the objectives. Or click ✨ Generate.' })}
-      ${ui.area('When Completed', () => q.successMessage, v => { q.successMessage = v; }, { rows: 2, extra: '<br><button class="outline gen" data-act="genText" data-arg="successMessage">✨ Generate</button>' })}
+      ${ui.toggle('Write the Texts for Me — they update when objectives or rewards change', () => !!q.autoText, v => {
+        if (v) { q.autoText = true; q.description = genDescription(t, q); q.successMessage = genSuccess(t, q); } else delete q.autoText;
+      }, { label: 'Keep Text Up to Date', refresh: 'details' })}
+      ${ui.area('Description', () => q.description, v => { q.description = v; if (q.autoText) { delete q.autoText; toast('Your own words now — Keep Text Up to Date switched off'); } }, { rows: 7, extra: '<br><button class="outline gen" data-act="genText" data-arg="description" title="Write it from the objectives, rewards and the trader (click again for another version)">✨ Generate</button>', placeholder: 'Click ✨ Generate — written from the objectives, the rewards and the trader.' })}
+      ${ui.area('When Completed', () => q.successMessage, v => { q.successMessage = v; if (q.autoText) { delete q.autoText; toast('Your own words now — Keep Text Up to Date switched off'); } }, { rows: 3, extra: '<br><button class="outline gen" data-act="genText" data-arg="successMessage" title="Click again for another version">✨ Generate</button>' })}
       <div class="field top"><label>Picture</label><div>
         ${pic ? `<img class="preview" src="${esc(pic.url)}" alt="">` : ''}
         ${ui.hint(pic?.kind === 'mine' ? 'Your own picture.' : pic?.kind === 'game' ? "One of the game's quest pictures." : pic?.kind === 'item' ? `No picture picked — the picture of ${esc(shortName(questItem(t, q)))} (the item it gives / unlocks) is used. It's saved as a picture file when you Save, and follows the item if you change it.` : pic ? "No picture picked — the game's default picture is used." : 'No picture — the game shows its default one.')}
@@ -2257,6 +2260,7 @@ function shellShowPage(page) { hideHome(); if (S.page === page) { LG.showTab(pag
 
 function markDirty(t = S.t) {
   if (!t) return;
+  if (typeof refreshAutoTexts === 'function') refreshAutoTexts(t); // quests that write their own texts follow the change
   if (typeof followQuestItems === 'function' && followQuestItems(t)) toast('Dynamic quest level now follows the offer\'s new item');
   t.dirty = true;
   t.edited = Date.now();
@@ -2394,61 +2398,7 @@ function pickMany(objs) {
 // Writing quest texts (✨ Generate)
 // =====================================================================
 
-const GEN = {
-  hello: ['Listen up, mercenary.', 'Got a minute? I have work for you.', 'You look like someone who gets things done.', 'Word is you can handle yourself out there.',
-    'I need a favour, and I pay well for favours.', 'Business is business, and right now business needs you.'],
-  outro: ["Don't keep me waiting.", "Get it done and you won't regret it.", "Come back when it's finished.", "Good luck out there — you'll need it.", 'I trust you know what to do.'],
-  paid: ["Here's your cut, as promised.", "Your payment is ready. Don't spend it all at once.", "I pay my debts — take this.", "We're square. Come back when you want more work."],
-  done: ["Good work. I won't forget this.", 'Excellent — exactly what I needed.', "You actually did it. Here's what I promised.", 'Nice job, mercenary. Your payment is ready.',
-    "That's how it's done. Pleasure doing business.", 'Well done. Come see me again soon — there will be more work.'],
-};
-const LOWER = new Set(['With', 'On', 'In', 'From', 'While', 'Wearing', 'Using', 'Ammo', 'Between', 'One', 'Raid', 'Headshots', 'Only', 'Hits', 'To', 'Found', 'As', 'Survive',
-  'And', 'Extract', 'Times', 'Level', 'Reach', 'Hand', 'Pay', 'Kill', 'Find', 'Use', 'Enemies', 'Enemy', 'Scavs', 'Scav', 'Bosses', 'Boss', 'Within', 'Survived', 'Killed']);
-const lowerWords = text => text.replace(/\b[A-Z][a-z]+\b/g, w => LOWER.has(w) ? w.toLowerCase() : w).replace(/\(found in raid\)/g, '(found in raid)');
-const capFirst = text => text.charAt(0).toUpperCase() + text.slice(1);
-function genPick(list, q) {
-  S.genN = (S.genN || 0) + 1;
-  let h = 0;
-  for (const ch of q.id) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
-  return list[(h + S.genN) % list.length];
-}
-/** Tidies what you typed: capitals, apostrophes (dont → don't), a full stop at the end. */
-function tidy(text) {
-  const fixes = { im: "I'm", ive: "I've", ill: "I'll", id: "I'd", i: 'I', dont: "don't", cant: "can't", wont: "won't", isnt: "isn't", arent: "aren't",
-    didnt: "didn't", doesnt: "doesn't", youre: "you're", youll: "you'll", youve: "you've", thats: "that's", theres: "there's", lets: "let's", its: "it's",
-    whats: "what's", wasnt: "wasn't", werent: "weren't", couldnt: "couldn't", shouldnt: "shouldn't", wouldnt: "wouldn't", gonna: 'going to', wanna: 'want to', u: 'you', ur: 'your' };
-  let s = text.trim().replace(/\s+\n/g, '\n').replace(/[ \t]+/g, ' ');
-  s = s.replace(/\b([A-Za-z]+)\b/g, w => fixes[w.toLowerCase()] ? (w[0] === w[0].toUpperCase() && w.length > 1 ? capFirst(fixes[w.toLowerCase()]) : fixes[w.toLowerCase()]) : w);
-  s = s.replace(/(^|[.!?]\s+|\n)([a-z])/g, (m, a, b) => a + b.toUpperCase());
-  if (s && !/[.!?…"')]$/.test(s)) s += '.';
-  return s;
-}
-/** Takes away a greeting / closing line the generator added before, so pressing ✨ again doesn't stack them. */
-function stripGenerated(text) {
-  let parts = text.split(/\n\s*\n/).map(x => x.trim()).filter(Boolean);
-  if (parts.length && GEN.hello.includes(parts[0])) parts.shift();
-  if (parts.length && GEN.outro.includes(parts[parts.length - 1])) parts.pop();
-  parts = parts.filter(p => !/^(Here's the job:|There's more than one way to handle this)/.test(p) && !p.startsWith("And don't get yourself killed"));
-  return parts.join('\n\n');
-}
-
-function genDescription(t, q) {
-  const own = tidy(stripGenerated(q.description || ''));
-  const w = ways(q);
-  const line = o => q.conditions.filter(c => (c.option || 1) === o).map(c => lowerWords(shortCondition(c))).join(', and then ');
-  let body;
-  if (!q.conditions.length) body = own ? '' : "I'll tell you the details when you're ready.";
-  else if (w.length === 1) body = `Here's the job: ${line(w[0])}.`;
-  else body = `There's more than one way to handle this — pick whichever suits you:\n${w.map(o => `${wayLetter(o)}) ${capFirst(line(o))}.`).join('\n')}`;
-  const hardcore = q.failOnDeath ? "\n\nAnd don't get yourself killed — if you die, go missing or leave a raid early, the job's off and you start over." : '';
-  // your own words stay in the middle; the trader greets, gives the job and signs off around them
-  return [genPick(GEN.hello, q), own, body + hardcore, genPick(GEN.outro, q)].map(x => x.trim()).filter(Boolean).join('\n\n');
-}
-function genSuccess(t, q) {
-  const own = tidy((q.successMessage || '').split(/\n\s*\n/).filter(p => !GEN.done.includes(p.trim()) && !GEN.paid.includes(p.trim())).join('\n\n'));
-  if (!own) return genPick(GEN.done, q);
-  return `${own}\n\n${genPick(GEN.paid, q)}`;
-}
+// the writer itself is in writer.js (genDescription / genSuccess / refreshAutoTexts)
 
 // =====================================================================
 // Menus: ⚙ view options, right-click
@@ -3128,9 +3078,15 @@ const ACT = {
     changed(false);
     toast(`Price set to ${fmt(count)} ${MONEY_SYMBOL[target]}`);
   },
-  genText(field) {
+  async genText(field) {
     const q = S.quest; if (!q) return;
-    q[field] = field === 'description' ? genDescription(S.t, q) : genSuccess(S.t, q);
+    const gen = () => field === 'description' ? genDescription(S.t, q) : genSuccess(S.t, q);
+    // text you typed yourself is only replaced after asking (Ctrl+Z also brings it back)
+    const typed = (q[field] || '').trim() && q[field] !== gen() && !q.autoText && !q.textSeed;
+    if (typed && !await confirmBox('Replace Your Text?', 'The text you wrote is replaced with a generated one. (Ctrl+Z brings yours back.)', 'Replace', 'Keep Mine')) return;
+    q.textSeed = (q.textSeed || 0) + 1;                // another version every click
+    q[field] = gen();
+    if (q.autoText) q[field === 'description' ? 'successMessage' : 'description'] = field === 'description' ? genSuccess(S.t, q) : genDescription(S.t, q);
     changed(false);
   },
   clearSearch() { S.search[S.page] = ''; $('#search').value = ''; renderHeader(); renderPage(false); },

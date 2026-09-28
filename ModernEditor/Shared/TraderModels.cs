@@ -219,6 +219,12 @@ public class QuestDef
     /// The editor draws it again when that item changes, and drops it when you pick a picture yourself.</summary>
     public string? AutoImage { get; set; }
 
+    /// <summary>Editor: the description and completed message are written from the objectives / rewards and follow their changes.</summary>
+    public bool AutoText { get; set; }
+
+    /// <summary>Editor: which version of the written texts (✨ Generate counts it up).</summary>
+    public int TextSeed { get; set; }
+
     /// <summary>One of the game's own quest pictures (file name without extension in SPT_Data/images/quests), used when Image is empty.</summary>
     public string? GameImage { get; set; }
 
