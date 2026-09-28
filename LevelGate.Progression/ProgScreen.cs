@@ -3113,7 +3113,7 @@ namespace LevelGate.Progression
             private readonly Component _activeTag;
             private readonly GameObject _activeMark;
             private readonly Image _unlockDots;
-            private bool _wasSel, _isCurrent, _floodOn, _numLit;
+            private bool _wasSel, _isCurrent, _floodOn;
             private readonly Image _numGlow, _flood, _floodDots;
             private readonly RectTransform _chev;
             private readonly Image[] _chevBars = new Image[2];
