@@ -358,7 +358,7 @@ function applySnapshot(snap) {
   applyItems(snap);
   S.deletedCount = snap.deletedCount || 0;
   if (snap.version) { S.version = snap.version; showVersion(); $('#homeVersion').textContent = 'v' + snap.version; }
-  S.serverMod = snap.serverMod; S.migration = snap.migration || null; S.imported = snap.imported || S.imported || [];
+  S.serverMod = snap.serverMod; if (snap.sections) S.sections = snap.sections; S.migration = snap.migration || null; S.imported = snap.imported || S.imported || [];
   if (snap.migrated) S.migrated = snap.migrated;
   S.traders = (snap.traders || []).map(t => {
     const e = normalize({ ...t, dirty: false });
@@ -627,6 +627,7 @@ function setLeftMini(on) {
 }
 
 function renderTraders() {
+  if (typeof applySections === 'function') applySections();
   const html = S.traders.map((t, i) => {
     const f = t.file;
     const errors = S.checks.filter(c => c.trader === t && c.level === 'error').length;
@@ -660,9 +661,6 @@ function renderTraders() {
   const modBad = modList().some(e => modStatus(e) !== 'on' && e.uses.length);
   $('#navMods').textContent = S.mods.length || modBad ? (modBad ? '⚠ ' : '') + `${S.mods.filter(m => m.enabled).length}/${S.mods.length}` : '';
   $('#navMods').className = modBad ? 'bad' : '';
-  const lg = S.addons?.levelgate;
-  $('#navAddons').textContent = lg?.found ? (lgOn() ? 'ON' : 'OFF') : '';
-  $('#navAddons').className = lg?.found && lgOn() ? 'addon-on' : '';
   $('#navChecks').className = errors ? 'bad' : '';
   if (typeof LG !== 'undefined' && S.lgStarted) {
     const lv = LG.levels().size, st = LG.state;
@@ -786,9 +784,8 @@ function renderPage(animate) {
   B = new Map([...B].filter(([k, v]) => v.zone !== 'page'));
   const zoneStart = bindSeq;
   let html = '';
-  if (!S.t && S.page !== 'checks' && S.page !== 'mods' && S.page !== 'addons') html = '<div class="empty">No trader selected.</div>';
+  if (!S.t && S.page !== 'checks' && S.page !== 'mods') html = '<div class="empty">No trader selected.</div>';
   else if (S.page === 'mods') html = pageMods();
-  else if (S.page === 'addons') html = pageAddons();
   else if (S.page === 'trader') html = pageTrader();
   else if (S.page === 'offers') html = pageOffers();
   else if (S.page === 'quests') html = pageQuests();
@@ -865,7 +862,6 @@ const COLUMNS = {
   offers: [['title', 'Title'], ['unlock', 'Unlock', 190], ['ll', 'LL', 56], ['stock', 'Stock', 110], ['mod', 'Modded', 100], ['notes', 'Notes', 150]],
   quests: [['title', 'Title'], ['level', 'Level', 80], ['ways', 'Ways', 70], ['mod', 'Modded', 100], ['notes', 'Notes', 150]],
   mods: [['title', 'Mod'], ['items', 'Items', 90], ['used', 'Used By', 170]],
-  addons: [['title', 'Add-on'], ['items', 'Items', 110], ['state', 'Status', 130]],
   lgitems: [['title', 'Item'], ['cat', 'Category', 130], ['used', 'Sold By Your Traders', 170], ['lvl', 'Level', 90]],
   checks: [['title', 'Title'], ['when', 'When', 90]],
 };
@@ -1165,10 +1161,11 @@ function pageMods() {
 
 // ---------------------------------------------------------------- add-ons (our other mods, read only)
 
-const addonOn = id => S.ui?.addons?.[id] !== false;
-/** Level Gate found, read and switched on (Add-ons page). */
+/** The left panel's section switches (config.json in the ModernEditor mod folder, also read by the server). */
+const secOn = key => S.sections?.[key] !== false;
+/** Level Gate's file loaded in Level Limits. */
 const lgLive = () => S.lgStarted && LG.loaded();
-const lgOn = () => addonOn('levelgate') && (lgLive() || !!(S.addons?.levelgate?.found && S.addons.levelgate.items));
+const lgOn = () => secOn('levelGate') && (lgLive() || !!(S.addons?.levelgate?.found && S.addons.levelgate.items));
 /** The level Level Gate asks for this item — live from Level Limits, unsaved edits included (undefined = no limit, or the add-on is off). */
 const lgLevel = tpl => (!lgOn() || !tpl ? undefined : lgLive() ? LG.levelOf(tpl) : S.addons.levelgate.items[tpl]);
 /** Small yellow "Lvl 20" (nothing when there's no limit; a dim dash in the list column). */
@@ -1186,89 +1183,6 @@ async function scanAddons(say) {
   } catch (err) { if (say) errorBox(err); }
 }
 
-/** Offers (all your traders) per item id, for the Level Gate list. */
-function lgUses() {
-  const m = new Map();
-  for (const t of S.traders) for (const o of t.file.offers) m.set(o.itemTpl, [...(m.get(o.itemTpl) || []), { t, o }]);
-  return m;
-}
-
-function pageAddons() {
-  const lg = S.addons?.levelgate || { found: false };
-  const n = Object.keys(lg.items || {}).length;
-  const on = lgOn();
-  const state = !S.addons ? ['SCANNING…', 'var(--muted)'] : !lg.found ? ['NOT FOUND', '#8a8a8a'] : !lg.items ? ['PROBLEM', 'var(--red)'] : on ? ['ON', 'var(--yellow)'] : ['OFF', '#8a8a8a'];
-  const toggle = lg.found && lg.items ? `<button class="modcheck ${on ? 'on' : ''}" data-act="addonToggle" data-arg="levelgate" title="${on ? 'On — click to switch off' : 'Off — click to switch on'}">${on ? '✓' : ''}</button>` : '';
-  const addonRow = row({
-    list: 'addons', act: 'selAddon', arg: 0, sel: !S.addonItemSel,
-    thumb: { text: 'LG', color: lg.found ? 'var(--yellow)' : '#3a3a3a', dark: lg.found },
-    title: 'Level Gate', badges: [lg.version ? ['v' + lg.version, 'var(--yellow)'] : null, state].filter(Boolean),
-    line2: lg.found ? (lg.dll || lg.config) : 'Not found in BepInEx\\plugins next to your SPT install — use Locate Level Gate… if it’s somewhere else.',
-    cols: { items: { html: `${toggle}<span>${lg.items ? fmt(n) + ' Levels' : '—'}</span>` }, state: lg.found ? (on ? 'Shown in Offers' : 'Hidden') : 'Not Installed' },
-    colColors: { state: on ? 'var(--yellow)' : 'var(--muted)' },
-  });
-  // Level Gate's items, lowest level first
-  let items = '';
-  if (lg.items) {
-    const uses = lgUses();
-    const limit = S.lgLimit || 300;
-    const list = Object.entries(lg.items).map(([id, lvl]) => ({ id, lvl, it: item(id) }))
-      .filter(x => matches('addons', x.it?.n || '', x.it?.s || '', x.id, `level ${x.lvl} lvl${x.lvl}`, x.it ? catName(x.it.c) : 'unknown'))
-      .sort((a, b) => a.lvl - b.lvl || (a.it?.n || a.id).localeCompare(b.it?.n || b.id));
-    S.shownLgItems = list.map(x => x.id);
-    const rows = list.slice(0, limit).map((x, i) => {
-      const used = uses.get(x.id)?.length || 0;
-      return row({
-        list: 'lgitems', act: 'addonSel', arg: i, sel: S.addonItemSel === x.id,
-        thumb: { text: initials(x.it?.s || x.it?.n || '?'), color: '#3a3a3a', item: x.it ? x.id : null, wide: true },
-        title: x.it?.n || `Unknown Item ${x.id}`, titleColor: x.it ? null : 'var(--muted)',
-        line2: `${x.it?.s ? x.it.s + ' · ' : ''}${x.id}`,
-        cols: { cat: x.it ? catName(x.it.c) : '—', used: used ? `${used} Offer${used === 1 ? '' : 's'}` : '', lvl: { html: lvlPill(x.lvl).replace('lvl-pill', 'lvl-pill first') } },
-        colColors: { used: 'var(--accent)' },
-      });
-    }).join('');
-    items = `<h3 class="section-title">Level Gate Items <span class="muted small">${fmt(list.length)}${list.length !== n ? ` of ${fmt(n)}` : ''} · Lowest Level First</span></h3>
-      <div class="list ${on ? '' : 'dim'}" data-list="lgitems">${listHead('lgitems')}${rows || '<div class="empty">Nothing matches the search</div>'}
-      ${list.length > limit ? `<button class="more" data-act="lgMore">Show More (${fmt(list.length - limit)} Left)</button>` : ''}</div>`;
-  }
-  return `<div class="toolbar sticky">
-      <button class="primary" data-act="addonsRescan" title="Looks for Level Gate in BepInEx\\plugins next to your SPT install and reads its levels again">Rescan</button>
-      <button class="outline" data-act="addonLocate" title="Pick LevelGate.dll or its config\\level_requirements.json">Locate Level Gate…</button>
-    </div>
-    ${ui.hint('Add-ons are our other mods the editor works with. <b>Level Gate</b>: each item’s unlock level shows in <b>Offers &amp; Barters</b> (a yellow <b>Level</b> column between # and Title), next to barter items and in the item picker — live from <b>Level Limits</b>, unsaved edits included. Switch it off (✓) and it isn’t shown on the trader pages. Level Gate’s DLL is never changed; its level_requirements.json is edited only by Level Limits, in its own layout.')}
-    <div class="list" data-list="addons">${listHead('addons')}${addonRow}</div>
-    ${items}`;
-}
-
-function detailsAddons() {
-  const lg = S.addons?.levelgate || { found: false };
-  const on = lgOn();
-  if (S.addonItemSel && lg.items?.[S.addonItemSel]) {
-    const id = S.addonItemSel, it = item(id), uses = lgUses().get(id) || [];
-    S.addonUses = uses;
-    const big = itemPic(id, '512');
-    return [it?.n || id, `<div class="hero">
-        <div class="hero-pic">${esc(initials(it?.s || it?.n || '?'))}${big ? `<img src="${big}" alt="" ${picFail}>` : ''}</div>
-        <div class="hero-text"><div class="kind">${esc((it?.c || 'Item').toUpperCase())}</div><div class="hero-name">${esc(it?.s || it?.n || id)}</div>
-          <div>${lvlPill(lg.items[id]).replace('lvl-pill', 'lvl-pill first')}</div></div></div>
-      ${card('a-lvl', 'Level Gate', `<div class="req">Players can’t use it before level ${lg.items[id]}.\n${esc(id)}</div><div class="toolbar"><button class="outline" data-act="goLevel" data-arg="${esc(id)}">Change It in Level Limits ›</button></div>`)}
-      ${card('a-used', `Sold By Your Traders ${uses.length ? `(${uses.length})` : ''}`, uses.length ? `<div class="mini">${uses.map((u, i) => `<div class="row" data-act="goAddonUse" data-arg="${i}"><div class="cell">${thumb({ text: initials(u.t.file.name), item: id, color: '#3a3a3a' })}
-          <div class="text"><div class="title">${esc(u.t.file.name)}</div><div class="line2">${esc(costText(u.o))} · LL${u.o.loyaltyLevel}</div></div></div></div>`).join('')}</div>${ui.hint('Click one to open it.')}` : ui.hint('None of your traders sell it.'))}
-      <div class="toolbar"><button class="outline" data-act="selAddon">‹ Back to Level Gate</button></div>`];
-  }
-  const sw = lg.found && lg.items ? ui.toggle('Show Levels', () => on, () => { }, {}).replace('data-b=', 'data-addon-toggle="levelgate" data-x=') : '';
-  const explain = !lg.found ? 'Level Gate wasn’t found in BepInEx\\plugins next to your SPT install. If it’s installed somewhere else, use Locate Level Gate… and pick LevelGate.dll or its level_requirements.json.'
-    : lg.error ? esc(lg.error)
-    : on ? 'Switched on: every item’s unlock level shows in Offers &amp; Barters, next to barter items and in the item picker.'
-    : 'Switched off: levels aren’t shown anywhere in the editor.';
-  const levels = Object.values(lg.items || {});
-  const bands = [[1, 10], [11, 20], [21, 30], [31, 40], [41, 79]].map(([a, b]) => [a, b, levels.filter(l => l >= a && l <= b).length]);
-  const max = Math.max(1, ...bands.map(x => x[2]));
-  return ['Level Gate', `
-    <div class="status" style="--c:${on ? 'var(--yellow)' : '#8a8a8a'}"><h3>${!lg.found ? 'Not Found' : on ? 'On' : 'Off'}<span class="grow"></span>${sw}</h3><div class="hint" style="margin:0">${explain}</div></div>
-    ${lg.found ? card('a-info', 'Found', `<div class="req">${lg.version ? `Version ${esc(lg.version)}\n` : ''}${lg.dll ? `Plugin: ${esc(lg.dll)}\n` : ''}${lg.config ? `Levels: ${esc(lg.config)}` : ''}</div>${lg.others?.length ? ui.hint(`Also found (not used — no level list, or an older one):<br>${lg.others.map(esc).join('<br>')}`) : ''}`) : ''}
-    ${levels.length ? card('a-bands', `Levels (${fmt(levels.length)} Items)`, `<div class="bands">${bands.map(([a, b, n]) => `<div class="band"><span>Lvl ${a}–${b}</span><div class="bar"><i style="width:${n / max * 100}%"></i></div><b>${n}</b></div>`).join('')}</div>`) : ''}`];
-}
 
 function detailsMod() {
   const e = modList().find(x => x.name === S.modSel);
@@ -1311,7 +1225,6 @@ function renderDetails(animate, toTop) {
   let title = '', html = '';
   if (S.page === 'checks') [title, html] = detailsCheck();
   else if (S.page === 'mods') [title, html] = detailsMod();
-  else if (S.page === 'addons') [title, html] = detailsAddons();
   else if (!S.t) [title, html] = ['', '<div class="empty">Pick or create a trader on the left.</div>'];
   else if (S.page === 'trader') [title, html] = detailsTrader();
   else if (S.picked.size > 1) [title, html] = detailsMulti();
@@ -2310,6 +2223,7 @@ function selectQuest(q) {
   S.reward = q?.rewards[0] || null;
 }
 function showPage(page) {
+  if (typeof pageAllowed === 'function' && !pageAllowed(page)) return toast(`${PAGE_SECTION_NAME[PAGE_SECTION[page]]} is switched off — switch it on in the left panel`);
   if (S.page === page && !lgActive()) return;
   const wasLg = lgActive();
   S.page = page;
@@ -2556,7 +2470,7 @@ function viewMenu(anchor) {
   closePopover();
   const pop = document.createElement('div');
   pop.className = 'popover menu2';
-  const list = S.page === 'offers' ? 'offers' : S.page === 'checks' ? 'checks' : S.page === 'mods' ? 'mods' : S.page === 'addons' ? 'addons' : 'quests';
+  const list = S.page === 'offers' ? 'offers' : S.page === 'checks' ? 'checks' : S.page === 'mods' ? 'mods' : 'quests';
   const draw = () => {
     const v = view();
     const sections = [];
@@ -2831,7 +2745,6 @@ document.addEventListener('change', e => {
   const el = e.target;
   if (lgActive() && !inShell(el)) return;
   if (el.dataset.modToggle) { ACT.modToggle(el.dataset.modToggle); return; }
-  if (el.dataset.addonToggle) { ACT.addonToggle(el.dataset.addonToggle); return; }
   const b = B.get(el.dataset.b);
   if (!b) return;
   if (el.type === 'checkbox') b.set(el.checked);
@@ -3257,25 +3170,6 @@ const ACT = {
   modsScanAll: () => modCall('modsScanAll', {}, r => r.added?.length ? `Imported ${r.added.length} mod(s): ${r.added.join(', ')}` : 'No new mods with items found'),
   modAddFolder: () => modCall('modAddFolder', {}, r => `Imported ${r.added?.[0] || 'the mod'}`),
   modRescan: () => modCall('modRescan', {}, () => 'Rescanned'),
-  addonToggle(id) {
-    (S.ui.addons ||= {})[id] = !addonOn(id);
-    saveUi();
-    renderAll(false);
-    toast(`Level Gate add-on switched ${addonOn(id) ? 'ON' : 'OFF'}`);
-  },
-  addonsRescan: () => scanAddons(true),
-  async addonLocate() {
-    try { const r = await host.call('addonLocate', {}); if (r) { S.addons = r; renderAll(false); toast(r.levelgate?.found ? 'Level Gate found' : 'That isn’t Level Gate'); } } catch (err) { errorBox(err); }
-  },
-  selAddon() { S.addonItemSel = null; renderPage(false); renderDetails(true, true); },
-  addonSel(i) { S.addonItemSel = S.shownLgItems?.[Number(i)] || null; renderPage(false); renderDetails(true, true); },
-  lgMore() { S.lgLimit = (S.lgLimit || 300) + 300; renderPage(false); },
-  goAddonUse(arg) {
-    const u = S.addonUses?.[Number(arg)]; if (!u) return;
-    if (u.t !== S.t) selectTrader(u.t, false);
-    S.offer = u.o; S.page = 'offers'; S.ui.page = 'offers'; S.picked = new Set();
-    renderAll(true);
-  },
   modToggle(name) {
     const m = S.mods.find(x => x.name === name); if (!m) return;
     modCall('modSet', { name, enabled: !m.enabled }, () => `${name} switched ${m.enabled ? 'OFF' : 'ON'}`);
@@ -3667,7 +3561,24 @@ function applyUi() {
   document.body.classList.toggle('left-mini', !!u.leftMini);
   document.body.classList.toggle('grey', !!u.grey);
   if (u.page && !S.pageRestored) { S.page = u.page; S.pageRestored = true; }
+  applyZoom();
 }
+
+// ---- interface size (Appearance → Size): Auto grows the whole page with the window (1080p ≈ 120%, 1440p ≈ 160%)
+let zoomNow = 1;
+function zoomWanted() {
+  const z = S.ui.zoom;
+  if (typeof z === 'number') return z;
+  const width = innerWidth * zoomNow;              // the window's width in CSS pixels at 100%
+  return clamp(Math.round(width / 1600 * 20) / 20, 1, 2);
+}
+function applyZoom() {
+  const z = zoomWanted();
+  if (Math.abs(z - zoomNow) < .01) return;
+  zoomNow = z;
+  host.call('setZoom', { factor: z }).catch(() => { });
+}
+window.addEventListener('resize', () => { clearTimeout(applyZoom.t); applyZoom.t = setTimeout(applyZoom, 250); });
 let saveUiTimer = 0;
 function saveUi() {
   clearTimeout(saveUiTimer);
@@ -3688,6 +3599,8 @@ function appearanceMenu(anchor) {
         ...(S.background ? [{ key: 'nobg', text: 'Remove Picture' }] : []),
       ] },
       { title: 'Button Color', items: [{ key: 'green', text: 'Default Green', on: !u.accent }, { key: 'pick', text: 'Custom…', on: !!u.accent, icon: `<span class="dot" style="--c:${u.accent || '#1ed760'}"></span>` }] },
+      { title: 'Size', items: [{ key: 'zoom:auto', text: `Auto (Fits the Window · ${Math.round(zoomNow * 100)}%)`, on: typeof u.zoom !== 'number' },
+        ...[1, 1.25, 1.5, 1.75, 2].map(z => ({ key: 'zoom:' + z, text: Math.round(z * 100) + '%', on: u.zoom === z }))] },
       { title: 'Show', items: [{ key: 'pics', text: 'Item Pictures', on: !view().noItemPics }, { key: 'grey', text: 'Grey Colors', on: !!u.grey }] },
     ]) + '<input type="color" id="accentPick" value="' + (u.accent || '#1ed760') + '" style="position:absolute;opacity:0;pointer-events:none;width:0;height:0">';
     pop.querySelector('#accentPick').addEventListener('input', e => { u.accent = e.target.value; applyUi(); saveUi(); draw(); });
@@ -3704,6 +3617,7 @@ function appearanceMenu(anchor) {
     if (what === 'pick') { pop.querySelector('#accentPick').click(); return; }
     if (what === 'pics') { view().noItemPics = !view().noItemPics; badPics.clear(); saveUi(); renderPage(false); renderDetails(false); }
     if (what === 'grey') { u.grey = !u.grey; applyUi(); saveUi(); }
+    if (what.startsWith('zoom:')) { const z = what.slice(5); if (z === 'auto') delete u.zoom; else u.zoom = Number(z); applyZoom(); saveUi(); closePopover(); return; }
     draw();
   });
   const r = anchor.getBoundingClientRect();

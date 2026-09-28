@@ -80,6 +80,13 @@ public class CustomTradersMod(
     {
         var modFolder = modHelper.GetAbsolutePathToModFolder(Assembly.GetExecutingAssembly());
         var tradersFolder = Path.Combine(modFolder, "traders");
+        var config = ModConfig.Load(modFolder);
+        LegacyMods.Warn(modFolder, logger);
+        if (!config.Traders)
+        {
+            LogBlue("[ModernEditor] Custom traders are switched off in Modern Editor — none loaded (their files are kept).");
+            return Task.CompletedTask;
+        }
 
         if (!Directory.Exists(tradersFolder) || !Directory.EnumerateFiles(tradersFolder, "trader.json", SearchOption.AllDirectories).Any())
         {
@@ -111,9 +118,9 @@ public class CustomTradersMod(
             }
         }
 
-        LegacyMods.Warn(modFolder, logger);
         // quests whose level follows an item's Level Gate level (read only from Level Gate's own file)
-        DynamicLevels.Apply(traders.Select(t => t.Trader), modFolder, logger);
+        if (config.LevelGate) DynamicLevels.Apply(traders.Select(t => t.Trader), modFolder, logger);
+        else ModLog.Detail("[ModernEditor] Level Gate is switched off in Modern Editor — dynamic quests keep their saved level.");
 
         foreach (var (trader, _) in traders)
         foreach (var quest in trader.Quests.Where(q => Ids.IsValid(q.Id) && q.Enabled))

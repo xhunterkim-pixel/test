@@ -10,7 +10,7 @@
   <div id="bg"></div>
 
   <header id="top">
-    <div class="logo" data-act="home" title="Start page (Ctrl+M)"><div>Modern Editor</div><div class="credit"><span id="appVersion">v2.0.1</span> · discord : k_kyangg</div></div>
+    <div class="logo" data-act="home" title="Start page (Ctrl+M)"><div>Modern Editor</div><div class="credit"><span id="appVersion">v2.0.2</span> · discord : k_kyangg</div></div>
     <div class="search-pill" id="modPill">
       <span class="ico">📁</span>
       <span id="folder" class="folder">Pick your SPT folder (Modern Editor keeps its files in SPT_Runtime\user\mods\ModernEditor)</span>
@@ -30,18 +30,17 @@
   <main id="main">
     <aside id="left" class="panel">
       <nav id="nav">
-        <div class="nav-group">Traders</div>
-        <button class="nav" data-act="page" data-arg="trader" title="Trader"><svg viewBox="0 0 24 24"><path d="M12 12a4.5 4.5 0 1 0 0-9 4.5 4.5 0 0 0 0 9Zm0 2c-4.4 0-8 2.3-8 5.2V21h16v-1.8c0-2.9-3.6-5.2-8-5.2Z"/></svg><span>Trader</span><em id="navTrader"></em></button>
-        <button class="nav" data-act="page" data-arg="offers" title="Offers &amp; Barters"><svg viewBox="0 0 24 24"><path d="M4 7h16l-1.4 12.2A2 2 0 0 1 16.6 21H7.4a2 2 0 0 1-2-1.8L4 7Zm4 0a4 4 0 1 1 8 0h-2a2 2 0 1 0-4 0H8Z"/></svg><span>Offers &amp; Barters</span><em id="navOffers"></em></button>
-        <button class="nav" data-act="page" data-arg="quests" title="Quests"><svg viewBox="0 0 24 24"><path d="M6 2h9l5 5v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2Zm2 9v2h8v-2H8Zm0 4v2h6v-2H8Zm6-11v4h4l-4-4Z"/></svg><span>Quests</span><em id="navQuests"></em></button>
-        <div class="nav-group">Level Gate</div>
-        <button class="nav" data-act="page" data-arg="levels" title="Level Limits (Level Gate)"><svg viewBox="0 0 24 24"><path d="M12 2 3 7v6c0 5 3.8 8.9 9 10 5.2-1.1 9-5 9-10V7l-9-5Zm-1 6h2v5h3l-4 5-4-5h3V8Z"/></svg><span>Level Limits</span><em id="navLevels"></em></button>
-        <button class="nav" data-act="page" data-arg="prog" title="Progression (what unlocks at each level)"><svg viewBox="0 0 24 24"><path d="M3 20h4v-6H3v6Zm7 0h4V9h-4v11Zm7 0h4V4h-4v16Z"/></svg><span>Progression</span><em id="navProg"></em></button>
-        <div class="nav-group">Items</div>
-        <button class="nav" data-act="page" data-arg="stats" title="Item Stats (meds, stims, food)"><svg viewBox="0 0 24 24"><path d="M10 3h4v7h7v4h-7v7h-4v-7H3v-4h7V3Z"/></svg><span>Item Stats</span><em id="navStats"></em></button>
+        <div class="nav-group sec-head" data-sec="traders"><span>Traders</span><button class="sec-sw" data-act="toggleSection" data-arg="traders" title="Off: the game doesn't get your custom traders (files are kept) and the trader pages are hidden"><i></i></button></div>
+        <button class="nav" data-sec="traders" data-act="page" data-arg="trader" title="Trader"><svg viewBox="0 0 24 24"><path d="M12 12a4.5 4.5 0 1 0 0-9 4.5 4.5 0 0 0 0 9Zm0 2c-4.4 0-8 2.3-8 5.2V21h16v-1.8c0-2.9-3.6-5.2-8-5.2Z"/></svg><span>Trader</span><em id="navTrader"></em></button>
+        <button class="nav" data-sec="traders" data-act="page" data-arg="offers" title="Offers &amp; Barters"><svg viewBox="0 0 24 24"><path d="M4 7h16l-1.4 12.2A2 2 0 0 1 16.6 21H7.4a2 2 0 0 1-2-1.8L4 7Zm4 0a4 4 0 1 1 8 0h-2a2 2 0 1 0-4 0H8Z"/></svg><span>Offers &amp; Barters</span><em id="navOffers"></em></button>
+        <button class="nav" data-sec="traders" data-act="page" data-arg="quests" title="Quests"><svg viewBox="0 0 24 24"><path d="M6 2h9l5 5v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2Zm2 9v2h8v-2H8Zm0 4v2h6v-2H8Zm6-11v4h4l-4-4Z"/></svg><span>Quests</span><em id="navQuests"></em></button>
+        <div class="nav-group sec-head" data-sec="levelGate"><span>Level Gate</span><button class="sec-sw" data-act="toggleSection" data-arg="levelGate" title="Off: Level Limits and Progression are hidden, offers don't show levels and quests don't follow item levels (Level Gate itself keeps working in game)"><i></i></button></div>
+        <button class="nav" data-sec="levelGate" data-act="page" data-arg="levels" title="Level Limits (Level Gate)"><svg viewBox="0 0 24 24"><path d="M12 2 3 7v6c0 5 3.8 8.9 9 10 5.2-1.1 9-5 9-10V7l-9-5Zm-1 6h2v5h3l-4 5-4-5h3V8Z"/></svg><span>Level Limits</span><em id="navLevels"></em></button>
+        <button class="nav" data-sec="levelGate" data-act="page" data-arg="prog" title="Progression (what unlocks at each level)"><svg viewBox="0 0 24 24"><path d="M3 20h4v-6H3v6Zm7 0h4V9h-4v11Zm7 0h4V4h-4v16Z"/></svg><span>Progression</span><em id="navProg"></em></button>
+        <div class="nav-group sec-head" data-sec="itemStats"><span>Items</span><button class="sec-sw" data-act="toggleSection" data-arg="itemStats" title="Off: item_stats.json isn't applied in game (edits are kept) and Item Stats is hidden"><i></i></button></div>
+        <button class="nav" data-sec="itemStats" data-act="page" data-arg="stats" title="Item Stats (meds, stims, food)"><svg viewBox="0 0 24 24"><path d="M10 3h4v7h7v4h-7v7h-4v-7H3v-4h7V3Z"/></svg><span>Item Stats</span><em id="navStats"></em></button>
         <div class="nav-group">More</div>
         <button class="nav" data-act="page" data-arg="mods" title="Mods"><svg viewBox="0 0 24 24"><path d="M10 2a2.5 2.5 0 0 1 2.5 2.5V5H17a2 2 0 0 1 2 2v4.5h.5a2.5 2.5 0 0 1 0 5H19V21a1 1 0 0 1-1 1h-4.5v-1a2 2 0 1 0-4 0v1H5a1 1 0 0 1-1-1v-4.5h1a2 2 0 1 0 0-4H4V7a2 2 0 0 1 2-2h1.5v-.5A2.5 2.5 0 0 1 10 2Z"/></svg><span>Mods</span><em id="navMods"></em></button>
-        <button class="nav" data-act="page" data-arg="addons" title="Add-ons (Level Gate)"><svg viewBox="0 0 24 24"><path d="M9 2h2v5H9V2Zm4 0h2v5h-2V2ZM6 8h12v3a6 6 0 0 1-5 5.9V22h-2v-5.1A6 6 0 0 1 6 11V8Z"/></svg><span>Add-ons</span><em id="navAddons"></em></button>
         <button class="nav" data-act="page" data-arg="checks" title="Checks &amp; Log"><svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 1 1 0 20 10 10 0 0 1 0-20Zm-1.2 13.6 6.3-6.3-1.4-1.4-4.9 4.9-2.3-2.3-1.4 1.4 3.7 3.7Z"/></svg><span>Checks &amp; Log</span><em id="navChecks"></em></button>
       </nav>
       <!-- the item pages' categories (Level Limits, Item Stats) -->
@@ -101,7 +100,7 @@
       <div id="homeNotes"></div>
       <h2 class="home-h2">Tools</h2>
       <div id="homeTools"></div>
-      <h2 class="home-h2">Your Traders</h2>
+      <h2 class="home-h2" id="homeTradersH">Your Traders</h2>
       <div id="homeGrid"></div>
       <div class="home-foot muted small">Modern Editor <span id="homeVersion"></span> · traders, level limits, item stats and progression in one · made by discord : k_kyangg</div>
     </div>

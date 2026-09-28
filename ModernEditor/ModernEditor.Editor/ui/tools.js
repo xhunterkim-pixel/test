@@ -19,6 +19,7 @@ const dynamicLevel = q => clamp(itemLevelNow(q.levelFromItem) + (Number(q.levelO
 /** Levels changed in Level Limits (or loaded): dynamic quests follow, the trader pages' Level column too. */
 function lgLevelsChanged(initial = false) {
   if (!S.lgStarted && !initial) return;
+  if (!secOn('levelGate')) return;             // switched off: quests keep their saved level (the server does the same)
   if (!LG.loaded()) return;
   let moved = 0;
   for (const t of S.traders) {
@@ -303,14 +304,14 @@ function batchMake(t, sorted, o) {
 // Go To… (Ctrl+K)
 // =====================================================================
 
-const PAGE_NAMES = [['trader', 'Trader'], ['offers', 'Offers & Barters'], ['quests', 'Quests'], ['levels', 'Level Limits'], ['stats', 'Item Stats'], ['prog', 'Progression'], ['mods', 'Mods'], ['addons', 'Add-ons'], ['checks', 'Checks & Log']];
+const PAGE_NAMES = [['trader', 'Trader'], ['offers', 'Offers & Barters'], ['quests', 'Quests'], ['levels', 'Level Limits'], ['stats', 'Item Stats'], ['prog', 'Progression'], ['mods', 'Mods'], ['checks', 'Checks & Log']];
 function paletteBox() {
   let query = '', found = [];
   const search = () => {
     const q = query.trim().toLowerCase(), words = q.split(/\s+/).filter(Boolean);
     const hit = text => words.every(w => text.toLowerCase().includes(w));
     const out = [];
-    for (const [k, n] of PAGE_NAMES) if (!q || hit(n + ' page')) out.push({ kind: 'Page', text: n, go: () => { hideHome(); showPage(k); } });
+    for (const [k, n] of PAGE_NAMES) if (pageAllowed(k) && (!q || hit(n + ' page'))) out.push({ kind: 'Page', text: n, go: () => { hideHome(); showPage(k); } });
     if (q) {
       for (const t of S.traders) {
         if (hit(t.file.name)) out.push({ kind: 'Trader', text: t.file.name, sub: `${t.file.offers.length} offers · ${t.file.quests.length} quests`, go: () => { hideHome(); selectTrader(t, false); showPage('trader'); renderAll(true); } });
@@ -358,9 +359,9 @@ function homeTools() {
   const quests = S.traders.reduce((n, t) => n + t.file.quests.length, 0), dyn = S.traders.reduce((n, t) => n + t.file.quests.filter(q => validId(q.levelFromItem)).length, 0);
   const tool = (page, color, art, name, lines) => `<button class="hcard tool" data-act="homeTool" data-arg="${page}" style="--hc:${color}"><div class="tool-art">${art}</div>
     <div class="htext"><div class="hname">${name}</div>${lines.map(l => `<div class="hsub">${l}</div>`).join('')}</div></button>`;
-  return tool('levels', '#b8901c', 'LV', 'Level Limits', lgLoaded ? [`${fmt(LG.levels().size)} items limited`, `${st.disabled?.size || 0} switched off`] : ['⚠ Level Gate\'s file not found', 'open it to pick the file'])
-    + tool('stats', '#1e8a4a', '+', 'Item Stats', [`${fmt(Object.keys(st.meds || {}).length)} meds, stims & food`, `${Object.keys(st.statEdits || {}).length} edited`])
-    + tool('prog', '#2c6f96', '▲', 'Progression', ['what unlocks at each level', `${quests} quests · ${dyn} dynamic`])
+  return (secOn('levelGate') ? tool('levels', '#b8901c', 'LV', 'Level Limits', lgLoaded ? [`${fmt(LG.levels().size)} items limited`, `${st.disabled?.size || 0} switched off`] : ['⚠ Level Gate\'s file not found', 'open it to pick the file'])
+      + tool('prog', '#2c6f96', '▲', 'Progression', ['what unlocks at each level', `${quests} quests · ${dyn} dynamic`]) : '')
+    + (secOn('itemStats') ? tool('stats', '#1e8a4a', '+', 'Item Stats', [`${fmt(Object.keys(st.meds || {}).length)} meds, stims & food`, `${Object.keys(st.statEdits || {}).length} edited`]) : '')
     + `<button class="hcard tool" data-act="openLogs" style="--hc:#6b5b95"><div class="tool-art">📄</div><div class="htext"><div class="hname">Logs</div><div class="hsub">open the Logs folder</div><div class="hsub">send the newest file if something breaks</div></div></button>`
     + `<button class="hcard tool" data-act="palette" style="--hc:#555"><div class="tool-art">🔎</div><div class="htext"><div class="hname">Go To…</div><div class="hsub">any trader, quest, offer or item</div><div class="hsub">Ctrl+K</div></div></button>`;
 }
@@ -389,6 +390,27 @@ function homeNotes() {
     out.push(`<div class="home-note"><h3>Welcome to Modern Editor</h3><div class="hint">Your settings from the ${esc(S.imported.join(' and the '))} came along: folders, imported mods, tags, notes, your own orders and categories, colors and column widths.</div>
       <div class="toolbar"><button class="ghost" data-act="importSeen">Got It</button></div></div>`);
   return out.join('');
+}
+
+// =====================================================================
+// Section switches (left panel): Traders / Level Gate / Items
+// =====================================================================
+
+const PAGE_SECTION = { trader: 'traders', offers: 'traders', quests: 'traders', levels: 'levelGate', prog: 'levelGate', stats: 'itemStats' };
+const PAGE_SECTION_NAME = { traders: 'Traders', levelGate: 'Level Gate', itemStats: 'Item Stats' };
+const pageAllowed = page => !PAGE_SECTION[page] || secOn(PAGE_SECTION[page]);
+/** The first page that's switched on (after switching a section off). */
+const firstPage = () => ['trader', 'levels', 'stats', 'mods'].find(pageAllowed);
+
+/** Shows / hides the pages of each section and moves off a page that just got switched off. */
+function applySections() {
+  for (const head of document.querySelectorAll('.sec-head')) head.classList.toggle('on', secOn(head.dataset.sec));
+  for (const nav of document.querySelectorAll('#nav .nav[data-sec]')) nav.classList.toggle('sec-off', !secOn(nav.dataset.sec));
+  document.body.classList.toggle('no-traders', !secOn('traders'));
+  if (!pageAllowed(S.page) && !applySections.moving) {
+    applySections.moving = true;
+    try { if (lgActive()) document.body.classList.remove('prog-mode'); S.page = null; showPage(firstPage()); } finally { applySections.moving = false; }
+  }
 }
 
 // =====================================================================
@@ -452,7 +474,7 @@ let progQuests = [];
 function questsAtLevelHtml(level) {
   const list = progQuests = questsAtLevel(level);
   if (!list.length) return '';
-  return `<section class="pcat" style="--c:#ffa42b"><h3><i></i>QUESTS<em>${list.length}</em></h3><div class="pquests">${list.map((x, i) => {
+  return `<section class="pcat" style="--c:#ffa42b"><h3><i></i>Quests<em>${list.length}</em></h3><div class="pquests">${list.map((x, i) => {
     const pic = questPic(x.t, x.q);
     return `<button class="pquest" data-act="progQuest" data-arg="${i}" title="${esc(x.t.file.name)} › ${esc(x.q.name)}">${pic ? `<img src="${esc(pic.url)}" alt="">` : ''}
       <div><div class="pq-name">${esc(x.q.name)}</div><div class="pq-sub">${esc(x.t.file.name)}${validId(x.q.levelFromItem) ? ' · ⟲ follows ' + esc(shortName(x.q.levelFromItem)) : ''}</div></div></button>`;
@@ -490,6 +512,21 @@ Object.assign(ACT, {
         <div class="hint">Restart the SPT server. The old mods are in user\\ModernEditor_old_mods if you ever need them.</div>
         <div class="buttons"><button class="primary" data-m>OK</button></div></div>`, m => { m.querySelector('[data-m]').onclick = () => closeModal(null); });
     } catch (err) { errorBox(err); }
+  },
+  async toggleSection(key) {
+    const on = !secOn(key);
+    try {
+      S.sections = await host.call('setSections', { ...(S.sections || {}), [key]: on });
+    } catch (err) { return errorBox(err); }
+    applySections();
+    if (key === 'levelGate') lgLevelsChanged(true);
+    renderAll(false);
+    if (S.home) renderHome();
+    toast({
+      traders: on ? 'Traders ON — restart the SPT server to load them again' : 'Traders OFF — the game won\'t load your custom traders after a server restart (files are kept)',
+      levelGate: on ? 'Level Gate ON — levels show again and quests follow their items' : 'Level Gate OFF — pages hidden, quests keep their saved level (Level Gate itself still runs in game)',
+      itemStats: on ? 'Item Stats ON — applied at the next server start' : 'Item Stats OFF — item_stats.json isn\'t applied after a server restart (edits are kept)',
+    }[key]);
   },
   openLogs: () => host.call('openLogs').catch(errorBox),
   async cleanup() {

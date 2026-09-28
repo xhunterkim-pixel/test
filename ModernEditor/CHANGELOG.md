@@ -1,5 +1,21 @@
 # Modern Editor changelog
 
+## 2.0.2
+- **Section switches** in the left panel replace the Add-ons page. The switches are saved in user\mods\ModernEditor\config.json, which the server mod reads too:
+  - Traders off: the server loads none of your custom traders (files kept), and the trader pages are hidden.
+  - Level Gate off: Level Limits and Progression are hidden, offers don't show levels, and dynamic quests keep their saved level. Level Gate itself keeps running in game.
+  - Items off: item_stats.json isn't applied (edits kept), and Item Stats is hidden.
+- **Interface size** (Appearance → Size):
+  - Auto grows the whole page with the window: about 120% at 1080p and 160% at 1440p.
+  - You can also pick 100–200% by hand.
+- **Progression, plain and bigger:**
+  - All 79 levels are in one clickable grid with their unlock counts.
+  - Below the grid, the picked level shows larger item tiles with full names. Right-click a tile to change its level.
+  - Q / E jump 5 levels.
+  - No badges, logo or animations.
+- Trader header is more compact, and the trader icon in the right panel is smaller.
+- The log is quieter: settings saves are one short line.
+
 ## 2.0.1
 - Dynamic quest levels follow the offer's new item when you swap the item of the offer the quest unlocks, or point the quest at another offer. A quest set on purpose to follow some other item is left alone.
 - Quests saved before this fix, that follow a different item than the one they unlock, get a warning in Checks and a "Follow <item>" button in the quest editor.

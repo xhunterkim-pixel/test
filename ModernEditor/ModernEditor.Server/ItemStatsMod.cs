@@ -33,8 +33,14 @@ public class ItemStatsMod(
 {
     public Task OnLoadAsync(CancellationToken cancellationToken)
     {
-        var file = Path.Combine(modHelper.GetAbsolutePathToModFolder(Assembly.GetExecutingAssembly()), "item_stats.json");
+        var modFolder = modHelper.GetAbsolutePathToModFolder(Assembly.GetExecutingAssembly());
+        var file = Path.Combine(modFolder, "item_stats.json");
         if (!File.Exists(file)) return Task.CompletedTask;
+        if (!ModConfig.Load(modFolder).ItemStats)
+        {
+            logger.MeInfo("[ModernEditor] Item stats are switched off in Modern Editor — item_stats.json not applied.");
+            return Task.CompletedTask;
+        }
 
         JsonObject? all;
         try

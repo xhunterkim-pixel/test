@@ -27,7 +27,7 @@ public sealed class HostForm : Form
     private const string FilesHost = "files.local";
 
     // MAJOR.MINOR.PATCH — 2.0.0: the Custom Trader Creator (1.0.0) and the Level & Item Editor (1.1.0) merged.
-    public const string Version = "2.0.1";
+    public const string Version = "2.0.2";
     public const string AppTitle = "Modern Editor";
 
     private readonly WebView2 _web = new() { Dock = DockStyle.Fill, DefaultBackgroundColor = Color.Black };
@@ -106,10 +106,13 @@ public sealed class HostForm : Form
             var method = (string?)message["method"] ?? "";
             var args = message["args"] as JsonObject ?? new JsonObject();
             method0 = method;
-            if (method != "log") EditorLog.Info("call", $"{method} {BriefArgs(args)}");
+            // settings saves and background checks happen all the time: one short line, no data
+            bool quiet = method is "log" or "saveUi" or "lg.saveUi" or "setUnsaved" or "addonsScan" or "setZoom";
+            if (!quiet) EditorLog.Info("call", $"{method} {BriefArgs(args)}");
+            else if (method != "log") EditorLog.Info("call", method + (method == "setUnsaved" ? " " + args["count"] : ""));
             var watch = System.Diagnostics.Stopwatch.StartNew();
             var result = Call(method, args);
-            if (method != "log")
+            if (!quiet)
             {
                 EditorLog.Info("call", $"{method} done in {watch.ElapsedMilliseconds} ms → {BriefResult(result)}");
                 if (result is JsonObject r)
@@ -195,6 +198,8 @@ public sealed class HostForm : Form
         // ---- logs, old files
         "log" => PageLog(Str(a, "level"), Str(a, "text")),
         "openLogs" => OpenLogs(),
+        "setSections" => SaveSections(a),
+        "setZoom" => SetZoom((double?)a["factor"] ?? 1),
         "cleanupScan" => Cleanup.Scan(_modFolder, _configFile),
         "cleanup" => new JsonObject { ["cleaned"] = Cleanup.Run((a["paths"] as JsonArray ?? new JsonArray()).Select(x => (string?)x ?? ""), _modFolder, _configFile), ["left"] = Cleanup.Scan(_modFolder, _configFile) },
         _ => throw new InvalidOperationException($"Unknown request '{method}'."),
@@ -255,6 +260,7 @@ public sealed class HostForm : Form
         _settings.Save();
         result["modFolder"] = folder;
         result["serverMod"] = File.Exists(Path.Combine(folder, "ModernEditor.dll"));
+        result["sections"] = ReadSections();
         if (!_settings.MigrationAsked && Migration.ModsRootOf(folder) is { } mods && Migration.Pending(mods) is { } pending)
             result["migration"] = pending;
 
@@ -289,6 +295,48 @@ public sealed class HostForm : Form
         var snap = Snapshot(Path.Combine(mods, Migration.ModName));
         snap["migrated"] = log;
         return snap;
+    }
+
+    // ------------------------------------------------------------------ section switches (user\mods\ModernEditor\config.json)
+
+    private static readonly string[] SectionKeys = { "traders", "itemStats", "levelGate" };
+
+    /// <summary>The left panel's switches — also read by the server mod (off = that part isn't applied in game).</summary>
+    private JsonObject ReadSections()
+    {
+        var result = new JsonObject();
+        JsonObject? file = null;
+        try
+        {
+            var path = _modFolder != null ? Path.Combine(_modFolder, "config.json") : null;
+            if (path != null && File.Exists(path)) file = JsonNode.Parse(File.ReadAllText(path), documentOptions: Lenient) as JsonObject;
+        }
+        catch (Exception e) { EditorLog.Warn("config", "config.json couldn't be read: " + e.Message); }
+        foreach (var key in SectionKeys) result[key] = (bool?)file?[key] ?? true;
+        return result;
+    }
+
+    private JsonNode SaveSections(JsonObject a)
+    {
+        if (_modFolder == null) throw new InvalidOperationException("Pick your SPT folder first (Browse… at the top).");
+        var path = Path.Combine(_modFolder, "config.json");
+        JsonObject file;
+        try { file = File.Exists(path) ? JsonNode.Parse(File.ReadAllText(path), documentOptions: Lenient) as JsonObject ?? new JsonObject() : new JsonObject(); }
+        catch { file = new JsonObject(); }
+        foreach (var key in SectionKeys)
+            if (a[key] is JsonValue v && v.TryGetValue(out bool on)) file[key] = on;
+        Directory.CreateDirectory(_modFolder);
+        File.WriteAllText(path, file.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
+        EditorLog.Info("config", "config.json: " + file.ToJsonString());
+        return ReadSections();
+    }
+
+    /// <summary>Interface size (Appearance → Size): the whole page scales like a browser zoom, so clicks and drags stay right.</summary>
+    private JsonNode SetZoom(double factor)
+    {
+        factor = Math.Clamp(factor, 0.5, 3);
+        if (Math.Abs(_web.ZoomFactor - factor) > 0.001) { _web.ZoomFactor = factor; EditorLog.Info("zoom", $"interface size {factor:P0}"); }
+        return factor;
     }
 
     private static JsonNode PageLog(string level, string text) { EditorLog.Page(level, text); return true; }

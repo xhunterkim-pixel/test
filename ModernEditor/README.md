@@ -1,4 +1,4 @@
-# Modern Editor v2.0.1 — traders, level limits, item stats and progression in one (SPT 4.1)
+# Modern Editor v2.0.2 — traders, level limits, item stats and progression in one (SPT 4.1)
 
 Modern Editor replaces three tools:
 
@@ -47,7 +47,11 @@ If the old mods are still installed next to ModernEditor.dll, the server log sho
   - **Level Limits**: Level Gate's level per item, with categories, filters, multi-select and undo.
   - **Progression**: what unlocks at each level.
 - **Items**: **Item Stats** (meds, stims and food).
-- **More**: Mods, Add-ons, Checks & Log.
+- **More**: Mods, Checks & Log.
+
+Each group (Traders, Level Gate, Items) has a switch in the left panel. Off hides its pages, and the server mod stops applying that part. See the changelog for details. The switches are saved in `user\mods\ModernEditor\config.json`.
+
+**Appearance → Size** makes everything bigger. Auto fits the window: about 120% at 1080p and 160% at 1440p.
 
 ## New in 2.0.0
 
