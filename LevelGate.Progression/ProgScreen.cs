@@ -514,7 +514,10 @@ namespace LevelGate.Progression
             //   │ LEVEL 36
             //   │ RENEGADE
             const float HeadH = 84;
-            Ui.Img(Ui.Rect(panel, "TitleStrip", new Vector2(0, 1), Vector2.one, new Vector2(0, -HeadH), Vector2.zero), Ui.Hex("#1c1d1e", .75f));
+            var strip = Ui.Rect(panel, "TitleStrip", new Vector2(0, 1), Vector2.one, new Vector2(0, -HeadH), Vector2.zero);
+            Ui.Img(strip, Ui.Hex("#1c1d1e", .75f));
+            strip.gameObject.AddComponent<RectMask2D>();
+            Ui.Handled(strip, 7, .06f);
             Ui.Img(Ui.Rect(panel, "Bracket", new Vector2(0, 1), new Vector2(0, 1), new Vector2(PanelPad, -HeadH + 12), new Vector2(PanelPad + 1, -12)), Ui.Hex("#8a8e90", .8f));
             Ui.Img(Ui.Rect(panel, "BracketTick", new Vector2(0, 1), new Vector2(0, 1), new Vector2(PanelPad - 6, -21), new Vector2(PanelPad, -20)), Ui.Hex("#8a8e90", .8f));
             float hx = PanelPad + 12;
@@ -671,6 +674,8 @@ namespace LevelGate.Progression
             Color bFace = Ui.Hex("#2c3538"), bFaceOn = Ui.Hex("#c4c9cb"), bInk = Text, bInkOn = Ui.Hex("#15191b");
             var bimg = Ui.Img(btn, bFace, null, true);
             var bTop = Ui.Img(Ui.Rect(btn, "Top", new Vector2(0, 1), Vector2.one, new Vector2(0, -1), Vector2.zero), Ui.Hex("#465155"));
+            btn.gameObject.AddComponent<RectMask2D>();
+            Ui.Handled(btn, 11, .05f);
             var bText = Ui.Label(btn, "Text", "INSPECT", TStrong, bInk, TextAnchor.MiddleCenter, false, 1);
             var cap = Ui.Rect(btn, "Key", new Vector2(1, .5f), new Vector2(1, .5f), new Vector2(-S3 - 38, -11), new Vector2(-S3, 11));
             var capEdge = Ui.Img(cap, Ui.Hex("#6a767b"));
@@ -1884,13 +1889,11 @@ namespace LevelGate.Progression
             // newly reached since you last opened the screen: a small restrained tag (top-right)
             if (reached && NewTags.Item(it.Tpl))
             {
-                // bottom-left (the bottom-right is a cut corner, where the solid block looked clipped): a small dark chip with an
-                // orange outline and orange letters, instead of a loud solid block over the picture
-                var tag = Ui.Rect(inner, "New", Vector2.zero, Vector2.zero, new Vector2(S1 + 1, S1 + 1), new Vector2(S1 + 1 + 32, S1 + 1 + 14));
+                // CoD's NEW: pinned to the tile's top-right corner, overhanging its edge; the name moves down to make room
+                var tag = Ui.NewBadge(rt, new Vector2(1, 1), new Vector2(-15, 1));
                 v.NewTag = tag.gameObject;
-                Ui.Img(tag, Ui.Hex(Orange, .9f));
-                Ui.Img(Ui.Fill(tag, "In", 1), Ui.Hex("#141516", .92f));
-                Ui.Label(tag, "Text", "NEW", 9.5f, Ui.Hex(Orange), TextAnchor.MiddleCenter, true, 1.5f);
+                var nr = ((Component)v.Name).transform.parent as RectTransform;
+                if (nr != null) nr.offsetMax = new Vector2(nr.offsetMax.x, nr.offsetMax.y - 12);
             }
             RequestIcon(_icons, it.Tpl, TileScaleOf(it.Tpl), v.Pic, placeholder);
             _hits.Add((rt, it));
@@ -2874,6 +2877,7 @@ namespace LevelGate.Progression
             private readonly CanvasGroup _group;
             private readonly Image _frame, _bg, _glow, _top, _stateLock, _selDots, _cur, _tagPlate, _cardLock, _stamp, _cardDither;
             private readonly Badge _cardBadge;
+            private readonly GameObject _newBadge;
             private readonly RectTransform _tag;
             private readonly Component _tagText, _typeLine;
             private const float HeadH = 46;
@@ -3058,6 +3062,7 @@ namespace LevelGate.Progression
                 var dm = Ui.Img(dotsMask, Color.white, Ui.Chamfer()); dm.type = Image.Type.Sliced; dm.raycastTarget = false;
                 dotsMask.gameObject.AddComponent<Mask>().showMaskGraphic = false; // the dots follow the card's cut corners
                 dotsMask.SetSiblingIndex(1);
+                Ui.Handled(dotsMask, _gritSeed++, .06f); // fingerprints / smudges, clipped to the card's cut shape
                 _selDots = Ui.Img(Ui.Fill(dotsMask, "SelDots"), new Color(1, 1, 1, .13f), Ui.DotGrid());
                 _selDots.type = Image.Type.Tiled; _selDots.raycastTarget = false; _selDots.enabled = false;
                 // locked: a small lock top-left on the picture area, like CoD's locked unlocks
@@ -3071,6 +3076,8 @@ namespace LevelGate.Progression
                 _cardDither = Ui.Img(Ui.Rect(inner, "Dither", new Vector2(0, 1), new Vector2(.6f, 1), new Vector2(10, -12), new Vector2(0, -3)), new Color(1, 1, 1, .12f), Ui.Dither());
                 _cardDither.raycastTarget = false; _cardDither.enabled = false;
                 _cur = Ui.Img(Ui.Rect(inner, "Current", new Vector2(0, 1), Vector2.one, new Vector2(10, -3), Vector2.zero), Ui.Hex(Orange));
+                _newBadge = Ui.NewBadge(card, new Vector2(1, 1), new Vector2(-24, 0), 40, 19, 12.5f).gameObject;
+                _newBadge.SetActive(false);
                 _cur.enabled = false;
                 for (int i = 0; i < 3; i++) _picRects[i] = Ui.Rect(pics, "Pic" + i, Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
                 for (int i = 0; i < 3; i++)
@@ -3221,7 +3228,8 @@ namespace LevelGate.Progression
                 }
                 bool empty = ProgData.CountAt(_level) == 0;
                 bool nextUp = player > 0 && _level == player + 1;
-                string state = player <= 0 || empty ? "" : fresh ? "<color=#e0562f>NEW</color>" : ""; // NEXT under the number says it; no LOCKED again
+                string state = ""; // NEW is CoD's yellow badge on the card's top-right corner now
+                if (_newBadge != null) _newBadge.SetActive(player > 0 && !empty && fresh);
                 Ui.SetText(_state, state);
                 _stateLock.enabled = false;
                 if (_stateLock.enabled)

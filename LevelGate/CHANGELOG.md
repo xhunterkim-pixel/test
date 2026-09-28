@@ -40,6 +40,10 @@ Versions are **MAJOR.MINOR.PATCH**:
 
 ## LevelGate Progression (BepInEx plugin, separate DLL)
 
+### 0.9.62
+- **CoD's NEW tag everywhere**: bright yellow bold NEW in a dark see-through box with a thin yellow outline, a fainter echo outline offset down-right, and a soft yellow glow — pinned to the top-right corner of new reward tiles (overhanging the edge, the name moves down to make room), on newly reached level cards (top-right, instead of the orange NEW text) and on the main menu's PROGRESSION shortcut after a level up (was a green block).
+- **Handled texture on the important surfaces** (level cards, the reward list's head, INSPECT): faint fingerprints and smudges with a slight purple / green mottling, like CoD's cards; follows Wear And Scratches.
+
 ### 0.9.61
 - **Character > Overall emblem fixed**: 0.9.60 added it to the game's icon column, which centres its items, so the USEC logo was pushed up into the level number. Ours now stays out of the game's layout and floats just below the column's lowest icon (the prestige mark), following it if the column moves.
 - **Text Size** (F12 > General, 100 / 115 / 130%): the small text (labels, tags, tile names, stat names) grows; titles and big numbers stay. Applies on the next open.

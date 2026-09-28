@@ -16,7 +16,7 @@ namespace LevelGate.Progression
         private const string Red = "#d8412f";
         private static GameObject _root;
         private static Image _glow, _emblem;
-        private static Component _title, _sub, _newText;
+        private static Component _title, _sub;
         private static GameObject _newTag;
         private static float _next;
         private static int _shownLevel = -1, _shownSeen = -1;
@@ -103,9 +103,9 @@ namespace LevelGate.Progression
             _emblem.raycastTarget = false;
 
             // NEW, PROGRESSION, level / XP
-            _newTag = Ui.Rect(block, "New", new Vector2(0, 1), new Vector2(0, 1), new Vector2(52, -13), new Vector2(82, -1)).gameObject;
-            Ui.Img((RectTransform)_newTag.transform, Ui.Hex("#6ad13a"));
-            _newText = Ui.Label(_newTag.transform, "Text", "NEW", 9, Ui.Hex("#0e1a08"), TextAnchor.MiddleCenter, true, 1);
+            // CoD's yellow NEW badge (outline, echo, glow)
+            var nb = Ui.NewBadge(block, new Vector2(0, 1), new Vector2(52 + 17, -7), 34, 16, 10.5f);
+            _newTag = nb.gameObject;
             _title = Ui.Label(Ui.Rect(block, "Title", new Vector2(0, 0), new Vector2(1, 1), new Vector2(51, 17), new Vector2(0, -11)), "Text", "PROGRESSION", 28, Ui.Hex(Red), TextAnchor.MiddleLeft, false, 1);
             _sub = Ui.Label(Ui.Rect(block, "Sub", new Vector2(0, 0), new Vector2(1, 0), new Vector2(52, 1), new Vector2(0, 17)), "Text", "", 11, Ui.Hex("#c9563f"), TextAnchor.MiddleLeft, false, 1);
 

@@ -245,6 +245,103 @@ namespace LevelGate.Progression
             return _dither;
         }
 
+        /// <summary>
+        /// CoD's NEW tag: bright yellow bold "NEW" in a dark see-through box with a thin yellow outline, a second fainter
+        /// outline offset down-right behind it (the "echo"), and a faint yellow glow. The badge rect is the box; place it
+        /// where you want it (CoD pins it to a tile's top-right corner, overhanging the edge).
+        /// </summary>
+        public static RectTransform NewBadge(RectTransform parent, Vector2 anchor, Vector2 pos, float w = 34, float h = 17, float textSize = 11.5f)
+        {
+            var yellow = Hex("#f4e23c");
+            var root = Box(parent, "New", anchor, pos, new Vector2(w, h));
+            var glow = Img(Box(root, "Glow", new Vector2(.5f, .5f), Vector2.zero, new Vector2(w * 2.2f, h * 2.6f)), new Color(yellow.r, yellow.g, yellow.b, .12f), Radial());
+            glow.raycastTarget = false;
+            // the echo: the same outline, 3 px down-right, fainter
+            var echo = Rect(root, "Echo", Vector2.zero, Vector2.one, new Vector2(3, -3), new Vector2(3, -3));
+            Outline(echo, new Color(yellow.r, yellow.g, yellow.b, .35f));
+            Img(Fill(root, "Face"), new Color(.07f, .07f, .03f, .78f)).raycastTarget = false;
+            Outline(root, new Color(yellow.r, yellow.g, yellow.b, .95f));
+            var t = Label(root, "Text", "NEW", textSize, yellow, TextAnchor.MiddleCenter, true, 1.5f);
+            ((Graphic)t).raycastTarget = false;
+            return root;
+        }
+
+        /// <summary>A 1 px outline inside a rect (four thin images).</summary>
+        public static void Outline(RectTransform rt, Color c)
+        {
+            Img(Rect(rt, "T", new Vector2(0, 1), Vector2.one, new Vector2(0, -1), Vector2.zero), c).raycastTarget = false;
+            Img(Rect(rt, "B", Vector2.zero, new Vector2(1, 0), Vector2.zero, new Vector2(0, 1)), c).raycastTarget = false;
+            Img(Rect(rt, "L", Vector2.zero, new Vector2(0, 1), new Vector2(0, 1), new Vector2(1, -1)), c).raycastTarget = false;
+            Img(Rect(rt, "R", new Vector2(1, 0), Vector2.one, new Vector2(-1, 1), new Vector2(0, -1)), c).raycastTarget = false;
+        }
+
+        private static Sprite[] _prints = new Sprite[3];
+
+        /// <summary>
+        /// Fingerprints and smudges (CoD's handled-glass look): a few partial prints (warped concentric ridges fading out
+        /// at their edges) and soft smears, white on transparent, 256 px. Three variants.
+        /// </summary>
+        public static Sprite Fingerprints(int variant)
+        {
+            variant = ((variant % 3) + 3) % 3;
+            if (_prints[variant] != null) return _prints[variant];
+            const int n = 256;
+            var rnd = new System.Random(101 + variant * 17);
+            var a = new float[n * n];
+            int prints = 2 + rnd.Next(2);
+            for (int k = 0; k < prints; k++)
+            {
+                float cx = (float)rnd.NextDouble() * n, cy = (float)rnd.NextDouble() * n, r = 34 + (float)rnd.NextDouble() * 26;
+                float rot = (float)rnd.NextDouble() * 6.28f, sq = .62f + (float)rnd.NextDouble() * .2f, ox = (float)rnd.NextDouble() * 50;
+                for (int y = 0; y < n; y++)
+                    for (int x = 0; x < n; x++)
+                    {
+                        float dx = x - cx, dy = y - cy;
+                        float u = dx * Mathf.Cos(rot) + dy * Mathf.Sin(rot), v = (-dx * Mathf.Sin(rot) + dy * Mathf.Cos(rot)) / sq;
+                        float d = Mathf.Sqrt(u * u + v * v);
+                        if (d > r * 1.3f) continue;
+                        float warp = (Mathf.PerlinNoise(x * .03f + ox, y * .03f) - .5f) * 7f;
+                        float ridge = .5f + .5f * Mathf.Sin((d + warp) * 1.25f);          // ~5 px apart
+                        float fade = Mathf.Clamp01(1 - d / (r * 1.3f));
+                        float broken = Mathf.PerlinNoise(x * .09f + ox, y * .09f + 7) > .38f ? 1 : .2f; // partial, like a real print
+                        a[y * n + x] = Mathf.Max(a[y * n + x], ridge * ridge * fade * fade * broken * .8f);
+                    }
+            }
+            // soft smears
+            for (int y = 0; y < n; y++)
+                for (int x = 0; x < n; x++)
+                {
+                    float sm = Mathf.Clamp01((Mathf.PerlinNoise(x * .012f + variant * 9, y * .03f) - .55f) * 2.2f) * .35f;
+                    a[y * n + x] = Mathf.Max(a[y * n + x], sm);
+                }
+            var tex = new Texture2D(n, n, TextureFormat.RGBA32, true) { wrapMode = TextureWrapMode.Clamp, filterMode = FilterMode.Trilinear };
+            var px = new Color32[n * n];
+            for (int i = 0; i < px.Length; i++) px[i] = new Color32(255, 255, 255, (byte)(255 * Mathf.Clamp01(a[i])));
+            tex.SetPixels32(px);
+            tex.Apply(true, true);
+            return _prints[variant] = Sprite.Create(tex, new Rect(0, 0, n, n), new Vector2(.5f, .5f));
+        }
+
+        /// <summary>
+        /// "Handled" texture on an important surface: fingerprints / smudges and a faint purple + green colour mottling
+        /// (like CoD's cards). Faint; follows F12 Wear And Scratches.
+        /// </summary>
+        public static void Handled(RectTransform box, int variant, float alpha = .05f)
+        {
+            var fp = Img(Fill(box, "Prints"), new Color(.9f, .9f, .92f, alpha), Fingerprints(variant));
+            fp.raycastTarget = false; fp.preserveAspect = false;
+            Grits.Add((fp, alpha));
+            var rnd = new System.Random(variant * 31 + 5);
+            var tints = new[] { new Color(.65f, .35f, .7f), new Color(.45f, .7f, .4f) };
+            for (int i = 0; i < 2; i++)
+            {
+                var anchor = new Vector2((float)rnd.NextDouble() * .8f + .1f, (float)rnd.NextDouble() * .8f + .1f);
+                var blob = Img(Box(box, "Mottle", anchor, Vector2.zero, new Vector2(220, 160)), new Color(tints[i].r, tints[i].g, tints[i].b, alpha * .9f), Radial());
+                blob.raycastTarget = false;
+                Grits.Add((blob, alpha * .9f));
+            }
+        }
+
         /// <summary>Registration marks: a small "+" just outside each corner of a panel (CoD's HUD framing).</summary>
         public static void CornerMarks(RectTransform frame, Color color, float arm = 5, float gap = 6)
         {
