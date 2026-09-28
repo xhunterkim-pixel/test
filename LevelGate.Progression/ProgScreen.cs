@@ -339,18 +339,13 @@ namespace LevelGate.Progression
             el.raycastTarget = false; el.type = Image.Type.Simple; el.preserveAspect = false;
             var inner = Ui.Fill(frame, "In", BorderWidth);
             Ui.Img(inner, PanelBg);
-            // each panel its own texture (not the same noise everywhere), faint and following Wear And Scratches:
-            //   the reward list: fine vertical stripes · the picture: a blueprint grid · the details: glass light + hairlines
-            Image tx;
-            if (mid < .4f) { tx = Ui.Img(Ui.Fill(inner, "Texture"), new Color(1, 1, 1, .016f), Ui.VStripes()); tx.type = Image.Type.Tiled; Ui.Grits.Add((tx, .016f)); }
-            else if (mid > .6f)
+            // 70 / 30: the panel bodies stay calm; the detail sits in the focal 30% (the list's head and tabs, the picked /
+            // your card, the picked tile, the XP header). The details panel only keeps a soft glass light (low detail).
+            if (mid > .6f)
             {
-                tx = Ui.Img(Ui.Fill(inner, "Texture"), new Color(1, 1, 1, .018f), Ui.Hatch()); tx.type = Image.Type.Tiled; Ui.Grits.Add((tx, .018f));
-                var glass = Ui.Img(Ui.Box(inner, "Glass", new Vector2(.15f, .9f), Vector2.zero, new Vector2(520, 360)), new Color(1, 1, 1, .035f), Ui.Radial());
-                glass.raycastTarget = false; Ui.Grits.Add((glass, .035f));
+                var glass = Ui.Img(Ui.Box(inner, "Glass", new Vector2(.15f, .9f), Vector2.zero, new Vector2(520, 360)), new Color(1, 1, 1, .03f), Ui.Radial());
+                glass.raycastTarget = false; Ui.Grits.Add((glass, .03f));
             }
-            else { tx = Ui.Img(Ui.Fill(inner, "Texture"), new Color(1, 1, 1, .022f), Ui.BlueprintGrid()); tx.type = Image.Type.Tiled; Ui.Grits.Add((tx, .022f)); }
-            tx.raycastTarget = false;
             return inner;
         }
 
@@ -539,6 +534,8 @@ namespace LevelGate.Progression
             Ui.Img(strip, Ui.Hex("#1c1d1e", .75f));
             strip.gameObject.AddComponent<RectMask2D>();
             Ui.Handled(strip, 7, .06f);
+            var headStripes = Ui.Img(Ui.Fill(strip, "Stripes"), new Color(1, 1, 1, .035f), Ui.VStripes()); // detail where the eye lands
+            headStripes.type = Image.Type.Tiled; headStripes.raycastTarget = false; Ui.Grits.Add((headStripes, .035f));
             Ui.Img(Ui.Rect(panel, "Bracket", new Vector2(0, 1), new Vector2(0, 1), new Vector2(PanelPad, -HeadH + 12), new Vector2(PanelPad + 1, -12)), Ui.Hex("#8a8e90", .8f));
             Ui.Img(Ui.Rect(panel, "BracketTick", new Vector2(0, 1), new Vector2(0, 1), new Vector2(PanelPad - 6, -21), new Vector2(PanelPad, -20)), Ui.Hex("#8a8e90", .8f));
             float hx = PanelPad + 12;
@@ -1893,7 +1890,6 @@ namespace LevelGate.Progression
             v.Top.enabled = false;
             // texture: light from above and a fine grit on the face; picked: a pixel dissolve along the top edge
             Ui.Img(Ui.Rect(inner, "TopLight", new Vector2(0, .5f), Vector2.one, Vector2.zero, Vector2.zero), new Color(1, 1, 1, .025f), Ui.VerticalFade()).raycastTarget = false;
-            Ui.Grit(inner, _gritSeed++, .045f);
             v.Dither = Ui.Img(Ui.Rect(inner, "Dither", new Vector2(0, 1), new Vector2(.7f, 1), new Vector2(9, -8), new Vector2(0, -2)), new Color(1, 1, 1, .16f), Ui.Dither());
             v.Dither.raycastTarget = false; v.Dither.enabled = false;
             // picked: a very light reflection (a soft sheen over the upper half, a glossy line down the right edge), like CoD's
@@ -2908,6 +2904,7 @@ namespace LevelGate.Progression
             private readonly CanvasGroup _group;
             private readonly Image _frame, _bg, _glow, _top, _stateLock, _selDots, _cur, _tagPlate, _cardLock, _stamp, _cardDither, _sheen, _gloss, _bloomFrame, _curScan;
             private readonly RectTransform _ticks;
+            private readonly GameObject _handled;
             private readonly Badge _cardBadge;
             public int Slot = -1; // its place in the row (0 … 4): which edge catches the light
             private readonly GameObject _newBadge;
@@ -3105,7 +3102,8 @@ namespace LevelGate.Progression
                 var dm = Ui.Img(dotsMask, Color.white, Ui.Chamfer()); dm.type = Image.Type.Sliced; dm.raycastTarget = false;
                 dotsMask.gameObject.AddComponent<Mask>().showMaskGraphic = false; // the dots follow the card's cut corners
                 dotsMask.SetSiblingIndex(1);
-                Ui.Handled(dotsMask, _gritSeed++, .06f); // fingerprints / smudges, clipped to the card's cut shape
+                _handled = Ui.Handled(dotsMask, _gritSeed++, .07f).gameObject; // fingerprints / smudges, clipped to the card's cut shape
+                _handled.SetActive(false);
                 _selDots = Ui.Img(Ui.Fill(dotsMask, "SelDots"), new Color(1, 1, 1, .13f), Ui.DotGrid());
                 _selDots.type = Image.Type.Tiled; _selDots.raycastTarget = false; _selDots.enabled = false;
                 // locked: a small lock top-left on the picture area, like CoD's locked unlocks
@@ -3261,6 +3259,7 @@ namespace LevelGate.Progression
                 }
                 _cur.enabled = current;       // a thin orange line: your level
                 _bloomFrame.enabled = current; _curScan.enabled = current; _ticks.gameObject.SetActive(current);
+                if (_handled.activeSelf != (sel || current)) _handled.SetActive(sel || current); // detail only on the focal cards
                 if (current && !sel) FadeTo(_frame, Ui.Hex(Orange, .85f)); // its border glows orange
                 _cardBadge.Still = !(sel || current); // five emblems playing at once was busy (and cost frames)
                 _selDots.enabled = sel;       // the picked card's dot-matrix fill

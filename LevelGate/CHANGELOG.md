@@ -40,6 +40,9 @@ Versions are **MAJOR.MINOR.PATCH**:
 
 ## LevelGate Progression (BepInEx plugin, separate DLL)
 
+### 0.9.64
+- **Detail follows the 70 / 30 rule**: texture had spread evenly over everything, so nothing stood out. The calm 70% (panel bodies, the picture area, ordinary tiles, ordinary cards) is plain again: no full-panel stripes / grid / hatching, no grit on every tile, no fingerprints on every card. The detail sits in the focal 30%: the reward list's head (stripes + fingerprints) and its category tabs, the picked card and your level's card (fingerprints, dots, bloom, scanlines, ticks), the picked tile (dissolve, sheen, gloss) and the XP header. The details panel keeps only a soft glass light.
+
 ### 0.9.63
 - **The main menu stays hidden while the screen is open**: the game could fade it back in behind us after a screen change, and its CHARACTER / TRADING text and the orange PROGRESSION block showed through between the panels.
 - **Selection reflection**: the picked tile and card get a very light sheen and a glossy line down the edge that faces the middle of the screen (left cards: right edge; right cards: left edge).

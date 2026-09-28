@@ -326,8 +326,9 @@ namespace LevelGate.Progression
         /// "Handled" texture on an important surface: fingerprints / smudges and a faint purple + green colour mottling
         /// (like CoD's cards). Faint; follows F12 Wear And Scratches.
         /// </summary>
-        public static void Handled(RectTransform box, int variant, float alpha = .05f)
+        public static RectTransform Handled(RectTransform parent, int variant, float alpha = .05f)
         {
+            var box = Fill(parent, "Handled"); // one container, so a surface can switch its handled look on / off
             var fp = Img(Fill(box, "Prints"), new Color(.9f, .9f, .92f, alpha), Fingerprints(variant));
             fp.raycastTarget = false; fp.preserveAspect = false;
             Grits.Add((fp, alpha));
@@ -340,6 +341,7 @@ namespace LevelGate.Progression
                 blob.raycastTarget = false;
                 Grits.Add((blob, alpha * .9f));
             }
+            return box;
         }
 
         private static Sprite _glowFrame, _scan, _vstripes, _grid;
