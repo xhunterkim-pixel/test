@@ -399,6 +399,52 @@ namespace LevelGate.Progression
             return _glowFrame = Sprite.Create(tex, new Rect(0, 0, n, n), new Vector2(.5f, .5f), 100, 0, SpriteMeshType.FullRect, new Vector4(pad + 6, pad + 6, pad + 6, pad + 6));
         }
 
+        private static Sprite _halftone;
+
+        /// <summary>
+        /// A light made of dots (CoD's LED / halftone glow): a soft oval of small square dots on a 5 px grid, each dot as big as
+        /// the light is strong there, so the glow itself carries a pattern. 2:1, white (tint it), 3x supersampled.
+        /// </summary>
+        public static Sprite HalftoneGlow()
+        {
+            if (_halftone != null) return _halftone;
+            const int w = 320, h = 160, pitch = 5, ss = 3;
+            var tex = new Texture2D(w, h, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Clamp, filterMode = FilterMode.Bilinear, name = "LevelGate halftone" };
+            var px = new Color32[w * h];
+            for (int y = 0; y < h; y++)
+                for (int x = 0; x < w; x++)
+                {
+                    // the light's strength at this dot's centre (one value per cell, so every dot is a clean square)
+                    int cx = x / pitch * pitch, cy = y / pitch * pitch;
+                    float dx = (cx + pitch * .5f) / w * 2 - 1, dy = (cy + pitch * .5f) / h * 2 - 1;
+                    float f = Mathf.Clamp01(1 - (dx * dx + dy * dy));
+                    f = f * f * (3 - 2 * f); // smooth
+                    float half = pitch * .32f * Mathf.Sqrt(f); // at most ~3 of 5 px: always a gap between dots (an LED wall, not a blob)
+                    if (half <= .05f) continue;
+                    int hit = 0;
+                    for (int j = 0; j < ss; j++)
+                        for (int i = 0; i < ss; i++)
+                        {
+                            float sx = x + (i + .5f) / ss - (cx + pitch * .5f), sy = y + (j + .5f) / ss - (cy + pitch * .5f);
+                            if (Mathf.Abs(sx) <= half && Mathf.Abs(sy) <= half) hit++;
+                        }
+                    float a = hit / (float)(ss * ss) * (.35f + .65f * f);
+                    px[y * w + x] = new Color32(255, 255, 255, (byte)(255 * a));
+                }
+            tex.SetPixels32(px);
+            tex.Apply(false, true);
+            return _halftone = Sprite.Create(tex, new Rect(0, 0, w, h), new Vector2(.5f, .5f), 100, 0, SpriteMeshType.FullRect);
+        }
+
+        /// <summary>
+        /// Its own (nested) canvas, so what moves in it every frame only redraws itself, not the whole panel around it.
+        /// Keeps the parent's masks and drawing order; takes no clicks.
+        /// </summary>
+        public static void OwnCanvas(RectTransform rt)
+        {
+            if (rt.GetComponent<Canvas>() == null) rt.gameObject.AddComponent<Canvas>();
+        }
+
         /// <summary>Fine horizontal scanlines (1 px on, 2 off), tiled.</summary>
         public static Sprite Scanlines()
         {

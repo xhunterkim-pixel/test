@@ -40,6 +40,15 @@ Versions are **MAJOR.MINOR.PATCH**:
 
 ## LevelGate Progression (BepInEx plugin, separate DLL)
 
+### 0.9.66
+- **The Performance Mode tip fits on screen**: long tips were cut at 420 px and their text ran past the box off the right edge; tips can be wider now and that one is shorter.
+- **Lights that move a little** (new F12 **Detail Animation**, 0–100%): the red glow top-right drifts, faint specks of light float up over the background, the header's rank emblem glow breathes, the picked card's bloom and the light under the big picture drift. Every moving piece is on its own small canvas, so only it redraws. 0, Reduce Motion or Performance Mode: all still.
+- **XP bar tracer** (like MW's XP track): sparks flow along the filled part into a bright flickering leading edge.
+- **Coloured selection** (MW's picked class / primary): the picked card gets a bloom around its border and a soft bloom inside in its **rank's colour**, and a light made of dots (a halftone / LED light) under its pictures. Your level's card stays orange.
+- **Lights carry a pattern**: the new lights are made of small square dots (an LED wall) rather than smooth blurs; the big picture's floor light too.
+- **Stacked cards**: a level with more than its three pictures shows a card stacked behind (bottom-right edge), a lot more (13+) two.
+- **Background Pattern Opacity** (new, 0–100%): the pattern's strength on its own; UI Detailing no longer changes it.
+
 ### 0.9.65
 - **Bloom behind the rank emblem**: the header's rank emblem sits in a soft glow in its rank's colour; the emblems on your level's card and the picked card glow too (the others don't, locked ones never).
 - **One UI Detailing slider (F12 > Look & Graphics, 0–100%)**: every texture layer follows it — scratches, smudges, fingerprints, film grain, the background pattern, corner marks, edge lights, dither, scanlines, the selection reflection, the bloom and tick marks on your card, the micro labels. At 0 those layers aren't drawn at all. It replaces Wear And Scratches (your old value is carried over); Dark Corners and Red Glow moved to Advanced.

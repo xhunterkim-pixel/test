@@ -69,7 +69,7 @@ namespace LevelGate.Progression
         private static Component _listTitle;
         private static RectTransform _content;
         // centre + right: the featured item
-        private static Image _featPic, _featLock;
+        private static Image _featPic, _featLock, _featLight;
         private static Component _featShort, _featType, _featName, _featReq, _featReqValue, _featStatus;
         private static Image _featCheck;
         private static Component _featDesc;
@@ -252,6 +252,7 @@ namespace LevelGate.Progression
             _bloom.Add(Ui.Img(Ui.Rect(root, "Bloom", new Vector2(.25f, 0), Vector2.one, Vector2.zero, Vector2.zero), new Color(0, 0, 0, 0), Ui.CornerGlow()));
             _bloom.Add(Ui.Img(Ui.Box(root, "BloomCore", new Vector2(1, .66f), Vector2.zero, new Vector2(1200, 1300)), new Color(0, 0, 0, 0), Ui.Radial()));
             _mood = -1; // forces the first ApplyMood to paint
+            BuildMotes(root); // faint specks of light drifting over the background (MW's title screen)
 
             // the level strip is navigation: ~30% of the height, the rest goes to the reward content
             var top = Ui.Rect(root, "Top", new Vector2(0, .30f), Vector2.one, Vector2.zero, Vector2.zero);
@@ -600,6 +601,11 @@ namespace LevelGate.Progression
             Ui.Img(Ui.Fill(picFace, "Light"), new Color(1, 1, 1, .07f), Ui.Radial());
             // a spotlight from above onto a floor: a soft pool of light, the floor line, the item's shadow on it
             Ui.Img(Ui.Rect(picFace, "Spot", new Vector2(.15f, .12f), new Vector2(.85f, .95f), Vector2.zero, Vector2.zero), new Color(1, .97f, .9f, .05f), Ui.Radial());
+            // the floor light is made of dots (CoD's lights carry a pattern) in the viewed rank's colour, drifting slowly
+            var lights = Ui.Fill(picFace, "Lights");
+            Ui.OwnCanvas(lights); // it moves every frame: only this redraws
+            _featLight = Ui.Detail(Ui.Img(Ui.Box(lights, "DotLight", new Vector2(.5f, .2f), Vector2.zero, new Vector2(560, 170)), new Color(1, 1, 1, .1f), Ui.HalftoneGlow()), .1f);
+            _featLight.raycastTarget = false;
             var floorR = Ui.Rect(picFace, "FloorR", new Vector2(.5f, .2f), new Vector2(.92f, .2f), Vector2.zero, new Vector2(0, 1));
             Ui.Img(floorR, new Color(1, 1, 1, .06f), Ui.HorizontalFade());
             var floorL = Ui.Rect(picFace, "FloorL", new Vector2(.08f, .2f), new Vector2(.5f, .2f), Vector2.zero, new Vector2(0, 1));
@@ -812,19 +818,21 @@ namespace LevelGate.Progression
         public static void ApplyLook()
         {
             float sc = Ui.GritK, vg = ProgressionPlugin.Vignette?.Value ?? 1f;
+            // the background pattern has its own opacity (F12 Background Pattern Opacity), not UI Detailing's; off in Performance Mode
+            float pk = ProgressionPlugin.Low ? 0f : 2f * Mathf.Clamp01((ProgressionPlugin.PatternOpacity?.Value ?? 100) / 100f);
             Ui.ApplyDetail(); // F12 > Graphics > UI Detailing (0 in Performance Mode)
             if (_dotGrid != null)
             {
                 // the background pattern (F12 > Graphics > Pattern): the dots tile; the line patterns cover the screen once
                 var pat = ProgressionPlugin.Pattern?.Value ?? BackgroundPattern.Dots;
                 if (pat == BackgroundPattern.Random) pat = _randomPattern;
-                if (sc <= 0) { BgPattern.Use(_dotGrid, null); _dotGrid.enabled = false; } // no detail: no pattern at all (nothing worked out or drawn)
+                if (pk <= 0) { BgPattern.Use(_dotGrid, null); _dotGrid.enabled = false; } // no detail: no pattern at all (nothing worked out or drawn)
                 else if (pat == BackgroundPattern.Dots) { BgPattern.Use(_dotGrid, null); _dotGrid.sprite = Ui.DotGrid(); _dotGrid.type = Image.Type.Tiled; _dotGrid.enabled = true; }
                 else BgPattern.Use(_dotGrid, pat.ToString()); // worked out off the main thread; shows once ready, moves while open
                 float basis = pat == BackgroundPattern.Dots || pat == BackgroundPattern.Streaks ? .035f
                     : pat == BackgroundPattern.Marble ? .03f : pat == BackgroundPattern.Pixels ? .04f : pat == BackgroundPattern.Terrain ? .055f
                     : pat == BackgroundPattern.Damascus2 ? .04f : .045f;
-                _dotGrid.color = new Color(1, 1, 1, Mathf.Clamp01(basis * sc));
+                _dotGrid.color = new Color(1, 1, 1, Mathf.Clamp01(basis * pk));
             }
             if (_vignette != null) _vignette.color = new Color(0, 0, 0, Mathf.Clamp01(.14f * vg));
             _mood = -1; // repaint the glow next frame
@@ -1125,7 +1133,7 @@ namespace LevelGate.Progression
             HoverHook.Add(rt, on =>
             {
                 FadeTo(label as Graphic, on ? Grey : Dim); FadeTo(edge, on ? HoverEdge : Ui.Hex("#5a6468"));
-                ShowTip(on ? rt : null, "Smaller, fewer pictures; no background pattern, blur or texture layers; still emblems; no slides or flashes");
+                ShowTip(on ? rt : null, "Lighter pictures · no pattern, blur or texture layers · still emblems, no motion");
             });
         }
 
@@ -1970,7 +1978,7 @@ namespace LevelGate.Progression
             if (rt == null || string.IsNullOrEmpty(name)) { _tip.gameObject.SetActive(false); return; }
             Ui.SetText(_tipText, name);
             float w = Ui.PreferredWidth(_tipText, name) + S3 * 2;
-            _tip.sizeDelta = new Vector2(Mathf.Min(w, 420), 26);
+            _tip.sizeDelta = new Vector2(Mathf.Min(w, 760), 26); // (420 cut long tips off: the text ran past the box and the screen)
             var r = rt.rect;
             _tip.pivot = new Vector2(.5f, below ? 1 : 0);
             _tip.position = rt.TransformPoint(new Vector3(r.center.x, below ? r.yMin : r.yMax, 0));
@@ -2685,6 +2693,7 @@ namespace LevelGate.Progression
             if (_restoreAgainAt > 0 && Time.unscaledTime > _restoreAgainAt && !IsOpen && MenuHook.QuietMenu()) { _restoreAgainAt = -1; GameItems.RestoreIcons(); }
             if (!IsOpen) { CheckMenuShown(); return; }
             BgPattern.Tick(); // the background pattern's slow motion: only ever while open
+            TickLights();     // the drifting lights, the XP bar's tracer (F12 Detail Animation)
             // the game can fade its main menu back in behind us (its own tween after a screen change): keep it hidden while open
             if (_menuGroup != null && (_menuGroup.alpha > 0 || _menuGroup.blocksRaycasts)) { _menuGroup.alpha = 0; _menuGroup.blocksRaycasts = false; }
             if (!_xpKnown && ProgData.HasExpTable) { _xpKnown = true; UpdateXp(); } // the SPT server's answer came in
@@ -2865,7 +2874,9 @@ namespace LevelGate.Progression
                 {
                     // behind everything else of the badge; follows UI Detailing (off in Performance Mode)
                     _bloomA = bloom;
-                    _bloom = Ui.Detail(Ui.Img(Ui.Box(_root, "Bloom", new Vector2(.5f, .5f), Vector2.zero, new Vector2(size * 2.1f, size * 2.1f)), new Color(1, 1, 1, bloom), Ui.Radial()), bloom);
+                    var br = Ui.Box(_root, "Bloom", new Vector2(.5f, .5f), Vector2.zero, new Vector2(size * 2.1f, size * 2.1f));
+                    if (size >= 60) Ui.OwnCanvas(br); // the header's breathes every frame: only it redraws
+                    _bloom = Ui.Detail(Ui.Img(br, new Color(1, 1, 1, bloom), Ui.Radial()), bloom);
                     _bloom.raycastTarget = false;
                 }
                 var rim = Ui.Box(_root, "Rim", new Vector2(.5f, .5f), Vector2.zero, new Vector2(size * .68f, size * .68f));
@@ -2889,6 +2900,14 @@ namespace LevelGate.Progression
             public bool Still { set { var pl = _emblem.GetComponent<EmblemPlayer>(); if (pl != null && pl.Still != value) { pl.Still = value; } } }
 
             public bool Visible { set { if (_root.gameObject.activeSelf != value) _root.gameObject.SetActive(value); } }
+
+            /// <summary>The header's glow breathes a little (0 = still): its strength and size, around the set level.</summary>
+            public void Breathe(float wave)
+            {
+                if (_bloom == null || !_bloom.enabled) return;
+                var c = _bloom.color; c.a = Mathf.Clamp01(_bloomA * Ui.DetailK * (1 + .25f * wave)); _bloom.color = c;
+                _bloom.rectTransform.localScale = Vector3.one * (1 + .04f * wave);
+            }
 
             /// <summary>The glow behind the emblem on / off (a card's badge: only your card and the picked one glow).</summary>
             public bool Bloom { set { _bloomOn = value; if (_bloom != null) { bool on = value && !_dim; if (_bloom.enabled != on) _bloom.enabled = on; } } }
@@ -2926,6 +2945,19 @@ namespace LevelGate.Progression
             private readonly CanvasGroup _group;
             private readonly Image _frame, _bg, _glow, _top, _stateLock, _selDots, _cur, _tagPlate, _cardLock, _stamp, _cardDither, _sheen, _gloss, _bloomFrame, _curScan;
             private readonly RectTransform _ticks;
+            private readonly GameObject[] _stack = new GameObject[2];
+            private readonly GameObject _selLights;
+            private readonly Image _selBloom, _selDotLight;
+            private float _lightSeed = UnityEngine.Random.value * 10;
+
+            /// <summary>Every frame (only the picked card has its lights on): they drift slowly, F12 Detail Animation.</summary>
+            public void TickLight(float phase, float amount)
+            {
+                if (_selLights == null || !_selLights.activeSelf) return;
+                float t = phase + _lightSeed;
+                _selBloom.rectTransform.anchoredPosition = new Vector2(60 * amount * Mathf.Sin(t * .31f), 14 * amount * Mathf.Sin(t * .23f + 1));
+                _selDotLight.rectTransform.anchoredPosition = new Vector2(80 * amount * Mathf.Sin(t * .19f + 2), 6 * amount * Mathf.Sin(t * .37f));
+            }
             private readonly GameObject _handled;
             private readonly Badge _cardBadge;
             public int Slot = -1; // its place in the row (0 … 4): which edge catches the light
@@ -3094,6 +3126,16 @@ namespace LevelGate.Progression
                     Ui.Detail(Ui.Img(Ui.Rect(_ticks, "T" + k, new Vector2(x0, 0), new Vector2(x0, 1), new Vector2(0, 0), new Vector2(k % 3 == 0 ? 14 : 5, 0)), Ui.Hex(Orange, k % 3 == 0 ? .55f : .3f)), k % 3 == 0 ? .55f : .3f).raycastTarget = false;
                 }
                 _ticks.gameObject.SetActive(false);
+                // more than the three pictures: one or two cards stacked behind, their edges peeking out bottom-right
+                for (int k = 2; k >= 1; k--)
+                {
+                    float o = 4 * k;
+                    var st = Ui.Rect(_body, "Stack" + k, Vector2.zero, Vector2.one, new Vector2(o, -o), new Vector2(o, -HeadH - 4 - o));
+                    var se = Ui.Img(st, Ui.Hex("#2b3438", k == 1 ? .75f : .45f), Ui.Chamfer()); se.type = Image.Type.Sliced; se.raycastTarget = false;
+                    var sf = Ui.Img(Ui.Fill(st, "In", 1), Ui.Hex("#0c0f11", .95f), Ui.Chamfer()); sf.type = Image.Type.Sliced; sf.raycastTarget = false;
+                    _stack[k - 1] = st.gameObject;
+                    st.gameObject.SetActive(false);
+                }
                 var card = Ui.Rect(_body, "Box", Vector2.zero, Vector2.one, Vector2.zero, new Vector2(0, -HeadH - 4));
                 // cut top-left / bottom-right corners like the game's prestige tiles (frame + face 2 px in = a cut outline)
                 _frame = Ui.Img(card, Border, Ui.Chamfer(), true);
@@ -3128,6 +3170,15 @@ namespace LevelGate.Progression
                 _handled.SetActive(false);
                 _selDots = Ui.Img(Ui.Fill(dotsMask, "SelDots"), new Color(1, 1, 1, .13f), Ui.DotGrid());
                 _selDots.type = Image.Type.Tiled; _selDots.raycastTarget = false; _selDots.enabled = false;
+                // picked: a bloom in the rank's colour and a light made of dots under the pictures, both drifting a little
+                // (their own canvas: moving them redraws only them), clipped to the card's cut shape
+                var lit = Ui.Fill(dotsMask, "Lights");
+                Ui.OwnCanvas(lit);
+                _selLights = lit.gameObject;
+                _selBloom = Ui.Detail(Ui.Img(Ui.Box(lit, "Bloom", new Vector2(.3f, .15f), Vector2.zero, new Vector2(460, 300)), new Color(1, 1, 1, .12f), Ui.Radial()), .12f);
+                _selDotLight = Ui.Detail(Ui.Img(Ui.Box(lit, "DotLight", new Vector2(.3f, .05f), Vector2.zero, new Vector2(420, 150)), new Color(1, 1, 1, .2f), Ui.HalftoneGlow()), .2f);
+                _selBloom.raycastTarget = _selDotLight.raycastTarget = false;
+                _selLights.SetActive(false);
                 // locked: a small lock top-left on the picture area, like CoD's locked unlocks
                 _cardLock = Ui.Img(Ui.Rect(inner, "Lock", new Vector2(0, 1), new Vector2(0, 1), new Vector2(Pad + 6, -Pad - 20), new Vector2(Pad + 18, -Pad - 6)), Ui.Hex("#c9cccd", .9f), Ui.Lock());
                 _cardLock.raycastTarget = false; _cardLock.enabled = false;
@@ -3225,6 +3276,8 @@ namespace LevelGate.Progression
                 var picks = CardPicks(items);
                 Ui.SetText(_head, level.ToString());
                 _cardBadge.Set(level, items.Count == 0);
+                // cards stacked behind: more than the three pictures (one), a lot more (two)
+                _stack[0].SetActive(items.Count > 3); _stack[1].SetActive(items.Count > 12);
                 // one emblem per page: on its first card, with the rank's name (the header shows yours)
                 _badge.Set(level, items.Count == 0);
                 _badge.Visible = _first;
@@ -3280,7 +3333,17 @@ namespace LevelGate.Progression
                     _sheen.rectTransform.anchorMin = _sheen.rectTransform.anchorMax = new Vector2(right ? .4f : left ? .6f : .5f, .7f);
                 }
                 _cur.enabled = current;       // a thin orange line: your level
-                _bloomFrame.enabled = current; _curScan.enabled = current; _ticks.gameObject.SetActive(current);
+                // the bloom around the border: orange on yours, the rank's colour on the picked one (CoD's coloured selection)
+                var rank = Ui.Hex(TierOf(_level).Rim);
+                var bc = current ? Ui.Hex(Orange) : Color.Lerp(rank, Color.white, .15f); bc.a = _bloomFrame.color.a; _bloomFrame.color = bc;
+                _bloomFrame.enabled = current || (sel && !locked); _curScan.enabled = current; _ticks.gameObject.SetActive(current);
+                if (_selLights.activeSelf != sel) _selLights.SetActive(sel);
+                if (sel)
+                {
+                    var light = Ui.Hex(TierOf(_level).Light);
+                    var b1 = Color.Lerp(rank, light, .3f); b1.a = _selBloom.color.a; _selBloom.color = b1;
+                    var b2 = Color.Lerp(light, Color.white, .2f); b2.a = _selDotLight.color.a; _selDotLight.color = b2;
+                }
                 if (_handled.activeSelf != (sel || current)) _handled.SetActive(sel || current); // detail only on the focal cards
                 if (current && !sel) FadeTo(_frame, Ui.Hex(Orange, .85f)); // its border glows orange
                 _cardBadge.Still = !(sel || current); // five emblems playing at once was busy (and cost frames)

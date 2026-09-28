@@ -26,13 +26,13 @@ namespace LevelGate.Progression
         public const string Guid = "com.kkyangg.levelgate.progression";
         public const string Name = "LevelGate Progression";
         // MAJOR.MINOR.PATCH — see CHANGELOG.md
-        public const string Version = "0.9.65";
+        public const string Version = "0.9.66";
 
         internal static ProgressionPlugin Instance;
         internal static ConfigEntry<KeyboardShortcut> OpenKey;
         internal static ConfigEntry<KeyboardShortcut> DumpKey;
         internal static ConfigEntry<bool> InjectButton, CharacterEmblem, ReduceMotion;
-        internal static ConfigEntry<int> TextSize, Detailing;
+        internal static ConfigEntry<int> TextSize, Detailing, PatternOpacity, DetailAnimation;
         internal static ConfigEntry<string> ButtonTemplate;
         internal static ConfigEntry<string> ButtonLabel;
         internal static ConfigEntry<bool> VerboseLog;
@@ -112,10 +112,17 @@ namespace LevelGate.Progression
                 "After you gain experience (a raid, a quest…), the next time you open the screen the XP bar fills up from where you last saw it: " +
                 "level ups, the new level number, a new rank emblem. Click or Space skips it. Off: the screen just shows your current XP.", 95));
             Detailing = Config.Bind(Gfx, "UIDetailing", 100, Desc(
-                "How much surface detail the screen has, all in one: scratches, smudges and fingerprints, film grain, the background pattern, " +
-                "corner marks, edge lights, dither, scanlines, the reflection on the picked card, the bloom around your card and behind the rank emblems. " +
+                "How much surface detail the screen has, all in one: scratches, smudges and fingerprints, film grain, " +
+                "corner marks, edge lights, dither, scanlines, the reflection on the picked card, the coloured bloom and dotted lights on the picked card, the bloom around your card and behind the rank emblems, the XP bar's tracer. " +
                 "100 = the full look, 0 = clean and flat (those layers aren't drawn at all). Performance Mode turns them all off.",
                 85, new AcceptableValueRange<int>(0, 100)));
+            DetailAnimation = Config.Bind(Gfx, "DetailAnimation", 100, Desc(
+                "How much the lights move: the red glow drifting, the rank emblem's glow breathing, the picked card's coloured bloom and dotted light, " +
+                "the light under the big picture, and the tracer running along the XP bar. 100 = a gentle drift, 0 = all still. Off with Reduce Motion / Performance Mode.",
+                84, new AcceptableValueRange<int>(0, 100)));
+            PatternOpacity = Config.Bind(Gfx, "PatternOpacity", 100, Desc(
+                "How visible the background pattern is, on its own (UI Detailing no longer changes it). 100 = as designed, 0 = no pattern (not worked out or drawn).",
+                88, new AcceptableValueRange<int>(0, 100)));
             // the old Wear And Scratches (0–5): now part of UI Detailing (hidden; carried over once below)
             Scratches = Config.Bind(Gfx, "Scratches", 2f, new ConfigDescription(
                 "Replaced by UI Detailing.", null, new ConfigurationManagerAttributes { Browsable = false }));
@@ -128,13 +135,14 @@ namespace LevelGate.Progression
             Vignette = Config.Bind(Gfx, "Vignette", 1f, Desc("How dark the screen's corners are (1 = the original, 0 = none).", 84, new AcceptableValueRange<float>(0f, 3f)));
             RedGlow = Config.Bind(Gfx, "RedGlow", 1.1f, Desc("How strong the red glow in the top-right is (1 = the original, 0 = none).", 83, new AcceptableValueRange<float>(0f, 3f)));
             Pattern = Config.Bind(Gfx, "Pattern", BackgroundPattern.Dots, Desc(
-                "The faint pattern behind the screen: Dots (grid of dots), Streaks (vertical streaks), Damascus 1 (busy topographic lines), Damascus 2 (big organic flowing lines), Damascus 3 (rings), Damascus 4 (mirrored lines), Marble (mirrored marbling), Pixels (LED wall with light bands), Terrain (3D ridge lines), Random (a different one each open). Its strength follows UI Detailing.",
-                87));
+                "The faint pattern behind the screen: Dots (grid of dots), Streaks (vertical streaks), Damascus 1 (busy topographic lines), Damascus 2 (big organic flowing lines), Damascus 3 (rings), Damascus 4 (mirrored lines), Marble (mirrored marbling), Pixels (LED wall with light bands), Terrain (3D ridge lines), Random (a different one each open). Its strength: Background Pattern Opacity.",
+                89));
             PatternMotion = Config.Bind(Gfx, "PatternMotion", 1f, Desc(
                 "How fast the animated patterns move (0 = still, 1 = a gentle drift). Only while the screen is open; it stops completely when you leave it.",
-                86, new AcceptableValueRange<float>(0f, 3f)));
+                87, new AcceptableValueRange<float>(0f, 3f)));
             Pattern.SettingChanged += (_, __) => ProgScreen.PatternChanged();
             Detailing.SettingChanged += (_, __) => ProgScreen.ApplyLook();
+            PatternOpacity.SettingChanged += (_, __) => ProgScreen.ApplyLook();
             Vignette.SettingChanged += (_, __) => ProgScreen.ApplyLook();
             RedGlow.SettingChanged += (_, __) => ProgScreen.ApplyLook();
             RefreshIcons = Config.Bind(Gfx, "RefreshIcons", false, Desc(
@@ -238,7 +246,7 @@ namespace LevelGate.Progression
                 ["HideMainMenu"] = "Hide Main Menu While Open", ["BlurBackground"] = "Blur Background", ["SoundVolume"] = "Sound Volume",
                 ["UseGameSounds"] = "Use Game Sounds", ["CharacterEmblem"] = "Rank Emblem On Character Screen", ["TextSize"] = "Text Size (%)", ["ReduceMotion"] = "Reduce Motion",
                 ["Quality"] = "Picture Quality", ["XpAnimation"] = "Level Up Animation", ["RefreshIcons"] = "Redraw All Item Pictures",
-                ["Pattern"] = "Background Pattern", ["PatternMotion"] = "Pattern Animation Speed", ["UIDetailing"] = "UI Detailing (%)",
+                ["Pattern"] = "Background Pattern", ["PatternMotion"] = "Pattern Animation Speed", ["UIDetailing"] = "UI Detailing (%)", ["DetailAnimation"] = "Detail Animation (%)", ["PatternOpacity"] = "Background Pattern Opacity (%)",
                 ["Vignette"] = "Dark Corners", ["RedGlow"] = "Red Glow",
                 ["Levels"] = "Levels To Play", ["PlayLevelUp"] = "Play Level Ups", ["PlayNextRank"] = "Play Next Rank", ["PlayUnlock"] = "Play Card Unlocks",
                 ["ButtonLabel"] = "Menu Button Text", ["CopyButton"] = "Copy Look Of Button", ["TopMargin"] = "Top Margin", ["BottomMargin"] = "Bottom Margin",
