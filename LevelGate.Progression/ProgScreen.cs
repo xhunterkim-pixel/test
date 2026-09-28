@@ -183,6 +183,15 @@ namespace LevelGate.Progression
         private static int _sLogLines;
 
         /// <summary>The screen is thrown away and built again on the next open (text size changed…).</summary>
+        private static bool _rebuildOnClose;
+
+        /// <summary>0.9.9 F12 dials baked in at build: applied the next time the screen opens (not mid-drag of a slider).</summary>
+        internal static void PolishChanged(string why)
+        {
+            if (IsOpen) { if (!_rebuildOnClose) L.Info($"{why}: close and reopen the screen to see it"); _rebuildOnClose = true; }
+            else Rebuild(why);
+        }
+
         public static void Rebuild(string why)
         {
             if (IsOpen) Close(why);
@@ -208,6 +217,7 @@ namespace LevelGate.Progression
             _flooded.Clear(); // MW 2: the flooded cards go dark again next visit
             _newFrom = 0; // the NEW tags themselves are kept (NewTags): they go when clicked / looked at, not when the screen closes
             _canvas.SetActive(false);
+            if (_rebuildOnClose) { _rebuildOnClose = false; Rebuild("0.9.9 dials changed"); } // applied on the next open
             MenuHook.SetOn(false);
             HideMenu(false);
             // the big renders' stash icons back to stash size: right away if we stay on the main menu; if the game is switching
@@ -278,7 +288,7 @@ namespace LevelGate.Progression
             grid.raycastTarget = false;
             // Arena-style colour bloom: red, strongest on the right edge and fading out to the left;
             // it always glows a little and flares up while the picked level is still locked
-            _bloom.Clear(); _panelFrames.Clear();
+            _bloom.Clear(); _panelFrames.Clear(); _edges.Clear(); _heroSub = null;
             // kept to the top half (right side), so it doesn't pull the eye to the level cards in the bottom corner
             _bloom.Add(Ui.Img(Ui.Rect(root, "Bloom", new Vector2(.25f, 0), Vector2.one, Vector2.zero, Vector2.zero), new Color(0, 0, 0, 0), Ui.CornerGlow()));
             _bloom.Add(Ui.Img(Ui.Box(root, "BloomCore", new Vector2(1, .66f), Vector2.zero, new Vector2(1200, 1300)), new Color(0, 0, 0, 0), Ui.Radial()));
@@ -373,7 +383,9 @@ namespace LevelGate.Progression
         private static RectTransform Panel(RectTransform parent, string name, Vector2 aMin, Vector2 aMax, Vector2 oMin, Vector2 oMax)
         {
             var frame = Ui.Rect(parent, name, aMin, aMax, oMin, oMax);
-            _panelFrames.Add(Ui.Img(frame, PanelLine));
+            var line = Ui.Img(frame, PanelLine);
+            _panelFrames.Add(line);
+            FadeEdges(line, BorderWidth); // 0.9.9: MW4 frames fade toward their ends
             Ui.CornerMarks(frame, Ui.Hex("#6f7375", .55f)); // CoD-style registration marks at the corners
             // light catches the border that faces the middle of the screen: the left panel's right edge, the right panel's
             // left edge, the centre panel's top edge (a glossy line fading out at both ends)
@@ -404,12 +416,12 @@ namespace LevelGate.Progression
 
         private static void BuildMicroText()
         {
-            Color c = Ui.Hex("#7d8285", .42f);
+            Color c = Ui.Hex("#7d8285", .42f * Polish.MicroK); // 0.9.9: Micro Labels %
             Component Micro(RectTransform parent, string name, Vector2 aMin, Vector2 aMax, Vector2 oMin, Vector2 oMax, TextAnchor al)
             {
                 var l = Ui.Label(Ui.Rect(parent, name, aMin, aMax, oMin, oMax), "Text", "", 8.5f, c, al, false, 2);
                 ((Graphic)l).raycastTarget = false;
-                Ui.Detail((Graphic)l, c.a);
+                Ui.Detail((Graphic)l, c.a, false);
                 return l;
             }
             if (_focusList != null) _microList = Micro(_focusList, "Micro", Vector2.zero, new Vector2(1, 0), new Vector2(PanelPad, 2), new Vector2(-PanelPad, 12), TextAnchor.LowerLeft);
@@ -756,13 +768,14 @@ namespace LevelGate.Progression
             _heroDiamond = Ui.Img(dia, Color.white);
             _heroDiamondIn = Ui.Img(Ui.Fill(dia, "In", 1.5f), Face);
             _heroDiamond.raycastTarget = _heroDiamondIn.raycastTarget = false;
+            BuildHeroSubtitle(face); // 0.9.9: MW4's line under the name
         }
 
         /// <summary>The hero's caption and rank pips for the featured item.</summary>
         private static void HeroFor(ProgItem it)
         {
             if (_heroKind == null) return;
-            if (it == null) { Ui.SetText(_heroKind, ""); Ui.SetText(_heroName, ""); foreach (var p in _heroPips) p.enabled = false; _heroDiamond.enabled = _heroDiamondIn.enabled = false; return; }
+            if (it == null) { HeroSubtitleFor(null); Ui.SetText(_heroKind, ""); Ui.SetText(_heroName, ""); foreach (var p in _heroPips) p.enabled = false; _heroDiamond.enabled = _heroDiamondIn.enabled = false; return; }
             var tier = TierOf(it.Level);
             var light = Ui.Hex(tier.Light);
             string kind = KindOf(it.Tpl);
@@ -770,6 +783,7 @@ namespace LevelGate.Progression
             Ui.SetText(_heroKind, kind);
             Ui.SetColor(_heroKind, Color.Lerp(Ui.Hex(tier.Rim), light, .5f));
             Ui.SetText(_heroName, it.Short);
+            HeroSubtitleFor(it);
             TitleGlitch(_heroName); // MW 7
             int into = Mathf.Clamp(it.Level - tier.From + 1, 1, 5);
             for (int i = 0; i < 5; i++)
@@ -777,7 +791,8 @@ namespace LevelGate.Progression
                 _heroPips[i].enabled = true;
                 // the pips in Tarkov's own loot colour for the item (red / violet / blue / green / orange / yellow, from its
                 // background in the stash); ordinary items keep the rank's colour
-                var pip = TierColor(it.Level); // Tarkov's loot order across the pages: grey → green → blue → purple → red
+                var pip = Polish.NeutralPips ? (Me > 0 && it.Level == Me ? Ui.Hex(Orange) : Ui.Hex("#e4e7e8")) // 0.9.9: state colours only
+                    : TierColor(it.Level); // Tarkov's loot order across the pages: grey → green → blue → purple → red
                 bool lit = i < into;
                 _heroPips[i].sprite = Ui.PipBox(lit);
                 _heroPips[i].color = lit ? pip : new Color(1, 1, 1, .32f);
@@ -785,7 +800,7 @@ namespace LevelGate.Progression
             // the diamond: the next rank — lit (orange) on a rank's last level, where the next level up is a new rank
             _heroDiamond.enabled = _heroDiamondIn.enabled = true;
             bool rankUpNext = TierOf(it.Level + 1).From != tier.From;
-            _heroDiamond.color = rankUpNext ? Ui.Hex(Orange, .9f) : new Color(1, 1, 1, .2f);
+            _heroDiamond.color = rankUpNext ? (Polish.NeutralPips ? new Color(.9f, .92f, .93f, .9f) : Ui.Hex(Orange, .9f)) : new Color(1, 1, 1, .2f);
         }
 
         private static void BuildFeatured(RectTransform top)
@@ -1885,6 +1900,8 @@ namespace LevelGate.Progression
         {
             L.Step("ShowLevel " + level);
             level = Mathf.Clamp(level, 1, ProgData.MaxLevel);
+            // clicks (cards, page arrows, Home) light the way you went, like A / D: back to an earlier level = right to left
+            if (level != _level && Time.unscaledTime - _shineDirAt > .05f) ShineWay(level < _level ? -1 : 1);
             if (!force && level == _shownLevel && InWindow(level)) { _level = level; UpdateSelection(); return; } // already showing it
             int page = (level - 1) / PerPage;
             _level = level;
@@ -2310,6 +2327,7 @@ namespace LevelGate.Progression
             var v = new TileView { Item = it, Rt = rt, Locked = !reached };
             v.Frame = Ui.Img(rt, Border, Ui.Chamfer(), true); // cut corners, like the game's prestige reward tiles
             v.Frame.type = Image.Type.Sliced;
+            FadeEdges(v.Frame, 1);
             var inner = Ui.Fill(rt, "Inner", 1);
             v.Face = Ui.Img(inner, Face, Ui.Chamfer());
             v.Face.type = Image.Type.Sliced;
@@ -2430,11 +2448,38 @@ namespace LevelGate.Progression
         /// <summary>Shows text in the tooltip just above rt (null hides it).</summary>
         private static void ShowTip(RectTransform rt, string name) => ShowTip(rt, name, false);
 
+        // Full-name tooltip only after resting on something (F12 TooltipDelay, 1 s): passing over tiles doesn't flash it up.
+        private static RectTransform _tipWantRt;
+        private static string _tipWantName;
+        private static bool _tipWantBelow;
+        private static float _tipWantAt;
+
         /// <summary>below: under the element instead of above it (card pictures: above would cover the rank label).</summary>
         private static void ShowTip(RectTransform rt, string name, bool below)
         {
             if (_tip == null) return;
-            if (rt == null || string.IsNullOrEmpty(name)) { _tip.gameObject.SetActive(false); return; }
+            if (rt == null || string.IsNullOrEmpty(name)) { _tipWantRt = null; _tip.gameObject.SetActive(false); return; }
+            float delay = ProgressionPlugin.TestTipDelay?.Value ?? 0f;
+            if (delay > 0.01f && rt != _tipWantRt)
+            {
+                _tipWantRt = rt; _tipWantName = name; _tipWantBelow = below; _tipWantAt = Time.unscaledTime + delay;
+                _tip.gameObject.SetActive(false);
+                return;
+            }
+            _tipWantRt = rt;
+            PlaceTip(rt, name, below);
+        }
+
+        /// <summary>Called every frame: shows the waiting tooltip once its delay has passed (and its element is still there).</summary>
+        private static void TickTip()
+        {
+            if (_tipWantRt == null || _tip == null || _tip.gameObject.activeSelf || Time.unscaledTime < _tipWantAt) return;
+            if (!_tipWantRt || !_tipWantRt.gameObject.activeInHierarchy) { _tipWantRt = null; return; }
+            PlaceTip(_tipWantRt, _tipWantName, _tipWantBelow);
+        }
+
+        private static void PlaceTip(RectTransform rt, string name, bool below)
+        {
             Ui.SetText(_tipText, name);
             float w = Ui.PreferredWidth(_tipText, name) + S3 * 2;
             _tip.sizeDelta = new Vector2(Mathf.Min(w, 760), 26); // (420 cut long tips off: the text ran past the box and the screen)
@@ -2821,6 +2866,12 @@ namespace LevelGate.Progression
         private static void Feature(ProgItem it)
         {
             L.Step("Feature " + it?.Tpl);
+            // a clicked tile: the light goes the way the pick moved in the list (up / left = right to left), like W / S
+            if (it != null && _featTpl != null && Time.unscaledTime - _shineDirAt > .05f)
+            {
+                int from = _tileOrder.FindIndex(v => v?.Item?.Tpl == _featTpl), to = _tileOrder.FindIndex(v => v?.Item?.Tpl == it.Tpl);
+                if (from >= 0 && to >= 0 && from != to) ShineWay(to < from ? -1 : 1);
+            }
             EndReveal(); _revealWanted = it != null; _featLevel = it?.Level ?? 0; // a new pick plays the load-in once its picture shows
             _bloomAt = 0; // item bloom: recoloured this frame, not up to 0.2 s later
             // the previous item's big picture may still be on its way: keep collecting it (else it came back blurry later)
@@ -3047,7 +3098,7 @@ namespace LevelGate.Progression
             if (_bloom.Count > 0 && _bloom[0] != null) _bloom[0].color = new Color(.85f, .14f, .08f, Mathf.Clamp01(Mathf.Lerp(.07f, .1f, m) * glow));
             if (_bloom.Count > 1 && _bloom[1] != null) _bloom[1].color = new Color(.95f, .2f, .1f, Mathf.Clamp01(Mathf.Lerp(.05f, .08f, m) * glow));
             var border = PanelLine; // the panel borders stay as they are (only the glow turns red)
-            foreach (var f in _panelFrames) if (f != null) f.color = border;
+            foreach (var f in _panelFrames) if (f != null) PaintFrame(f, border);
         }
 
         private static RectTransform _rail, _railFill;
@@ -3124,9 +3175,10 @@ namespace LevelGate.Progression
         private static void FadeTo(Graphic g, Color to, bool instant = false)
         {
             if (g == null) return;
-            if (instant || !IsOpen) { _fades.Remove(g); g.color = to; return; }
-            if (g.color == to) { _fades.Remove(g); return; }
-            _fades[g] = (g.color, to, Time.unscaledTime);
+            if (instant || !IsOpen) { _fades.Remove(g); PaintFrame(g, to); return; }
+            var now = FrameColor(g);
+            if (now == to) { _fades.Remove(g); return; }
+            _fades[g] = (now, to, Time.unscaledTime);
         }
 
         private static readonly List<Graphic> _fadeDone = new List<Graphic>();
@@ -3140,7 +3192,7 @@ namespace LevelGate.Progression
             {
                 if (kv.Key == null) { _fadeDone.Add(kv.Key); continue; }
                 float t = Mathf.Clamp01((now - kv.Value.Start) / .12f);
-                kv.Key.color = Color.Lerp(kv.Value.From, kv.Value.To, 1 - (1 - t) * (1 - t));
+                PaintFrame(kv.Key, Color.Lerp(kv.Value.From, kv.Value.To, 1 - (1 - t) * (1 - t)));
                 if (t >= 1) _fadeDone.Add(kv.Key);
             }
             foreach (var g in _fadeDone) _fades.Remove(g);
@@ -3149,6 +3201,7 @@ namespace LevelGate.Progression
         // ---------------------------------------------------------------- every frame
 
         private static float _restoreAgainAt = -1, _openedAt = -10;
+        private static bool _xpBusy; // the XP / level-up animation is playing (ambient movers rest meanwhile)
         private static CanvasGroup _fade;
         private static bool _xpKnown;
 
@@ -3162,6 +3215,7 @@ namespace LevelGate.Progression
             TickPerf();       // F12 > Advanced > Performance Readout
             TickLights();     // the drifting lights, the XP bar's tracer (F12 Detail Animation)
             SweepPictures();  // no picture left pointing at a deleted texture (the "wrong pictures")
+            TickTip();        // the full-name tooltip waits for a resting pointer (F12 TooltipDelay)
             // the game can fade its main menu back in behind us (its own tween after a screen change): keep it hidden while open
             if (_menuGroup != null && (_menuGroup.alpha > 0 || _menuGroup.blocksRaycasts)) { _menuGroup.alpha = 0; _menuGroup.blocksRaycasts = false; }
             if (!_xpKnown && ProgData.HasExpTable) { _xpKnown = true; UpdateXp(); } // the SPT server's answer came in
@@ -3177,6 +3231,7 @@ namespace LevelGate.Progression
                 return;
             }
             bool xpBusy = RunXpAnim();
+            _xpBusy = xpBusy;
             if (!IsOpen) return; // Esc during the animation closed the screen
             bool window = GameWindowOpen();
             // the game may close its window on this same Esc before we look: a window seen a moment ago still owns the key
@@ -3455,14 +3510,14 @@ namespace LevelGate.Progression
             }
             private SelFrame _selFx;
             private readonly GameObject _selLights;
-            private readonly Image _selBloom, _selDotLight;
+            private readonly Image _selBloom, _selDotLight, _selTint;
             private float _lightSeed = UnityEngine.Random.value * 10;
 
             /// <summary>The picked card's inner bloom takes its main item's colours (item bloom); null: back to the rank's.</summary>
             public void ItemBloom(Color? c, float alpha, float size)
             {
                 if (_selBloom == null || !_selLights.activeSelf) return;
-                if (c.HasValue) { var col = c.Value; col.a = alpha; if (_selBloom.color != col) _selBloom.color = col; }
+                if (c.HasValue) { var col = c.Value; col.a = Mathf.Clamp01(alpha * Polish.AmbientLightK); if (_selBloom.color != col) _selBloom.color = col; }
                 var want = new Vector2(460, 300) * size;
                 if (_selBloom.rectTransform.sizeDelta != want) _selBloom.rectTransform.sizeDelta = want;
             }
@@ -3482,6 +3537,15 @@ namespace LevelGate.Progression
                 float t = phase + _lightSeed;
                 _selBloom.rectTransform.anchoredPosition = new Vector2(60 * amount * Mathf.Sin(t * .31f), 14 * amount * Mathf.Sin(t * .23f + 1));
                 _selDotLight.rectTransform.anchoredPosition = new Vector2(30 * amount * Mathf.Sin(t * .19f + 2), 4 * amount * Mathf.Sin(t * .37f));
+                if (_selTint != null)
+                {
+                    // Mixed: a soft accent drifting between purple and pink on the other side of the card from the main bloom
+                    float on = Polish.MixedLight ? 1f : 0f;
+                    var tc = Color.Lerp(new Color(.62f, .42f, 1f), new Color(1f, .45f, .72f), .5f + .5f * Mathf.Sin(t * .13f));
+                    tc.a = Mathf.Clamp01(.075f * Polish.AmbientLightK * Ui.DetailK * on);
+                    if (_selTint.color != tc) _selTint.color = tc;
+                    _selTint.rectTransform.anchoredPosition = new Vector2(40 * amount * Mathf.Sin(t * .23f + 4), 18 * amount * Mathf.Sin(t * .17f + 2));
+                }
             }
             private readonly GameObject _handled;
             private readonly Badge _cardBadge;
@@ -3686,6 +3750,7 @@ namespace LevelGate.Progression
                 // cut top-left / bottom-right corners like the game's prestige tiles (frame + face 2 px in = a cut outline)
                 _frame = Ui.Img(card, Border, Ui.Chamfer(), true);
                 _frame.type = Image.Type.Sliced;
+                FadeEdges(_frame, 2);
                 var inner = Ui.Fill(card, "In", 2);
                 _bg = Ui.Img(inner, Ui.Hex("#12181b", .88f), Ui.Chamfer(), true);
                 _bg.type = Image.Type.Sliced;
@@ -3733,9 +3798,13 @@ namespace LevelGate.Progression
                 var lit = Ui.Fill(dotsMask, "Lights");
                 Ui.OwnCanvas(lit);
                 _selLights = lit.gameObject;
-                _selBloom = Ui.Detail(Ui.Img(Ui.Box(lit, "Bloom", new Vector2(.6f, .5f), Vector2.zero, new Vector2(460, 300)), new Color(1, 1, 1, .1f), Ui.Radial()), .1f);
+                // 0.9.9: lighting, not decoration — Ambient Light % (not Decor Noise); Mixed adds a pink / purple accent light
+                float al = Polish.AmbientLightK;
+                _selBloom = Ui.Detail(Ui.Img(Ui.Box(lit, "Bloom", new Vector2(.6f, .5f), Vector2.zero, new Vector2(460, 300)), new Color(1, 1, 1, .1f * al), Ui.Radial()), Mathf.Clamp01(.1f * al), false);
+                _selTint = Ui.Img(Ui.Box(lit, "Tint", new Vector2(.22f, .28f), Vector2.zero, new Vector2(380, 260)), new Color(.7f, .45f, 1f, 0f), Ui.Radial());
+                _selTint.raycastTarget = false;
                 // bottom-right, clear of the name and "ASSAULT RIFLE · +9 ITEMS" on the left (0.9.66 lit them up and they were hard to read)
-                _selDotLight = Ui.Detail(Ui.Img(Ui.Box(lit, "DotLight", new Vector2(.8f, .04f), Vector2.zero, new Vector2(300, 110)), new Color(1, 1, 1, .16f), Ui.HalftoneGlow()), .16f);
+                _selDotLight = Ui.Detail(Ui.Img(Ui.Box(lit, "DotLight", new Vector2(.8f, .04f), Vector2.zero, new Vector2(300, 110)), new Color(1, 1, 1, .16f * al), Ui.HalftoneGlow()), Mathf.Clamp01(.16f * al), false);
                 _selBloom.raycastTarget = _selDotLight.raycastTarget = false;
                 _selLights.SetActive(false);
                 // locked: a small lock top-left on the picture area, like CoD's locked unlocks
@@ -3756,7 +3825,7 @@ namespace LevelGate.Progression
                 _curScan.type = Image.Type.Tiled; _curScan.raycastTarget = false; _curScan.enabled = false; Ui.Detail(_curScan, .045f);
                 _cur = Ui.Img(Ui.Rect(inner, "Current", new Vector2(0, 1), Vector2.one, new Vector2(10, -3), Vector2.zero), Ui.Hex(Orange));
                 // your level: MW's "LEVEL_ACTIVE" system tag top-right, and a crosshair tick on the card's left edge
-                _activeTag = Ui.Label(Ui.Rect(inner, "Active", new Vector2(.45f, 1), Vector2.one, new Vector2(0, -12), new Vector2(-12, -3)), "Text", "", 8.5f, Ui.Hex(Orange, .85f), TextAnchor.MiddleRight, false, 1.5f);
+                _activeTag = Ui.Label(Ui.Rect(inner, "Active", new Vector2(.45f, 1), Vector2.one, new Vector2(0, -12), new Vector2(-12, -3)), "Text", "", 8.5f, Ui.Hex(Orange, .85f * Polish.MicroK), TextAnchor.MiddleRight, false, 1.5f);
                 ((Graphic)_activeTag).raycastTarget = false;
                 _activeTag.gameObject.SetActive(false);
                 var mark = Ui.Rect(card, "ActiveMark", new Vector2(0, .5f), new Vector2(0, .5f), new Vector2(-12, -8), new Vector2(1, 8));
@@ -3976,7 +4045,7 @@ namespace LevelGate.Progression
                     lr.offsetMax = new Vector2(-S3 - w - S1, lr.offsetMax.y);
                 }
                 // future levels step back (unless picked or under the mouse)
-                _baseAlpha = locked && !sel && !_hover && !empty ? .85f : 1f;
+                _baseAlpha = empty || sel || _hover || current ? 1f : locked ? Polish.CardLocked : Polish.CardRest; // 0.9.81: .85 locked, 1 the rest
                 // the pictures carry the weight: full only on the viewing / current card (or under the mouse)
                 float pa = sel || current || _hover ? 1f : locked ? .85f : .9f; // .65 made future levels' items hard to make out
                 // locked levels clearly darker: the pictures dimmed (a little less while hovered / picked) — this used to be

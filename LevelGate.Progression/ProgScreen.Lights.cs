@@ -19,7 +19,9 @@ namespace LevelGate.Progression
 
         private static void TickLights()
         {
-            float k = MotionK;
+            // 0.9.9: the idle movers at Ambient Motion %, resting while a level up / XP fill / picture load-in plays
+            bool busy = _wallA > .01f || _xpBusy || Time.unscaledTime - _revealAt < RevealTime + .3f;
+            float k = MotionK * Polish.AmbientK * Polish.Quiet(busy, Mathf.Min(Time.unscaledDeltaTime, .1f));
             TickTracer(k);
             TickMotes(k);
             TickWave(k);

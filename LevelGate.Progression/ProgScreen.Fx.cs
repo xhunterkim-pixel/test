@@ -73,7 +73,7 @@ namespace LevelGate.Progression
         }
 
         /// <summary>F12 > CURRENTLY TESTING > Hover Glitch, as a multiple of 0.9.70's strength (default 50%).</summary>
-        private static float GlitchK => (ProgressionPlugin.TestGlitch?.Value ?? 23) / 100f;
+        private static float GlitchK => (ProgressionPlugin.TestGlitch?.Value ?? 23) / 100f * Polish.FlourishK;
 
         /// <summary>Hover: glitch streaks slide across and fade (Motion: Fast × 1.8, linear, stepped flicker on the shared clock).</summary>
         private static void PlayGlitch(RectTransform host)
@@ -99,7 +99,7 @@ namespace LevelGate.Progression
         private static void PlayShine(RectTransform host)
         {
             bool back = _shineDir < 0 && Time.unscaledTime - _shineDirAt < .6f;
-            float strength = (ProgressionPlugin.TestShine?.Value ?? 285) / 100f, width = (ProgressionPlugin.TestShineWidth?.Value ?? 157) / 100f;
+            float strength = (ProgressionPlugin.TestShine?.Value ?? 285) / 100f * Polish.FlourishK, width = (ProgressionPlugin.TestShineWidth?.Value ?? 157) / 100f;
             if (host == null || Motion.Still || Ui.DetailK <= 0 || strength <= 0) return;
             var f = FxOf(host); var sh = f.Shine;
             sh.enabled = true;

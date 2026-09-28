@@ -1,4 +1,4 @@
-# LevelGate Progression (0.9.79, test build)
+# LevelGate Progression (0.9.9, test build)
 
 A Call of Duty style **Progression** screen inside Tarkov's main menu. It adds a
 **PROGRESSION** button to the menu bar next to Character, Trading, Flea Market and the rest.
@@ -18,6 +18,29 @@ A Call of Duty style **Progression** screen inside Tarkov's main menu. It adds a
   - P or Esc closes the screen.
 - It works on its own and never changes LevelGate. It only **reads**
   `BepInEx\plugins\LevelGate\config\level_requirements.json`, and picks up changes to that file while the game runs.
+
+## 0.9.9 — polish pass (all in F12 › CURRENTLY TESTING)
+
+**Polish** switches the whole pass off, to get exactly 0.9.81 back for a before / after comparison. The dials:
+
+- **Decor Noise:** scanlines, rulers, corner marks, scratches, dither and inner glows at a % of 0.9.81.
+- **Micro Labels:** the tiny system labels at a % of 0.9.81.
+- **Border Fade:** MW4 frames. Borders are full strength in the middle of each side and fade toward the ends (panels, tiles, cards).
+- **Ambient Motion:** drifting lights, breathing emblems and background pattern drift at a % of 0.9.81.
+- **Quiet During Effects:** the idle movers rest while a level up, the XP fill or a picture load-in plays.
+- **Flourish:** selection shine, hover glitch and title glitch at a % of their own settings.
+- **Ambient Light / Ambient Light Colours:** the picked card's soft lights are stronger. Mixed adds a drifting pink / purple accent.
+- **Card Rest / Card Locked:** how far the bottom cards that are neither yours nor viewed step back.
+- **Small Text Minimum:** information text is never smaller than this at 1080p.
+- **Neutral Rank Pips:** state colours only (grey, orange for your level). Red is kept for unmet requirements.
+- **Line Under Name / its opacity:** MW4's grey italic line under the big name (the description's first sentence, or the full name).
+- **Tooltip Delay:** the full-name tooltip waits until you rest on a tile (1 s).
+
+Other changes:
+- Clicking an earlier level card or an earlier tile runs the light sweep right to left, like A / W.
+- XP Bar Edge is fixed at **Shadow** (your pick).
+
+Build-time dials apply the next time the screen opens (close and reopen with P). Every change is written to the log.
 
 ## Install
 Copy `BepInEx\plugins\LevelGateProgression\` (LevelGate.Progression.dll + eft-logo.png) into your SPT folder.

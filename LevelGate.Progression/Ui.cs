@@ -90,6 +90,9 @@ namespace LevelGate.Progression
             // F12 Text Size: the small text grows (labels, tags, names); big numbers and titles stay as designed
             int pct = ProgressionPlugin.TextSize?.Value ?? 100;
             if (pct != 100 && size <= 15) size = Mathf.Round(size * pct / 100f * 2) / 2;
+            // 0.9.9 Small Text: information text (9 px and up) never smaller than this; decorative micro text (under 9) stays
+            float floor = ProgScreen.Polish.SmallText;
+            if (floor > 0 && size >= 9 && size < floor) size = floor;
             var tmp = TmpType;
             if (tmp != null)
             {
@@ -138,6 +141,8 @@ namespace LevelGate.Progression
         }
 
         private static Font TryFont(string name) { try { return Resources.GetBuiltinResource<Font>(name); } catch { return null; } }
+
+        internal static void SetEnumPublic(Component c, string prop, string value) => SetEnum(c, prop, value);
 
         private static void SetEnum(Component c, string prop, string value)
         {
@@ -1059,17 +1064,20 @@ namespace LevelGate.Progression
         internal static Image AddGrit(Image img, float alpha)
         {
             if (Grits.Count > 3000) Grits.RemoveAll(x => x.Img == null);
+            alpha *= ProgScreen.Polish.DecorK; // 0.9.9 Decor Noise
             Grits.Add((img, alpha));
             Fade(img, alpha * GritK);
             return img;
         }
 
         /// <summary>A texture detail (not information): registered and shown at the current detailing (culled at 0).</summary>
-        internal static T Detail<T>(T g, float alpha) where T : Graphic
+        internal static T Detail<T>(T g, float alpha, bool decor = true) where T : Graphic
         {
             if (Details.Count > 3000) Details.RemoveAll(x => x.G == null); // tiles come and go while browsing
-            Details.Add((g, alpha));
-            Fade(g, alpha * DetailK);
+            // 0.9.9 Decor Noise: the decorative layers at a % of 0.9.81 (micro labels have their own dial: decor false)
+            float a = decor ? alpha * ProgScreen.Polish.DecorK : alpha;
+            Details.Add((g, a));
+            Fade(g, a * DetailK);
             return g;
         }
 

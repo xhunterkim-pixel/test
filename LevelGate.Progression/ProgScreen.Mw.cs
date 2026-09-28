@@ -190,7 +190,8 @@ namespace LevelGate.Progression
         /// <summary>The title just changed: for a moment it smears sideways in red and cyan copies, then settles.</summary>
         private static void TitleGlitch(Component title)
         {
-            if (!Mw(7) || Motion.Still || title == null || !title.gameObject.activeInHierarchy || _keepPickTpl != null) return;
+            if (!Mw(7) || Motion.Still || title == null || !title.gameObject.activeInHierarchy || _keepPickTpl != null || Polish.FlourishK < .05f) return;
+            float fk = Mathf.Min(1f, Polish.FlourishK);
             var g = GhostsOf(title);
             string text = Refl.Get(title, "text") as string ?? "";
             foreach (var x in g) { Ui.SetText(x, text); x.gameObject.SetActive(true); }
@@ -201,8 +202,8 @@ namespace LevelGate.Progression
                 {
                     float jitter = (float)(_glitchRng.NextDouble() * 2 - 1);
                     // half of 0.9.74's (asked for after testing): smaller offsets, fainter copies
-                    ((RectTransform)g[i].transform).anchoredPosition = new Vector2((i == 0 ? -1 : 1) * (2 + 5 * jitter) * v, (_glitchRng.NextDouble() < .3 ? 1 : 0) * v);
-                    Ui.SetColor(g[i], i == 0 ? new Color(1f, .25f, .3f, .275f * v) : new Color(.3f, .9f, 1f, .275f * v));
+                    ((RectTransform)g[i].transform).anchoredPosition = new Vector2((i == 0 ? -1 : 1) * (2 + 5 * jitter) * v * fk, (_glitchRng.NextDouble() < .3 ? 1 : 0) * v * fk);
+                    Ui.SetColor(g[i], i == 0 ? new Color(1f, .25f, .3f, .275f * v * fk) : new Color(.3f, .9f, 1f, .275f * v * fk));
                 }
             }, 0, () => { foreach (var x in g) if (x != null) x.gameObject.SetActive(false); });
         }

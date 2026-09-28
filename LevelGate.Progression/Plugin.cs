@@ -26,7 +26,7 @@ namespace LevelGate.Progression
         public const string Guid = "com.kkyangg.levelgate.progression";
         public const string Name = "LevelGate Progression";
         // MAJOR.MINOR.PATCH — see CHANGELOG.md
-        public const string Version = "0.9.81";
+        public const string Version = "0.9.9";
 
         internal static ProgressionPlugin Instance;
         internal static ConfigEntry<KeyboardShortcut> OpenKey;
@@ -37,6 +37,12 @@ namespace LevelGate.Progression
         internal static ConfigEntry<int> TestShine, TestShineWidth, TestGlitch, TestRevealRandom, TestBloomOpacity, TestBloomSize, TestWallBrightness, TestMotionSpeed, TestStagger;
         /// <summary>The ten MW4 features, each switchable while they're being tried (index 1…10; [0] unused).</summary>
         internal static readonly ConfigEntry<bool>[] TestMw = new ConfigEntry<bool>[11];
+        // 0.9.9 polish pass (F12 > CURRENTLY TESTING): Polish off = exactly 0.9.81
+        internal static ConfigEntry<bool> TestPolish, TestQuietFx, TestNeutralPips;
+        internal static ConfigEntry<int> TestDecorNoise, TestMicroLabels, TestAmbient, TestFlourish, TestBorderFade, TestCardRest, TestCardLocked, TestHeroSubtitleOpacity, TestAmbientLight;
+        internal static ConfigEntry<float> TestSmallText, TestTipDelay;
+        internal static ConfigEntry<ProgScreen.HeroLine> TestHeroSubtitle;
+        internal static ConfigEntry<ProgScreen.LightHue> TestLightHue;
         internal static bool Mw(int n) => TestMw[n]?.Value ?? true;
         internal static ConfigEntry<float> TestRevealTime;
         internal static ConfigEntry<ProgScreen.LoadInStyle> TestRevealStyle;
@@ -233,6 +239,51 @@ namespace LevelGate.Progression
                 else if (entry is ConfigEntry<float> ef) ef.SettingChanged += (_, __) => L.Info($"testing: {entry.Definition.Key} = {entry.BoxedValue:0.##}");
             }
 
+            // 0.9.9: the polish pass — one switch for before / after, then a dial per change (order = importance)
+            TestPolish = Config.Bind(T, "Polish", true, Desc(
+                "0.9.9's polish pass on (the dials below) or off (exactly 0.9.81) — flip it to compare before / after.", 200));
+            TestDecorNoise = Config.Bind(T, "DecorNoise", 55, Desc(
+                "Decorative layers — scanlines, rulers, corner marks, scratches, dither, inner glows — in % of 0.9.81 (100 = as before).", 199, new AcceptableValueRange<int>(0, 150)));
+            TestMicroLabels = Config.Bind(T, "MicroLabels", 60, Desc(
+                "The tiny system labels (ID - …, STATS —, LEVEL_ACTIVE) in % of 0.9.81.", 198, new AcceptableValueRange<int>(0, 150)));
+            TestBorderFade = Config.Bind(T, "BorderFade", 70, Desc(
+                "MW4 frames: panel, tile and card borders at full strength in the middle of each side, fading toward the ends. 0 = solid (0.9.81), 100 = gone at the ends.", 197, new AcceptableValueRange<int>(0, 100)));
+            TestAmbient = Config.Bind(T, "AmbientMotion", 40, Desc(
+                "Idle movement — drifting lights, the breathing emblem, the background pattern — in % of 0.9.81.", 196, new AcceptableValueRange<int>(0, 150)));
+            TestQuietFx = Config.Bind(T, "QuietDuringEffects", true, Desc(
+                "The idle movers rest while a level up, the XP fill or a picture load-in plays, so one thing moves at a time.", 195));
+            TestFlourish = Config.Bind(T, "Flourish", 65, Desc(
+                "The one-off show effects — selection shine, hover glitch, title glitch — in % of their own settings.", 194, new AcceptableValueRange<int>(0, 150)));
+            TestAmbientLight = Config.Bind(T, "AmbientLight", 140, Desc(
+                "The picked card's soft ambient lights (the coloured bloom and the dotted light), in % of 0.9.81.", 193, new AcceptableValueRange<int>(0, 300)));
+            TestLightHue = Config.Bind(T, "LightColours", ProgScreen.LightHue.Mixed, Desc(
+                "The picked card's ambient light: Mixed (its item / rank colour plus a pink-purple accent drifting on the other side) or Rank (0.9.81: one colour).", 192));
+            TestCardRest = Config.Bind(T, "CardRest", 90, Desc(
+                "Bottom cards that are neither yours nor viewed (reached levels): how visible, in %. 0.9.81 = 100.", 191, new AcceptableValueRange<int>(40, 100)));
+            TestCardLocked = Config.Bind(T, "CardLocked", 72, Desc(
+                "Bottom cards of levels you haven't reached (unless viewed or hovered): how visible, in %. 0.9.81 = 85.", 190, new AcceptableValueRange<int>(30, 100)));
+            TestSmallText = Config.Bind(T, "SmallText", 10.5f, Desc(
+                "Information text (tile LV, group captions, card type lines…) is never smaller than this at 1080p. Decorative micro text isn't changed.", 189, new AcceptableValueRange<float>(9f, 13f)));
+            TestNeutralPips = Config.Bind(T, "NeutralPips", true, Desc(
+                "The hero's rank pips in the screen's state colours (light grey, orange when it's your level) instead of loot colours — red is kept for unmet requirements.", 188));
+            TestHeroSubtitle = Config.Bind(T, "HeroSubtitle", ProgScreen.HeroLine.Description, Desc(
+                "A line under the big name, like MW4: Description (its first sentence, grey italic), FullName (the long name), Off.", 187));
+            TestHeroSubtitleOpacity = Config.Bind(T, "HeroSubtitleOpacity", 70, Desc(
+                "How bright the line under the big name is, in %.", 186, new AcceptableValueRange<int>(20, 100)));
+            TestTipDelay = Config.Bind(T, "TooltipDelay", 1f, Desc(
+                "The full-name tooltip shows only after resting on a tile / card this long, in seconds (0 = at once, like 0.9.81).", 185, new AcceptableValueRange<float>(0f, 2.5f)));
+            var polishDials = new HashSet<ConfigEntryBase> { TestPolish, TestDecorNoise, TestMicroLabels, TestBorderFade, TestAmbient, TestQuietFx, TestFlourish, TestAmbientLight, TestLightHue,
+                TestCardRest, TestCardLocked, TestSmallText, TestNeutralPips, TestHeroSubtitle, TestHeroSubtitleOpacity, TestTipDelay };
+            var liveDials = new HashSet<ConfigEntryBase> { TestTipDelay, TestAmbient, TestQuietFx, TestFlourish };
+            Config.SettingChanged += (_, a) =>
+            {
+                var entry = a?.ChangedSetting;
+                if (entry == null || !polishDials.Contains(entry)) return;
+                L.Info($"testing: {entry.Definition.Key} = {(entry.BoxedValue is float f ? f.ToString("0.##") : entry.BoxedValue)}");
+                // live ones need nothing; the rest are baked in when the screen is built (applied on the next open)
+                if (!liveDials.Contains(entry)) ProgScreen.PolishChanged("testing: " + entry.Definition.Key);
+            };
+
             // 4. Preview: plays the XP animation with made-up numbers — nothing real changes (closing the screen brings yours back)
             const string P = "4. Preview";
             PreviewLevels = Config.Bind(P, "Levels", 1, Desc("How many levels the preview buttons below play.", 100, new AcceptableValueRange<int>(1, 40)));
@@ -336,6 +387,10 @@ namespace LevelGate.Progression
                 ["TileSize"] = "Tile Size", ["MaxTilesPerCategory"] = "Max Items Per Category", ["Opacity"] = "Background Opacity",
                 ["CameraTurnDegrees"] = "Camera Turn (Degrees)", ["SortOrder"] = "Drawing Order", ["InsideGameUi"] = "Inside Game UI",
                 ["CountFreeItemsAtLevel1"] = "Count Free Items At Level 1", ["VerboseLog"] = "Detailed Log", ["DumpKey"] = "Debug Dump Key", ["PerformanceReadout"] = "Performance Readout", ["XpBarEdge"] = "XP Bar Edge",
+                ["Polish"] = "Polish 0.9.9 (Off = 0.9.81)", ["DecorNoise"] = "Decor Noise (%)", ["MicroLabels"] = "Micro Labels (%)", ["BorderFade"] = "Border Fade (%)",
+                ["AmbientMotion"] = "Ambient Motion (%)", ["QuietDuringEffects"] = "Quiet During Effects", ["Flourish"] = "Flourish (%)", ["AmbientLight"] = "Ambient Light (%)",
+                ["LightColours"] = "Ambient Light Colours", ["CardRest"] = "Card Rest Opacity (%)", ["CardLocked"] = "Card Locked Opacity (%)", ["SmallText"] = "Small Text Minimum (px)",
+                ["NeutralPips"] = "Neutral Rank Pips", ["HeroSubtitle"] = "Line Under Name", ["HeroSubtitleOpacity"] = "Line Under Name Opacity (%)", ["TooltipDelay"] = "Tooltip Delay (s)",
             };
             var titles = new Dictionary<string, string>
             {
@@ -343,7 +398,8 @@ namespace LevelGate.Progression
                 ["5. Testing"] = "5. CURRENTLY TESTING",
             };
             // what most players never touch: under F12's "Advanced settings" (the Preview tools too); the tuning section is hidden
-            var testingNow = new HashSet<string> { "XpBarEdge" }; // still being tried: shown under CURRENTLY TESTING
+            var testingNow = new HashSet<string> { "Polish", "DecorNoise", "MicroLabels", "BorderFade", "AmbientMotion", "QuietDuringEffects", "Flourish", "AmbientLight", "LightColours",
+                "CardRest", "CardLocked", "SmallText", "NeutralPips", "HeroSubtitle", "HeroSubtitleOpacity", "TooltipDelay" }; // 0.9.9: being tried (XP Bar Edge: Shadow, your pick, is the default)
             var advanced = new HashSet<string> { "RefreshIcons", "UseGameSounds", "Vignette", "RedGlow", "BlurBackground", "HideMainMenu", "PatternMotion" };
             foreach (var kv in Config)
             {

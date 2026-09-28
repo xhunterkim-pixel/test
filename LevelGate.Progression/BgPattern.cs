@@ -65,7 +65,7 @@ namespace LevelGate.Progression
         public static void Tick()
         {
             if (_want == null) return;
-            float motion = ProgScreen.Calm ? 0f : ProgressionPlugin.PatternMotion?.Value ?? 1f; // Reduce Motion: stands still
+            float motion = ProgScreen.Calm ? 0f : (ProgressionPlugin.PatternMotion?.Value ?? 1f) * ProgScreen.Polish.AmbientK; // Reduce Motion: stands still
             _t += Mathf.Min(Time.unscaledDeltaTime, .1f) * motion * Speed(_want);
             if (_busy) return;
             if (_done)
