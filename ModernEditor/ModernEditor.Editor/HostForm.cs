@@ -27,7 +27,7 @@ public sealed class HostForm : Form
     private const string FilesHost = "files.local";
 
     // MAJOR.MINOR.PATCH — 2.0.0: the Custom Trader Creator (1.0.0) and the Level & Item Editor (1.1.0) merged.
-    public const string Version = "2.0.5";
+    public const string Version = "2.0.6";
     public const string AppTitle = "Modern Editor";
 
     private readonly WebView2 _web = new() { Dock = DockStyle.Fill, DefaultBackgroundColor = Color.Black };

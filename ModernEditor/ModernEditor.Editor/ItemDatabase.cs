@@ -34,6 +34,8 @@ public sealed class ItemDatabase
         ("5485a8684bdc2da71d8b4567", ItemCategory.Ammo),
         ("543be5f84bdc2dd4348b456a", ItemCategory.Gear),      // Equipment: armor, helmets, rigs, backpacks, eyewear, face cover...
         ("57bef4c42459772e8d35a53b", ItemCategory.Gear),      // ArmoredEquipment
+        ("5448e5284bdc2dcb718b4567", ItemCategory.Gear),      // Vest (chest rigs) — not under Equipment in items.json
+        ("5448e53e4bdc2d60728b4567", ItemCategory.Gear),      // Backpack — not under Equipment in items.json either
         ("5448e8d04bdc2ddf718b4569", ItemCategory.Food),
         ("5448e8d64bdc2dce718b4568", ItemCategory.Food),      // Drink
         ("543be5664bdc2dd4348b4569", ItemCategory.Meds),

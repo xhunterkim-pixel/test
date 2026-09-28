@@ -316,6 +316,9 @@ public class ConditionDef
     /// <summary>Kill/Extract: the player must be wearing one of these items. Empty = no requirement.</summary>
     public List<string> WearingTpls { get; set; } = new();
 
+    /// <summary>Kill/Extract: true = all the WearingTpls at once (a full set); false = any one of them is enough.</summary>
+    public bool WearingAll { get; set; }
+
     /// <summary>Kill/Extract/UseItem: map ids (see <see cref="Maps"/>). Empty = any map.</summary>
     public List<string> Locations { get; set; } = new();
 

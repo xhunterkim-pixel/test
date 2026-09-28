@@ -832,8 +832,10 @@ public class CustomTradersMod(
             {
                 counterConditions.Add(Counter("equipment", "Equipment", n =>
                 {
-                    // Any one of the listed items (each inner list is one set to wear).
-                    n["equipmentInclusive"] = new JsonArray(wearing.Select(t => (JsonNode)new JsonArray(t)).ToArray());
+                    // Each inner list is one set that must be worn completely: [[a],[b]] = a OR b, [[a,b]] = a AND b (a full set).
+                    n["equipmentInclusive"] = c.WearingAll
+                        ? new JsonArray(new JsonArray(wearing.Select(t => (JsonNode)JsonValue.Create(t)!).ToArray()))
+                        : new JsonArray(wearing.Select(t => (JsonNode)new JsonArray(t)).ToArray());
                     n["equipmentExclusive"] = new JsonArray();
                     n["IncludeNotEquippedItems"] = false;
                 }));
@@ -1019,7 +1021,7 @@ public class CustomTradersMod(
     {
         string items = c.ItemTpls.Count > 0 ? string.Join(" or ", c.ItemTpls.Select(ItemName)) : "…";
         string where = c.Locations.Count > 0 ? " on " + string.Join(" or ", c.Locations.Select(Maps.Name)) : "";
-        string wearing = c.WearingTpls.Count > 0 ? " while wearing " + string.Join(" or ", c.WearingTpls.Select(ItemName)) : "";
+        string wearing = c.WearingTpls.Count > 0 ? " while wearing " + string.Join(c.WearingAll ? " and " : " or ", c.WearingTpls.Select(ItemName)) : "";
         string raid = c.OneRaid ? " in one raid" : "";
         switch (c.Type)
         {

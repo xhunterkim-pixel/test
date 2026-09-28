@@ -51,6 +51,15 @@ const BOSSES = [
   ['followerBirdEye', 'Birdeye'], ['bossZryachiy', 'Zryachiy'], ['bossBoar', 'Kaban'], ['bossKolontay', 'Kollontay'],
   ['bossPartisan', 'Partisan'], ['sectantPriest', 'Cultist Priest'], ['pmcBot', 'Raider'], ['exUsec', 'Rogue'],
 ];
+/** Where the bosses spawn in the unmodded game (map ids, lower case) — only used to warn about impossible kill objectives. */
+const BOSS_MAPS = {
+  bossBully: ['bigmap'], bossKilla: ['interchange'], bossKojaniy: ['woods'], bossGluhar: ['rezervbase'], bossSanitar: ['shoreline'],
+  bossTagilla: ['factory4_day', 'factory4_night', 'sandbox_high'], bossZryachiy: ['lighthouse'], bossBoar: ['tarkovstreets'],
+  bossKolontay: ['tarkovstreets', 'sandbox_high'],
+  bossKnight: ['woods', 'bigmap', 'lighthouse', 'shoreline'], followerBigPipe: ['woods', 'bigmap', 'lighthouse', 'shoreline'],
+  followerBirdEye: ['woods', 'bigmap', 'lighthouse', 'shoreline'], bossPartisan: ['woods', 'bigmap', 'lighthouse', 'shoreline'],
+  pmcBot: ['rezervbase', 'laboratory'], exUsec: ['lighthouse'],
+};
 const REWARD_TYPES = [
   ['Experience', 'XP', '#a082ff'], ['TraderStanding', 'Standing', '#509bf5'], ['Money', 'Money', '#f5cd46'], ['Item', 'Item', '#ffa42b'], ['UnlockOffer', 'Unlock Offer', '#1ed760'],
   ['Skill', 'Skill XP', '#f5cd46'], ['StashRows', 'Stash Rows', '#ff7ab6'],
@@ -1674,7 +1683,8 @@ function objectiveEditor(c) {
     ${kill ? needs('weapon', 'Must Kill With a Specific Weapon or Grenade', c.weaponTpls, () => itemList('Any One of These Counts', c.weaponTpls, 'weapons+')) : ''}
     ${kill ? weaponTypeField(c, open) : ''}
     ${kill ? needs('caliber', 'Must Use Specific Ammo (Caliber)', c.calibers, () => caliberList(c.calibers)) : ''}
-    ${kill || type === 'Extract' ? needs('wearing', 'Must Be Wearing Something', c.wearingTpls, () => itemList('Wearing Any One of These', c.wearingTpls, 'Gear')) : ''}
+    ${kill || type === 'Extract' ? needs('wearing', 'Must Be Wearing Something', c.wearingTpls, () => itemList(c.wearingAll ? 'Wearing ALL of These Together' : 'Wearing Any One of These', c.wearingTpls, 'Gear')
+      + (c.wearingTpls.length > 1 ? ui.toggle('All of Them at Once (a Full Set) — Off: Any One of Them Is Enough', () => !!c.wearingAll, v => { if (v) c.wearingAll = true; else delete c.wearingAll; }, { label: 'Full Set', refresh: 'details' }) : '')) : ''}
     ${kill || type === 'Extract' || type === 'UseItem' ? needs('maps', 'Only on Specific Maps', c.locations, () => ui.multichips('', MAPS, c.locations, { color: 'var(--green)' })) : ''}
     ${kill ? needs('body', 'Only Hits to Certain Body Parts (e.g. Headshots)', c.bodyParts, () => ui.multichips('', BODY_PARTS, c.bodyParts, { color: 'var(--red)' })) : ''}
     ${kill ? distanceField(c, open) : ''}
@@ -1692,7 +1702,7 @@ function objectiveEditor(c) {
 function tarkovText(c) {
   const items = c.itemTpls.map(itemName).join(' or ') || '…';
   const where = c.locations.length ? ' on ' + c.locations.map(mapName).join(' or ') : '';
-  const wearing = c.wearingTpls.length ? ' while wearing ' + c.wearingTpls.map(itemName).join(' or ') : '';
+  const wearing = c.wearingTpls.length ? ' while wearing ' + c.wearingTpls.map(itemName).join(c.wearingAll ? ' and ' : ' or ') : '';
   const raid = c.oneRaid ? ' in one raid' : '';
   switch (c.type) {
     case 'HandoverItem':
@@ -1885,7 +1895,7 @@ function conditionExtras(c) {
     if (c.distance > 0) d.push(c.distanceCompare === '<=' ? `Within ${c.distance} m` : `From ${c.distance} m+`);
   }
   if (c.type === 'Extract' && c.exitStatuses.length) d.push(`As ${c.exitStatuses.map(x => (EXIT_STATUSES.find(e => e[0] === x) || [x, x])[1]).join(' / ')}`);
-  if (['Kill', 'Extract'].includes(c.type) && c.wearingTpls.length) d.push(`While Wearing ${c.wearingTpls.map(shortName).join(' / ')}`);
+  if (['Kill', 'Extract'].includes(c.type) && c.wearingTpls.length) d.push(`While Wearing ${c.wearingTpls.map(shortName).join(c.wearingAll ? ' + ' : ' / ')}`);
   if (['Kill', 'Extract', 'UseItem'].includes(c.type) && c.locations.length) d.push(`${c.type === 'Extract' ? 'From' : 'On'} ${c.locations.map(mapName).join(' / ')}`);
   if (c.type === 'Kill' && c.daytimeFrom !== c.daytimeTo) d.push(`Between ${hour(c.daytimeFrom)}–${hour(c.daytimeTo)}`);
   if (['Kill', 'Extract', 'UseItem'].includes(c.type) && c.oneRaid) d.push('In One Raid');
@@ -2117,6 +2127,15 @@ function checkQuest(t, q, add, known) {
         if (!known(id)) A('error', `${what}: weapon '${id}' doesn't exist.`);
         else if (it && !['Weapon', 'Grenade', 'Melee'].includes(it.c)) A('warning', `${what}: ${it.n} is not a weapon or grenade — kills can never count with it.`);
       }
+      const armed = c.weaponTpls.map(item).filter(Boolean);
+      if (armed.length && armed.every(i => i.c === 'Melee') && c.distance > 3 && c.distanceCompare !== '<=')
+        A('warning', `${what}: melee kills from ${c.distance} m or more — a knife can't reach that far, this can never be met.`);
+      if (c.killTarget === 'Boss' && c.locations.length) {
+        const home = c.bossRoles.map(b => [b, BOSS_MAPS[b]]).filter(([, m]) => m);
+        const off = home.filter(([, m]) => !c.locations.some(l => m.includes(String(l).toLowerCase())));
+        if (home.length && off.length === home.length)
+          A('info', `${what}: ${off.map(([b, m]) => `${bossName(b)} normally spawns on ${m.map(mapName).join(' / ')}`).join('; ')} — not on ${c.locations.map(mapName).join(' / ')} (unless a mod moves them).`);
+      }
       if (c.weaponTpls.length && c.calibers.length) {
         const guns = c.weaponTpls.map(item).filter(i => i?.c === 'Weapon');
         if (guns.length && guns.every(g => g.k && !c.calibers.includes(g.k)))
@@ -2126,7 +2145,9 @@ function checkQuest(t, q, add, known) {
     if (['Kill', 'Extract'].includes(c.type)) for (const id of c.wearingTpls) {
       const it = item(id);
       if (!known(id)) A('error', `${what}: worn item '${id}' doesn't exist.`);
-      else if (it && !['Gear', 'Weapon'].includes(it.c)) A('warning', `${what}: ${it.n} can't be worn (not gear) — this can never be met.`);
+      // the game's "wearing" check looks at every equipment slot: helmet, earpiece, face cover, eyewear, armband, armor, rig,
+      // backpack — and the weapons / melee in the weapon slots
+      else if (it && !['Gear', 'Weapon', 'Melee'].includes(it.c)) A('warning', `${what}: ${it.n} doesn't go in an equipment slot — "while wearing" can never be met.`);
     }
     for (const m of c.locations) if (!MAPS.some(x => x[0].toLowerCase() === String(m).toLowerCase())) A('warning', `${what}: unknown map id '${m}'.`);
   }
@@ -3570,6 +3591,7 @@ function zoomWanted() {
 }
 function applyZoom() {
   const z = zoomWanted();
+  if (!applyZoom.told) { applyZoom.told = true; host.call('log', { level: 'info', text: `size: window ${Math.round(innerWidth * zoomNow)} px wide at 100% (Windows scaling ${Math.round(devicePixelRatio * 100 / zoomNow)}%) → interface ${Math.round(z * 100)}%${typeof S.ui.zoom === 'number' ? ' (picked)' : ' (auto)'}` }).catch(() => { }); }
   if (Math.abs(z - zoomNow) < .01) return;
   zoomNow = z;
   host.call('setZoom', { factor: z }).catch(() => { });

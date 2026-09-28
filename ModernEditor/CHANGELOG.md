@@ -1,5 +1,13 @@
 # Modern Editor changelog
 
+## 2.0.6
+- Fixed the false "can't be worn (not gear)" warning for chest rigs and backpacks. In Tarkov's item tree they don't sit under Equipment, so the editor filed them as "Other". They now count as gear, in the check and in the "wearing" item picker. The game's wearing check covers every equipment slot: helmet, earpiece, face cover, eyewear, armband, armor, rig, backpack, and the weapon and melee slots.
+- "Must Be Wearing": a new **Full Set** switch. Off (the old behaviour): any one of the listed items is enough. On: all of them at once, e.g. a helmet and an armor together. It uses the same format as the game's own quests.
+- New checks:
+  - Melee-only kill objectives with a minimum distance are flagged, since they can never be met.
+  - A boss kill on a map where that boss doesn't normally spawn gets a note (not a warning, since mods can move bosses).
+- The log records the window size and the interface size picked.
+
 ## 2.0.5
 - New quest writer (✨ Generate). It writes the way Tarkov's traders talk: short, in character, a story rather than a checklist (the game lists the objectives under it anyway).
   - An opener that knows the quest chain ("…went well. Don't let it go to your head.") and the player's level.
