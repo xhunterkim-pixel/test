@@ -1,4 +1,4 @@
-# Modern Editor v2.0.0 — traders, level limits, item stats and progression in one (SPT 4.1)
+# Modern Editor v2.0.1 — traders, level limits, item stats and progression in one (SPT 4.1)
 
 Modern Editor replaces three tools:
 
@@ -43,10 +43,10 @@ If the old mods are still installed next to ModernEditor.dll, the server log sho
 ## Pages
 
 - **Traders**: Trader, Offers & Barters, Quests. Everything from the Custom Trader Creator is still here: sorting, tags, categories, columns, bulk edit, drag to reorder, on/off switches, the View menu, deleted traders, and add-ons.
-- **Items**:
+- **Level Gate**:
   - **Level Limits**: Level Gate's level per item, with categories, filters, multi-select and undo.
-  - **Item Stats**: meds, stims and food.
   - **Progression**: what unlocks at each level.
+- **Items**: **Item Stats** (meds, stims and food).
 - **More**: Mods, Add-ons, Checks & Log.
 
 ## New in 2.0.0
@@ -71,6 +71,15 @@ If the old mods are still installed next to ModernEditor.dll, the server log sho
 - **Start page**: tool cards, your traders, and notes (files to move, a missing server mod).
 - **Save All (Ctrl+S)** saves level limits, item stats and traders together. Undo / redo and the unsaved counter cover every page.
 
+## Logs (send these when something goes wrong)
+
+- **Editor**: `Logs\ModernEditor_<date>_<time>.log` next to ModernEditor.exe. If that folder is read-only, it's in `%AppData%\ModernEditor\Logs`. There's one file per start and the last 30 are kept. Open the folder from the **Logs** card on the start page or from **Checks & Log**.
+- **Server mod**: `user\mods\ModernEditor\logs\server_<date>_<time>.log`. There's one file per server start and the last 20 are kept.
+
+## Cleaning up old files
+
+The start page lists files that Modern Editor made unnecessary, and you tick what to remove. Removed files go to the Recycle Bin. Level Gate and your ModernEditor files are never listed.
+
 ## Keyboard
 
 F1 lists everything. The main ones:
@@ -80,7 +89,7 @@ F1 lists everything. The main ones:
 - Ctrl+K: go to
 - Ctrl+M: start page
 - Ctrl+F: search
-- Ctrl+1…8: pages
+- Ctrl+1…8: pages (4 Level Limits, 5 Progression, 6 Item Stats)
 
 In Level Limits and Progression, the old Level & Item Editor keys still work as before.
 

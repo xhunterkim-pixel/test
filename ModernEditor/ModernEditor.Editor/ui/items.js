@@ -39,7 +39,7 @@ const MAX_LEVEL = 79;
 // Host bridge: the shell's (app.js); the item pages' own methods start with "lg."
 // =====================================================================
 
-const LG_METHODS = new Set(['init', 'reload', 'browse', 'save', 'saveStats', 'saveUi', 'openConfigFolder', 'saveDisabled']);
+const LG_METHODS = new Set(['init', 'reload', 'browse', 'save', 'saveStats', 'saveUi', 'openConfigFolder', 'openStatsFolder', 'saveDisabled']);
 const host = { call: (method, args = {}) => shellHost.call(LG_METHODS.has(method) ? 'lg.' + method : method, args) };
 
 
@@ -117,6 +117,7 @@ function applyItems(snap) {
   if (snap.medsDefault) S.medsDefault = snap.medsDefault;
   if (snap.statSources) S.statSources = snap.statSources;
   if (snap.statsFile !== undefined) S.statsFile = snap.statsFile;
+  if (snap.statsReadFrom !== undefined) S.statsReadFrom = snap.statsReadFrom;
   if (snap.serverMod !== undefined) S.serverMod = !!snap.serverMod;
   if (snap.statEdits) { S.statEdits = JSON.parse(JSON.stringify(snap.statEdits)); S.statSaved = JSON.parse(JSON.stringify(snap.statEdits)); }
 }
@@ -706,7 +707,7 @@ const ACT = {
     if (changes().length + statChanges().length && !await confirmBox('Unsaved changes', 'Pick another file and lose the unsaved changes?', 'Continue')) return;
     try { const r = await host.call('browse'); if (r) apply(r); } catch (e) { errorBox(e); }
   },
-  openFolder() { host.call('openConfigFolder').catch(errorBox); },
+  openFolder() { host.call(S.tab === 'stats' ? 'openStatsFolder' : 'openConfigFolder').catch(errorBox); },
   sortMenu(arg, el) { sortMenu(el); },
   shortcuts() { shortcutsBox(); },
   async modsScanAll() { await modCall('modsScanAll'); },
@@ -1282,7 +1283,9 @@ function statsPage() {
   const ids = S.shown.map(it => it.i);
   const head = ([k, t], c) => `<div>${c ? grip('st', c) : ''}<span class="head-text sortable ${S.statSort.key === k ? 'on' : ''}" data-act="statSortBy" data-arg="${k}">${t}${S.statSort.key === k && k !== 'custom' ? `<span class="sort-arrow">${d > 0 ? '▲' : '▼'}</span>` : ''}</span></div>`;
   const warn = !S.serverMod
-    ? `<div class="warn-line">⚠ The ItemStatEditor server mod wasn't found in ${esc(S.statsFile ? S.statsFile.replace(/[\\/]item_stats\.json$/, '') : 'SPT\\user\\mods\\ItemStatEditor')} — item stat edits are saved but only take effect with it installed (ItemStatEditor.Server.dll from the download).</div>` : '';
+    ? `<div class="warn-line">⚠ The Modern Editor server mod (ModernEditor.dll) wasn't found in ${esc(S.statsFile ? S.statsFile.replace(/[\\/]item_stats\.json$/, '') : 'SPT\\user\\mods\\ModernEditor')} — item stat edits are saved but only take effect with it installed (Install\\SPT_Runtime\\user\\mods\\ModernEditor in the download).</div>` : '';
+  const oldFile = S.statsReadFrom && S.statsFile && S.statsReadFrom.toLowerCase() !== S.statsFile.toLowerCase()
+    ? `<div class="warn-line">⚠ Your edits were read from the old file ${esc(S.statsReadFrom)} — they're saved to ${esc(S.statsFile)} from now on (or click Move My Files on the start page).</div>` : '';
   const rows = ids.map((id, i) => {
     const it = S.items.get(id), m = effMed(id), k = MED_KIND[m.kind];
     const changed = JSON.stringify(S.statEdits[id] ?? null) !== JSON.stringify(S.statSaved[id] ?? null);
@@ -1298,7 +1301,7 @@ function statsPage() {
       ${levelCell(id)}
     </div>`;
   }).join('');
-  return `<div class="toolbar sticky">${warn}
+  return `<div class="toolbar sticky">${warn}${oldFile}
       <span class="muted small">${fmt(ids.length)} shown${S.picked.size > 1 ? ` · ${S.picked.size} picked` : ''} · Ctrl+drag to reorder · edits apply after restarting the SPT server${S.statSources.length ? ` · your edits win over ${esc(S.statSources.map(x => x.replace(/ \(.*/, '')).join(' and '))}` : ''}</span></div>
     ${tagBar(statIds(S.statCat))}
     <div class="list st" data-cols="st" style="--cols:${colsCss('st')}"><div class="list-head">${head(['custom', '#'])}${head(['name', 'Item'], 'item')}${head(['type', 'Type'], 'type')}<div>${grip('st', 'effects')}<span class="head-text">Effects</span></div><div>${grip('st', 'notes')}<span class="head-text">Notes</span></div>${head(['price', 'Price'], 'price').replace(/<\/div>$/, priceToggle() + '</div>')}${head(['level', 'Level'], 'level')}</div>${rows || `<div class="empty">${Object.keys(S.meds).length ? 'Nothing matches.' : 'No meds loaded — the stats come from the SPT database (pick the config inside your SPT folder).'}</div>`}</div>`;
@@ -1321,7 +1324,7 @@ function statsDetails() {
   if (!id) {
     $('#detailsTitle').textContent = 'Item Stats';
     d.innerHTML = `<div class="card"><h3>Meds, Stims & Food</h3><div class="hint">Pick an item to change how long it takes to use, how many uses / HP it has, what it treats, energy and hydration, and a stim's effects.
-      <br><br>Edits are saved to <span class="mono">${esc(S.statsFile || 'SPT\\user\\mods\\ItemStatEditor\\item_stats.json')}</span> and applied by the ItemStatEditor server mod when the server starts (after other mods, so they win). The Level Limits tab shows the edited stats too.
+      <br><br>Edits are saved to <span class="mono">${esc(S.statsFile || 'SPT\\user\\mods\\ModernEditor\\item_stats.json')}</span> and applied by the Modern Editor server mod (ModernEditor.dll) when the server starts (after other mods, so they win). The Level Limits tab shows the edited stats too.
       <br><br>Values that differ from Escape From Tarkov's show the original next to them, like <span class="def">(1.5 Default)</span>. Right-click an item to reset it.</div></div>`;
     return;
   }
@@ -2043,7 +2046,7 @@ function progRestore() {
     start, applyItems, onHostEvent, showTab, renderAll, renderPage, renderDetails, renderHeader, renderNav,
     save: () => ACT.save(), reload: () => ACT.reload(), undo: () => undo(false), redo: () => undo(true),
     canUndo: () => S.undo.length > 0, canRedo: () => S.redo.length > 0, unsavedCount,
-    loaded: () => !!S.configFile, configFile: () => S.configFile, levelGateVersion: () => S.levelGateVersion,
+    loaded: () => !!S.configFile, configFile: () => S.configFile, statsFile: () => S.statsFile, statsReadFrom: () => S.statsReadFrom, levelGateVersion: () => S.levelGateVersion,
     levelOf: id => S.levels.get(id), levels: () => S.levels, savedLevels: () => S.saved, items: () => S.items,
     tab: () => S.tab, SHORTCUTS, state: S, api: { setLevels, itemOf, groupOf, GROUP, GROUPS, tierOf, icon },
     addActs: acts => Object.assign(ACT, acts),

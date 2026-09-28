@@ -27,7 +27,7 @@ public sealed class HostForm : Form
     private const string FilesHost = "files.local";
 
     // MAJOR.MINOR.PATCH — 2.0.0: the Custom Trader Creator (1.0.0) and the Level & Item Editor (1.1.0) merged.
-    public const string Version = "2.0.0";
+    public const string Version = "2.0.1";
     public const string AppTitle = "Modern Editor";
 
     private readonly WebView2 _web = new() { Dock = DockStyle.Fill, DefaultBackgroundColor = Color.Black };
@@ -62,6 +62,7 @@ public sealed class HostForm : Form
         }
         catch (WebView2RuntimeNotFoundException)
         {
+            EditorLog.Error("start", "WebView2 Runtime not found");
             if (MessageBox.Show(this,
                     "Modern Editor needs the Microsoft Edge WebView2 Runtime (normally already part of Windows 10/11).\n\n" +
                     "Open the download page now?", AppTitle, MessageBoxButtons.YesNo, MessageBoxIcon.Warning) == DialogResult.Yes)
@@ -71,6 +72,7 @@ public sealed class HostForm : Form
         }
 
         var core = _web.CoreWebView2;
+        EditorLog.Info("start", $"WebView2 {core.Environment.BrowserVersionString}");
         core.Settings.AreDevToolsEnabled = Environment.GetEnvironmentVariable("MODERN_EDITOR_DEVTOOLS") == "1";
         core.Settings.AreDefaultContextMenusEnabled = false;
         core.Settings.AreBrowserAcceleratorKeysEnabled = false; // no F5 reload / Ctrl+P etc. (would lose unsaved edits)
@@ -96,19 +98,54 @@ public sealed class HostForm : Form
     private void HandleMessage(string json)
     {
         JsonNode? id = null;
+        string method0 = "?";
         try
         {
             var message = JsonNode.Parse(json)!.AsObject();
             id = message["id"]?.DeepClone();
             var method = (string?)message["method"] ?? "";
             var args = message["args"] as JsonObject ?? new JsonObject();
+            method0 = method;
+            if (method != "log") EditorLog.Info("call", $"{method} {BriefArgs(args)}");
+            var watch = System.Diagnostics.Stopwatch.StartNew();
             var result = Call(method, args);
+            if (method != "log")
+            {
+                EditorLog.Info("call", $"{method} done in {watch.ElapsedMilliseconds} ms → {BriefResult(result)}");
+                if (result is JsonObject r)
+                    foreach (var key in new[] { "problems", "statsError", "migrated", "cleaned" })
+                        if (r[key] is JsonNode n && n.ToJsonString() is var text && text is not ("[]" or "null" or "\"\"")) EditorLog.Warn(method, $"{key}: {text}");
+            }
             Reply(new JsonObject { ["id"] = id, ["ok"] = true, ["result"] = result });
         }
         catch (Exception e)
         {
+            EditorLog.Error("call " + method0, e);
             Reply(new JsonObject { ["id"] = id, ["ok"] = false, ["error"] = e.Message });
         }
+    }
+
+    /// <summary>The request's arguments for the log: big texts (a whole trader.json) only by size.</summary>
+    private static string BriefArgs(JsonObject a)
+    {
+        if (a.Count == 0) return "";
+        return string.Join(", ", a.Select(kv => kv.Key + "=" + (kv.Value is JsonValue v && v.TryGetValue(out string? str) ? EditorLog.Brief(str, 120)
+            : kv.Value is JsonObject o ? $"{{{o.Count} keys}} {EditorLog.Brief(o.ToJsonString(), 300)}"
+            : kv.Value is JsonArray arr ? $"[{arr.Count}] {EditorLog.Brief(arr.ToJsonString(), 300)}"
+            : kv.Value?.ToJsonString() ?? "null")));
+    }
+
+    /// <summary>The answer for the log: lists by their size, objects by their keys, short values as they are.</summary>
+    private static string BriefResult(JsonNode? r)
+    {
+        if (r is not JsonObject o) return EditorLog.Brief(r?.ToJsonString(), 200);
+        return string.Join(", ", o.Select(kv => kv.Key + "=" + (kv.Value switch
+        {
+            JsonArray arr => $"[{arr.Count}]",
+            JsonObject obj => $"{{{obj.Count}}}",
+            null => "null",
+            var v => EditorLog.Brief(v.ToJsonString(), 160),
+        })));
     }
 
     private void Reply(JsonObject reply) => _web.CoreWebView2?.PostWebMessageAsJson(reply.ToJsonString());
@@ -151,9 +188,15 @@ public sealed class HostForm : Form
         "lg.saveStats" => SaveStats(a["edits"] as JsonObject),
         "lg.saveUi" => SaveLgUi(a["ui"] as JsonObject),
         "lg.openConfigFolder" => OpenConfigFolder(),
+        "lg.openStatsFolder" => OpenStatsFolder(),
         // ---- window
         "saveUi" => SaveUi(a["ui"] as JsonObject),
         "setUnsaved" => SetUnsaved((int?)a["count"] ?? 0),
+        // ---- logs, old files
+        "log" => PageLog(Str(a, "level"), Str(a, "text")),
+        "openLogs" => OpenLogs(),
+        "cleanupScan" => Cleanup.Scan(_modFolder, _configFile),
+        "cleanup" => new JsonObject { ["cleaned"] = Cleanup.Run((a["paths"] as JsonArray ?? new JsonArray()).Select(x => (string?)x ?? ""), _modFolder, _configFile), ["left"] = Cleanup.Scan(_modFolder, _configFile) },
         _ => throw new InvalidOperationException($"Unknown request '{method}'."),
     };
 
@@ -246,6 +289,14 @@ public sealed class HostForm : Form
         var snap = Snapshot(Path.Combine(mods, Migration.ModName));
         snap["migrated"] = log;
         return snap;
+    }
+
+    private static JsonNode PageLog(string level, string text) { EditorLog.Page(level, text); return true; }
+
+    private static JsonNode OpenLogs()
+    {
+        if (Directory.Exists(EditorLog.Folder)) OpenUrl(EditorLog.Folder);
+        return EditorLog.Folder;
     }
 
     private JsonNode MigrateLater() { _settings.MigrationAsked = true; _settings.Save(); return true; }
@@ -537,6 +588,12 @@ public sealed class HostForm : Form
         }
     }
 
+    private JsonNode OpenStatsFolder()
+    {
+        if (StatsFile() is { } f && Path.GetDirectoryName(f) is { } dir && Directory.Exists(dir)) OpenUrl(dir);
+        return true;
+    }
+
     private JsonNode OpenConfigFolder()
     {
         if (_configFile != null && Path.GetDirectoryName(_configFile) is { } dir && Directory.Exists(dir)) OpenUrl(dir);
@@ -559,6 +616,7 @@ public sealed class HostForm : Form
         result["statsFile"] = file;
         result["serverMod"] = file != null && File.Exists(Path.Combine(Path.GetDirectoryName(file)!, "ModernEditor.dll"));
         if (file == null || !File.Exists(file)) file = OldStatsFile() ?? file; // edits not moved over yet
+        result["statsReadFrom"] = file;
         var edits = new JsonObject();
         try
         {
@@ -1211,6 +1269,7 @@ public sealed class HostForm : Form
 
     private void OnClosing(object? sender, FormClosingEventArgs e)
     {
+        EditorLog.Info("close", $"closing with {_unsaved} unsaved change(s)");
         if (_unsaved == 0) return;
         if (MessageBox.Show(this, $"{_unsaved} unsaved change(s). Close and lose them?", "Unsaved changes",
                 MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes)

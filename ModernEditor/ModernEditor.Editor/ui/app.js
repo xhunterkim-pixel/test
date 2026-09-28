@@ -367,6 +367,7 @@ function applySnapshot(snap) {
     return e;
   });
   resetHistory();
+  if (typeof seedQuestItems === 'function') seedQuestItems();
   for (const p of snap.problems || []) log('error', 'Load', p);
   applyBackground(snap.background);
   applyUi();
@@ -694,9 +695,15 @@ function renderHeader() {
     $('#headerKind').textContent = kind; $('#headerKind').style.color = color;
     $('#headerTitle').textContent = title;
     $('#header').style.setProperty('--hc', color + '55');
-    const cfg = S.lgStarted && LG.configFile();
-    $('#lgConfigPath').textContent = cfg || 'Level Gate\'s file wasn\'t found — Browse… to SPT\\BepInEx\\plugins\\LevelGate\\config\\level_requirements.json';
-    $('#lgConfigBar').classList.toggle('warn', !cfg || !!(S.lgStarted && LG.state.notInGame));
+    const cfg = S.lgStarted && LG.configFile(), stats = S.page === 'stats';
+    const statsFile = S.lgStarted && LG.statsFile(), readFrom = S.lgStarted && LG.statsReadFrom();
+    $('#lgConfigIco').textContent = stats ? '💊' : '🛡';
+    $('#lgBrowseBtn').hidden = stats;                 // item_stats.json always lives in the ModernEditor mod folder
+    $('#lgConfigPath').textContent = stats
+      ? statsFile || 'Pick your SPT folder first (Browse… at the top) — item stats are kept in SPT_Runtime\\user\\mods\\ModernEditor\\item_stats.json'
+      : cfg || 'Level Gate\'s file wasn\'t found — Browse… to SPT\\BepInEx\\plugins\\LevelGate\\config\\level_requirements.json';
+    $('#lgConfigBar').title = stats ? (readFrom && readFrom !== statsFile ? `Read from the old file ${readFrom}; saved to ${statsFile}` : 'Item stat edits (meds, stims, food) — applied by ModernEditor.dll') : 'Level Gate\'s level limits file';
+    $('#lgConfigBar').classList.toggle('warn', stats ? !statsFile : !cfg || !!(S.lgStarted && LG.state.notInGame));
     $('#search').placeholder = S.page === 'stats' ? 'Search meds, stims & food (Ctrl+F)' : 'Search names, short names, ids, mods (Ctrl+F)';
     document.querySelectorAll('#nav .nav').forEach(n => n.classList.toggle('on', n.dataset.arg === S.page));
     if (S.lgStarted) LG.renderHeader();
@@ -1105,7 +1112,7 @@ function pageChecks() {
   })).join('');
   S.shownChecks = shown;
   return `<div class="toolbar sticky">
-      <button class="primary" data-act="runChecks">Run Checks</button>
+      <button class="primary" data-act="runChecks">Run Checks</button><button class="outline" data-act="openLogs" title="The Logs folder next to ModernEditor.exe — send the newest file when something goes wrong">📄 Open Logs Folder</button>
       ${filter(null, 'All')}${filter('error', `Errors (${count('error')})`)}${filter('warning', `Warnings (${count('warning')})`)}
       ${filter('info', `Info (${count('info')})`)}${filter('ok', 'OK')}
     </div>
@@ -1675,7 +1682,7 @@ function detailsQuest() {
       <div class="field top"><label>Picture</label><div>
         ${pic ? `<img class="preview" src="${esc(pic.url)}" alt="">` : ''}
         ${ui.hint(pic?.kind === 'mine' ? 'Your own picture.' : pic?.kind === 'game' ? "One of the game's quest pictures." : pic ? "No picture picked — the game's default picture is used." : 'No picture — the game shows its default one.')}
-        ${S.gameQuestImages.length ? '' : ui.hint(`The game's quest pictures weren't found${S.gameQuestImagesLooked ? ` (looked for an images\\quests folder in ${esc(S.gameQuestImagesLooked)})` : ''}. Point the editor at your SPT_Runtime\\user\\mods\\CustomTraders folder with Browse… if it isn't already.`)}
+        ${S.gameQuestImages.length ? '' : ui.hint(`The game's quest pictures weren't found${S.gameQuestImagesLooked ? ` (looked for an images\\quests folder in ${esc(S.gameQuestImagesLooked)})` : ''}. Pick your SPT folder with Browse… at the top if it isn't already.`)}
         <div class="toolbar" style="padding:0">
           ${S.gameQuestImages.length ? '<button class="primary" data-act="pickGameImage">Pick a Game Picture…</button><button class="outline" data-act="randomGameImage" title="Another random game picture">🎲 Random</button>' : ''}
           <button class="outline" data-act="chooseQuestImage">From PC…</button>
@@ -2154,8 +2161,11 @@ function checkQuest(t, q, add, known) {
   if (!q.name.trim()) A('warning', 'Quest has no name.');
   if (q.minLevel < 1 || q.minLevel > 79) A('warning', `Unlock level ${q.minLevel} — player levels go from 1 to 79.`);
   if (q.levelFromItem !== undefined) {
+    const unlocks = q.rewards.filter(r => r.type === 'UnlockOffer').map(r => t.file.offers.find(o => o.id === r.offerId)?.itemTpl).filter(validId);
     if (!validId(q.levelFromItem)) A('error', 'Dynamic level is on but no item is picked — the saved level is used.');
     else if (!known(q.levelFromItem)) A('warning', `Its level follows ${q.levelFromItem}, which isn't a known item.`);
+    else if (unlocks.length && !unlocks.includes(q.levelFromItem))
+      A('warning', `Its level follows ${itemName(q.levelFromItem)}, but it unlocks ${unlocks.map(itemName).join(', ')} — if the offer's item was swapped, open the quest and click "Follow ${shortName(unlocks[0])}".`);
     else if (!(S.lgStarted && LG.loaded())) A('info', `Its level follows ${itemName(q.levelFromItem)}, but Level Gate's file isn't loaded — the server still applies it at start (level ${q.minLevel} until then).`);
     else A('info', `Level follows ${itemName(q.levelFromItem)} (Level Gate level ${LG.levelOf(q.levelFromItem) ?? '— no limit'}${Number(q.levelOffset) ? `, ${q.levelOffset > 0 ? '+' : ''}${q.levelOffset}` : ''}) → level ${q.minLevel}.`);
   }
@@ -2235,8 +2245,8 @@ function checkQuest(t, q, add, known) {
 
 const SHORTCUTS = [
   ['General', [['Ctrl+S', 'Save all (traders, level limits, item stats)'], ['Ctrl+Z', 'Undo'], ['Ctrl+Shift+Z / Ctrl+Y', 'Redo'], ['Ctrl+M', 'Start menu (all traders)'], ['F1 or ?', 'This guide'], ['Esc', 'Close / unselect']]],
-  ['Pages', [['Ctrl+1', 'Trader'], ['Ctrl+2', 'Offers & Barters'], ['Ctrl+3', 'Quests'], ['Ctrl+4', 'Level Limits'], ['Ctrl+5', 'Item Stats'],
-    ['Ctrl+6', 'Progression'], ['Ctrl+7', 'Mods'], ['Ctrl+8', 'Checks & Log'], ['Ctrl+K', 'Go to anything (traders, quests, offers, items, pages)']]],
+  ['Pages', [['Ctrl+1', 'Trader'], ['Ctrl+2', 'Offers & Barters'], ['Ctrl+3', 'Quests'], ['Ctrl+4', 'Level Limits'], ['Ctrl+5', 'Progression'],
+    ['Ctrl+6', 'Item Stats'], ['Ctrl+7', 'Mods'], ['Ctrl+8', 'Checks & Log'], ['Ctrl+K', 'Go to anything (traders, quests, offers, items, pages)']]],
   ['Offers & Quests', [['Ctrl+N', 'New offer / quest (on the Trader page: new trader)'], ['Ctrl+D', 'Duplicate the selected'], ['Del', 'Remove the selected'],
     ['Ctrl+B', 'Bulk edit everything shown'], ['Ctrl+A', 'Select everything shown'], ['Ctrl+F', 'Search'], ['↑ / ↓', 'Previous / next row'],
     ['Alt+↑ / Alt+↓', 'Move the selected row up / down'], ['Ctrl + drag a row', 'Move it anywhere'], ['Drag across rows', 'Select several'], ['Ctrl-click / Shift-click', 'Select several']]],
@@ -2254,7 +2264,7 @@ function handleShortcut(e) {
   const ctrl = e.ctrlKey || e.metaKey, k = e.key.toLowerCase();
   if (e.key === 'F1' || (!typing && e.key === '?')) { shortcutsBox(); return true; }
   if (ctrl && k === 'm') { showHome(); return true; }
-  if (ctrl && /^[1-8]$/.test(k)) { hideHome(); showPage(['trader', 'offers', 'quests', 'levels', 'stats', 'prog', 'mods', 'checks'][Number(k) - 1]); return true; }
+  if (ctrl && /^[1-8]$/.test(k)) { hideHome(); showPage(['trader', 'offers', 'quests', 'levels', 'prog', 'stats', 'mods', 'checks'][Number(k) - 1]); return true; }
   if (ctrl && k === 'k') { ACT.palette(); return true; }
   if (ctrl && k === 'n') {
     if (S.page === 'offers' && S.t) ACT.addOffer(); else if (S.page === 'quests' && S.t) ACT.addQuest(); else ACT.newTrader();
@@ -2324,6 +2334,7 @@ function shellShowPage(page) { hideHome(); if (S.page === page) { LG.showTab(pag
 
 function markDirty(t = S.t) {
   if (!t) return;
+  if (typeof followQuestItems === 'function' && followQuestItems(t)) toast('Dynamic quest level now follows the offer\'s new item');
   t.dirty = true;
   t.edited = Date.now();
   checksSoon();
@@ -2384,6 +2395,7 @@ function restore(state) {
   S.cond = S.quest?.conditions[s.cond] || null;
   S.reward = S.quest?.rewards[s.reward] || null;
   S.picked = new Set();
+  seedQuestItems();
   runChecks();
   renderAll(false);
   renderUndo();
@@ -2679,7 +2691,7 @@ async function deletedTradersBox() {
       <button class="outline" data-restore="${esc(d.folder)}">Restore</button><button class="danger" data-purge="${esc(d.folder)}">Delete Forever</button></div></div>`).join('')
     : '<div class="empty">The trash is empty.</div>';
   await openModal(`<div class="dialog"><h2>Deleted Traders</h2>
-    ${ui.hint('Removed traders are moved here first (…\\CustomTraders\\deleted_traders). <b>Restore</b> puts one back; <b>Delete Forever</b> erases the folder and can’t be undone.')}
+    ${ui.hint('Removed traders are moved here first (…\\ModernEditor\\deleted_traders). <b>Restore</b> puts one back; <b>Delete Forever</b> erases the folder and can’t be undone.')}
     <div class="picker-list deleted">${rows()}</div>
     <div class="buttons"><button class="danger" data-m="all" ${list.length ? '' : 'disabled'} style="margin-right:auto">Empty Trash</button><button class="primary" data-m="0">Close</button></div></div>`, m => {
     const redraw = () => {
@@ -3940,6 +3952,7 @@ async function startEditor() {
     renderAll(false);
     if (S.home) renderHome();
     await scanAddons();
+    scanOldFiles();
   } catch (err) { errorBox(err); }
 }
 window.addEventListener('focus', () => scanAddons());

@@ -15,14 +15,6 @@ body.lg .nav-sep { height: 1px; background: #2a2a2a; margin: 6px 8px; }
 body.lg .dot { flex: none; width: 10px; height: 10px; border-radius: 50%; background: var(--c); display: inline-block; }
 body.lg .col .dot { margin-right: 8px; width: 8px; height: 8px; }
 
-/* header art: a colored square with the category's letters */
-body.lg #headerArt {
-  flex: none; width: 136px; height: 136px; border-radius: 6px; display: grid; place-items: center;
-  font-size: 44px; font-weight: 900; letter-spacing: -.02em; color: #fff;
-  background: linear-gradient(135deg, var(--c, #555), color-mix(in srgb, var(--c, #555) 35%, #000));
-  box-shadow: 0 8px 40px rgba(0, 0, 0, .55);
-}
-
 /* the item list */
 body.lg .list.lg { --cols: minmax(220px, 1fr) 130px minmax(120px, .8fr) 96px 100px; }
 body.lg .list.st { --cols: minmax(220px, 1fr) 120px minmax(160px, 1.2fr) 70px; }

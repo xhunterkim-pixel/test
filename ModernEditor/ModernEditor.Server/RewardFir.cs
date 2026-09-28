@@ -41,7 +41,7 @@ public sealed class CustomTradersRewardFir(ISptLogger<CustomTradersRewardFir> lo
                 && m.GetParameters().Any(p => p.Name == "postfix"));
             if (target == null || methodType == null || patch == null)
             {
-                logger.Warning($"[ModernEditor] Couldn't hook quest rewards ({(target == null ? "RewardHelper.ProcessReward not found" : "Harmony not found")}) — rewards with Found in Raid off will still arrive Found in Raid.");
+                logger.MeWarning($"[ModernEditor] Couldn't hook quest rewards ({(target == null ? "RewardHelper.ProcessReward not found" : "Harmony not found")}) — rewards with Found in Raid off will still arrive Found in Raid.");
                 return Task.CompletedTask;
             }
             var postfix = Activator.CreateInstance(methodType, typeof(CustomTradersRewardFir).GetMethod(nameof(Postfix), BindingFlags.Static | BindingFlags.NonPublic));
@@ -55,7 +55,7 @@ public sealed class CustomTradersRewardFir(ISptLogger<CustomTradersRewardFir> lo
         }
         catch (Exception e)
         {
-            logger.Warning($"[ModernEditor] Couldn't hook quest rewards ({e.GetBaseException().Message}) — rewards with Found in Raid off will still arrive Found in Raid.");
+            logger.MeWarning($"[ModernEditor] Couldn't hook quest rewards ({e.GetBaseException().Message}) — rewards with Found in Raid off will still arrive Found in Raid.");
         }
         return Task.CompletedTask;
     }

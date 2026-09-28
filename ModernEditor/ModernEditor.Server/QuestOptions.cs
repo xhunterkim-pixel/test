@@ -137,10 +137,10 @@ public sealed class CustomTradersProfileFix(SaveServer saveServer, TimeUtil time
         }
         catch (Exception e)
         {
-            logger.Warning($"[ModernEditor] Could not check profiles for finished quest ways: {e.Message}");
+            logger.MeWarning($"[ModernEditor] Could not check profiles for finished quest ways: {e.Message}");
         }
         if (fixedWays > 0)
-            logger.LogWithColor($"[ModernEditor] Closed {fixedWays} leftover quest way(s) in player profiles (they showed as failed).", Spectre.Console.Color.DodgerBlue1, null, null);
+            logger.MeBlue($"[ModernEditor] Closed {fixedWays} leftover quest way(s) in player profiles (they showed as failed).");
         return Task.CompletedTask;
     }
 }

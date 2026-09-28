@@ -43,7 +43,7 @@ public class ItemStatsMod(
         }
         catch (Exception e)
         {
-            logger.Error($"[ModernEditor] item_stats.json couldn't be read, no item stats changed: {e.Message}");
+            logger.MeError($"[ModernEditor] item_stats.json couldn't be read, no item stats changed: {e.Message}");
             return Task.CompletedTask;
         }
         if (all == null) return Task.CompletedTask;
@@ -54,7 +54,7 @@ public class ItemStatsMod(
             if (node is not JsonObject edit) continue;
             if (!templateTable.Items.TryGetValue(tpl, out var item) || item.Properties == null)
             {
-                logger.Warning($"[ModernEditor] item_stats.json: no item {tpl} in the database, skipped.");
+                logger.MeWarning($"[ModernEditor] item_stats.json: no item {tpl} in the database, skipped.");
                 continue;
             }
             try
@@ -64,10 +64,10 @@ public class ItemStatsMod(
             }
             catch (Exception e)
             {
-                logger.Error($"[ModernEditor] item_stats.json: {tpl} not changed — {e.Message}");
+                logger.MeError($"[ModernEditor] item_stats.json: {tpl} not changed — {e.Message}");
             }
         }
-        logger.Info($"[ModernEditor] Item stats: {done} item(s) changed from item_stats.json.");
+        logger.MeInfo($"[ModernEditor] Item stats: {done} item(s) changed from item_stats.json.");
         return Task.CompletedTask;
     }
 

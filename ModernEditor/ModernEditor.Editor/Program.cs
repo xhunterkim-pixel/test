@@ -14,9 +14,12 @@ internal static class Program
 
         // One editor at a time: a second start brings the open one to the front instead
         // (two editors saving the same trader files would overwrite each other).
+        EditorLog.Start(HostForm.Version);
+
         using var single = new Mutex(true, @"Local\ModernEditor.SingleInstance", out bool first);
         if (!first)
         {
+            EditorLog.Info("start", "already open — brought the open editor to the front");
             BringOpenEditorToFront();
             return;
         }
@@ -61,11 +64,12 @@ internal static class Program
     private static void Report(Exception? e, bool fatal)
     {
         string text = $"{DateTime.Now:yyyy-MM-dd HH:mm:ss}  Modern Editor {(fatal ? "crashed" : "error")}\n{e}\n\n";
+        EditorLog.Error(fatal ? "crash" : "error", e?.ToString() ?? "unknown error");
         try { File.AppendAllText(CrashLog, text); }
         catch { /* read-only folder: the message box still shows it */ }
         MessageBox.Show(
             $"{(fatal ? "The editor crashed" : "Something went wrong")}:\n\n{e?.Message}\n\n" +
-            $"Details were saved to:\n{CrashLog}\n\nSend that file (or a screenshot of this) to get it fixed.",
+            $"Details were saved to:\n{EditorLog.File}\n\nSend that file (or a screenshot of this) to get it fixed.",
             HostForm.AppTitle, MessageBoxButtons.OK, fatal ? MessageBoxIcon.Error : MessageBoxIcon.Warning);
     }
 }

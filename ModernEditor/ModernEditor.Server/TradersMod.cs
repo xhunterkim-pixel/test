@@ -27,7 +27,7 @@ public record ModMetadata : IModMetadata
     public string Name { get; init; } = "ModernEditor";
     public string Author { get; init; } = "xhunterkim";
     public List<string>? Contributors { get; init; }
-    public SemanticVersioning.Version Version { get; init; } = new("2.0.0");
+    public SemanticVersioning.Version Version { get; init; } = new(ModLog.ModVersion);
     public SemanticVersioning.Range SptVersion { get; init; } = new("~4.1.0");
     public bool HasPrepatcher { get; init; }
     public List<string>? Incompatibilities { get; init; }
@@ -107,7 +107,7 @@ public class CustomTradersMod(
             }
             catch (Exception e)
             {
-                logger.Error($"[ModernEditor] Failed to read {file}: {e.Message}", e);
+                logger.MeError($"[ModernEditor] Failed to read {file}: {e.Message}", e);
             }
         }
 
@@ -131,11 +131,13 @@ public class CustomTradersMod(
             }
             catch (Exception e)
             {
-                logger.Error($"[ModernEditor] Failed to load {trader.Name} ({folder}): {e.Message}", e);
+                logger.MeError($"[ModernEditor] Failed to load {trader.Name} ({folder}): {e.Message}", e);
             }
         }
 
         foreach (var (trader, _) in traders) HookTraderUnlock(trader);
+        foreach (var (trader, folder) in traders)
+            ModLog.Detail($"[ModernEditor] {trader.Name} ({Path.GetFileName(folder)}): {trader.Offers.Count} offer(s) ({trader.Offers.Count(o => o.Enabled)} on), {trader.Quests.Count} quest(s) ({trader.Quests.Count(q => q.Enabled)} on, {trader.Quests.Count(q => !string.IsNullOrEmpty(q.LevelFromItem))} dynamic)");
 
         LogBlue($"[ModernEditor] Loaded {loaded} trader(s) from {tradersFolder}");
         return Task.CompletedTask;
@@ -154,7 +156,7 @@ public class CustomTradersMod(
         MongoId traderId = file.Id;
         if (tradersTable.ContainsKey(traderId))
         {
-            logger.Warning($"[ModernEditor] Trader id {file.Id} ({file.Name}) already exists — skipped.");
+            logger.MeWarning($"[ModernEditor] Trader id {file.Id} ({file.Name}) already exists — skipped.");
             return false;
         }
 
@@ -173,7 +175,7 @@ public class CustomTradersMod(
         }
         else
         {
-            logger.Warning($"[ModernEditor] {file.Name}: avatar '{file.Avatar}' not found in {folder}.");
+            logger.MeWarning($"[ModernEditor] {file.Name}: avatar '{file.Avatar}' not found in {folder}.");
         }
 
         var traderBase = jsonUtil.Deserialize<TraderBase>(BuildTraderBase(file, avatarKey + ".jpg").ToJsonString())
@@ -364,7 +366,7 @@ public class CustomTradersMod(
             }
             if (cost.Count == 0)
             {
-                logger.Warning($"[ModernEditor] {file.Name}: offer {offer.Id} ({ItemName(offer.ItemTpl)}) has no valid cost — skipped.");
+                logger.MeWarning($"[ModernEditor] {file.Name}: offer {offer.Id} ({ItemName(offer.ItemTpl)}) has no valid cost — skipped.");
                 continue;
             }
 
@@ -430,7 +432,7 @@ public class CustomTradersMod(
             if (byClass || byCaliber) result.Add(id.ToString());
         }
         if (result.Count == 0)
-            logger.Warning($"[ModernEditor] Kill objective: no weapons match {string.Join(", ", c.WeaponClasses.Concat(c.WeaponCalibers))}.");
+            logger.MeWarning($"[ModernEditor] Kill objective: no weapons match {string.Join(", ", c.WeaponClasses.Concat(c.WeaponCalibers))}.");
         return result;
     }
 
@@ -573,7 +575,7 @@ public class CustomTradersMod(
             }
             else
             {
-                logger.Warning($"[ModernEditor] {file.Name}: quest '{def.Name}' requires quest {prereq}, which isn't loaded " +
+                logger.MeWarning($"[ModernEditor] {file.Name}: quest '{def.Name}' requires quest {prereq}, which isn't loaded " +
                                "(deleted, or its trader is switched off) — it will NEVER unlock.");
             }
         }
@@ -586,7 +588,7 @@ public class CustomTradersMod(
         MongoId questId = gameId;
         if (templateTable.Quests.ContainsKey(questId))
         {
-            logger.Warning($"[ModernEditor] Quest id {gameId} ({def.Name}) already exists — skipped.");
+            logger.MeWarning($"[ModernEditor] Quest id {gameId} ({def.Name}) already exists — skipped.");
             return false;
         }
 
@@ -762,7 +764,7 @@ public class CustomTradersMod(
         var parsed = jsonUtil.Deserialize<Quest>(quest.ToJsonString());
         if (parsed == null)
         {
-            logger.Warning($"[ModernEditor] Quest {name} did not deserialize — skipped.");
+            logger.MeWarning($"[ModernEditor] Quest {name} did not deserialize — skipped.");
             return false;
         }
 
@@ -925,7 +927,7 @@ public class CustomTradersMod(
             }
 
             default:
-                logger.Warning($"[ModernEditor] Unknown condition type '{c.Type}' — skipped.");
+                logger.MeWarning($"[ModernEditor] Unknown condition type '{c.Type}' — skipped.");
                 return null;
         }
     }
@@ -977,7 +979,7 @@ public class CustomTradersMod(
                 var offer = file.Offers.FirstOrDefault(o => o.Id == r.OfferId);
                 if (offer == null)
                 {
-                    logger.Warning($"[ModernEditor] {file.Name}: UnlockOffer reward points at a missing offer {r.OfferId} — skipped.");
+                    logger.MeWarning($"[ModernEditor] {file.Name}: UnlockOffer reward points at a missing offer {r.OfferId} — skipped.");
                     return null;
                 }
                 // The copy of the offer that this quest unlocks (all its ways share it), see BuildAssort.
@@ -996,7 +998,7 @@ public class CustomTradersMod(
             }
 
             default:
-                logger.Warning($"[ModernEditor] Unknown reward type '{r.Type}' — skipped.");
+                logger.MeWarning($"[ModernEditor] Unknown reward type '{r.Type}' — skipped.");
                 return null;
         }
     }
@@ -1134,7 +1136,7 @@ public class CustomTradersMod(
             hooked++;
         }
         if (hooked == 0)
-            logger.Warning($"[ModernEditor] {file.Name}: unlocks after quest {file.UnlockQuestId}, which isn't loaded — the trader will stay locked.");
+            logger.MeWarning($"[ModernEditor] {file.Name}: unlocks after quest {file.UnlockQuestId}, which isn't loaded — the trader will stay locked.");
         else
             LogBlue($"[ModernEditor] {file.Name}: locked at start, unlocked by completing '{QuestName(file.UnlockQuestId!)}'.");
     }
@@ -1162,7 +1164,7 @@ public class CustomTradersMod(
     /// busy server console. Warnings stay yellow and errors red.
     /// </summary>
     private void LogBlue(string message) =>
-        logger.LogWithColor(message, Spectre.Console.Color.DodgerBlue1, null, null);
+        logger.MeBlue(message);
 
     /// <summary>Adds the same strings to every game language (so non-English clients still show text).</summary>
     private void AddLocales(Dictionary<string, string> strings)
@@ -1192,7 +1194,7 @@ public class CustomTradersMod(
     {
         if (Ids.IsValid(tpl) && templateTable.Items.ContainsKey(tpl!)) return true;
         var hint = _requiredMods.Count > 0 ? $" It probably comes from a mod this trader needs ({string.Join(", ", _requiredMods)}) — is it installed and loading?" : "";
-        logger.Warning($"[ModernEditor] Unknown item id '{tpl}' in {context} — skipped.{hint}");
+        logger.MeWarning($"[ModernEditor] Unknown item id '{tpl}' in {context} — skipped.{hint}");
         return false;
     }
 

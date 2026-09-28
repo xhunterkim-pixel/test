@@ -20,7 +20,7 @@ public static class DynamicLevels
         var config = FindLevelGateConfig(modFolder);
         if (config == null)
         {
-            logger.Warning($"[ModernEditor] {quests.Count} quest(s) follow an item's Level Gate level, but Level Gate's level_requirements.json " +
+            logger.MeWarning($"[ModernEditor] {quests.Count} quest(s) follow an item's Level Gate level, but Level Gate's level_requirements.json " +
                            "wasn't found — they keep the level saved in the editor.");
             return;
         }
@@ -28,7 +28,7 @@ public static class DynamicLevels
         try { levels = ReadLevels(config); }
         catch (Exception e)
         {
-            logger.Warning($"[ModernEditor] Level Gate's levels couldn't be read ({e.Message}) — dynamic quests keep the level saved in the editor.");
+            logger.MeWarning($"[ModernEditor] Level Gate's levels couldn't be read ({e.Message}) — dynamic quests keep the level saved in the editor.");
             return;
         }
         int moved = 0;
@@ -38,13 +38,13 @@ public static class DynamicLevels
             int level = Math.Clamp(itemLevel + quest.LevelOffset, 1, 79);
             if (level != quest.MinLevel)
             {
-                logger.Info($"[ModernEditor]   {trader.Name} › {quest.Name}: level {quest.MinLevel} → {level} (follows its item, Level Gate level {itemLevel}" +
+                logger.MeInfo($"[ModernEditor]   {trader.Name} › {quest.Name}: level {quest.MinLevel} → {level} (follows its item, Level Gate level {itemLevel}" +
                             (quest.LevelOffset != 0 ? $" {quest.LevelOffset:+#;-#}" : "") + ")");
                 moved++;
             }
             quest.MinLevel = level;
         }
-        logger.Info($"[ModernEditor] Dynamic levels: {quests.Count} quest(s) follow their item's Level Gate level ({moved} moved since the last save).");
+        logger.MeInfo($"[ModernEditor] Dynamic levels: {quests.Count} quest(s) follow their item's Level Gate level ({moved} moved since the last save).");
     }
 
     /// <summary>{ "items": { "&lt;tpl&gt;": level } } — numbers or numeric strings.</summary>
@@ -89,7 +89,7 @@ public static class LegacyMods
         if (mods == null) return;
         foreach (var (folder, dll) in new[] { ("CustomTraders", "CustomTraders.dll"), ("ItemStatEditor", "ItemStatEditor.Server.dll") })
             if (File.Exists(Path.Combine(mods, folder, dll)))
-                logger.Warning($"[ModernEditor] The old {folder} mod is still installed (user\\mods\\{folder}) — Modern Editor replaces it. " +
+                logger.MeWarning($"[ModernEditor] The old {folder} mod is still installed (user\\mods\\{folder}) — Modern Editor replaces it. " +
                                $"Open ModernEditor.exe once (it moves your files over) or delete that folder, or things load twice.");
     }
 }

@@ -44,6 +44,25 @@ function questItem(t, q) {
   return '';
 }
 
+/** What each quest looked tied to (questItem) the last time it was checked, by quest id. */
+const questItemSeen = new Map();
+/** Remembers every quest's item without changing anything (on load / reload / undo). */
+function seedQuestItems() { questItemSeen.clear(); for (const t of S.traders) for (const q of t.file.quests) questItemSeen.set(q.id, questItem(t, q)); }
+/** The offer a dynamic quest unlocks got another item (or the quest now unlocks another offer): if the quest followed the old
+ *  item, it follows the new one. A quest set to follow some other item on purpose is left alone. */
+function followQuestItems(t) {
+  let moved = 0;
+  for (const q of t?.file.quests || []) {
+    const now = questItem(t, q), was = questItemSeen.get(q.id);
+    questItemSeen.set(q.id, now);
+    if (was === undefined || was === now || !validId(now) || !validId(q.levelFromItem) || q.levelFromItem !== was) continue;
+    q.levelFromItem = now;
+    if (LG.loaded()) q.minLevel = dynamicLevel(q);
+    moved++;
+  }
+  return moved;
+}
+
 /** Quest editor: "Unlocks at Level" — a number, or following an item. */
 function questLevelFields(t, q) {
   const on = validId(q.levelFromItem) || q.levelFromItem === '';
@@ -61,6 +80,8 @@ function questLevelFields(t, q) {
     ${ui.hint(!loaded ? '⚠ Level Gate\'s file isn\'t loaded (Level Limits page) — the level above is the one last saved.'
       : !validId(item) ? '✖ Pick the item whose level this quest follows.'
       : `The quest unlocks at the item's level${Number(q.levelOffset) ? ` ${q.levelOffset > 0 ? '+' : '−'} ${Math.abs(q.levelOffset)}` : ''}. Change the item's level in Level Limits and this follows; the server applies it again at every start.`)}
+    ${(() => { const tied = questItem(t, q); return validId(tied) && tied !== item ? `<div class="warn-line">It unlocks ${esc(shortName(tied))}, but its level follows ${esc(item ? shortName(item) : 'nothing')}.</div>
+      <div class="toolbar" style="padding:0 0 6px"><button class="primary" data-act="followTied">Follow ${esc(shortName(tied))}</button></div>` : ''; })()}
     ${validId(item) ? `<div class="toolbar" style="padding:0 0 6px"><button class="outline" data-act="goLevel" data-arg="${esc(item)}">Change ${esc(shortName(item))}'s Level ›</button></div>` : ''}`;
 }
 
@@ -340,6 +361,7 @@ function homeTools() {
   return tool('levels', '#b8901c', 'LV', 'Level Limits', lgLoaded ? [`${fmt(LG.levels().size)} items limited`, `${st.disabled?.size || 0} switched off`] : ['⚠ Level Gate\'s file not found', 'open it to pick the file'])
     + tool('stats', '#1e8a4a', '+', 'Item Stats', [`${fmt(Object.keys(st.meds || {}).length)} meds, stims & food`, `${Object.keys(st.statEdits || {}).length} edited`])
     + tool('prog', '#2c6f96', '▲', 'Progression', ['what unlocks at each level', `${quests} quests · ${dyn} dynamic`])
+    + `<button class="hcard tool" data-act="openLogs" style="--hc:#6b5b95"><div class="tool-art">📄</div><div class="htext"><div class="hname">Logs</div><div class="hsub">open the Logs folder</div><div class="hsub">send the newest file if something breaks</div></div></button>`
     + `<button class="hcard tool" data-act="palette" style="--hc:#555"><div class="tool-art">🔎</div><div class="htext"><div class="hname">Go To…</div><div class="hsub">any trader, quest, offer or item</div><div class="hsub">Ctrl+K</div></div></button>`;
 }
 
@@ -355,10 +377,69 @@ function homeNotes() {
   } else if (S.modFolder && S.serverMod === false) {
     out.push(`<div class="home-note warn"><h3>Server Mod Missing</h3><div class="hint">ModernEditor.dll isn't in <b>${esc(S.modFolder)}</b> yet — copy it there from the download (Install\\SPT_Runtime\\user\\mods\\ModernEditor), or the game won't get your traders and item stats.</div></div>`);
   }
+  const junk = oldFilesToShow();
+  if (junk.length) {
+    const total = junk.reduce((n, f) => n + (f.size || 0), 0);
+    out.push(`<div class="home-note warn" id="cleanNote"><h3>Old Files Found — Clean Them Up?</h3>
+      <div class="hint">Modern Editor replaced these (${junk.length} item${junk.length === 1 ? '' : 's'}, ${sizeText(total)}). Pick what to remove — it goes to the <b>Recycle Bin</b>, so you can still get it back. Level Gate and your ModernEditor files are never listed.</div>
+      <div class="clean-list">${junk.map((f, i) => `<label class="clean-row"><input type="checkbox" data-clean="${i}" checked><span><b>${esc(f.what)}</b><br><span class="muted small">${esc(f.path)} · ${sizeText(f.size)}</span></span></label>`).join('')}</div>
+      <div class="toolbar"><button class="primary" data-act="cleanup">Clean Up Selected</button><button class="ghost" data-act="cleanupLater">Not Now</button></div></div>`);
+  }
   if (S.imported?.length && !S.ui.importNoteSeen)
     out.push(`<div class="home-note"><h3>Welcome to Modern Editor</h3><div class="hint">Your settings from the ${esc(S.imported.join(' and the '))} came along: folders, imported mods, tags, notes, your own orders and categories, colors and column widths.</div>
       <div class="toolbar"><button class="ghost" data-act="importSeen">Got It</button></div></div>`);
   return out.join('');
+}
+
+// =====================================================================
+// Old files (Clean Up) and the log
+// =====================================================================
+
+const sizeText = n => n >= 1048576 ? `${(n / 1048576).toFixed(1)} MB` : n >= 1024 ? `${Math.round(n / 1024)} KB` : `${n || 0} B`;
+/** What the last scan found, minus what "Not Now" put aside (until something new turns up). */
+function oldFilesToShow() {
+  const list = S.oldFiles || [];
+  const later = new Set(S.ui.cleanupLater || []);
+  return list.some(f => !later.has(f.path)) ? list : [];
+}
+async function scanOldFiles() {
+  try { S.oldFiles = await host.call('cleanupScan') || []; } catch (e) { S.oldFiles = []; }
+  if (S.home) renderHome();
+}
+
+/** Everything the page shows or runs into also goes to the log file (Logs\ next to ModernEditor.exe), in small batches. */
+const pageLog = (() => {
+  let lines = [], timer = null, busy = false;
+  const flush = () => {
+    timer = null;
+    if (!lines.length) return;
+    const batch = lines; lines = [];
+    for (const level of ['error', 'warn', 'info']) {
+      const text = batch.filter(l => l.level === level).map(l => l.text).join('\n');
+      if (text) host.call('log', { level, text }).catch(() => { });
+    }
+  };
+  return (level, text) => {
+    if (busy) return;
+    busy = true;
+    try { lines.push({ level, text: String(text).slice(0, 4000) }); } finally { busy = false; }
+    if (level === 'error') flush(); else if (!timer) timer = setTimeout(flush, 600);
+  };
+})();
+window.addEventListener('error', e => pageLog('error', `${e.message} at ${(e.filename || '').split('/').pop()}:${e.lineno}:${e.colno}${e.error?.stack ? '\n' + e.error.stack : ''}`));
+window.addEventListener('unhandledrejection', e => pageLog('error', `unhandled: ${e.reason?.stack || e.reason}`));
+for (const [name, level] of [['error', 'error'], ['warn', 'warn']]) {
+  const orig = console[name].bind(console);
+  console[name] = (...a) => { orig(...a); pageLog(level, a.map(x => x?.stack || (typeof x === 'object' ? JSON.stringify(x) : String(x))).join(' ')); };
+}
+{
+  // what the user saw (toasts, status line, the Checks & Log page's log, error boxes) and where they went
+  const wrap = (name, fn) => { const orig = window[name]; if (typeof orig === 'function') window[name] = function (...a) { try { fn(...a); } catch { } return orig.apply(this, a); }; };
+  wrap('toast', t => pageLog('info', 'toast: ' + t));
+  wrap('status', t => pageLog('info', 'status: ' + t));
+  wrap('log', (level, where, msg) => pageLog(level === 'error' ? 'error' : level === 'warning' ? 'warn' : 'info', `log ${where}: ${msg}`));
+  wrap('errorBox', err => pageLog('error', 'error box: ' + (err?.stack || err?.message || err)));
+  wrap('showPage', p => pageLog('info', `page: ${p}${S.t ? ` (trader ${S.t.file.name})` : ''}`));
 }
 
 /** Quests (all your traders, switched on) that unlock at a level — shown in the Progression view. */
@@ -387,6 +468,14 @@ function goProgQuest(i) {
 Object.assign(ACT, {
   palette: () => paletteBox(),
   homeTool(page) { hideHome(); showPage(page); },
+  followTied() {
+    const t = S.t, q = S.quest; if (!t || !q) return;
+    const id = questItem(t, q); if (!validId(id)) return;
+    q.levelFromItem = id; if (LG.loaded()) q.minLevel = dynamicLevel(q);
+    questItemSeen.set(q.id, id);
+    markDirty(t); runChecks(); renderPage(false); renderDetails(false);
+    toast(`${q.name} now follows ${shortName(id)} — level ${q.minLevel}`);
+  },
   goLevel: id => goItemLevels(id),
   importSeen() { S.ui.importNoteSeen = true; saveUi(); renderHome(); },
   async migrate() {
@@ -396,11 +485,26 @@ Object.assign(ACT, {
       await LG.start(snap);
       lgLevelsChanged(true);
       renderAll(false);
+      scanOldFiles();
       await openModal(`<div class="dialog"><h2>Files Moved</h2><div class="req">${esc((snap.migrated || []).join('\n') || 'Nothing to move.')}</div>
         <div class="hint">Restart the SPT server. The old mods are in user\\ModernEditor_old_mods if you ever need them.</div>
         <div class="buttons"><button class="primary" data-m>OK</button></div></div>`, m => { m.querySelector('[data-m]').onclick = () => closeModal(null); });
     } catch (err) { errorBox(err); }
   },
+  openLogs: () => host.call('openLogs').catch(errorBox),
+  async cleanup() {
+    const picked = [...document.querySelectorAll('#cleanNote [data-clean]')].filter(x => x.checked).map(x => oldFilesToShow()[Number(x.dataset.clean)]?.path).filter(Boolean);
+    if (!picked.length) return toast('Nothing picked');
+    try {
+      const r = await host.call('cleanup', { paths: picked });
+      S.oldFiles = r.left || [];
+      renderHome();
+      await openModal(`<div class="dialog"><h2>Cleaned Up</h2><div class="req">${esc((r.cleaned || []).join('\n') || 'Nothing removed.')}</div>
+        <div class="hint">Everything went to the Recycle Bin — restore it from there if you need it back.</div>
+        <div class="buttons"><button class="primary" data-m>OK</button></div></div>`, m => { m.querySelector('[data-m]').onclick = () => closeModal(null); });
+    } catch (err) { errorBox(err); }
+  },
+  cleanupLater() { S.ui.cleanupLater = (S.oldFiles || []).map(f => f.path); saveUi(); renderHome(); },
   async migrateLater() { await host.call('migrateLater').catch(() => { }); S.migration = null; renderHome(); },
 });
 
