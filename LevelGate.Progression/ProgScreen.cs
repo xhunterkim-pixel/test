@@ -768,7 +768,8 @@ namespace LevelGate.Progression
             _heroDiamond = Ui.Img(dia, Color.white);
             _heroDiamondIn = Ui.Img(Ui.Fill(dia, "In", 1.5f), Face);
             _heroDiamond.raycastTarget = _heroDiamondIn.raycastTarget = false;
-            BuildHeroSubtitle(face); // 0.9.9: MW4's line under the name
+            BuildHeroSubtitle(face); // 0.9.9: MW4's line under the name (off since 0.9.91)
+            NameGlow(_heroName);     // 0.9.91: MW4's soft glow behind the name
         }
 
         /// <summary>The hero's caption and rank pips for the featured item.</summary>

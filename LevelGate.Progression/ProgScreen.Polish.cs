@@ -18,6 +18,7 @@ namespace LevelGate.Progression
     ///   · Neutral Pips: the hero's rank pips in the screen's state colours instead of loot colours (red means unmet)
     ///   · Hero Subtitle: a line under the big name (MW4: the description in grey italic)
     ///   · Tooltip Delay: the full name shows only after resting on a tile
+    ///   · Name Glow (0.9.91): MW4's soft light halo behind the big name
     ///   · Ambient Light / Light Colours: the picked card's soft lights stronger, with a pink / purple accent (Mixed)
     /// </summary>
     internal static partial class ProgScreen
@@ -29,7 +30,7 @@ namespace LevelGate.Progression
 
             public static float DecorK => On ? Pct(ProgressionPlugin.TestDecorNoise, 55) : 1f;
             public static float MicroK => On ? Pct(ProgressionPlugin.TestMicroLabels, 60) : 1f;
-            public static float AmbientK => On ? Pct(ProgressionPlugin.TestAmbient, 40) : 1f;
+            public static float AmbientK => On ? Pct(ProgressionPlugin.TestAmbient, 50) : 1f; // 0.9.91: your pick (was 40)
             public static float FlourishK => On ? Pct(ProgressionPlugin.TestFlourish, 65) : 1f;
             public static float BorderFade => On ? Pct(ProgressionPlugin.TestBorderFade, 70) : 0f;
             public static float CardRest => On ? Pct(ProgressionPlugin.TestCardRest, 90) : 1f;
@@ -37,7 +38,10 @@ namespace LevelGate.Progression
             public static float SmallText => On ? (ProgressionPlugin.TestSmallText?.Value ?? 10.5f) : 0f;
             public static bool NeutralPips => On && (ProgressionPlugin.TestNeutralPips?.Value ?? true);
             public static bool QuietDuringFx => On && (ProgressionPlugin.TestQuietFx?.Value ?? true);
-            public static HeroLine Subtitle => On ? (ProgressionPlugin.TestHeroSubtitle?.Value ?? HeroLine.Description) : HeroLine.Off;
+            // 0.9.91: off — the glow behind the name was wanted, not a line (fixed: a saved 0.9.9 value doesn't bring it back)
+            public static HeroLine Subtitle => HeroLine.Off;
+            public static float NameGlowK => On ? Pct(ProgressionPlugin.TestNameGlow, 60) : 0f;
+            public static float NameGlowSoft => Pct(ProgressionPlugin.TestNameGlowSoftness, 85);
             public static float SubtitleAlpha => Pct(ProgressionPlugin.TestHeroSubtitleOpacity, 70);
             public static float AmbientLightK => On ? Pct(ProgressionPlugin.TestAmbientLight, 140) : 1f;
             public static bool MixedLight => On && (ProgressionPlugin.TestLightHue?.Value ?? LightHue.Mixed) == LightHue.Mixed;
@@ -124,6 +128,40 @@ namespace LevelGate.Progression
         }
 
         private static void ForgetEdges() { if (_edges.Count > 0) { var dead = new List<Graphic>(); foreach (var kv in _edges) if (kv.Key == null) dead.Add(kv.Key); foreach (var d in dead) _edges.Remove(d); } }
+
+        // ---------------------------------------------------------------- MW4's soft glow behind the hero's name (0.9.91)
+
+        /// <summary>
+        /// A soft light halo hugging the letters (MW4's "HAN 86"), drawn by the text's own underlay pass on an instance of its
+        /// material — no extra graphics. Shaders without an underlay get a faint radial light behind the name instead.
+        /// </summary>
+        private static void NameGlow(Component label)
+        {
+            float k = Polish.NameGlowK;
+            if (label == null || k <= 0) return;
+            try
+            {
+                var mat = Refl.Get(label, "fontMaterial") as Material; // the label's own copy: other text keeps its look
+                if (mat != null && mat.HasProperty("_UnderlayColor"))
+                {
+                    mat.EnableKeyword("UNDERLAY_ON");
+                    mat.SetColor("_UnderlayColor", new Color(1f, .96f, .88f, Mathf.Clamp01(.42f * k)));
+                    if (mat.HasProperty("_UnderlaySoftness")) mat.SetFloat("_UnderlaySoftness", Mathf.Clamp01(Polish.NameGlowSoft));
+                    if (mat.HasProperty("_UnderlayDilate")) mat.SetFloat("_UnderlayDilate", Mathf.Lerp(.1f, .6f, Mathf.Clamp01(k)));
+                    if (mat.HasProperty("_UnderlayOffsetX")) mat.SetFloat("_UnderlayOffsetX", 0f);
+                    if (mat.HasProperty("_UnderlayOffsetY")) mat.SetFloat("_UnderlayOffsetY", -.2f);
+                    L.Info($"name glow: text underlay on ({mat.shader?.name}), {k * 100:0}%");
+                    return;
+                }
+                L.Info($"name glow: the text shader ({mat?.shader?.name ?? "none"}) has no underlay — a soft light behind the name instead");
+            }
+            catch (System.Exception e) { L.ErrorOnce("name glow", e); }
+            var rt = ((Component)label).transform as RectTransform;
+            if (rt == null) return;
+            var glow = Ui.Img(Ui.Rect(rt, "Glow", new Vector2(0, 0), new Vector2(.5f, 1), new Vector2(-30, -16), new Vector2(40, 16)), new Color(1f, .96f, .88f, .09f * k), Ui.Radial());
+            glow.raycastTarget = false;
+            glow.transform.SetAsFirstSibling();
+        }
 
         // ---------------------------------------------------------------- the line under the hero's name
 

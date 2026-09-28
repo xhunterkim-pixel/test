@@ -26,7 +26,7 @@ namespace LevelGate.Progression
         public const string Guid = "com.kkyangg.levelgate.progression";
         public const string Name = "LevelGate Progression";
         // MAJOR.MINOR.PATCH — see CHANGELOG.md
-        public const string Version = "0.9.9";
+        public const string Version = "0.9.91";
 
         internal static ProgressionPlugin Instance;
         internal static ConfigEntry<KeyboardShortcut> OpenKey;
@@ -39,7 +39,7 @@ namespace LevelGate.Progression
         internal static readonly ConfigEntry<bool>[] TestMw = new ConfigEntry<bool>[11];
         // 0.9.9 polish pass (F12 > CURRENTLY TESTING): Polish off = exactly 0.9.81
         internal static ConfigEntry<bool> TestPolish, TestQuietFx, TestNeutralPips;
-        internal static ConfigEntry<int> TestDecorNoise, TestMicroLabels, TestAmbient, TestFlourish, TestBorderFade, TestCardRest, TestCardLocked, TestHeroSubtitleOpacity, TestAmbientLight;
+        internal static ConfigEntry<int> TestNameGlow, TestNameGlowSoftness, TestDecorNoise, TestMicroLabels, TestAmbient, TestFlourish, TestBorderFade, TestCardRest, TestCardLocked, TestHeroSubtitleOpacity, TestAmbientLight;
         internal static ConfigEntry<float> TestSmallText, TestTipDelay;
         internal static ConfigEntry<ProgScreen.HeroLine> TestHeroSubtitle;
         internal static ConfigEntry<ProgScreen.LightHue> TestLightHue;
@@ -248,7 +248,7 @@ namespace LevelGate.Progression
                 "The tiny system labels (ID - …, STATS —, LEVEL_ACTIVE) in % of 0.9.81.", 198, new AcceptableValueRange<int>(0, 150)));
             TestBorderFade = Config.Bind(T, "BorderFade", 70, Desc(
                 "MW4 frames: panel, tile and card borders at full strength in the middle of each side, fading toward the ends. 0 = solid (0.9.81), 100 = gone at the ends.", 197, new AcceptableValueRange<int>(0, 100)));
-            TestAmbient = Config.Bind(T, "AmbientMotion", 40, Desc(
+            TestAmbient = Config.Bind(T, "AmbientMotion", 50, Desc(
                 "Idle movement — drifting lights, the breathing emblem, the background pattern — in % of 0.9.81.", 196, new AcceptableValueRange<int>(0, 150)));
             TestQuietFx = Config.Bind(T, "QuietDuringEffects", true, Desc(
                 "The idle movers rest while a level up, the XP fill or a picture load-in plays, so one thing moves at a time.", 195));
@@ -266,13 +266,18 @@ namespace LevelGate.Progression
                 "Information text (tile LV, group captions, card type lines…) is never smaller than this at 1080p. Decorative micro text isn't changed.", 189, new AcceptableValueRange<float>(9f, 13f)));
             TestNeutralPips = Config.Bind(T, "NeutralPips", true, Desc(
                 "The hero's rank pips in the screen's state colours (light grey, orange when it's your level) instead of loot colours — red is kept for unmet requirements.", 188));
-            TestHeroSubtitle = Config.Bind(T, "HeroSubtitle", ProgScreen.HeroLine.Description, Desc(
+            TestHeroSubtitle = Config.Bind(T, "HeroSubtitle", ProgScreen.HeroLine.Off, Desc(
                 "A line under the big name, like MW4: Description (its first sentence, grey italic), FullName (the long name), Off.", 187));
             TestHeroSubtitleOpacity = Config.Bind(T, "HeroSubtitleOpacity", 70, Desc(
                 "How bright the line under the big name is, in %.", 186, new AcceptableValueRange<int>(20, 100)));
             TestTipDelay = Config.Bind(T, "TooltipDelay", 1f, Desc(
                 "The full-name tooltip shows only after resting on a tile / card this long, in seconds (0 = at once, like 0.9.81).", 185, new AcceptableValueRange<float>(0f, 2.5f)));
-            var polishDials = new HashSet<ConfigEntryBase> { TestPolish, TestDecorNoise, TestMicroLabels, TestBorderFade, TestAmbient, TestQuietFx, TestFlourish, TestAmbientLight, TestLightHue,
+            // 0.9.91: MW4's soft glow behind the big name
+            TestNameGlow = Config.Bind(T, "NameGlow", 60, Desc(
+                "A soft light halo hugging the big name's letters, like MW4's weapon names, in % (0 = off).", 210, new AcceptableValueRange<int>(0, 200)));
+            TestNameGlowSoftness = Config.Bind(T, "NameGlowSoftness", 85, Desc(
+                "How soft (spread out) that glow is, in %.", 209, new AcceptableValueRange<int>(10, 100)));
+            var polishDials = new HashSet<ConfigEntryBase> { TestNameGlow, TestNameGlowSoftness, TestPolish, TestDecorNoise, TestMicroLabels, TestBorderFade, TestAmbient, TestQuietFx, TestFlourish, TestAmbientLight, TestLightHue,
                 TestCardRest, TestCardLocked, TestSmallText, TestNeutralPips, TestHeroSubtitle, TestHeroSubtitleOpacity, TestTipDelay };
             var liveDials = new HashSet<ConfigEntryBase> { TestTipDelay, TestAmbient, TestQuietFx, TestFlourish };
             Config.SettingChanged += (_, a) =>
@@ -390,7 +395,7 @@ namespace LevelGate.Progression
                 ["Polish"] = "Polish 0.9.9 (Off = 0.9.81)", ["DecorNoise"] = "Decor Noise (%)", ["MicroLabels"] = "Micro Labels (%)", ["BorderFade"] = "Border Fade (%)",
                 ["AmbientMotion"] = "Ambient Motion (%)", ["QuietDuringEffects"] = "Quiet During Effects", ["Flourish"] = "Flourish (%)", ["AmbientLight"] = "Ambient Light (%)",
                 ["LightColours"] = "Ambient Light Colours", ["CardRest"] = "Card Rest Opacity (%)", ["CardLocked"] = "Card Locked Opacity (%)", ["SmallText"] = "Small Text Minimum (px)",
-                ["NeutralPips"] = "Neutral Rank Pips", ["HeroSubtitle"] = "Line Under Name", ["HeroSubtitleOpacity"] = "Line Under Name Opacity (%)", ["TooltipDelay"] = "Tooltip Delay (s)",
+                ["NeutralPips"] = "Neutral Rank Pips", ["HeroSubtitle"] = "Line Under Name", ["HeroSubtitleOpacity"] = "Line Under Name Opacity (%)", ["TooltipDelay"] = "Tooltip Delay (s)", ["NameGlow"] = "Name Glow (%)", ["NameGlowSoftness"] = "Name Glow Softness (%)",
             };
             var titles = new Dictionary<string, string>
             {
@@ -398,8 +403,8 @@ namespace LevelGate.Progression
                 ["5. Testing"] = "5. CURRENTLY TESTING",
             };
             // what most players never touch: under F12's "Advanced settings" (the Preview tools too); the tuning section is hidden
-            var testingNow = new HashSet<string> { "Polish", "DecorNoise", "MicroLabels", "BorderFade", "AmbientMotion", "QuietDuringEffects", "Flourish", "AmbientLight", "LightColours",
-                "CardRest", "CardLocked", "SmallText", "NeutralPips", "HeroSubtitle", "HeroSubtitleOpacity", "TooltipDelay" }; // 0.9.9: being tried (XP Bar Edge: Shadow, your pick, is the default)
+            // 0.9.91: the 0.9.9 dials are tuned (your values are the defaults: Ambient Motion 50, the line under the name off); being tried now:
+            var testingNow = new HashSet<string> { "NameGlow", "NameGlowSoftness" };
             var advanced = new HashSet<string> { "RefreshIcons", "UseGameSounds", "Vignette", "RedGlow", "BlurBackground", "HideMainMenu", "PatternMotion" };
             foreach (var kv in Config)
             {
