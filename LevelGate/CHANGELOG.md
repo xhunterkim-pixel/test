@@ -40,6 +40,9 @@ Versions are **MAJOR.MINOR.PATCH**:
 
 ## LevelGate Progression (BepInEx plugin, separate DLL)
 
+### 0.9.51
+- **NEW tags stay until you deal with them** (they used to vanish as soon as the screen closed): every reward from levels you reached since your last visit is tagged NEW and keeps it (across visits and game restarts, per character) until you click it. Each of those level cards shows NEW in its bottom-right corner (your current level's too) until you pick that level yourself or click all its new rewards. Kept in a hidden setting (NewState).
+
 ### 0.9.50
 - **Category tabs light up like the game's**: hovering a title (WEAPONS ›, AMMO ›) turns it pale grey with dark text, like EYEWEAR › in the inventory (it used to only get a shade lighter).
 - **Small levels look like the gear slots**: with a handful of items, each category is a small slot side by side (its own tab over a box as wide as its items) instead of one grid with a coloured label on each tile.

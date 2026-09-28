@@ -110,12 +110,13 @@ namespace LevelGate.Progression
                 int player = ProgData.PlayerLevel();
                 int seen = SeenState.Level;
                 _newFrom = seen > 0 && seen < player ? seen : 0;
+                int added = NewTags.Reached(seen, player); // levels reached since the last visit: their rewards are NEW until clicked
                 _sLevels = _sItems = _sInspects = _sPages = _sSlow = 0; _sSlowMax = 0; _sOpenedAt = Time.unscaledTime;
                 _sLogMs = L.CostMs; _sLogLines = L.CostLines;
-                int newItems = _newFrom > 0 ? ProgData.Levels.Values.Count(v => v > _newFrom && v <= player) : 0;
+                int newItems = NewTags.Count;
                 string xpNow = ProgData.LevelExp(out int xh, out int xn) ? $"{xh} / {xn} into level {player} (total {ProgData.TotalExp()})" : "XP unknown";
                 L.Info($"open: player level {player}, {xpNow}; last seen level {seen}" +
-                       (_newFrom > 0 ? $" → NEW: levels {_newFrom + 1}–{player}, {newItems} item(s) tagged NEW" : " → nothing new since last visit"));
+                       (added > 0 ? $" → levels {_newFrom + 1}–{player} reached: {added} reward(s) tagged NEW" : " → no new levels since last visit") + $"; {newItems} reward(s) still NEW");
                 MenuWidget.Seen(player); // the NEW tag on the main-menu shortcut goes away
                 L.Info($"screen: game resolution {Screen.width}x{Screen.height} (UI scale {(_canvas.GetComponentInParent<Canvas>()?.scaleFactor ?? 1):0.00}), card pictures ~{CardPx():0} px");
                 L.Info($"screen open ({why}); player level {player}, {ProgData.Levels.Count} limited items; graphics {ProgressionPlugin.Quality.Value}{(Perf ? " — emblems stand still, pictures drawn smaller" : "")}");
@@ -162,8 +163,7 @@ namespace LevelGate.Progression
                    $"since start {L.CostLines} line(s), {L.CostMs:0} ms ({L.CostMs / 10 / Math.Max(1, Time.realtimeSinceStartup):0.000}% of play time); verbose {(L.Verbose ? "on" : "off")}");
             FinishXpAnim("screen closed");
             EndPreview();
-            if (_newFrom > 0) L.Info($"NEW: cleared ({_newClicked.Count} item(s) clicked, {_newViewed.Count} level(s) looked at)");
-            _newFrom = 0; _newClicked.Clear(); _newViewed.Clear();
+            _newFrom = 0; // the NEW tags themselves are kept (NewTags): they go when clicked / looked at, not when the screen closes
             _canvas.SetActive(false);
             MenuHook.SetOn(false);
             HideMenu(false);
@@ -1225,7 +1225,9 @@ namespace LevelGate.Progression
             int page = (level - 1) / PerPage;
             _level = level;
             if (page != _page) { ShowPage(page, page > _page ? 1 : -1, level); return; }
-            if (!XpAnimating) _newViewed.Add(level); // looked at: its card's NEW goes (its items keep theirs until clicked)
+            // picked by you (not the automatic landing when the screen opens, nor the XP animation): its card's NEW goes;
+            // its rewards keep theirs until clicked
+            if (!XpAnimating && Time.unscaledTime - _openedAt > .6f && NewTags.ClearLevel(level)) { L.Debug($"NEW: level {level} looked at"); UpdateSelection(); }
             float t0 = Time.realtimeSinceStartup;
             var items = ProgData.ItemsAt(level);
             int player = Me;
@@ -1429,13 +1431,13 @@ namespace LevelGate.Progression
 
         // NEW tags: an item's goes away once you click it, a level card's once you've looked at that level; all of them when
         // the screen closes (the last seen level is already yours by then)
-        private static readonly HashSet<string> _newClicked = new HashSet<string>();
-        private static readonly HashSet<int> _newViewed = new HashSet<int>();
 
         private static void ClickedNew(ProgItem it)
         {
-            if (it == null || !_newClicked.Add(it.Tpl)) return;
-            if (_tileViews.TryGetValue(it.Tpl, out var v) && v.NewTag != null) { UnityEngine.Object.Destroy(v.NewTag); v.NewTag = null; L.Debug($"NEW: {it.Name} seen"); }
+            if (it == null || !NewTags.ClearItem(it.Tpl, it.Level)) return;
+            if (_tileViews.TryGetValue(it.Tpl, out var v) && v.NewTag != null) { UnityEngine.Object.Destroy(v.NewTag); v.NewTag = null; }
+            L.Debug($"NEW: {it.Name} seen");
+            UpdateSelection(); // its level's card loses NEW once none of its rewards are new
         }
 
         private static readonly Dictionary<string, TileView> _tileViews = new Dictionary<string, TileView>();
@@ -1476,7 +1478,7 @@ namespace LevelGate.Progression
                     cat.Value.Name.ToUpperInvariant(), 10, Grey, TextAnchor.MiddleLeft, false, 1, true);
             }
             // newly reached since you last opened the screen: a small restrained tag (top-right)
-            if (_newFrom > 0 && reached && it.Level > _newFrom && !_newClicked.Contains(it.Tpl))
+            if (reached && NewTags.Item(it.Tpl))
             {
                 var tag = Ui.Rect(inner, "New", new Vector2(1, 1), new Vector2(1, 1), new Vector2(-S1 - 30, -S1 - 14), new Vector2(-S1, -S1));
                 v.NewTag = tag.gameObject;
@@ -2600,7 +2602,7 @@ namespace LevelGate.Progression
                 _picked = picked; _player = player;
                 bool sel = _level == picked, current = player > 0 && _level == player;
                 bool locked = player > 0 && _level > player, reached = player > 0 && _level <= player;
-                bool fresh = reached && !current && _newFrom > 0 && _level > _newFrom && !_newViewed.Contains(_level);
+                bool fresh = reached && NewTags.Level(_level); // kept until you pick the level or click its new rewards
                 FadeTo(_frame, sel ? Select : _hover ? HoverEdge : Border);
                 _top.enabled = sel;
                 FadeTo(_bg, sel ? Ui.Hex("#172024", .96f) : _hover ? Ui.Hex("#141b1e", .94f) : locked ? Ui.Hex("#0b0e10", .96f) : Ui.Hex("#11171a", .92f));

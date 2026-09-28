@@ -62,4 +62,73 @@ namespace LevelGate.Progression
             set { if (!Ensure()) return; var e = Map()[Id]; if (e.Level == value) return; Map()[Id] = (e.Xp, value); Save(); }
         }
     }
+
+    /// <summary>
+    /// The NEW tags, per character, kept between visits and restarts ("id=tpl,tpl…|level,level…;…" in a hidden setting):
+    /// a reward stays NEW until you click it; a level card until you pick that level (or click all its new rewards).
+    /// Rewards of levels you reached since the screen last saw you are added when it opens.
+    /// </summary>
+    internal static class NewTags
+    {
+        private static Dictionary<string, (HashSet<string> Items, HashSet<int> Levels)> _map;
+
+        private static Dictionary<string, (HashSet<string>, HashSet<int>)> Map()
+        {
+            if (_map != null) return _map;
+            _map = new Dictionary<string, (HashSet<string>, HashSet<int>)>();
+            foreach (var part in (ProgressionPlugin.NewState.Value ?? "").Split(';'))
+            {
+                var kv = part.Split('=');
+                if (kv.Length != 2) continue;
+                var halves = kv[1].Split('|');
+                var items = new HashSet<string>(halves[0].Split(',').Where(x => x.Length > 0));
+                var levels = new HashSet<int>(halves.Length > 1 ? halves[1].Split(',').Select(x => int.TryParse(x, out int n) ? n : 0).Where(n => n > 0) : new int[0]);
+                _map[kv[0]] = (items, levels);
+            }
+            return _map;
+        }
+
+        private static void Save() => ProgressionPlugin.NewState.Value = string.Join(";", Map().Where(e => e.Value.Item1.Count > 0 || e.Value.Item2.Count > 0)
+            .Select(e => $"{e.Key}={string.Join(",", e.Value.Item1.ToArray())}|{string.Join(",", e.Value.Item2.Select(n => n.ToString()).ToArray())}").ToArray());
+
+        private static (HashSet<string> Items, HashSet<int> Levels) Mine()
+        {
+            var id = ProgData.ProfileId() ?? "";
+            if (!Map().TryGetValue(id, out var e)) { e = (new HashSet<string>(), new HashSet<int>()); Map()[id] = e; }
+            return e;
+        }
+
+        /// <summary>Levels from+1 … to reached: their rewards and cards become NEW. Returns how many rewards were added.</summary>
+        public static int Reached(int from, int to)
+        {
+            if (from <= 0 || to <= from) return 0;
+            var m = Mine(); int n = 0;
+            foreach (var kv in ProgData.Levels)
+                if (kv.Value > from && kv.Value <= to && m.Items.Add(kv.Key)) n++;
+            for (int l = from + 1; l <= to; l++) if (ProgData.CountAt(l) > 0) m.Levels.Add(l);
+            Save();
+            return n;
+        }
+
+        public static bool Item(string tpl) => tpl != null && Mine().Items.Contains(tpl);
+        public static bool Level(int level) => Mine().Levels.Contains(level);
+        public static int Count => Mine().Items.Count;
+
+        /// <summary>A reward clicked: no longer NEW; its level's card too once none of that level's rewards are NEW.</summary>
+        public static bool ClearItem(string tpl, int level)
+        {
+            var m = Mine();
+            if (!m.Items.Remove(tpl)) return false;
+            if (!ProgData.Levels.Any(kv => kv.Value == level && m.Items.Contains(kv.Key))) m.Levels.Remove(level);
+            Save();
+            return true;
+        }
+
+        public static bool ClearLevel(int level)
+        {
+            if (!Mine().Levels.Remove(level)) return false;
+            Save();
+            return true;
+        }
+    }
 }
