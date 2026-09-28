@@ -40,6 +40,13 @@ Versions are **MAJOR.MINOR.PATCH**:
 
 ## LevelGate Progression (BepInEx plugin, separate DLL)
 
+### 0.9.63
+- **The main menu stays hidden while the screen is open**: the game could fade it back in behind us after a screen change, and its CHARACTER / TRADING text and the orange PROGRESSION block showed through between the panels.
+- **Selection reflection**: the picked tile and card get a very light sheen and a glossy line down the edge that faces the middle of the screen (left cards: right edge; right cards: left edge).
+- **Borders catch the light by position**: the reward list's right border, the details panel's left border and the picture panel's top edge carry a faint glossy highlight.
+- **Your level's card looks important** (CoD's bloom): an orange glowing border, faint orange scanlines inside and a row of tick marks under it.
+- **Each panel its own texture**: fine vertical stripes on the reward list (and CoD's striped look on its category tabs), a blueprint grid behind the picture, a glassy light with fine hairlines on the details; all faint, following Wear And Scratches.
+
 ### 0.9.62
 - **CoD's NEW tag everywhere**: bright yellow bold NEW in a dark see-through box with a thin yellow outline, a fainter echo outline offset down-right, and a soft yellow glow — pinned to the top-right corner of new reward tiles (overhanging the edge, the name moves down to make room), on newly reached level cards (top-right, instead of the orange NEW text) and on the main menu's PROGRESSION shortcut after a level up (was a green block).
 - **Handled texture on the important surfaces** (level cards, the reward list's head, INSPECT): faint fingerprints and smudges with a slight purple / green mottling, like CoD's cards; follows Wear And Scratches.

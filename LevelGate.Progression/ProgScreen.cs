@@ -328,8 +328,29 @@ namespace LevelGate.Progression
             var frame = Ui.Rect(parent, name, aMin, aMax, oMin, oMax);
             _panelFrames.Add(Ui.Img(frame, Border));
             Ui.CornerMarks(frame, Ui.Hex("#6f7375", .55f)); // CoD-style registration marks at the corners
+            // light catches the border that faces the middle of the screen: the left panel's right edge, the right panel's
+            // left edge, the centre panel's top edge (a glossy line fading out at both ends)
+            float mid = (aMin.x + aMax.x) / 2;
+            RectTransform edge = mid < .4f ? Ui.Rect(frame, "EdgeLight", new Vector2(1, .08f), new Vector2(1, .92f), new Vector2(-2, 0), new Vector2(0, 0))
+                : mid > .6f ? Ui.Rect(frame, "EdgeLight", new Vector2(0, .08f), new Vector2(0, .92f), new Vector2(0, 0), new Vector2(2, 0))
+                : Ui.Rect(frame, "EdgeLight", new Vector2(.08f, 1), new Vector2(.92f, 1), new Vector2(0, -2), new Vector2(0, 0));
+            if (mid >= .4f && mid <= .6f) edge.localEulerAngles = Vector3.zero;
+            var el = Ui.Img(edge, new Color(1, 1, 1, .16f), mid >= .4f && mid <= .6f ? Ui.Radial() : Ui.VerticalFade());
+            el.raycastTarget = false; el.type = Image.Type.Simple; el.preserveAspect = false;
             var inner = Ui.Fill(frame, "In", BorderWidth);
             Ui.Img(inner, PanelBg);
+            // each panel its own texture (not the same noise everywhere), faint and following Wear And Scratches:
+            //   the reward list: fine vertical stripes · the picture: a blueprint grid · the details: glass light + hairlines
+            Image tx;
+            if (mid < .4f) { tx = Ui.Img(Ui.Fill(inner, "Texture"), new Color(1, 1, 1, .016f), Ui.VStripes()); tx.type = Image.Type.Tiled; Ui.Grits.Add((tx, .016f)); }
+            else if (mid > .6f)
+            {
+                tx = Ui.Img(Ui.Fill(inner, "Texture"), new Color(1, 1, 1, .018f), Ui.Hatch()); tx.type = Image.Type.Tiled; Ui.Grits.Add((tx, .018f));
+                var glass = Ui.Img(Ui.Box(inner, "Glass", new Vector2(.15f, .9f), Vector2.zero, new Vector2(520, 360)), new Color(1, 1, 1, .035f), Ui.Radial());
+                glass.raycastTarget = false; Ui.Grits.Add((glass, .035f));
+            }
+            else { tx = Ui.Img(Ui.Fill(inner, "Texture"), new Color(1, 1, 1, .022f), Ui.BlueprintGrid()); tx.type = Image.Type.Tiled; Ui.Grits.Add((tx, .022f)); }
+            tx.raycastTarget = false;
             return inner;
         }
 
@@ -1042,7 +1063,7 @@ namespace LevelGate.Progression
             {
                 float a = i / (float)PerPage, b = (i + 1) / (float)PerPage;
                 var slot = Ui.Rect(cards, "Slot" + i, new Vector2(a, 0), new Vector2(b, 1), new Vector2(Gutter / 2, 0), new Vector2(-Gutter / 2, 0));
-                _cards[i] = new Card(slot, i == 0);
+                _cards[i] = new Card(slot, i == 0) { Slot = i };
             }
 
 
@@ -1676,6 +1697,8 @@ namespace LevelGate.Progression
             Color face = Ui.Hex("#232a2d", .97f), faceHover = Ui.Hex("#c4c9cb"), ink = Ui.Hex("#d0d5d7"), inkHover = Ui.Hex("#15191b");
             Color dim = Ui.Hex("#7d8588"), dimHover = Ui.Hex("#3a4245"), chevInk = Ui.Hex("#aab2b5");
             var tabFace = Ui.Img(head, face, null, true);
+            var stripes = Ui.Img(Ui.Fill(head, "Stripes"), new Color(1, 1, 1, .05f), Ui.VStripes()); // like CoD's BONUS bar
+            stripes.type = Image.Type.Tiled; stripes.raycastTarget = false;
             var top = Ui.Img(Ui.Rect(head, "Top", new Vector2(0, 1), Vector2.one, new Vector2(0, -1), Vector2.zero), Ui.Hex("#3f494d"));
             var shade = Ui.Img(Ui.Rect(head, "Shade", Vector2.zero, new Vector2(1, .5f), Vector2.zero, Vector2.zero), new Color(0, 0, 0, .18f));
             string count = list.Count > max ? $"{max} of {list.Count}" : list.Count.ToString();
@@ -1794,7 +1817,7 @@ namespace LevelGate.Progression
         {
             public ProgItem Item;
             public RectTransform Rt;
-            public Image Frame, Face, Top, Pic, Dither;
+            public Image Frame, Face, Top, Pic, Dither, Sheen, Gloss;
             public Component Name;
             public bool Locked, Hover;
             public GameObject NewTag;
@@ -1873,6 +1896,11 @@ namespace LevelGate.Progression
             Ui.Grit(inner, _gritSeed++, .045f);
             v.Dither = Ui.Img(Ui.Rect(inner, "Dither", new Vector2(0, 1), new Vector2(.7f, 1), new Vector2(9, -8), new Vector2(0, -2)), new Color(1, 1, 1, .16f), Ui.Dither());
             v.Dither.raycastTarget = false; v.Dither.enabled = false;
+            // picked: a very light reflection (a soft sheen over the upper half, a glossy line down the right edge), like CoD's
+            v.Sheen = Ui.Img(Ui.Box(inner, "Sheen", new Vector2(.62f, .66f), Vector2.zero, new Vector2(170, 110)), new Color(1, 1, 1, .07f), Ui.Radial());
+            v.Sheen.raycastTarget = false; v.Sheen.enabled = false;
+            v.Gloss = Ui.Img(Ui.Rect(inner, "Gloss", new Vector2(1, .1f), new Vector2(1, .9f), new Vector2(-3, 0), new Vector2(-2, 0)), new Color(1, 1, 1, .22f), Ui.VerticalFade());
+            v.Gloss.raycastTarget = false; v.Gloss.enabled = false;
             // the short name, top-right like the game's cells (two lines at most; look-alikes say what sets them apart)
             // a soft dark fade under the name, so two-line names stay readable over the picture
             var nameFade = Ui.Img(Ui.Rect(inner, "NameFade", new Vector2(0, 1), Vector2.one, new Vector2(0, -40), Vector2.zero), new Color(0, 0, 0, .5f), Ui.VerticalFade());
@@ -1921,6 +1949,7 @@ namespace LevelGate.Progression
             FadeTo(v.Face, sel ? FaceSelect : v.Hover ? FaceHover : Face, instant);
             v.Top.enabled = sel;
             if (v.Dither != null) v.Dither.enabled = sel;
+            if (v.Sheen != null) { v.Sheen.enabled = sel; v.Gloss.enabled = sel; }
             v.Pic.rectTransform.localScale = Vector3.one * (v.Hover ? 1.04f : 1f); // a slight lift on hover
             float pa = v.Locked ? (v.Hover || sel ? .8f : .6f) : 1f;
             FadeTo(v.Pic, new Color(1, 1, 1, pa), instant);
@@ -2659,6 +2688,8 @@ namespace LevelGate.Progression
             if (_restoreAgainAt > 0 && Time.unscaledTime > _restoreAgainAt && !IsOpen && MenuHook.QuietMenu()) { _restoreAgainAt = -1; GameItems.RestoreIcons(); }
             if (!IsOpen) { CheckMenuShown(); return; }
             BgPattern.Tick(); // the background pattern's slow motion: only ever while open
+            // the game can fade its main menu back in behind us (its own tween after a screen change): keep it hidden while open
+            if (_menuGroup != null && (_menuGroup.alpha > 0 || _menuGroup.blocksRaycasts)) { _menuGroup.alpha = 0; _menuGroup.blocksRaycasts = false; }
             if (!_xpKnown && ProgData.HasExpTable) { _xpKnown = true; UpdateXp(); } // the SPT server's answer came in
             if (_fade != null && _fade.alpha < 1)
             {
@@ -2875,8 +2906,10 @@ namespace LevelGate.Progression
         {
             private readonly RectTransform _body;
             private readonly CanvasGroup _group;
-            private readonly Image _frame, _bg, _glow, _top, _stateLock, _selDots, _cur, _tagPlate, _cardLock, _stamp, _cardDither;
+            private readonly Image _frame, _bg, _glow, _top, _stateLock, _selDots, _cur, _tagPlate, _cardLock, _stamp, _cardDither, _sheen, _gloss, _bloomFrame, _curScan;
+            private readonly RectTransform _ticks;
             private readonly Badge _cardBadge;
+            public int Slot = -1; // its place in the row (0 … 4): which edge catches the light
             private readonly GameObject _newBadge;
             private readonly RectTransform _tag;
             private readonly Component _tagText, _typeLine;
@@ -3032,6 +3065,16 @@ namespace LevelGate.Progression
                 _tagPlate.type = Image.Type.Sliced; _tagPlate.raycastTarget = false;
                 _tagText = Ui.Label(_tag, "Text", "", 11, Grey, TextAnchor.MiddleCenter, true, 1.5f);
 
+                // your level: CoD's "important" look — a bloom around the border, scanlines inside, tick marks under it
+                _bloomFrame = Ui.Img(Ui.Rect(_body, "Bloom", Vector2.zero, Vector2.one, new Vector2(-16, -16), new Vector2(16, -HeadH - 4 + 16)), Ui.Hex(Orange, .5f), Ui.GlowFrame());
+                _bloomFrame.type = Image.Type.Sliced; _bloomFrame.raycastTarget = false; _bloomFrame.enabled = false;
+                _ticks = Ui.Rect(_body, "Ticks", new Vector2(0, 0), new Vector2(1, 0), new Vector2(12, -6), new Vector2(-12, -3));
+                for (int k = 0; k < 9; k++)
+                {
+                    float x0 = k / 9f;
+                    Ui.Img(Ui.Rect(_ticks, "T" + k, new Vector2(x0, 0), new Vector2(x0, 1), new Vector2(0, 0), new Vector2(k % 3 == 0 ? 14 : 5, 0)), Ui.Hex(Orange, k % 3 == 0 ? .55f : .3f)).raycastTarget = false;
+                }
+                _ticks.gameObject.SetActive(false);
                 var card = Ui.Rect(_body, "Box", Vector2.zero, Vector2.one, Vector2.zero, new Vector2(0, -HeadH - 4));
                 // cut top-left / bottom-right corners like the game's prestige tiles (frame + face 2 px in = a cut outline)
                 _frame = Ui.Img(card, Border, Ui.Chamfer(), true);
@@ -3075,6 +3118,12 @@ namespace LevelGate.Progression
                 // your level: one thin orange line along the top (orange only ever means "you")
                 _cardDither = Ui.Img(Ui.Rect(inner, "Dither", new Vector2(0, 1), new Vector2(.6f, 1), new Vector2(10, -12), new Vector2(0, -3)), new Color(1, 1, 1, .12f), Ui.Dither());
                 _cardDither.raycastTarget = false; _cardDither.enabled = false;
+                _sheen = Ui.Img(Ui.Box(inner, "Sheen", new Vector2(.6f, .7f), Vector2.zero, new Vector2(320, 170)), new Color(1, 1, 1, .06f), Ui.Radial());
+                _sheen.raycastTarget = false; _sheen.enabled = false;
+                _gloss = Ui.Img(Ui.Rect(inner, "Gloss", new Vector2(1, .12f), new Vector2(1, .88f), new Vector2(-4, 0), new Vector2(-3, 0)), new Color(1, 1, 1, .2f), Ui.VerticalFade());
+                _gloss.raycastTarget = false; _gloss.enabled = false;
+                _curScan = Ui.Img(Ui.Fill(inner, "Scan"), Ui.Hex(Orange, .045f), Ui.Scanlines());
+                _curScan.type = Image.Type.Tiled; _curScan.raycastTarget = false; _curScan.enabled = false;
                 _cur = Ui.Img(Ui.Rect(inner, "Current", new Vector2(0, 1), Vector2.one, new Vector2(10, -3), Vector2.zero), Ui.Hex(Orange));
                 _newBadge = Ui.NewBadge(card, new Vector2(1, 1), new Vector2(-24, 0), 40, 19, 12.5f).gameObject;
                 _newBadge.SetActive(false);
@@ -3198,7 +3247,21 @@ namespace LevelGate.Progression
                 FadeTo(_frame, sel ? Select : _hover ? HoverEdge : Border);
                 _top.enabled = sel && !current;
                 _cardDither.enabled = sel;
+                _sheen.enabled = _gloss.enabled = sel; // a very light reflection on the picked card
+                if (sel && Slot >= 0)
+                {
+                    // the lit edge faces the middle of the row: right edge for the left cards, left edge for the right ones
+                    bool left = Slot < PerPage / 2, right = Slot > PerPage / 2;
+                    var gr = _gloss.rectTransform;
+                    float x = right ? 0 : 1;
+                    gr.anchorMin = new Vector2(x, .12f); gr.anchorMax = new Vector2(x, .88f);
+                    gr.offsetMin = new Vector2(right ? 3 : -4, 0); gr.offsetMax = new Vector2(right ? 4 : -3, 0);
+                    _gloss.enabled = left || right;
+                    _sheen.rectTransform.anchorMin = _sheen.rectTransform.anchorMax = new Vector2(right ? .4f : left ? .6f : .5f, .7f);
+                }
                 _cur.enabled = current;       // a thin orange line: your level
+                _bloomFrame.enabled = current; _curScan.enabled = current; _ticks.gameObject.SetActive(current);
+                if (current && !sel) FadeTo(_frame, Ui.Hex(Orange, .85f)); // its border glows orange
                 _cardBadge.Still = !(sel || current); // five emblems playing at once was busy (and cost frames)
                 _selDots.enabled = sel;       // the picked card's dot-matrix fill
                 _cardLock.enabled = locked && ProgData.CountAt(_level) > 0;

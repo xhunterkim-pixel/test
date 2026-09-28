@@ -342,6 +342,73 @@ namespace LevelGate.Progression
             }
         }
 
+        private static Sprite _glowFrame, _scan, _vstripes, _grid;
+
+        /// <summary>Fine vertical stripes (1 px on, 2 off), tiled: CoD's "BONUS" bar / barcode texture.</summary>
+        public static Sprite VStripes()
+        {
+            if (_vstripes != null) return _vstripes;
+            var tex = new Texture2D(3, 2, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Repeat, filterMode = FilterMode.Point };
+            var px = new Color32[6];
+            px[0] = px[3] = new Color32(255, 255, 255, 255);
+            tex.SetPixels32(px);
+            tex.Apply(false, true);
+            return _vstripes = Sprite.Create(tex, new Rect(0, 0, 3, 2), new Vector2(.5f, .5f), 100, 0, SpriteMeshType.FullRect);
+        }
+
+        /// <summary>A blueprint grid: 1 px lines every 32 px with a fainter line every 8, tiled.</summary>
+        public static Sprite BlueprintGrid()
+        {
+            if (_grid != null) return _grid;
+            const int n = 32;
+            var tex = new Texture2D(n, n, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Repeat, filterMode = FilterMode.Point };
+            var px = new Color32[n * n];
+            for (int y = 0; y < n; y++)
+                for (int x = 0; x < n; x++)
+                {
+                    byte a = x == 0 || y == 0 ? (byte)255 : (x % 8 == 0 && y % 2 == 0) || (y % 8 == 0 && x % 2 == 0) ? (byte)90 : (byte)0;
+                    px[y * n + x] = new Color32(255, 255, 255, a);
+                }
+            tex.SetPixels32(px);
+            tex.Apply(false, true);
+            return _grid = Sprite.Create(tex, new Rect(0, 0, n, n), new Vector2(.5f, .5f), 100, 0, SpriteMeshType.FullRect);
+        }
+
+        /// <summary>A soft glow around a frame (bloom): see-through in the middle, bright at the frame's line, fading outward.
+        /// 9-sliced; give it a rect ~16 px bigger than the thing it lights on every side.</summary>
+        public static Sprite GlowFrame()
+        {
+            if (_glowFrame != null) return _glowFrame;
+            const int n = 64, pad = 16;
+            var tex = new Texture2D(n, n, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Clamp, filterMode = FilterMode.Bilinear };
+            var px = new Color32[n * n];
+            for (int y = 0; y < n; y++)
+                for (int x = 0; x < n; x++)
+                {
+                    // distance outside the inner rect (pad … n-pad); inside: a faint inner glow along the line
+                    float dx = Mathf.Max(pad - (x + .5f), (x + .5f) - (n - pad), 0), dy = Mathf.Max(pad - (y + .5f), (y + .5f) - (n - pad), 0);
+                    float outD = Mathf.Sqrt(dx * dx + dy * dy);
+                    float inD = Mathf.Min(Mathf.Min(x + .5f - pad, n - pad - x - .5f), Mathf.Min(y + .5f - pad, n - pad - y - .5f));
+                    float a = outD > 0 ? Mathf.Pow(Mathf.Clamp01(1 - outD / pad), 2.2f) : Mathf.Pow(Mathf.Clamp01(1 - inD / 6f), 2f) * .6f;
+                    px[y * n + x] = new Color32(255, 255, 255, (byte)(255 * a));
+                }
+            tex.SetPixels32(px);
+            tex.Apply(false, true);
+            return _glowFrame = Sprite.Create(tex, new Rect(0, 0, n, n), new Vector2(.5f, .5f), 100, 0, SpriteMeshType.FullRect, new Vector4(pad + 6, pad + 6, pad + 6, pad + 6));
+        }
+
+        /// <summary>Fine horizontal scanlines (1 px on, 2 off), tiled.</summary>
+        public static Sprite Scanlines()
+        {
+            if (_scan != null) return _scan;
+            var tex = new Texture2D(2, 3, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Repeat, filterMode = FilterMode.Point };
+            var px = new Color32[6];
+            px[4] = px[5] = new Color32(255, 255, 255, 255);
+            tex.SetPixels32(px);
+            tex.Apply(false, true);
+            return _scan = Sprite.Create(tex, new Rect(0, 0, 2, 3), new Vector2(.5f, .5f), 100, 0, SpriteMeshType.FullRect);
+        }
+
         /// <summary>Registration marks: a small "+" just outside each corner of a panel (CoD's HUD framing).</summary>
         public static void CornerMarks(RectTransform frame, Color color, float arm = 5, float gap = 6)
         {
