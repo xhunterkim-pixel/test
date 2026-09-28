@@ -40,6 +40,17 @@ Versions are **MAJOR.MINOR.PATCH**:
 
 ## LevelGate Progression (BepInEx plugin, separate DLL)
 
+### 0.9.77
+- **F12 cleaned up**: the CURRENTLY TESTING section is hidden (your tuned values are the defaults: Selection Shine 285% / width 157%, load-in style Lines, rank-up Dogtag …); Blur Background, Hide Main Menu, Pattern Animation Speed and the Preview tools moved under F12's "Advanced settings". What's left is what players use.
+- **Dogtag rank-up rebuilt after Tarkov's tags**: brushed, scratched metal with a pressed rim and a punched hole, on a real bead chain looping up out of view; everything embossed (dark letters, light lower edge) — PROMOTED, the rank emblem pressed into a shallow well, the rank name, a rule, LV and the date. It drops in on the chain, swings to rest with a slight turn; on the emblem sound's peak the new emblem is stamped in (a jolt, a small flash) and a glint crosses the metal. Now the default rank-up.
+- **Group Similar Items** (new, F12 > Look & Graphics): similar items in a category — balaclavas, beanies, berets, bandanas, shemaghs, neoprene masks, caps, hats, glasses, goggles, masks, headsets, armbands, scarves, gloves, or variants of one item — as one group when there are 3 or more: **Stack** (one tile with cards stacked behind it and a +N box that opens it), **Folder** (4 pictures in one tile and the +N box), **Rows** (all shown, each group under its own label), Off. Opening / closing a group keeps your pick and scroll.
+- **Cards glow only while they have NEW rewards** (MW 2): a reached level's card is lit in its rank's colour while any of its rewards are still NEW, and goes back once they've all been clicked (softer than before).
+- **NEW stays until clicked, per character**: the main menu's NEW tag stays while any reward is still NEW (it used to clear when the screen opened), and cards keep their NEW until all their new rewards are clicked.
+- **NEW tag inside the tile** (it overhung the tile's edge and overlapped the tile above).
+- **Pips in Tarkov's loot colours**: the big picture's pips (and row pips) take the item's own background colour from the stash — red, violet, blue, green, orange, yellow; ordinary items keep the rank's colour.
+- **Picture load-in**: 48 strips (a denser front), and it arrives bright and settles to the picture's own colours.
+- **Item bloom ready sooner**: each picture's glow colour is read as soon as it's drawn (the loading screen draws most of them), and the bloom recolours the moment you pick, not up to 0.2 s later.
+
 ### 0.9.76
 - **Fixed: an orange glow outside the reward list** (under the panel): with MW 1 (additive glow) on, the picked tile's item bloom used the game's additive particle shader, which ignores the UI's clipping — a picked tile scrolled half out of the list glowed below the panel. Glows inside clipped areas (the list's tiles, the track's waveform) keep normal blending now; the light wall's glow stays inside its strip.
 

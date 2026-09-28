@@ -612,6 +612,25 @@ namespace LevelGate.Progression
         private static readonly Image[] _heroPips = new Image[5];
         private static Image _heroDiamond, _heroDiamondIn;
 
+        /// <summary>
+        /// Tarkov's loot colours (an item's background in the stash: the game's own rarity hint) — red: the rarest (Labs
+        /// keycards…), violet: very valuable (LEDX, bitcoin…), blue: intel, documents, keycards, green: task and military
+        /// items, orange / yellow: the game's other marked items. Null for ordinary (grey / default / black) ones.
+        /// </summary>
+        private static Color? LootColor(string tpl)
+        {
+            switch ((GameItems.BackgroundOf(tpl) ?? "").ToLowerInvariant())
+            {
+                case "red": case "tracerred": return Ui.Hex("#d04a44");
+                case "violet": case "purple": return Ui.Hex("#9a6ae0");
+                case "blue": return Ui.Hex("#5a9ad8");
+                case "green": case "tracergreen": return Ui.Hex("#6fae54");
+                case "orange": return Ui.Hex("#e08a3c");
+                case "yellow": case "traceryellow": return Ui.Hex("#e0c24a");
+                default: return null;
+            }
+        }
+
         private static void BuildHeroDetail(RectTransform face)
         {
             // viewfinder corners and faint scanlines over the lit face (the light has a texture)
@@ -657,7 +676,10 @@ namespace LevelGate.Progression
             for (int i = 0; i < 5; i++)
             {
                 _heroPips[i].enabled = true;
-                _heroPips[i].color = i < into ? Color.Lerp(light, Color.white, .1f) : new Color(1, 1, 1, .12f);
+                // the pips in Tarkov's own loot colour for the item (red / violet / blue / green / orange / yellow, from its
+                // background in the stash); ordinary items keep the rank's colour
+                var pip = LootColor(it.Tpl) ?? Color.Lerp(light, Color.white, .1f);
+                _heroPips[i].color = i < into ? pip : new Color(1, 1, 1, .12f);
             }
             // the diamond: the next rank — lit (orange) on a rank's last level, where the next level up is a new rank
             _heroDiamond.enabled = _heroDiamondIn.enabled = true;
@@ -1755,14 +1777,17 @@ namespace LevelGate.Progression
             // old tiles out of the layout right away (Destroy only happens at the end of the frame, and for that frame the
             // new list was laid out under them — it opened scrolled down), and back to the top once it's built
             foreach (Transform ch in _content) { ch.gameObject.SetActive(false); UnityEngine.Object.Destroy(ch.gameObject); }
-            _scrollTopFrames = 2;
+            _scrollTopFrames = _keepScrollY >= 0 ? 0 : 2;
             _tiles.Clear();
             _tileViews.Clear();
             _tileOrder.Clear();
             ShowTip(null);
             Adopt(_icons); DropRequests(_icons);
             _hits.RemoveAll(h => h.Rect == null || !h.Rect.IsChildOf(_bottom));
-            Feature(CardPicks(items).FirstOrDefault()); // opens on the item the level's card shows big (weapons first)
+            // opens on the item the level's card shows big (weapons first); a group expanded / folded keeps the pick
+            var keep = _keepPickTpl != null ? items.FirstOrDefault(i => i.Tpl == _keepPickTpl) : null;
+            Feature(keep ?? CardPicks(items).FirstOrDefault());
+            if (keep != null) { EndReveal(); _revealWanted = false; }
             int max = Mathf.Max(1, Perf ? Mathf.Min(12, ProgressionPlugin.MaxTilesPerCategory.Value) : ProgressionPlugin.MaxTilesPerCategory.Value), n = 0;
             // a fixed column count from the panel width (4 at 1080p), all tiles the same size, 8 px apart
             float width = _content.rect.width - S2;
@@ -1817,7 +1842,7 @@ namespace LevelGate.Progression
                 empty.gameObject.AddComponent<LayoutElement>().preferredHeight = 120;
                 Ui.Label(empty, "Text", $"Nothing unlocks at level {level}\n<size=13><color=#7d8588>Set items to this level in the Level & Item Editor.</color></size>", TStrong, Text, TextAnchor.MiddleCenter, false);
             }
-            _content.anchoredPosition = Vector2.zero;
+            _content.anchoredPosition = _keepScrollY >= 0 ? new Vector2(0, _keepScrollY) : Vector2.zero;
             _shownLevel = level;
             _sLevels++;
             _tilesStart = Time.unscaledTime;
@@ -1924,7 +1949,7 @@ namespace LevelGate.Progression
                 FadeTo(countText as Graphic, on ? dimHover : dim, true);
                 FadeTo(chevText as Graphic, on ? inkHover : chevInk, true);
             });
-            foreach (var it in list.Take(max)) addTile(grid, it);
+            AddGrouped(body, grid, catKey, list.Take(max).ToList(), narrow, tileCols, tileCell, addTile); // similar items grouped (ProgScreen.Groups)
             return section;
         }
 
@@ -2060,7 +2085,7 @@ namespace LevelGate.Progression
                 // MW 8: where its level sits in its rank (5 pips) and the level itself, along the tile's foot
                 var tier = TierOf(Mathf.Max(1, it.Level));
                 int into = Mathf.Clamp(it.Level - tier.From + 1, 1, 5);
-                var tl = Ui.Hex(tier.Light);
+                var tl = LootColor(it.Tpl) ?? Ui.Hex(tier.Light); // Tarkov's loot colour, else the rank's
                 for (int k = 0; k < 5; k++)
                     Ui.Img(Ui.Rect(inner, "Pip", Vector2.zero, Vector2.zero, new Vector2(8 + k * 6, 5), new Vector2(12 + k * 6, 9)), k < into ? new Color(tl.r, tl.g, tl.b, .85f) : new Color(1, 1, 1, .14f)).raycastTarget = false;
                 ((Graphic)Ui.Label(Ui.Rect(inner, "Lv", new Vector2(1, 0), new Vector2(1, 0), new Vector2(-48, 2), new Vector2(-7, 13)), "Text", $"LV {it.Level}", 9, Dim, TextAnchor.MiddleRight, false, 1)).raycastTarget = false;
@@ -2109,11 +2134,12 @@ namespace LevelGate.Progression
             // newly reached since you last opened the screen: a small restrained tag (top-right)
             if (reached && NewTags.Item(it.Tpl))
             {
-                // CoD's NEW: pinned to the tile's top-right corner, overhanging its edge; the name moves down to make room
-                var tag = Ui.NewBadge(rt, new Vector2(1, 1), new Vector2(-15, 1));
+                // CoD's NEW: inside the tile's top-right corner (0.9.76 and older overhung the edge and overlapped the tile
+                // above); the name moves down to make room
+                var tag = Ui.NewBadge(rt, new Vector2(1, 1), new Vector2(-21, -12));
                 v.NewTag = tag.gameObject;
                 var nr = ((Component)v.Name).transform.parent as RectTransform;
-                if (nr != null) nr.offsetMax = new Vector2(nr.offsetMax.x, nr.offsetMax.y - 12);
+                if (nr != null) nr.offsetMax = new Vector2(nr.offsetMax.x, nr.offsetMax.y - 18);
             }
             RequestIcon(_icons, it.Tpl, TileScaleOf(it.Tpl), v.Pic, placeholder);
             _hits.Add((rt, it));
@@ -2555,6 +2581,7 @@ namespace LevelGate.Progression
         {
             L.Step("Feature " + it?.Tpl);
             EndReveal(); _revealWanted = it != null; _featLevel = it?.Level ?? 0; // a new pick plays the load-in once its picture shows
+            _bloomAt = 0; // item bloom: recoloured this frame, not up to 0.2 s later
             // the previous item's big picture may still be on its way: keep collecting it (else it came back blurry later)
             if (_featIcon != null && _featTpl != null) _prefetching.Add((_featIcon, _featTpl));
             _featIcon = null;
@@ -3150,7 +3177,7 @@ namespace LevelGate.Progression
             private readonly Component _activeTag;
             private readonly GameObject _activeMark;
             private readonly Image _unlockDots;
-            private bool _wasSel, _isCurrent, _floodOn;
+            private bool _wasSel, _isCurrent, _floodOn, _fresh;
             private readonly Image _numGlow, _flood, _floodDots;
             private readonly RectTransform _chev;
             private readonly Image[] _chevBars = new Image[2];
@@ -3159,15 +3186,17 @@ namespace LevelGate.Progression
             /// <summary>MW 2: every frame — fills when its level was unlocked in this visit's level up, stays lit.</summary>
             public void TickFlood()
             {
-                bool want = Mw(2) && _flooded.Contains(_level);
+                // MW 2: lit while the level still has NEW rewards (goes once they've all been clicked), and for levels just
+                // unlocked in this visit's level up
+                bool want = Mw(2) && (_fresh || _flooded.Contains(_level));
                 if (want == _floodOn) return;
                 _floodOn = want;
                 var light = Ui.Hex(TierOf(Mathf.Max(1, _level)).Light);
                 Motion.To(_flood, "flood", 0, want ? 1 : 0, Motion.D(want ? Motion.Hero : Motion.Base), want ? Motion.Ease.OutCubic : Motion.Ease.InCubic, v =>
                 {
                     _flood.enabled = _floodDots.enabled = v > .001f;
-                    _flood.color = new Color(light.r, light.g, light.b, .15f * v);
-                    _floodDots.color = new Color(light.r, light.g, light.b, .22f * v);
+                    _flood.color = new Color(light.r, light.g, light.b, .1f * v);
+                    _floodDots.color = new Color(light.r, light.g, light.b, .16f * v);
                 });
             }
             private SelFrame _selFx;
@@ -3602,7 +3631,8 @@ namespace LevelGate.Progression
                 _picked = picked; _player = player;
                 bool sel = _level == picked, current = player > 0 && _level == player;
                 bool locked = player > 0 && _level > player, reached = player > 0 && _level <= player;
-                bool fresh = reached && NewTags.Level(_level); // kept until you pick the level or click its new rewards
+                bool fresh = reached && NewTags.AnyItemAt(_level); // until every NEW reward of the level has been clicked (per character)
+                _fresh = fresh;
                 FadeTo(_frame, sel ? (Ui.DetailK > 0 ? Border : Select) : _hover ? HoverEdge : Border); // picked: the selection border is the outline
                 _top.enabled = sel && !current;
                 _cardDither.enabled = sel;

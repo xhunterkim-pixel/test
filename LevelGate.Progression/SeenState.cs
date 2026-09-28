@@ -127,6 +127,14 @@ namespace LevelGate.Progression
         public static bool Level(int level) => _simLevels.Contains(level) || Mine().Levels.Contains(level);
         public static int Count => Mine().Items.Count;
 
+        /// <summary>Does this level still have rewards NEW for this character (not clicked yet)?</summary>
+        public static bool AnyItemAt(int level)
+        {
+            var m = Mine();
+            foreach (var kv in ProgData.Levels) if (kv.Value == level && (m.Items.Contains(kv.Key) || _simItems.Contains(kv.Key))) return true;
+            return false;
+        }
+
         /// <summary>A reward clicked: no longer NEW; its level's card too once none of that level's rewards are NEW.</summary>
         public static bool ClearItem(string tpl, int level)
         {

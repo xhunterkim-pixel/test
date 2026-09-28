@@ -333,6 +333,7 @@ namespace LevelGate.Progression
             if (sp == null) return null;
             if (icon == null || !_pending.TryGetValue(icon, out var p))
             {
+                BloomColor(sp); // its glow colour read now (in the background), ready before it's picked
                 // a shared request another asker already finished: the copy made from it (the game's own is back at stash size)
                 if (icon != null && _madeFrom.TryGetValue(icon, out var mf) && mf.Copy != null && mf.Copy.texture != null && Time.realtimeSinceStartup - mf.At < 10f) { done = true; return mf.Copy; }
                 done = true; return sp;
@@ -373,6 +374,7 @@ namespace LevelGate.Progression
             _copyOrder.Enqueue(key);
             Trim(key);
             L.Debug($"icon: kept a {copy.rect.width:0}x{copy.rect.height:0} copy of {tpl} and put the game's back to stash size");
+            BloomColor(copy); // its glow colour read now (in the background; the loading screen does most), ready before it's picked
             return copy;
         }
 

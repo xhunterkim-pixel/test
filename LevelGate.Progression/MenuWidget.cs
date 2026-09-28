@@ -21,6 +21,7 @@ namespace LevelGate.Progression
         private static float _next;
         private static int _shownLevel = -1, _shownSeen = -1;
         private static string _shownXp;
+        private static int _shownNew = -1;
 
         public static void Seen(int level)
         {
@@ -124,10 +125,11 @@ namespace LevelGate.Progression
             if (level <= 0) return;
             int seen = SeenState.Level; // a character seen for the first time starts at its level: nothing is new yet
             string xp = ProgData.LevelExp(out int have, out int need) ? $"{Thousands(have)} / {Thousands(need)} EXP" : "";
-            if (level == _shownLevel && seen == _shownSeen && xp == _shownXp) return;
-            _shownLevel = level; _shownSeen = seen; _shownXp = xp;
+            int newCount = NewTags.Count;
+            if (level == _shownLevel && seen == _shownSeen && xp == _shownXp && newCount == _shownNew) return;
+            _shownLevel = level; _shownSeen = seen; _shownXp = xp; _shownNew = newCount;
             Emblems.Show(_emblem, level);
-            bool isNew = level > seen;
+            bool isNew = level > seen || NewTags.Count > 0; // stays (per character) until every NEW reward has been clicked
             if (_newTag.activeSelf != isNew) L.Info(isNew ? $"NEW: main-menu tag ON — level {level} > last seen {seen}" : $"NEW: main-menu tag off (level {level}, last seen {seen})");
             _newTag.SetActive(isNew);
             Ui.SetText(_sub, $"Level {level}  ·  {ProgScreen.TierOf(level).Name}" + (xp != "" ? "   <color=#8a3a2c>|</color>   " + xp : ""));

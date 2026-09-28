@@ -26,7 +26,7 @@ namespace LevelGate.Progression
         public const string Guid = "com.kkyangg.levelgate.progression";
         public const string Name = "LevelGate Progression";
         // MAJOR.MINOR.PATCH — see CHANGELOG.md
-        public const string Version = "0.9.76";
+        public const string Version = "0.9.77";
 
         internal static ProgressionPlugin Instance;
         internal static ConfigEntry<KeyboardShortcut> OpenKey;
@@ -41,6 +41,7 @@ namespace LevelGate.Progression
         internal static ConfigEntry<float> TestRevealTime;
         internal static ConfigEntry<ProgScreen.LoadInStyle> TestRevealStyle;
         internal static ConfigEntry<ProgScreen.RankUpStyle> TestRankStyle;
+        internal static ConfigEntry<ProgScreen.GroupLook> GroupStyle;
         internal static ConfigEntry<string> ButtonTemplate;
         internal static ConfigEntry<string> ButtonLabel;
         internal static ConfigEntry<bool> VerboseLog;
@@ -150,6 +151,11 @@ namespace LevelGate.Progression
                 87, new AcceptableValueRange<float>(0f, 3f)));
             Pattern.SettingChanged += (_, __) => ProgScreen.PatternChanged();
             Detailing.SettingChanged += (_, __) => ProgScreen.ApplyLook();
+            GroupStyle = Config.Bind(Gfx, "GroupSimilarItems", ProgScreen.GroupLook.Stack, Desc(
+                "Similar items in a category (balaclavas, caps, berets, bandanas, variants of one helmet…, 3 or more) as one group: " +
+                "Stack (one tile with cards stacked behind it and a +N box that opens the group), Folder (4 pictures in one tile and the +N box), " +
+                "Rows (all shown, each group under its own label), Off.", 83));
+            GroupStyle.SettingChanged += (_, __) => { L.Info($"settings: group similar items = {GroupStyle.Value}"); ProgScreen.Refresh(); };
             PatternOpacity.SettingChanged += (_, __) => ProgScreen.ApplyLook();
             Vignette.SettingChanged += (_, __) => ProgScreen.ApplyLook();
             RedGlow.SettingChanged += (_, __) => ProgScreen.ApplyLook();
@@ -168,16 +174,16 @@ namespace LevelGate.Progression
             const string T = "5. Testing";
             TestGlitch = Config.Bind(T, "HoverGlitch", 23, Desc(
                 "Hover: how strong the burst of glitch streaks across a tile or card is, in % of 0.9.70's (0 = off).", 100, new AcceptableValueRange<int>(0, 200)));
-            TestShine = Config.Bind(T, "SelectShine", 100, Desc(
+            TestShine = Config.Bind(T, "SelectShine", 285, Desc(
                 "Picking a tile or card: how bright the light sweeping across it is, in % (0 = off).", 96, new AcceptableValueRange<int>(0, 300)));
-            TestShineWidth = Config.Bind(T, "SelectShineWidth", 100, Desc(
+            TestShineWidth = Config.Bind(T, "SelectShineWidth", 157, Desc(
                 "Picking a tile or card: how wide the sweeping light is, in %.", 95, new AcceptableValueRange<int>(30, 300)));
             TestRevealTime = Config.Bind(T, "RevealTime", .2f, Desc(
                 "The big picture's load-in: how long it takes to appear from the top down, in seconds.", 90, new AcceptableValueRange<float>(.2f, 2.5f)));
-            TestRevealStyle = Config.Bind(T, "RevealStyle", ProgScreen.LoadInStyle.DotColumns, Desc(
+            TestRevealStyle = Config.Bind(T, "RevealStyle", ProgScreen.LoadInStyle.Lines, Desc(
                 "The big picture's load-in light: Dot Columns (loose vertical columns of dots), Dot Cloud (a scattered cluster), Lines (0.9.71's lines). The dots breathe (size and brightness).", 89));
             TestRevealStyle.SettingChanged += (_, __) => L.Info($"testing: RevealStyle = {TestRevealStyle.Value}");
-            TestRankStyle = Config.Bind(T, "RankUpStyle", ProgScreen.RankUpStyle.Banner, Desc(
+            TestRankStyle = Config.Bind(T, "RankUpStyle", ProgScreen.RankUpStyle.Dogtag, Desc(
                 "The new-rank moment in a level up: Banner (a dark tactical strip across mid-screen), Dossier (a personnel file with a PROMOTED stamp), " +
                 "Terminal (a comms readout typing it out), Dogtag (a metal tag dropping in on its chain), Full (0.9.74's full-screen splash). Try them with 3. Preview > Play Next Rank.", 88));
             TestRankStyle.SettingChanged += (_, __) => L.Info($"testing: RankUpStyle = {TestRankStyle.Value}");
@@ -312,7 +318,7 @@ namespace LevelGate.Progression
                 ["UseGameSounds"] = "Use Game Sounds", ["CharacterEmblem"] = "Rank Emblem On Character Screen", ["TextSize"] = "Text Size (%)", ["ReduceMotion"] = "Reduce Motion",
                 ["Quality"] = "Picture Quality", ["XpAnimation"] = "Level Up Animation", ["RefreshIcons"] = "Redraw All Item Pictures",
                 ["Pattern"] = "Background Pattern", ["PatternMotion"] = "Pattern Animation Speed", ["UIDetailing"] = "UI Detailing (%)", ["HoverGlitch"] = "Hover Glitch (%)", ["RevealTime"] = "Picture Load-In Time (s)",
-                ["RevealRandom"] = "Picture Load-In Randomness (%)", ["RevealStyle"] = "Picture Load-In Style", ["RankUpStyle"] = "Rank Up Style", ["BloomOpacity"] = "Item Bloom Opacity (%)", ["BloomSize"] = "Item Bloom Size (%)", ["LightWall"] = "Light Wall Brightness (%)", ["MotionSpeed"] = "Motion Speed (%)", ["SelectShine"] = "Selection Shine (%)", ["SelectShineWidth"] = "Selection Shine Width (%)", ["Stagger"] = "Stagger (ms)",
+                ["RevealRandom"] = "Picture Load-In Randomness (%)", ["RevealStyle"] = "Picture Load-In Style", ["RankUpStyle"] = "Rank Up Style", ["GroupSimilarItems"] = "Group Similar Items", ["BloomOpacity"] = "Item Bloom Opacity (%)", ["BloomSize"] = "Item Bloom Size (%)", ["LightWall"] = "Light Wall Brightness (%)", ["MotionSpeed"] = "Motion Speed (%)", ["SelectShine"] = "Selection Shine (%)", ["SelectShineWidth"] = "Selection Shine Width (%)", ["Stagger"] = "Stagger (ms)",
                 ["MW01"] = "MW 1 · Additive Glow", ["MW02"] = "MW 2 · Card Flood", ["MW03"] = "MW 3 · Level Numbers Glow", ["MW04"] = "MW 4 · XP Counter On Light Wall",
                 ["MW05"] = "MW 5 · Reactive Waveform", ["MW06"] = "MW 6 · Screen Flashes", ["MW07"] = "MW 7 · Title Glitch", ["MW08"] = "MW 8 · Row Pips",
                 ["MW09"] = "MW 9 · Locked Hologram", ["MW10"] = "MW 10 · Wave Surfaces", ["DetailAnimation"] = "Detail Animation (%)", ["PatternOpacity"] = "Background Pattern Opacity (%)",
@@ -328,14 +334,16 @@ namespace LevelGate.Progression
                 ["1. General"] = "1. General", ["2. Graphics"] = "2. Look & Graphics", ["4. Preview"] = "3. Preview (Test The Animations)", ["3. Advanced"] = "4. Advanced",
                 ["5. Testing"] = "5. CURRENTLY TESTING",
             };
-            var advanced = new HashSet<string> { "RefreshIcons", "UseGameSounds", "Vignette", "RedGlow" };
+            // what most players never touch: under F12's "Advanced settings" (the Preview tools too); the tuning section is hidden
+            var advanced = new HashSet<string> { "RefreshIcons", "UseGameSounds", "Vignette", "RedGlow", "BlurBackground", "HideMainMenu", "PatternMotion" };
             foreach (var kv in Config)
             {
                 var a = kv.Value.Description?.Tags?.OfType<ConfigurationManagerAttributes>().FirstOrDefault();
                 if (a == null) continue;
                 if (names.TryGetValue(kv.Key.Key, out var dn)) a.DispName = dn;
                 if (titles.TryGetValue(kv.Key.Section, out var cat)) a.Category = cat;
-                if (kv.Key.Section == "3. Advanced" || advanced.Contains(kv.Key.Key)) a.IsAdvanced = true;
+                if (kv.Key.Section == "3. Advanced" || kv.Key.Section == "4. Preview" || advanced.Contains(kv.Key.Key)) a.IsAdvanced = true;
+                if (kv.Key.Section == "5. Testing") a.Browsable = false; // tuned: its values are the defaults now
             }
         }
 

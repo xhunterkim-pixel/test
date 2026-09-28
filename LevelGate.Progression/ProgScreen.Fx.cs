@@ -92,7 +92,7 @@ namespace LevelGate.Progression
         /// <summary>Picked: one soft shine sweeps across (Motion: Slow, OutCubic travel, pulse brightness).</summary>
         private static void PlayShine(RectTransform host)
         {
-            float strength = (ProgressionPlugin.TestShine?.Value ?? 100) / 100f, width = (ProgressionPlugin.TestShineWidth?.Value ?? 100) / 100f;
+            float strength = (ProgressionPlugin.TestShine?.Value ?? 285) / 100f, width = (ProgressionPlugin.TestShineWidth?.Value ?? 157) / 100f;
             if (host == null || Motion.Still || Ui.DetailK <= 0 || strength <= 0) return;
             var f = FxOf(host); var sh = f.Shine;
             sh.enabled = true;
@@ -239,9 +239,9 @@ namespace LevelGate.Progression
         /// The light (F12 Picture Load-In Style): Dot Columns / Dot Cloud / Lines, breathing (each dot pulses its size and
         /// brightness, drawn as a few frames and cycled). Time and Randomness from F12; Reduce Motion: none.
         /// </summary>
-        private const int Strips = 20, DotFrames = 6;
+        private const int Strips = 48, DotFrames = 6; // 48: a dense ragged front (20 read as ~10 lines)
         private static RectTransform _revealHost;
-        private static readonly Image[] _stripPic = new Image[Strips], _stripMask = new Image[Strips], _stripLight = new Image[Strips];
+        private static readonly Image[] _stripPic = new Image[Strips], _stripHot = new Image[Strips], _stripMask = new Image[Strips], _stripLight = new Image[Strips];
         private static readonly float[] _stripDelay = new float[Strips];
         private static float _revealAt = -10;
         private static bool _revealWanted;
@@ -251,7 +251,7 @@ namespace LevelGate.Progression
         private static readonly Dictionary<int, Sprite[]> _dotFrames = new Dictionary<int, Sprite[]>();
         private static float RevealTime => Mathf.Max(.1f, ProgressionPlugin.TestRevealTime?.Value ?? .2f) / Motion.Speed;
         private static float RevealRandom => Mathf.Clamp01((ProgressionPlugin.TestRevealRandom?.Value ?? 100) / 100f);
-        private static int RevealStyle => (int)(ProgressionPlugin.TestRevealStyle?.Value ?? LoadInStyle.DotColumns);
+        private static int RevealStyle => (int)(ProgressionPlugin.TestRevealStyle?.Value ?? LoadInStyle.Lines);
 
         private static void BuildReveal()
         {
@@ -266,13 +266,17 @@ namespace LevelGate.Progression
                 _stripPic[i] = Ui.Img(Ui.Rect(strip, "Pic", full, fullMax, Vector2.zero, Vector2.zero), Color.white);
                 _stripPic[i].preserveAspect = true;
                 _stripPic[i].type = Image.Type.Filled; _stripPic[i].fillMethod = Image.FillMethod.Vertical; _stripPic[i].fillOrigin = (int)Image.OriginVertical.Top;
+                // arriving bright: a white copy of the picture over it, fading as the strip settles
+                _stripHot[i] = Ui.Img(Ui.Rect(strip, "Hot", full, fullMax, Vector2.zero, Vector2.zero), new Color(1, 1, 1, 0));
+                _stripHot[i].preserveAspect = true;
+                _stripHot[i].type = Image.Type.Filled; _stripHot[i].fillMethod = Image.FillMethod.Vertical; _stripHot[i].fillOrigin = (int)Image.OriginVertical.Top;
                 var shape = Ui.Rect(strip, "Shape", full, fullMax, Vector2.zero, Vector2.zero);
                 _stripMask[i] = Ui.Img(shape, Color.white);
                 _stripMask[i].preserveAspect = true;
                 shape.gameObject.AddComponent<Mask>().showMaskGraphic = false;
                 _stripLight[i] = Ui.Img(Ui.Rect(shape, "Light", Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero), new Color(1, 1, 1, 0));
                 _stripLight[i].type = Image.Type.Tiled;
-                foreach (var g in new Graphic[] { _stripPic[i], _stripMask[i], _stripLight[i] }) g.raycastTarget = false;
+                foreach (var g in new Graphic[] { _stripPic[i], _stripHot[i], _stripMask[i], _stripLight[i] }) g.raycastTarget = false;
             }
             _revealHost.gameObject.SetActive(false);
         }
@@ -288,7 +292,7 @@ namespace LevelGate.Progression
             for (int i = 0; i < Strips; i++)
             {
                 // ragged front: each strip waits a little (neighbours roughly agree, plus noise)
-                float ridge = .5f + .5f * Mathf.Sin(i * .7f + (float)_revealRng.NextDouble() * 6.28f);
+                float ridge = .5f + .5f * Mathf.Sin(i * .31f + (float)_revealRng.NextDouble() * 6.28f);
                 _stripDelay[i] = rk * .45f * Mathf.Clamp01(.6f * ridge + .4f * (float)_revealRng.NextDouble());
             }
             _revealHost.gameObject.SetActive(true);
@@ -301,7 +305,7 @@ namespace LevelGate.Progression
             var sp = _featPic.sprite;
             for (int i = 0; i < Strips; i++)
             {
-                if (_stripPic[i].sprite != sp) { _stripPic[i].sprite = sp; _stripMask[i].sprite = sp; }
+                if (_stripPic[i].sprite != sp) { _stripPic[i].sprite = sp; _stripMask[i].sprite = sp; _stripHot[i].sprite = sp; }
                 if (!_stripMask[i].enabled) _stripMask[i].enabled = true; // (picture clearing can switch it off: never a flat band)
                 if (!_stripPic[i].enabled) _stripPic[i].enabled = true;
             }
@@ -331,6 +335,8 @@ namespace LevelGate.Progression
                 float u = Mathf.Clamp01(t - _stripDelay[i]); // t runs past 1 so the latest strips finish too
                 float r = Motion.Eval(Motion.Ease.OutCubic, u);
                 _stripPic[i].fillAmount = r;
+                _stripHot[i].fillAmount = r;
+                _stripHot[i].color = new Color(1, 1, 1, .5f * Mathf.Pow(1 - u, 1.4f)); // bright as it arrives, settling to the picture's own colours
                 var lr = _stripLight[i].rectTransform;
                 float front = 1 - r;
                 lr.anchorMin = new Vector2(0, Mathf.Max(0, front - .55f)); lr.anchorMax = new Vector2(1, front);

@@ -17,7 +17,7 @@ namespace LevelGate.Progression
     {
         public enum RankUpStyle { Banner, Dossier, Terminal, Dogtag, Full }
 
-        private static RankUpStyle RankStyle => ProgressionPlugin.TestRankStyle?.Value ?? RankUpStyle.Banner;
+        private static RankUpStyle RankStyle => ProgressionPlugin.TestRankStyle?.Value ?? RankUpStyle.Dogtag;
 
         private sealed class RankView
         {
@@ -122,21 +122,10 @@ namespace LevelGate.Progression
                     break;
                 }
                 case RankUpStyle.Dogtag:
-                {
-                    v.Veil.color = new Color(0, 0, 0, .45f);
-                    // drops in on its chain, swings to rest (damped)
-                    float drop = still ? 1 : Motion.Eval(Motion.Ease.OutCubic, t / .45f);
-                    v.Body.anchoredPosition = new Vector2(0, Mathf.Lerp(420, 0, drop) + DogtagLift);
-                    float swing = still ? 0 : 9 * Mathf.Exp(-t * 2.2f) * Mathf.Sin(t * 7.5f);
-                    v.Body.localEulerAngles = new Vector3(0, 0, swing);
-                    Ui.SetText(v.Name, name);
-                    Ui.SetText(v.Line, $"LV {level:000}   ·   {System.DateTime.Now:dd.MM.yyyy}");
+                    DrawDogtag(v, level, t, dur, after, still, name); // ProgScreen.Dogtag
                     break;
-                }
             }
         }
-
-        private const float DogtagLift = (1.9f - .5f) * 210; // the pivot sits 1.4 tag-heights above centre
 
         private static string Typed(string s, float after, bool still)
         {
@@ -241,28 +230,8 @@ namespace LevelGate.Progression
                     break;
                 }
                 case RankUpStyle.Dogtag:
-                {
-                    var holder = Ui.Box(root, "Tag", new Vector2(.5f, .55f), Vector2.zero, new Vector2(380, 210));
-                    v.Body = holder;
-                    // swings about a point high above it (on the chain): the pivot moves up, the position makes up for it
-                    holder.pivot = new Vector2(.5f, 1.9f);
-                    // the bead chain: a dotted line from the tag's top straight up
-                    var chain = Ui.Rect(holder, "Chain", new Vector2(.5f, 1), new Vector2(.5f, 1), Vector2.zero, Vector2.zero);
-                    chain.pivot = new Vector2(0, .5f); chain.sizeDelta = new Vector2(700, 3); chain.anchoredPosition = Vector2.zero;
-                    chain.localEulerAngles = new Vector3(0, 0, 90);
-                    var dots = Ui.Img(chain, new Color(.75f, .78f, .8f, .8f), Ui.Leader()); dots.type = Image.Type.Tiled;
-                    var plate = Ui.Img(Ui.Fill(holder, "Plate"), Color.white, Ui.WornPlate()); plate.type = Image.Type.Sliced;
-                    plate.color = Ui.Hex("#aeb4b6");
-                    Ui.Img(Ui.Box(holder, "Hole", new Vector2(.08f, .5f), Vector2.zero, new Vector2(16, 16)), Ui.Hex("#2a2f31"), Ui.Radial());
-                    var eb = Ui.Rect(holder, "EmblemBox", new Vector2(0, .5f), new Vector2(0, .5f), new Vector2(40, -60), new Vector2(160, 60));
-                    v.Emblem = Ui.Img(Ui.Fill(eb, "Emblem"), Color.white); v.Emblem.preserveAspect = true;
-                    v.Flash = Ui.Img(Ui.Fill(eb, "Flash"), new Color(1, 1, 1, 0));
-                    var dark = Ui.Hex("#1c2022");
-                    v.Name = Ui.Label(Ui.Rect(holder, "Name", new Vector2(0, .5f), new Vector2(1, .5f), new Vector2(172, -4), new Vector2(-20, 34)), "Text", "", 30, dark, TextAnchor.MiddleLeft, true, 4);
-                    v.Line = Ui.Label(Ui.Rect(holder, "Line", new Vector2(0, .5f), new Vector2(1, .5f), new Vector2(172, -34), new Vector2(-20, -8)), "Text", "", 13, dark, TextAnchor.MiddleLeft, true, 3);
-                    Ui.Label(Ui.Rect(holder, "Top", new Vector2(0, 1), new Vector2(1, 1), new Vector2(172, -40), new Vector2(-20, -16)), "Text", "PROMOTED", 12, dark, TextAnchor.MiddleLeft, true, 6);
+                    BuildDogtag(v, root); // ProgScreen.Dogtag
                     break;
-                }
             }
             foreach (var g in root.GetComponentsInChildren<Graphic>(true)) g.raycastTarget = false;
             root.gameObject.SetActive(false);

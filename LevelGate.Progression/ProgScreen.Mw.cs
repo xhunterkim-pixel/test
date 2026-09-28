@@ -190,7 +190,7 @@ namespace LevelGate.Progression
         /// <summary>The title just changed: for a moment it smears sideways in red and cyan copies, then settles.</summary>
         private static void TitleGlitch(Component title)
         {
-            if (!Mw(7) || Motion.Still || title == null || !title.gameObject.activeInHierarchy) return;
+            if (!Mw(7) || Motion.Still || title == null || !title.gameObject.activeInHierarchy || _keepPickTpl != null) return;
             var g = GhostsOf(title);
             string text = Refl.Get(title, "text") as string ?? "";
             foreach (var x in g) { Ui.SetText(x, text); x.gameObject.SetActive(true); }
