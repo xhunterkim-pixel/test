@@ -303,6 +303,7 @@ namespace LevelGate.Progression
                     _luT = 0;
                     if (st.Final) _xpBlockFlashT = 0;
                     if (Sfx.UseGame) PlayLevelUp(1);
+                    ScreenFlash(Color.Lerp(Ui.Hex(TierOf(st.Level).Light), Color.white, .45f), .3f, Motion.D(Motion.Slow) * 1.5f); // MW 6
                     L.Debug($"xp: level up → {st.Level}");
                     break;
                 case StepKind.Rank:
@@ -356,6 +357,8 @@ namespace LevelGate.Progression
                     {
                         int n = ProgData.CountAt(st.Level);
                         foreach (var c in _cards) if (c.Level == st.Level) c.Flash(); // (no "+N ITEMS" float: barely visible, looked cheap)
+                        _flooded.Add(st.Level); // MW 2: stays lit until the screen closes
+                        ScreenFlash(Ui.Hex(TierOf(st.Level).Light), .1f, Motion.D(Motion.Base)); // MW 6: a softer wash per card
                         if (Time.unscaledTime - _xpTickAt > .15f) { _xpTickAt = Time.unscaledTime; Sounds.Play("ButtonOver", "ButtonClick"); }
                     }
                     break;
@@ -553,6 +556,7 @@ namespace LevelGate.Progression
             Ui.SetText(_xpGain, $"+{Thousands(Mathf.Max(0, _xpTo - shownTotal))}");
             // CoD-style big counter under the picture: what you've earned so far, counting up as the bar takes it
             if (_xpBig != null) Ui.SetText(_xpBig, $"+{Thousands(Mathf.Clamp(shownTotal - _xpFrom, 0, _xpTo - _xpFrom))} <size=60%><color=#e0562f>EXP</color></size>");
+            _gainShown = $"+{Thousands(Mathf.Clamp(shownTotal - _xpFrom, 0, _xpTo - _xpFrom))} <size=55%>XP</size>"; // MW 4: rides the light wall
         }
 
         /// <summary>The level square's pop, the number's roll, the bar's flash and reset, LEVEL UP, the rank emblem, the cards.</summary>

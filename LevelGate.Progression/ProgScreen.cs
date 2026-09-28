@@ -178,6 +178,7 @@ namespace LevelGate.Progression
                    $"since start {L.CostLines} line(s), {L.CostMs:0} ms ({L.CostMs / 10 / Math.Max(1, Time.realtimeSinceStartup):0.000}% of play time); verbose {(L.Verbose ? "on" : "off")}");
             FinishXpAnim("screen closed");
             EndPreview();
+            _flooded.Clear(); // MW 2: the flooded cards go dark again next visit
             _newFrom = 0; // the NEW tags themselves are kept (NewTags): they go when clicked / looked at, not when the screen closes
             _canvas.SetActive(false);
             MenuHook.SetOn(false);
@@ -245,6 +246,7 @@ namespace LevelGate.Progression
             // the Arena dot grid, barely there (fades in with the rest of the screen)
             var grid = Ui.Img(Ui.Fill(root, "DotGrid"), new Color(1, 1, 1, .035f), Ui.DotGrid());
             _dotGrid = grid;
+            BuildWaves(root); // MW 10: dotted wave surfaces in the bottom corners, behind the panels
             grid.type = Image.Type.Tiled;
             grid.raycastTarget = false;
             // Arena-style colour bloom: red, strongest on the right edge and fading out to the left;
@@ -293,6 +295,7 @@ namespace LevelGate.Progression
             _fade = root.gameObject.AddComponent<CanvasGroup>();
 
             _splashRoot = root; // the new-rank splash is built here on first use (ProgScreen.Splash)
+            BuildScreenFlash(root); // MW 6
             // hover tooltip (full item names, setting hints): its own layer, over everything
             var tipLayer = Ui.Rect(root, "TooltipLayer", Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
             SubCanvas(tipLayer);
@@ -651,6 +654,7 @@ namespace LevelGate.Progression
             Ui.SetText(_heroKind, kind);
             Ui.SetColor(_heroKind, Color.Lerp(Ui.Hex(tier.Rim), light, .5f));
             Ui.SetText(_heroName, it.Short);
+            TitleGlitch(_heroName); // MW 7
             int into = Mathf.Clamp(it.Level - tier.From + 1, 1, 5);
             for (int i = 0; i < 5; i++)
             {
@@ -685,6 +689,7 @@ namespace LevelGate.Progression
             Ui.OwnCanvas(lights); // it moves every frame: only this redraws
             _featLight = Ui.Detail(Ui.Img(Ui.Box(lights, "DotLight", new Vector2(.5f, .2f), Vector2.zero, new Vector2(560, 170)), new Color(1, 1, 1, .1f), Ui.HalftoneGlow()), .1f);
             _featLight.raycastTarget = false;
+            Glow(_featLight);
             var floorR = Ui.Rect(picFace, "FloorR", new Vector2(.5f, .2f), new Vector2(.92f, .2f), Vector2.zero, new Vector2(0, 1));
             Ui.Img(floorR, new Color(1, 1, 1, .06f), Ui.HorizontalFade());
             var floorL = Ui.Rect(picFace, "FloorL", new Vector2(.08f, .2f), new Vector2(.5f, .2f), Vector2.zero, new Vector2(0, 1));
@@ -694,6 +699,7 @@ namespace LevelGate.Progression
             // item bloom: a glow in the picked item's own colours behind it (F12 > CURRENTLY TESTING > Item Bloom)
             _heroBloom = Ui.Img(Ui.Box(picFace, "ItemBloom", new Vector2(.5f, .52f), Vector2.zero, new Vector2(760, 440)), new Color(1, 1, 1, 0), Ui.Radial());
             _heroBloom.raycastTarget = false;
+            Glow(_heroBloom);
             _featPic = Ui.Img(Ui.Fill(picFace, "Pic", 40), Color.white);
             _featPic.preserveAspect = true;
             _featPic.enabled = false;
@@ -1142,6 +1148,7 @@ namespace LevelGate.Progression
             _waveBase.type = Image.Type.Tiled; _waveBase.raycastTarget = false;
             _waveHot = Ui.Detail(Ui.Img(Ui.Box(wave, "Hot", new Vector2(0, .5f), Vector2.zero, new Vector2(360, 26)), Ui.Hex("#f0c9a8", .3f), Ui.Waveform(true)), .3f);
             _waveHot.raycastTarget = false;
+            Glow(_waveHot);
             Ui.Img(Ui.Rect(rail, "Line", new Vector2(0, .5f), new Vector2(1, .5f), new Vector2(0, 0), new Vector2(0, 1)), Ui.Hex("#3c3e3f", .9f));
             _railFill = Ui.Rect(rail, "Fill", new Vector2(0, .5f), new Vector2(0, .5f), new Vector2(0, -1), new Vector2(0, 1));
             Ui.Img(_railFill, Ui.Hex("#c4c7c8", .85f));
@@ -1844,7 +1851,7 @@ namespace LevelGate.Progression
             var boxLit = Ui.Img(Ui.Fill(body, "Lit", 1), new Color(1, 1, 1, 0), Ui.HorizontalFade());
             boxLit.rectTransform.localScale = new Vector3(-1, 1, 1); boxLit.raycastTarget = false;
             boxLit.gameObject.AddComponent<LayoutElement>().ignoreLayout = true;
-            _sectionLit[g.Key] = (headLit, boxLit); _sectionA.Remove(g.Key);
+            _sectionLit[g.Key] = (headLit, boxLit); _litSection = null; // (re)lit on the next frame
             var bl = body.gameObject.AddComponent<VerticalLayoutGroup>();
             bl.padding = new RectOffset(BoxPad + 1, BoxPad + 1, BoxPad + 1, BoxPad + 1); bl.childControlHeight = true; bl.childControlWidth = true;
             bl.childForceExpandHeight = false; bl.childForceExpandWidth = true;
@@ -2014,14 +2021,31 @@ namespace LevelGate.Progression
             Ui.Detail(Ui.Img(Ui.Fill(inner, "Light"), new Color(1, 1, 1, .045f), Ui.Radial()), .045f);
             var placeholder = Ui.Label(Ui.Fill(thumb, "Placeholder", S2), "Text", "", TCaps, Dim, TextAnchor.MiddleCenter, false, 0, true);
             AddLoader(placeholder, -2);
+            if (Mw(8))
+            {
+                // MW 8: where its level sits in its rank (5 pips) and the level itself, along the tile's foot
+                var tier = TierOf(Mathf.Max(1, it.Level));
+                int into = Mathf.Clamp(it.Level - tier.From + 1, 1, 5);
+                var tl = Ui.Hex(tier.Light);
+                for (int k = 0; k < 5; k++)
+                    Ui.Img(Ui.Rect(inner, "Pip", Vector2.zero, Vector2.zero, new Vector2(8 + k * 6, 5), new Vector2(12 + k * 6, 9)), k < into ? new Color(tl.r, tl.g, tl.b, .85f) : new Color(1, 1, 1, .14f)).raycastTarget = false;
+                ((Graphic)Ui.Label(Ui.Rect(inner, "Lv", new Vector2(1, 0), new Vector2(1, 0), new Vector2(-48, 2), new Vector2(-7, 13)), "Text", $"LV {it.Level}", 9, Dim, TextAnchor.MiddleRight, false, 1)).raycastTarget = false;
+            }
             v.Bloom = Ui.Img(Ui.Box(thumb, "ItemBloom", new Vector2(.5f, .5f), Vector2.zero, new Vector2(150, 110)), new Color(1, 1, 1, 0), Ui.Radial());
             v.Bloom.raycastTarget = false; v.Bloom.enabled = false;
+            Glow(v.Bloom);
             v.Pic = Ui.Img(Ui.Fill(thumb, "Icon", 0), Color.white);
             var prt = v.Pic.rectTransform;
             // long guns take the full width (they came out tiny at 80% of a box)
             prt.anchorMin = new Vector2(.05f, .04f); prt.anchorMax = new Vector2(.95f, .96f); prt.offsetMin = prt.offsetMax = Vector2.zero;
             v.Pic.preserveAspect = true;
             v.Pic.enabled = false;
+            if (Mw(9) && !reached)
+            {
+                // MW 9: locked — a cold, scanlined hologram over the picture (after it: on top)
+                var hs = Ui.Img(Ui.Fill(thumb, "HoloScan"), new Color(.7f, .86f, .95f, .22f), Ui.Scanlines()); hs.type = Image.Type.Tiled; hs.raycastTarget = false;
+                Ui.Img(Ui.Fill(thumb, "HoloNoise"), new Color(.7f, .86f, .95f, .14f), Ui.HStreaks()).raycastTarget = false;
+            }
             // selection: a 2 px light bar along the top (so selected isn't told by colour alone)
             v.Top = Ui.Img(Ui.Rect(inner, "Top", new Vector2(0, 1), Vector2.one, new Vector2(9, -2), Vector2.zero), Select); // clear of the cut corner
             v.Top.enabled = false;
@@ -2089,7 +2113,7 @@ namespace LevelGate.Progression
             if (v.Sheen != null) { v.Sheen.enabled = sel; v.Gloss.enabled = sel; }
             v.Pic.rectTransform.localScale = Vector3.one * (v.Hover ? 1.04f : 1f); // a slight lift on hover
             float pa = v.Locked ? (v.Hover || sel ? .8f : .6f) : 1f;
-            FadeTo(v.Pic, new Color(1, 1, 1, pa), instant);
+            FadeTo(v.Pic, v.Locked && Mw(9) ? new Color(.72f, .86f, .96f, pa * .9f) : new Color(1, 1, 1, pa), instant); // MW 9: cold hologram tint
             // names stay readable; locked shows through the dimmed icon, not unreadable text
             FadeTo(v.Name as Graphic, sel ? Color.white : v.Hover ? Text : v.Locked ? Grey : Ui.Hex("#b9c0c3"), instant);
         }
@@ -2526,6 +2550,7 @@ namespace LevelGate.Progression
             string path = it.Group == "Weapons" ? null : GameText.CategoryPath(it.Tpl);
             Ui.SetText(_featType, (path ?? g.Name ?? "Item").ToUpperInvariant());
             Ui.SetText(_featName, it.Name);
+            TitleGlitch(_featName); // MW 7
             if (_microStage != null) Ui.SetText(_microStage, $"ID - {it.Tpl.Substring(Mathf.Max(0, it.Tpl.Length - 6)).ToUpperInvariant()}  //  LV {it.Level:00}");
             Ui.SetSize(_featName, it.Name.Length > 34 ? TTitle - 2 : it.Name.Length > 26 ? TTitle : THero); // long names: smaller, not a lone word on line 2
             // stats: damage / penetration / armor class / resource big; weight / size / caliber small (nothing invented, nothing dropped)
@@ -2828,6 +2853,7 @@ namespace LevelGate.Progression
             if (_restoreAgainAt > 0 && Time.unscaledTime > _restoreAgainAt && !IsOpen && MenuHook.QuietMenu()) { _restoreAgainAt = -1; GameItems.RestoreIcons(); }
             if (!IsOpen) { CheckMenuShown(); return; }
             BgPattern.Tick(); // the background pattern's slow motion: only ever while open
+            Motion.Tick();    // the shared motion system: every tween and sequence advances here, once
             TickLights();     // the drifting lights, the XP bar's tracer (F12 Detail Animation)
             SweepPictures();  // no picture left pointing at a deleted texture (the "wrong pictures")
             // the game can fade its main menu back in behind us (its own tween after a screen change): keep it hidden while open
@@ -3015,6 +3041,7 @@ namespace LevelGate.Progression
                     if (size >= 60) Ui.OwnCanvas(br); // the header's breathes every frame: only it redraws
                     _bloom = Ui.Detail(Ui.Img(br, new Color(1, 1, 1, bloom), Ui.Radial()), bloom);
                     _bloom.raycastTarget = false;
+                    Glow(_bloom);
                 }
                 var rim = Ui.Box(_root, "Rim", new Vector2(.5f, .5f), Vector2.zero, new Vector2(size * .68f, size * .68f));
                 rim.localEulerAngles = new Vector3(0, 0, 45);
@@ -3086,7 +3113,26 @@ namespace LevelGate.Progression
             private readonly Component _activeTag;
             private readonly GameObject _activeMark;
             private readonly Image _unlockDots;
-            private bool _wasSel, _isCurrent;
+            private bool _wasSel, _isCurrent, _floodOn, _numLit;
+            private readonly Image _numGlow, _flood, _floodDots;
+            private readonly RectTransform _chev;
+            private readonly Image[] _chevBars = new Image[2];
+            private readonly GameObject _holo;
+
+            /// <summary>MW 2: every frame — fills when its level was unlocked in this visit's level up, stays lit.</summary>
+            public void TickFlood()
+            {
+                bool want = Mw(2) && _flooded.Contains(_level);
+                if (want == _floodOn) return;
+                _floodOn = want;
+                var light = Ui.Hex(TierOf(Mathf.Max(1, _level)).Light);
+                Motion.To(_flood, "flood", 0, want ? 1 : 0, Motion.D(want ? Motion.Hero : Motion.Base), want ? Motion.Ease.OutCubic : Motion.Ease.InCubic, v =>
+                {
+                    _flood.enabled = _floodDots.enabled = v > .001f;
+                    _flood.color = new Color(light.r, light.g, light.b, .15f * v);
+                    _floodDots.color = new Color(light.r, light.g, light.b, .22f * v);
+                });
+            }
             private SelFrame _selFx;
             private readonly GameObject _selLights;
             private readonly Image _selBloom, _selDotLight;
@@ -3273,6 +3319,17 @@ namespace LevelGate.Progression
                 // plate like the game's selected sub-tabs; CURRENT; NEXT), thin rules either side
                 var head = Ui.Rect(_body, "Head", new Vector2(0, 1), Vector2.one, new Vector2(0, -HeadH), Vector2.zero);
                 var numRow = Ui.Rect(head, "NumRow", new Vector2(0, 1), Vector2.one, new Vector2(0, -26), Vector2.zero);
+                // MW 3: a glow behind the number and a small chevron over it, lit once the level is reached
+                _numGlow = Ui.Img(Ui.Box(numRow, "NumGlow", new Vector2(.5f, .5f), Vector2.zero, new Vector2(110, 46)), new Color(1, 1, 1, 0), Ui.Radial());
+                _numGlow.raycastTarget = false; Glow(_numGlow);
+                _chev = Ui.Box(numRow, "Chevron", new Vector2(.5f, 1), new Vector2(0, 7), new Vector2(16, 8));
+                for (int k = 0; k < 2; k++)
+                {
+                    var bar = Ui.Box(_chev, "Bar", new Vector2(.5f, .5f), new Vector2(k == 0 ? -3.2f : 3.2f, 0), new Vector2(9, 1.6f));
+                    bar.localEulerAngles = new Vector3(0, 0, k == 0 ? 38 : -38);
+                    _chevBars[k] = Ui.Img(bar, Color.white); _chevBars[k].raycastTarget = false;
+                }
+                _chev.gameObject.SetActive(false);
                 _head = Ui.Label(numRow, "Text", "", TTitle, Grey, TextAnchor.MiddleCenter, true);
                 _cardBadge = new Badge(numRow, new Vector2(.5f, .5f), new Vector2(-30, 0), 30, .35f);
                 _headL = DottedLine.Add(Ui.Rect(numRow, "L", new Vector2(0, 0), new Vector2(.5f, 1), Vector2.zero, new Vector2(-46, 0)), false);
@@ -3287,6 +3344,7 @@ namespace LevelGate.Progression
                 _bloomFrame = Ui.Img(Ui.Rect(_body, "Bloom", Vector2.zero, Vector2.one, new Vector2(-16, -16), new Vector2(16, -HeadH - 4 + 16)), Ui.Hex(Orange, .5f), Ui.GlowFrame());
                 _bloomFrame.type = Image.Type.Sliced; _bloomFrame.raycastTarget = false; _bloomFrame.enabled = false; Ui.Detail(_bloomFrame, .5f);
                 Ui.OwnCanvas(_bloomFrame.rectTransform); // your card's bloom breathes: only it redraws
+                Glow(_bloomFrame);
                 _ticks = Ui.Rect(_body, "Ticks", new Vector2(0, 0), new Vector2(1, 0), new Vector2(12, -6), new Vector2(-12, -3));
                 for (int k = 0; k < 9; k++)
                 {
@@ -3340,6 +3398,16 @@ namespace LevelGate.Progression
                 _selDots.type = Image.Type.Tiled; _selDots.raycastTarget = false; _selDots.enabled = false;
                 _unlockDots = Ui.Img(Ui.Fill(dotsMask, "UnlockDots"), new Color(1, 1, 1, 0), Ui.DotGrid());
                 _unlockDots.type = Image.Type.Tiled; _unlockDots.raycastTarget = false; _unlockDots.enabled = false;
+                // MW 2: unlocked in this level up — the card fills with its rank's colour and a dot matrix, and stays lit
+                _flood = Ui.Img(Ui.Fill(dotsMask, "Flood"), new Color(1, 1, 1, 0));
+                _floodDots = Ui.Img(Ui.Fill(dotsMask, "FloodDots"), new Color(1, 1, 1, 0), Ui.DotGrid());
+                _floodDots.type = Image.Type.Tiled;
+                _flood.raycastTarget = _floodDots.raycastTarget = false; _flood.enabled = _floodDots.enabled = false;
+                // MW 9: locked — a cold, scanlined hologram over the pictures
+                _holo = Ui.Fill(inner, "Holo").gameObject; // brought to the top when shown (over the pictures)
+                var hs = Ui.Img(Ui.Fill(_holo.transform, "Scan"), new Color(.7f, .86f, .95f, .2f), Ui.Scanlines()); hs.type = Image.Type.Tiled; hs.raycastTarget = false;
+                Ui.Img(Ui.Fill(_holo.transform, "Noise"), new Color(.7f, .86f, .95f, .12f), Ui.HStreaks()).raycastTarget = false;
+                _holo.SetActive(false);
                 // picked: a bloom in the rank's colour and a light made of dots under the pictures, both drifting a little
                 // (their own canvas: moving them redraws only them), clipped to the card's cut shape
                 var lit = Ui.Fill(dotsMask, "Lights");
@@ -3514,6 +3582,17 @@ namespace LevelGate.Progression
                     _sheen.rectTransform.anchorMin = _sheen.rectTransform.anchorMax = new Vector2(right ? .4f : left ? .6f : .5f, .7f);
                 }
                 _cur.enabled = current;       // a thin orange line: your level
+                // MW 3: the number glows once reached (most on yours), a chevron over it
+                {
+                    var light = Ui.Hex(TierOf(Mathf.Max(1, _level)).Light);
+                    float target = Mw(3) ? (current ? .4f : reached ? .17f : 0) : 0;
+                    if (Mathf.Abs(Motion.ValueOf(_numGlow, "a", -1) - target) > .001f)
+                        Motion.To(_numGlow, "a", 0, target, Motion.D(Motion.Base), Motion.Ease.OutCubic, v => _numGlow.color = new Color(light.r, light.g, light.b, v));
+                    bool chev = Mw(3) && reached;
+                    if (_chev.gameObject.activeSelf != chev) _chev.gameObject.SetActive(chev);
+                    if (chev) foreach (var b in _chevBars) b.color = current ? Ui.Hex(Orange) : new Color(light.r, light.g, light.b, .85f);
+                }
+                if (_holo.activeSelf != (Mw(9) && locked)) { _holo.SetActive(Mw(9) && locked); if (_holo.activeSelf) _holo.transform.SetAsLastSibling(); } // MW 9
                 if (_activeTag.gameObject.activeSelf != current) _activeTag.gameObject.SetActive(current);
                 if (current) Ui.SetText(_activeTag, $"LEVEL_ACTIVE  //  {_level:000}");
                 if (_activeMark.activeSelf != current) _activeMark.SetActive(current);
@@ -3543,7 +3622,7 @@ namespace LevelGate.Progression
                 Ui.SetColor(_tier, locked ? Dim : Grey);
                 Ui.SetColor(_count, sel || current ? Text : locked ? Dim : Grey);
                 // head: the number bright on the picked / current card, quieter elsewhere, dim when locked
-                var head = sel || current ? Ui.Hex("#eceeef") : locked ? Dim : Grey;
+                var head = sel || current ? Ui.Hex("#eceeef") : locked ? Dim : Mw(3) && reached ? Color.Lerp(Grey, Ui.Hex(TierOf(Mathf.Max(1, _level)).Light), .4f) : Grey;
                 Ui.SetColor(_head, head);
                 _headL.color = _headR.color = new Color(head.r, head.g, head.b, current || sel ? .75f : .5f); // on every card, fainter
                 float nw = Ui.PreferredWidth(_head, _level.ToString());

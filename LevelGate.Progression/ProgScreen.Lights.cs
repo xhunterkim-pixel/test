@@ -25,11 +25,13 @@ namespace LevelGate.Progression
             TickWave(k);
             TickWall();
             TickSplash();
+            TickWaves();
             TickLoaders();
             TickFx();
             TickReveal();
             TickBloom();
             TickSelection();
+            if (_cards != null) foreach (var c in _cards) c?.TickFlood(); // MW 2
             if (k <= 0) return;
             _lightPhase += Mathf.Min(Time.unscaledDeltaTime, .1f);
             float t = _lightPhase;
@@ -85,7 +87,9 @@ namespace LevelGate.Progression
                 _trailImg[i] = Ui.Img(r, new Color(1f, .92f, .78f, 0));
                 _trailImg[i].enabled = false;
             }
+            BuildWallExtras(layer); // MW 4 + 5
             foreach (var g in layer.GetComponentsInChildren<Graphic>(true)) g.raycastTarget = false;
+            foreach (var g in new[] { _wallCore, _wallGlow, _wallEq }) Glow(g);
             layer.gameObject.SetActive(false);
         }
 
@@ -95,7 +99,8 @@ namespace LevelGate.Progression
             bool moving = !Calm && XpAnimating && Mathf.Abs(_railShown - _railTarget) > .001f;
             float dt = Mathf.Min(Time.unscaledDeltaTime, .1f);
             _wallA = Mathf.MoveTowards(_wallA, moving ? 1f : 0f, dt * (moving ? 6f : 1.6f));
-            bool on = (_wallA > .001f && _railShown > 0) || _trailAlive > 0;
+            bool idleBars = Mw(5) && !Calm && Ui.DetailK > 0 && MotionK > 0 && _railShown > .002f && _railShown < .998f; // MW 5's idle bounce
+            bool on = (_wallA > .001f && _railShown > 0) || _trailAlive > 0 || idleBars;
             if (_wallLayer.gameObject.activeSelf != on) _wallLayer.gameObject.SetActive(on);
             if (!on) return;
             float w = _wallLayer.rect.width, h = _wallLayer.rect.height;
@@ -146,6 +151,7 @@ namespace LevelGate.Progression
                 float fl = .75f + .25f * Mathf.Sin((Time.unscaledTime + i) * 17f);
                 _trailImg[i].color = new Color(1f, .92f, .78f, Mathf.Clamp01(_trailA[i] * Mathf.Pow(1 - u, 1.5f) * fl * (ProgressionPlugin.TestWallBrightness?.Value ?? 100) / 100f));
             }
+            TickWallExtras(x, a, w, h, moving);
             // the waveform's glowing part flares with the wall
             if (_waveHot != null) { var wc = _waveHot.color; wc.a = Mathf.Clamp01(.3f * Ui.DetailK + .6f * a * flick); _waveHot.color = wc; }
         }

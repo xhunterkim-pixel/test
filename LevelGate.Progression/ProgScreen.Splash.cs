@@ -16,6 +16,7 @@ namespace LevelGate.Progression
         private static Image _spVeil, _spGlow, _spFlash, _spEmblem, _spFloor, _spBand, _spBandScan, _spBandStripes;
         private static RectTransform _spFrame;
         private static CanvasGroup _spFrameGroup;
+        private static Image _spWaves;
         private static Component _spSide;
         private static Component _spNew, _spName, _spLevel, _spLog;
         private const int SpStreaks = 72, SpSpecks = 48;
@@ -45,6 +46,9 @@ namespace LevelGate.Progression
             _spVeil = Ui.Img(layer, new Color(0, 0, 0, 0));
             _spVeil.raycastTarget = false;
             _spGlow = Ui.Img(Ui.Box(layer, "Glow", new Vector2(.5f, .58f), Vector2.zero, new Vector2(1500, 1000)), new Color(1, 1, 1, 0), Ui.Radial());
+            Glow(_spGlow);
+            // MW 10: a dotted wave surface behind the emblem
+            _spWaves = Ui.Img(Ui.Box(layer, "Waves", new Vector2(.5f, .42f), Vector2.zero, new Vector2(1500, 560)), new Color(1, 1, 1, 0), DotWaves());
             // the floor: a perspective grid fading into the distance
             _spFloor = Ui.Img(Ui.Rect(layer, "Floor", new Vector2(.08f, 0), new Vector2(.92f, .34f), Vector2.zero, Vector2.zero), new Color(1, 1, 1, 0), PerspectiveGrid());
             // light streaks (thin vertical lines rising) and specks
@@ -171,6 +175,7 @@ namespace LevelGate.Progression
             float gk = after < 0 ? .06f + .06f * Mathf.Clamp01(t / Mathf.Max(.01f, peak)) : .2f * Mathf.Exp(-after * 1.2f) + .08f;
             var gc = Color.Lerp(new Color(1f, .75f, .45f), light, after < 0 ? 0 : 1); gc.a = gk * vis; _spGlow.color = gc;
             var fc = Color.Lerp(rim, light, .5f); fc.a = (after < 0 ? .25f * Mathf.Clamp01(t / .8f) : .5f) * vis; _spFloor.color = fc;
+            if (_spWaves != null) { var wc = light; wc.a = Mw(10) ? .16f * vis : 0; _spWaves.color = wc; _spWaves.rectTransform.localScale = new Vector3(1, 1 + .1f * Motion.Wave(3f), 1); }
             // the emblem: gathers (shrinks a little, dims) → pops in (overshoot) → settles, slowly breathing
             float s;
             if (still) s = 1;

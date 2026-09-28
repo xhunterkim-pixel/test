@@ -26,7 +26,7 @@ namespace LevelGate.Progression
         public const string Guid = "com.kkyangg.levelgate.progression";
         public const string Name = "LevelGate Progression";
         // MAJOR.MINOR.PATCH — see CHANGELOG.md
-        public const string Version = "0.9.73";
+        public const string Version = "0.9.74";
 
         internal static ProgressionPlugin Instance;
         internal static ConfigEntry<KeyboardShortcut> OpenKey;
@@ -34,7 +34,10 @@ namespace LevelGate.Progression
         internal static ConfigEntry<bool> InjectButton, CharacterEmblem, ReduceMotion;
         internal static ConfigEntry<int> TextSize, Detailing, PatternOpacity, DetailAnimation;
         // 5. CURRENTLY TESTING: new animation features to tune in game; the chosen values become the defaults after the patch
-        internal static ConfigEntry<int> TestGlitch, TestRevealRandom, TestBloomOpacity, TestBloomSize, TestWallBrightness;
+        internal static ConfigEntry<int> TestGlitch, TestRevealRandom, TestBloomOpacity, TestBloomSize, TestWallBrightness, TestMotionSpeed, TestStagger;
+        /// <summary>The ten MW4 features, each switchable while they're being tried (index 1…10; [0] unused).</summary>
+        internal static readonly ConfigEntry<bool>[] TestMw = new ConfigEntry<bool>[11];
+        internal static bool Mw(int n) => TestMw[n]?.Value ?? true;
         internal static ConfigEntry<float> TestRevealTime;
         internal static ConfigEntry<string> ButtonTemplate;
         internal static ConfigEntry<string> ButtonLabel;
@@ -173,6 +176,36 @@ namespace LevelGate.Progression
                 "Item bloom: how far the glow spreads, in %.", 75, new AcceptableValueRange<int>(40, 250)));
             TestWallBrightness = Config.Bind(T, "LightWall", 100, Desc(
                 "The light wall on the level track during level ups: brightness of the wall, its wash and trail, in %.", 70, new AcceptableValueRange<int>(0, 250)));
+            TestMotionSpeed = Config.Bind(T, "MotionSpeed", 100, Desc(
+                "The shared motion system: how fast every transition on the screen plays, in % (100 = as designed, 200 = twice as fast).", 99, new AcceptableValueRange<int>(25, 300)));
+            TestStagger = Config.Bind(T, "Stagger", 30, Desc(
+                "The shared motion system: the step between items coming in one after another (lights, specks, rows), in milliseconds.", 98, new AcceptableValueRange<int>(0, 120)));
+            string[] mw =
+            {
+                null,
+                "Additive glow: glows add light to what's under them (a real glow) instead of tinting it, where the game has an additive shader (the log says which it found)",
+                "Card flood: cards unlocked during a level up fill with their rank's colour and a dot matrix, and stay lit until the screen closes",
+                "Level numbers glow: reached levels' numbers above the cards glow in the rank's colour, with a small chevron over them (brightest on yours)",
+                "XP counter on the light wall: +XP with a crosshair rides the light wall along the track as it counts",
+                "Reactive waveform: bars around the light wall jump like audio as it passes; a low idle bounce at your place",
+                "Screen flashes: a quick full-screen wash in the rank's colour on each level up, a softer one on each card unlock",
+                "Title glitch: the item's name smears and splits (red / cyan) for a moment when the picked item changes",
+                "Row pips: every list tile shows 5 pips (where its level sits in its rank) and its level (LV 17)",
+                "Locked hologram: locked items' pictures look like a cold, scanlined hologram instead of just dimmed",
+                "Wave surfaces: dotted wave surfaces drifting in the background's bottom corners (and behind the new-rank emblem)",
+            };
+            for (int i = 1; i <= 10; i++)
+            {
+                int n = i;
+                TestMw[n] = Config.Bind(T, $"MW{n:00}", true, Desc($"MW4 feature {n} — {mw[n]}. On/off is written to the log.", 60 - n));
+                TestMw[n].SettingChanged += (_, __) => { L.Info($"testing: MW{n:00} {(TestMw[n].Value ? "on" : "off")} — {mw[n].Split(':')[0]}"); ProgScreen.MwChanged(n); };
+            }
+            foreach (var e in new ConfigEntryBase[] { TestGlitch, TestRevealTime, TestRevealRandom, TestBloomOpacity, TestBloomSize, TestWallBrightness, TestMotionSpeed, TestStagger })
+            {
+                var entry = e;
+                if (entry is ConfigEntry<int> ei) ei.SettingChanged += (_, __) => L.Info($"testing: {entry.Definition.Key} = {entry.BoxedValue}");
+                else if (entry is ConfigEntry<float> ef) ef.SettingChanged += (_, __) => L.Info($"testing: {entry.Definition.Key} = {entry.BoxedValue:0.##}");
+            }
 
             // 4. Preview: plays the XP animation with made-up numbers — nothing real changes (closing the screen brings yours back)
             const string P = "4. Preview";
@@ -265,7 +298,10 @@ namespace LevelGate.Progression
                 ["UseGameSounds"] = "Use Game Sounds", ["CharacterEmblem"] = "Rank Emblem On Character Screen", ["TextSize"] = "Text Size (%)", ["ReduceMotion"] = "Reduce Motion",
                 ["Quality"] = "Picture Quality", ["XpAnimation"] = "Level Up Animation", ["RefreshIcons"] = "Redraw All Item Pictures",
                 ["Pattern"] = "Background Pattern", ["PatternMotion"] = "Pattern Animation Speed", ["UIDetailing"] = "UI Detailing (%)", ["HoverGlitch"] = "Hover Glitch (%)", ["RevealTime"] = "Picture Load-In Time (s)",
-                ["RevealRandom"] = "Picture Load-In Randomness (%)", ["BloomOpacity"] = "Item Bloom Opacity (%)", ["BloomSize"] = "Item Bloom Size (%)", ["LightWall"] = "Light Wall Brightness (%)", ["DetailAnimation"] = "Detail Animation (%)", ["PatternOpacity"] = "Background Pattern Opacity (%)",
+                ["RevealRandom"] = "Picture Load-In Randomness (%)", ["BloomOpacity"] = "Item Bloom Opacity (%)", ["BloomSize"] = "Item Bloom Size (%)", ["LightWall"] = "Light Wall Brightness (%)", ["MotionSpeed"] = "Motion Speed (%)", ["Stagger"] = "Stagger (ms)",
+                ["MW01"] = "MW 1 · Additive Glow", ["MW02"] = "MW 2 · Card Flood", ["MW03"] = "MW 3 · Level Numbers Glow", ["MW04"] = "MW 4 · XP Counter On Light Wall",
+                ["MW05"] = "MW 5 · Reactive Waveform", ["MW06"] = "MW 6 · Screen Flashes", ["MW07"] = "MW 7 · Title Glitch", ["MW08"] = "MW 8 · Row Pips",
+                ["MW09"] = "MW 9 · Locked Hologram", ["MW10"] = "MW 10 · Wave Surfaces", ["DetailAnimation"] = "Detail Animation (%)", ["PatternOpacity"] = "Background Pattern Opacity (%)",
                 ["Vignette"] = "Dark Corners", ["RedGlow"] = "Red Glow",
                 ["Levels"] = "Levels To Play", ["PlayLevelUp"] = "Play Level Ups", ["PlayNextRank"] = "Play Next Rank", ["PlayUnlock"] = "Play Card Unlocks",
                 ["ButtonLabel"] = "Menu Button Text", ["CopyButton"] = "Copy Look Of Button", ["TopMargin"] = "Top Margin", ["BottomMargin"] = "Bottom Margin",

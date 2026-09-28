@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Linq;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -52,13 +53,13 @@ namespace LevelGate.Progression
 
         // ---------------------------------------------------------------- hover glitch, selection shine
 
-        private sealed class Fx { public RectTransform Holder; public Image Glitch, Shine; public float GlitchAt = -10, ShineAt = -10; }
+        private sealed class Fx { public RectTransform Holder; public Image Glitch, Shine; }
         private static readonly Dictionary<RectTransform, Fx> _fx = new Dictionary<RectTransform, Fx>();
-        private static readonly List<RectTransform> _fxDead = new List<RectTransform>();
 
         private static Fx FxOf(RectTransform host)
         {
             if (_fx.TryGetValue(host, out var f) && f.Holder != null) return f;
+            if (_fx.Count > 400) foreach (var k in _fx.Keys.Where(k => k == null || _fx[k].Holder == null).ToList()) _fx.Remove(k);
             f = new Fx();
             f.Holder = Ui.Fill(host, "Fx");
             f.Holder.gameObject.AddComponent<RectMask2D>(); // the streaks stay inside the tile
@@ -73,59 +74,68 @@ namespace LevelGate.Progression
         /// <summary>F12 > CURRENTLY TESTING > Hover Glitch, as a multiple of 0.9.70's strength (default 50%).</summary>
         private static float GlitchK => (ProgressionPlugin.TestGlitch?.Value ?? 50) / 100f;
 
+        /// <summary>Hover: glitch streaks slide across and fade (Motion: Fast × 1.8, linear, stepped flicker on the shared clock).</summary>
         private static void PlayGlitch(RectTransform host)
         {
-            if (host == null || Calm || Ui.DetailK <= 0 || GlitchK <= 0) return;
-            var f = FxOf(host); f.GlitchAt = Time.unscaledTime; f.Glitch.enabled = true;
+            if (host == null || Motion.Still || Ui.DetailK <= 0 || GlitchK <= 0) return;
+            var f = FxOf(host); var g = f.Glitch;
+            g.enabled = true;
+            Motion.Reset(g, "glitch");
+            Motion.To(g, "glitch", 0, 1, Motion.D(Motion.Fast) * 1.8f, Motion.Ease.Linear, t =>
+            {
+                float fl = Motion.Flicker(.65f, g.GetInstanceID());
+                g.color = new Color(1, 1, 1, .55f * GlitchK * (1 - t) * fl);
+                g.rectTransform.anchoredPosition = new Vector2(Mathf.Lerp(-18, 22, t), t < .5f ? 0 : 2);
+            }, 0, () => { if (g != null) g.enabled = false; });
         }
 
+        /// <summary>Picked: one soft shine sweeps across (Motion: Slow, OutCubic travel, pulse brightness).</summary>
         private static void PlayShine(RectTransform host)
         {
-            if (host == null || Calm || Ui.DetailK <= 0) return;
-            var f = FxOf(host); f.ShineAt = Time.unscaledTime; f.Shine.enabled = true;
+            if (host == null || Motion.Still || Ui.DetailK <= 0) return;
+            var f = FxOf(host); var sh = f.Shine;
+            sh.enabled = true;
+            Motion.Reset(sh, "shine");
+            Motion.To(sh, "shine", 0, 1, Motion.D(Motion.Slow), Motion.Ease.Linear, t =>
+            {
+                var r = sh.rectTransform;
+                float x = Mathf.Lerp(-.2f, 1.2f, Motion.Eval(Motion.Ease.OutCubic, t));
+                r.anchorMin = new Vector2(x, 0); r.anchorMax = new Vector2(x, 1);
+                sh.color = new Color(1, 1, 1, .22f * Motion.Eval(Motion.Ease.Pulse, t));
+            }, 0, () => { if (sh != null) sh.enabled = false; });
         }
 
-        private static void TickFx()
-        {
-            if (_fx.Count == 0) return;
-            float now = Time.unscaledTime;
-            foreach (var kv in _fx)
-            {
-                var f = kv.Value;
-                if (kv.Key == null || f.Holder == null) { _fxDead.Add(kv.Key); continue; }
-                if (f.Glitch.enabled)
-                {
-                    float t = (now - f.GlitchAt) / .28f;
-                    if (t >= 1) f.Glitch.enabled = false;
-                    else
-                    {
-                        // slides across, flickering, and fades
-                        float fl = (Mathf.Sin(now * 70f) > -.2f ? 1f : .35f);
-                        f.Glitch.color = new Color(1, 1, 1, .55f * GlitchK * (1 - t) * fl);
-                        f.Glitch.rectTransform.anchoredPosition = new Vector2(Mathf.Lerp(-18, 22, t), (t < .5f ? 0 : 2));
-                    }
-                }
-                if (f.Shine.enabled)
-                {
-                    float t = (now - f.ShineAt) / .4f;
-                    if (t >= 1) f.Shine.enabled = false;
-                    else
-                    {
-                        var r = f.Shine.rectTransform;
-                        float x = Mathf.Lerp(-.2f, 1.2f, EaseOutCubic(t));
-                        r.anchorMin = new Vector2(x, 0); r.anchorMax = new Vector2(x, 1);
-                        f.Shine.color = new Color(1, 1, 1, .22f * Mathf.Sin(t * Mathf.PI));
-                    }
-                }
-            }
-            foreach (var d in _fxDead) _fx.Remove(d);
-            _fxDead.Clear();
-        }
+        private static void TickFx() { } // (all on Motion now)
 
         // ---------------------------------------------------------------- selection border, section light-up
 
-        /// <summary>A selection border: fades / settles in when picked, out when not; crawls while shown.</summary>
-        private sealed class SelFrame { public Image Img; public float A; public bool On; }
+        /// <summary>
+        /// A selection border. Picked: draws in from a little outside (Motion: Base, OutCubic); unpicked: lets go (Fast,
+        /// InCubic); while shown its broken bottom crawls on the shared clock.
+        /// </summary>
+        private sealed class SelFrame
+        {
+            public Image Img;
+            private bool _on;
+            public bool On
+            {
+                set
+                {
+                    if (_on == value || Img == null) return;
+                    _on = value;
+                    var img = Img;
+                    Motion.To(img, "sel", 0, value ? 1 : 0, Motion.D(value ? Motion.Base : Motion.Fast), value ? Motion.Ease.OutCubic : Motion.Ease.InCubic, a =>
+                    {
+                        bool show = a > .001f && Ui.DetailK > 0;
+                        if (img.enabled != show) img.enabled = show;
+                        img.color = new Color(1, 1, 1, .85f * a);
+                        float sc = 1 + .035f * (1 - a); // draws in from a little outside
+                        img.rectTransform.localScale = new Vector3(sc, sc, 1);
+                    });
+                }
+                get => _on;
+            }
+        }
         private static readonly List<SelFrame> _selFrames = new List<SelFrame>();
         private static float _selSwapAt;
         private static int _selVariant;
@@ -142,44 +152,34 @@ namespace LevelGate.Progression
         // the section holding the picked item lights up from the left in the theme colour (the viewed rank's)
         private static readonly Dictionary<string, (Image Head, Image Box)> _sectionLit = new Dictionary<string, (Image, Image)>();
         private static readonly Dictionary<string, float> _sectionA = new Dictionary<string, float>();
+        private static string _litSection;
 
         private static void TickSelection()
         {
-            float dt = Mathf.Min(Time.unscaledDeltaTime, .1f);
-            bool swap = false;
-            if (!Calm && Time.unscaledTime >= _selSwapAt) { _selSwapAt = Time.unscaledTime + .11f; _selVariant++; swap = true; }
-            _selFrames.RemoveAll(f => f.Img == null);
-            foreach (var f in _selFrames)
+            // the broken bottoms crawl: one shared step for every border on screen
+            if (!Motion.Still && Time.unscaledTime >= _selSwapAt)
             {
-                float target = f.On ? 1 : 0;
-                if (f.A == target && !(f.On && swap)) continue;
-                f.A = Calm ? target : Mathf.MoveTowards(f.A, target, dt * (f.On ? 5f : 7f));
-                bool show = f.A > .001f && Ui.DetailK > 0;
-                if (f.Img.enabled != show) f.Img.enabled = show;
-                if (!show) continue;
-                float e = EaseOutCubic(f.A);
-                f.Img.color = new Color(1, 1, 1, .85f * e);
-                float sc = 1 + .035f * (1 - e); // draws in from a little outside
-                f.Img.rectTransform.localScale = new Vector3(sc, sc, 1);
-                if (swap) f.Img.sprite = Ui.DashFrame(_selVariant);
+                _selSwapAt = Time.unscaledTime + Motion.Micro * 1.4f;
+                _selVariant++;
+                _selFrames.RemoveAll(f => f.Img == null);
+                foreach (var f in _selFrames) if (f.Img.enabled) f.Img.sprite = Ui.DashFrame(_selVariant);
             }
-            if (_sectionLit.Count == 0) return;
+            // the section light: moves when the pick moves to another section (Motion: Slow in, Base out)
             string lit = _featTpl != null ? ProgData.GroupOf(_featTpl) : null;
+            if (lit == _litSection) return;
+            _litSection = lit;
             var theme = Ui.Hex(TierOf(Mathf.Max(1, _level)).Light);
-            var dead = (List<string>)null;
-            foreach (var kv in _sectionLit)
+            foreach (var kv in _sectionLit.ToList())
             {
-                if (kv.Value.Head == null) { (dead = dead ?? new List<string>()).Add(kv.Key); continue; }
-                _sectionA.TryGetValue(kv.Key, out float a);
-                float target = kv.Key == lit ? 1 : 0;
-                if (a == target) continue;
-                a = Calm ? target : Mathf.MoveTowards(a, target, dt * 3f);
-                _sectionA[kv.Key] = a;
-                float e = EaseOutCubic(a);
-                kv.Value.Head.color = new Color(theme.r, theme.g, theme.b, .32f * e);
-                kv.Value.Box.color = new Color(theme.r, theme.g, theme.b, .07f * e);
+                if (kv.Value.Head == null) { _sectionLit.Remove(kv.Key); continue; }
+                var (head, box) = kv.Value;
+                bool on = kv.Key == lit;
+                Motion.To(head, "lit", 0, on ? 1 : 0, Motion.D(on ? Motion.Slow : Motion.Base), on ? Motion.Ease.OutCubic : Motion.Ease.InCubic, e =>
+                {
+                    head.color = new Color(theme.r, theme.g, theme.b, .32f * e);
+                    box.color = new Color(theme.r, theme.g, theme.b, .07f * e);
+                });
             }
-            if (dead != null) foreach (var k in dead) { _sectionLit.Remove(k); _sectionA.Remove(k); }
         }
 
         // ---------------------------------------------------------------- item bloom

@@ -40,6 +40,21 @@ Versions are **MAJOR.MINOR.PATCH**:
 
 ## LevelGate Progression (BepInEx plugin, separate DLL)
 
+### 0.9.74 — shared motion system + ten MW4 features (all switchable)
+- **Motion, the screen's one motion system** (new Motion.cs): durations are tokens (Micro 0.08 s, Fast 0.15, Base 0.25, Slow 0.4, Hero 0.6, Epic 1.2) scaled by one F12 **Motion Speed** and instant under Reduce Motion / Performance Mode; one easing library (OutCubic, OutQuint, OutExpo, OutBack, InCubic, InOutSine, InOutCubic, Spring, Pulse); tweens keyed by owner + channel that continue from where the last one got to (hover on → off → on never jumps) and end themselves when their object is gone; a shared **Stagger** step (F12); sequences (Then / With / Wait / Call); one clock for every pulse and flicker (Wave, Flicker) so they stay in phase. On it now: the selection border, the section light-up, hover glitch, selection shine, card flood, level-number glow, screen flashes, title glitch, wave surfaces.
+- **F12 > CURRENTLY TESTING > MW 1 … MW 10**, each on its own switch (all on to start; every change is written to the log as "testing: MW05 off — …"):
+  1. **Additive glow** — glows add light to what's under them instead of tinting it, using an additive shader the game already has (the log says which one it found, or that there is none).
+  2. **Card flood** — cards unlocked during a level up fill with their rank's colour and a dot matrix and stay lit until the screen closes.
+  3. **Level numbers glow** — reached levels' numbers above the cards glow in the rank's colour with a small chevron over them; brightest on yours (orange chevron).
+  4. **XP counter on the light wall** — +XP with a crosshair tick rides the light wall along the track as it counts.
+  5. **Reactive waveform** — bars around the light wall jump like audio as it passes, mostly behind it; a low idle bounce at your place otherwise.
+  6. **Screen flashes** — a quick full-screen wash in the rank's colour on each level up, a softer one per card unlock.
+  7. **Title glitch** — the item name (big picture caption and details panel) smears and splits into red / cyan copies for a moment when the pick changes.
+  8. **Row pips** — every list tile shows 5 pips (where its level sits in its rank) and its level (LV 17) along its foot.
+  9. **Locked hologram** — locked items' pictures turn into a cold, scanlined hologram (tiles and cards) instead of just dimmed.
+  10. **Wave surfaces** — dotted wave surfaces swelling slowly in the background's bottom corners, and one behind the new-rank emblem.
+- F12 also gains **Motion Speed** (%) and **Stagger** (ms); every CURRENTLY TESTING slider change is logged too.
+
 ### 0.9.73
 - **MW panel edges**: the three main panels' flat 3 px border is now a thin, lighter 1 px line with a soft glow fading inward from it (over the panel's background, under its content), so each panel stands apart from what's around it. The glow follows UI Detailing.
 
