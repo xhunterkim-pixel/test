@@ -642,7 +642,7 @@ namespace LevelGate.Progression
             var b = btn.gameObject.AddComponent<Button>();
             b.targetGraphic = bimg;
             b.transition = Selectable.Transition.None;
-            b.onClick.AddListener(() => { if (_featTpl != null) Inspect(_featTpl); });
+            b.onClick.AddListener(() => { if (_featTpl != null) InspectSoon(_featTpl); });
             HoverHook.Add(bimg, on =>
             {
                 if (on) Sounds.Play("ButtonOver");
@@ -675,6 +675,22 @@ namespace LevelGate.Progression
         private static RectTransform _info, _descView;
 
         /// <summary>The description takes the height it needs (up to what's left, then it scrolls), so INSPECT follows the text.</summary>
+        private static string _inspectTpl;
+        private static int _inspectFrame;
+
+        /// <summary>
+        /// The game's inspect window, opened on the next frame: the click sound and highlight land first, then the window
+        /// (opening it costs the game up to ~220 ms for a modded weapon; now it doesn't swallow the click's feedback).
+        /// </summary>
+        private static void InspectSoon(string tpl) { Sounds.Click(); _inspectTpl = tpl; _inspectFrame = Time.frameCount + 1; }
+
+        private static void InspectPending()
+        {
+            if (_inspectTpl == null || Time.frameCount < _inspectFrame) return;
+            var t = _inspectTpl; _inspectTpl = null;
+            Inspect(t);
+        }
+
         private static string _featWantTpl;
         private static int _featWantScale;
         private static float _featWantAt;
@@ -972,6 +988,10 @@ namespace LevelGate.Progression
             }
             _railYou = Ui.Img(Ui.Box(rail, "You", new Vector2(0, .5f), Vector2.zero, new Vector2(8, 8)), Ui.Hex(Orange));
             _railYou.rectTransform.localEulerAngles = new Vector3(0, 0, 45); // a small diamond
+            // CoD's sweep: a bright beam riding the fill's front while the XP animation moves it
+            _railBeam = Ui.Img(Ui.Box(rail, "Beam", new Vector2(0, .5f), Vector2.zero, new Vector2(10, 56)), new Color(1f, .93f, .8f, 0), Ui.Radial());
+            _railBeam.raycastTarget = false;
+            _railYouText = Ui.Label(Ui.Rect(rail, "YouText", new Vector2(0, .5f), new Vector2(0, .5f), new Vector2(0, -8), new Vector2(60, 8)), "Text", "", 10, Ui.Hex(Orange), TextAnchor.MiddleLeft, true, 1);
             _rail = rail;
             for (int i = 0; i < PerPage; i++)
             {
@@ -1333,7 +1353,7 @@ namespace LevelGate.Progression
         private static float _dragBase, _dragSuppressUntil, _lastScrollAt;
 
         /// <summary>You're flying through levels (drag / wheel / keys in the last 0.35 s): pictures and effects hold back.</summary>
-        private static bool Browsing => _dragging || Time.unscaledTime - _lastScrollAt < .35f;
+        private static bool Browsing => Dragging || Time.unscaledTime - _lastScrollAt < .35f;
 
         private static bool InWindow(int level) => level >= _first && level < _first + PerPage;
         private static int MaxFirst => Mathf.Max(1, ProgData.MaxLevel - PerPage + 1);
@@ -1366,25 +1386,47 @@ namespace LevelGate.Progression
         /// Drag the card row with the mouse: it follows the pointer, a level comes in each time it passes half a card
         /// (so the row can show 44–48, not only pages), and it settles into place when let go. A drag is never a click.
         /// </summary>
+        public static bool Dragging => _dragging || _flingV != 0;
+        private static float _flingV, _dragLastX, _dragTickAt;
+
+        /// <summary>Moves the row by dx (canvas units, + = right): each half card passed brings the next level in.</summary>
+        private static float MoveRow(float dx)
+        {
+            float slot = SlotWidth;
+            while (dx < -slot / 2 && _first < MaxFirst) { ShiftWindow(_first + 1, false); _dragBase -= slot; dx += slot; DragTick(); }
+            while (dx > slot / 2 && _first > 1) { ShiftWindow(_first - 1, false); _dragBase += slot; dx -= slot; DragTick(); }
+            return dx;
+        }
+
+        /// <summary>One soft tick as a level passes, at most every 80 ms.</summary>
+        private static void DragTick()
+        {
+            if (Time.unscaledTime - _dragTickAt < .08f) return;
+            _dragTickAt = Time.unscaledTime;
+            Sounds.Play("ButtonOver");
+        }
+
         private static void DragCards(BepInEx.IInputSystem input, bool blocked)
         {
             if (_cardsRt == null) return;
+            float dt = Mathf.Max(.001f, Time.unscaledDeltaTime);
             var canvas = _cardsRt.GetComponentInParent<Canvas>();
             var cam = canvas != null && canvas.renderMode != RenderMode.ScreenSpaceOverlay ? canvas.worldCamera : null;
             Vector2 local;
             bool inside = RectTransformUtility.ScreenPointToLocalPointInRectangle(_cardsRt, input.mousePosition, cam, out local);
-            if (input.GetMouseButtonDown(0) && !blocked && inside && _cardsRt.rect.Contains(local)) { _dragArmed = true; _dragging = false; _dragBase = local.x; }
+            if (input.GetMouseButtonDown(0) && !blocked && inside && _cardsRt.rect.Contains(local))
+            { _dragArmed = true; _dragging = false; _dragBase = local.x; _dragLastX = local.x; _flingV = 0; }
             if (_dragArmed && input.GetMouseButton(0))
             {
                 float dx = local.x - _dragBase;
                 if (!_dragging && Mathf.Abs(dx) > 10) { _dragging = true; _shiftStart = -10; _cardsStart = -10; L.Debug("cards: drag"); }
                 if (_dragging)
                 {
-                    float slot = SlotWidth;
-                    // dragging left brings later levels in, right brings earlier ones; resistance at the ends
-                    while (dx < -slot / 2 && _first < MaxFirst) { ShiftWindow(_first + 1, false); _dragBase -= slot; dx += slot; Sounds.Play("ButtonOver"); }
-                    while (dx > slot / 2 && _first > 1) { ShiftWindow(_first - 1, false); _dragBase += slot; dx -= slot; Sounds.Play("ButtonOver"); }
-                    if ((dx < 0 && _first >= MaxFirst) || (dx > 0 && _first <= 1)) dx *= .3f;
+                    // how fast it's being pulled (smoothed), for the flick when let go
+                    _flingV = Mathf.Lerp(_flingV, (local.x - _dragLastX) / dt, .35f);
+                    _dragLastX = local.x;
+                    dx = MoveRow(dx);
+                    if ((dx < 0 && _first >= MaxFirst) || (dx > 0 && _first <= 1)) dx *= .3f; // resistance at the ends
                     SetCardOffset(dx);
                     _shiftFrom = dx;
                 }
@@ -1394,10 +1436,23 @@ namespace LevelGate.Progression
                 if (_dragging)
                 {
                     _dragSuppressUntil = Time.unscaledTime + .2f; // the release isn't a click on a card
-                    _shiftStart = Time.unscaledTime; _shiftFade = false; // settle from where it was let go
-                    L.Debug($"cards: dropped at levels {_first}–{Mathf.Min(ProgData.MaxLevel, _first + PerPage - 1)}");
+                    if (Mathf.Abs(_flingV) < 500) { _flingV = 0; _shiftStart = Time.unscaledTime; _shiftFade = false; } // settle from where it was let go
+                    L.Debug($"cards: dropped at levels {_first}–{Mathf.Min(ProgData.MaxLevel, _first + PerPage - 1)}{(_flingV != 0 ? $", flicked ({_flingV:0}/s)" : "")}");
                 }
+                else _flingV = 0;
                 _dragArmed = _dragging = false;
+            }
+            // a flick: the row keeps going and slows down, then settles into place
+            if (!_dragArmed && _flingV != 0)
+            {
+                float dx = _shiftFrom + _flingV * dt;
+                _flingV *= Mathf.Exp(-dt * 5.5f);
+                dx = MoveRow(dx);
+                bool atEnd = (dx < 0 && _first >= MaxFirst) || (dx > 0 && _first <= 1);
+                if (atEnd) { dx = Mathf.Clamp(dx, -SlotWidth * .25f, SlotWidth * .25f); _flingV = 0; }
+                SetCardOffset(dx);
+                _shiftFrom = dx;
+                if (Mathf.Abs(_flingV) < 180) { _flingV = 0; _shiftStart = Time.unscaledTime; _shiftFade = false; }
             }
         }
 
@@ -1737,6 +1792,9 @@ namespace LevelGate.Progression
             v.Top = Ui.Img(Ui.Rect(inner, "Top", new Vector2(0, 1), Vector2.one, new Vector2(9, -2), Vector2.zero), Select); // clear of the cut corner
             v.Top.enabled = false;
             // the short name, top-right like the game's cells (two lines at most; look-alikes say what sets them apart)
+            // a soft dark fade under the name, so two-line names stay readable over the picture
+            var nameFade = Ui.Img(Ui.Rect(inner, "NameFade", new Vector2(0, 1), Vector2.one, new Vector2(0, -40), Vector2.zero), new Color(0, 0, 0, .5f), Ui.VerticalFade());
+            nameFade.raycastTarget = false;
             // two lines when needed ("ACHHC (Coyote Brown)" was cut to one line "ACHHC (Coyote B…")
             string nm = shownName ?? it.Short;
             v.Name = Ui.Label(Ui.Rect(inner, "Name", new Vector2(0, 1), Vector2.one, new Vector2(S2, -TileTop - 22), new Vector2(-S1 - 2, -S1)), "Text",
@@ -1749,10 +1807,13 @@ namespace LevelGate.Progression
             // newly reached since you last opened the screen: a small restrained tag (top-right)
             if (reached && NewTags.Item(it.Tpl))
             {
-                var tag = Ui.Rect(inner, "New", new Vector2(1, 0), new Vector2(1, 0), new Vector2(-S1 - 30, S1), new Vector2(-S1, S1 + 14)); // bottom-right
+                // bottom-left (the bottom-right is a cut corner, where the solid block looked clipped): a small dark chip with an
+                // orange outline and orange letters, instead of a loud solid block over the picture
+                var tag = Ui.Rect(inner, "New", Vector2.zero, Vector2.zero, new Vector2(S1 + 1, S1 + 1), new Vector2(S1 + 1 + 32, S1 + 1 + 14));
                 v.NewTag = tag.gameObject;
                 Ui.Img(tag, Ui.Hex(Orange, .9f));
-                Ui.Label(tag, "Text", "NEW", 10, Ui.Hex("#1a1210"), TextAnchor.MiddleCenter, true, 1);
+                Ui.Img(Ui.Fill(tag, "In", 1), Ui.Hex("#141516", .92f));
+                Ui.Label(tag, "Text", "NEW", 9.5f, Ui.Hex(Orange), TextAnchor.MiddleCenter, true, 1.5f);
             }
             RequestIcon(_icons, it.Tpl, TileScaleOf(it.Tpl), v.Pic, placeholder);
             _hits.Add((rt, it));
@@ -1854,6 +1915,8 @@ namespace LevelGate.Progression
                 _iconRequests.RemoveAt(0);
                 if (r.Pic == null) continue;
                 var have = r.Scale != 1 ? GameItems.CopyOf(r.Tpl, r.Scale) : null;
+                // drawn earlier this visit: reuse it (dragging the row back and forth redrew the AS VAL six times, 70–84 ms each)
+                if (have == null && r.Scale == 1 && _drawn.TryGetValue(r.Tpl, out var seen) && seen != null) have = seen;
                 if (have != null) { r.Pic.sprite = have; r.Pic.enabled = true; if (r.Placeholder != null) r.Placeholder.gameObject.SetActive(false); budget++; continue; }
                 r.Target.Add((GameItems.IconOf(GameItems.ItemOf(r.Tpl), r.Scale), r.Pic, r.Placeholder, r.Tpl));
             }
@@ -2119,6 +2182,7 @@ namespace LevelGate.Progression
             _loadQueue.Clear(); _loadWaiting.Clear();
             int n = GameItems.ClearCopies();
             ForgetPictures();
+            _drawn.Clear();
             L.Info($"loading: {n} kept picture(s) let go ({why}); the next open loads them again");
         }
 
@@ -2158,6 +2222,8 @@ namespace LevelGate.Progression
             }
         }
 
+        private static readonly Dictionary<string, Sprite> _drawn = new Dictionary<string, Sprite>(); // this visit's finished pictures
+
         private static void ShowIcons(List<(object Icon, Image Pic, Component Placeholder, string Tpl)> list)
         {
             for (int i = list.Count - 1; i >= 0; i--)
@@ -2171,6 +2237,7 @@ namespace LevelGate.Progression
                 if (placeholder != null) placeholder.gameObject.SetActive(false);
                 if (!done) continue;
                 list.RemoveAt(i);
+                _drawn[tpl] = sprite;
                 if (_iconsShown++ == 0) L.Info($"first item icon shown ({tpl}, {sprite.rect.width:0}x{sprite.rect.height:0} px)");
             }
         }
@@ -2269,26 +2336,28 @@ namespace LevelGate.Progression
             Ui.SetText(_featReq, $"Reach level {it.Level}");
             // said once each: the level to reach (left), how far that is (right, the one red), the XP under it
             int away = it.Level - player;
-            Ui.SetText(_featReqValue, player > 0 && !met ? $"<color={Red}>{away} level{(away == 1 ? "" : "s")} away</color>" : "");
+            // one line: "Reach level 44 ........ 819 081 EXP to go" (LOCKED and "4 levels away" are said by the list's chip)
+            string xpGo = _xpCardLevel <= 0 && ProgData.XpTo(it.Level, out int xpLeft) ? $"{Thousands(xpLeft)} EXP to go" : $"{away} level{(away == 1 ? "" : "s")} away";
+            Ui.SetText(_featReqValue, player > 0 && !met ? $"<color={Red}>{xpGo}</color>" : "");
             Ui.SetText(_featStatus, player <= 0 ? "" : met ? "UNLOCKED" : "LOCKED");
             // unlocked: one quiet line ("✓ Unlocked at level 1"); locked: the full box, the one place that explains it
             bool full = player > 0 && !met;
-            _reqHead.SetActive(full);
-            _featStatus.gameObject.SetActive(full);
+            _reqHead.SetActive(false);
+            _featStatus.gameObject.SetActive(false);
             _reqEdge.color = full ? Border : new Color(0, 0, 0, 0);
             _reqBg.color = full ? Ui.Hex("#0b0f11", .9f) : new Color(0, 0, 0, 0);
             _reqRed.enabled = full;
-            _reqRow.offsetMin = new Vector2(full ? S4 : 0, full ? -54 : -26);
-            _reqRow.offsetMax = new Vector2(full ? -S4 : 0, full ? -30 : -2);
+            _reqRow.offsetMin = new Vector2(full ? S4 : 0, full ? -34 : -26);
+            _reqRow.offsetMax = new Vector2(full ? -S4 : 0, full ? -6 : -2);
             if (!full)
             {
                 Ui.SetText(_featReq, player <= 0 ? $"Unlocks at level {it.Level}" : it.Level == player ? "Unlocked at your current level" : $"Unlocked at level {it.Level}");
                 Ui.SetText(_featReqValue, "");
             }
             ReqLeader(Refl.Get(_featReq, "text") as string ?? "", Refl.Get(_featReqValue, "text") as string ?? "");
-            string note = full ? (_xpCardLevel <= 0 && ProgData.XpTo(it.Level, out int xp) ? $"{Thousands(xp)} EXP to go" : "") : "";
+            string note = ""; // the EXP to go is the requirement's value now
             Ui.SetText(_featNote, note);
-            _reqSize.minHeight = _reqSize.preferredHeight = full ? 84 : 28;
+            _reqSize.minHeight = _reqSize.preferredHeight = full ? 40 : 28;
             FitDescription();
             _featLock.enabled = false; // the band says it now
             _featPic.color = player > 0 && it.Level > player ? new Color(.82f, .82f, .82f, 1) : Color.white; // locked: a shade darker
@@ -2298,7 +2367,7 @@ namespace LevelGate.Progression
             var kept = GameItems.CopyOf(it.Tpl, featScale);
             FitFeat(null);
             if (kept != null) { _featIcon = null; _featPic.sprite = kept; _featPic.enabled = true; _featShort.gameObject.SetActive(false); FitFeat(kept); LogSharpness(kept, "kept"); }
-            else if (!_loading) { _featWantTpl = it.Tpl; _featWantScale = featScale; _featWantAt = Time.unscaledTime + (Browsing ? .3f : .02f); } // drawn a moment later (it cost up to 136 ms right in the click)
+            else if (!_loading) { _featWantTpl = it.Tpl; _featWantScale = featScale; _featWantAt = Time.unscaledTime + (Browsing ? .3f : .12f); } // drawn a moment later (it cost up to 136 ms right in the click)
             MarkSelectedTile();
         }
 
@@ -2403,12 +2472,24 @@ namespace LevelGate.Progression
         private static RectTransform _rail, _railFill;
         private static readonly List<Image> _railTicks = new List<Image>();
         private static Image _railYou;
+        private static Component _railYouText;
+        private static Image _railBeam;
         private static float _railTarget, _railShown = -1;
 
         private static void TickRail(float dt)
         {
             if (_railFill == null) return;
             if (_railShown < 0) _railShown = _railTarget;
+            if (_railBeam != null)
+            {
+                bool moving = XpAnimating && Mathf.Abs(_railShown - _railTarget) > .001f;
+                float ba = Mathf.MoveTowards(_railBeam.color.a, moving ? .9f : 0f, dt * 4);
+                if (ba != _railBeam.color.a || moving)
+                {
+                    _railBeam.color = new Color(1f, .93f, .8f, ba);
+                    var br = _railBeam.rectTransform; br.anchorMin = br.anchorMax = new Vector2(_railShown, .5f); br.anchoredPosition = Vector2.zero;
+                }
+            }
             if (Mathf.Abs(_railShown - _railTarget) < .0005f) { if (_railFill.anchorMax.x != _railTarget) _railFill.anchorMax = new Vector2(_railTarget, .5f); return; }
             _railShown = Mathf.Lerp(_railShown, _railTarget, 1 - Mathf.Exp(-dt * 9));
             _railFill.anchorMax = new Vector2(_railShown, .5f);
@@ -2431,9 +2512,18 @@ namespace LevelGate.Progression
                 tr.offsetMin = new Vector2(tr.offsetMin.x, -th); tr.offsetMax = new Vector2(tr.offsetMax.x, th);
                 _railTicks[i].gameObject.SetActive(lv <= ProgData.MaxLevel);
             }
-            bool here = me >= first && me < first + PerPage;
-            _railYou.enabled = here;
-            if (here) { var yr = _railYou.rectTransform; float a = ((me - first) + .5f) / PerPage; yr.anchorMin = yr.anchorMax = new Vector2(a, .5f); yr.anchoredPosition = Vector2.zero; }
+            // your level on the row: the diamond on its tick; off the row: the diamond at the edge pointing to it ("◀ 40" / "40 ▶")
+            bool here = me >= first && me < first + PerPage, before = me > 0 && me < first, after = me >= first + PerPage;
+            _railYou.enabled = me > 0;
+            var yr = _railYou.rectTransform;
+            float ax = here ? ((me - first) + .5f) / PerPage : before ? 0 : 1;
+            yr.anchorMin = yr.anchorMax = new Vector2(ax, .5f); yr.anchoredPosition = Vector2.zero;
+            var tr2 = (RectTransform)((Component)_railYouText).transform.parent;
+            Ui.SetText(_railYouText, before ? $"◀ {me}" : after ? $"{me} ▶" : "");
+            tr2.anchorMin = tr2.anchorMax = new Vector2(ax, .5f);
+            tr2.anchoredPosition = new Vector2(before ? 8 : -68, 0);
+            Refl.Set(_railYouText, "alignment", before ? 4097 : 4100); // TMP: MidlineLeft / MidlineRight
+            if (me <= 0) Ui.SetText(_railYouText, "");
         }
 
         private static void UpdateSelection()
@@ -2532,7 +2622,7 @@ namespace LevelGate.Progression
             DragCards(input, window || xpBusy);
             TickRail(Time.unscaledDeltaTime);
             // the row slid by one card (or was let go after a drag): ease the cards back into their places
-            if (!_dragging && _shiftStart > 0)
+            if (!_dragging && _flingV == 0 && _shiftStart > 0)
             {
                 float t = Mathf.Clamp01((now - _shiftStart) / .26f), e = 1 - Mathf.Pow(1 - t, 3);
                 float x = _shiftFrom * (1 - e);
@@ -2582,10 +2672,11 @@ namespace LevelGate.Progression
                 if (input.GetMouseButtonDown(1))
                 {
                     L.Debug($"right-click at {mouse} over {(over == null ? "nothing" : over.Name + " (" + over.Tpl + ")")}");
-                    if (over != null) Inspect(over.Tpl);
+                    if (over != null) InspectSoon(over.Tpl);
                 }
             }
             FeatureDeferred();
+            InspectPending();
             if (_featIcon != null)
             {
                 var sp = GameItems.TakeSprite(_featIcon, _featTpl, out bool done);
@@ -2698,7 +2789,7 @@ namespace LevelGate.Progression
         {
             private readonly RectTransform _body;
             private readonly CanvasGroup _group;
-            private readonly Image _frame, _bg, _glow, _top, _stateLock, _selDots, _cur, _tagPlate;
+            private readonly Image _frame, _bg, _glow, _top, _stateLock, _selDots, _cur, _tagPlate, _cardLock, _stamp;
             private readonly Badge _cardBadge;
             private readonly RectTransform _tag;
             private readonly Component _tagText, _typeLine;
@@ -2771,6 +2862,7 @@ namespace LevelGate.Progression
                 if (_flash == null) return;
                 _flashAt = Time.unscaledTime;
                 _flash.enabled = true;
+                if (_stamp != null) _stamp.enabled = true;
             }
 
             public void TickFlash()
@@ -2784,7 +2876,19 @@ namespace LevelGate.Progression
                 // and a gentle lift: up to 102% and back in 0.35 s
                 float sc = 1 + .02f * Mathf.Sin(Mathf.Clamp01(t / .35f) * Mathf.PI);
                 _body.localScale = new Vector3(sc, sc, 1);
-                if (t > 1.05f) { _flash.enabled = false; _body.localScale = Vector3.one; }
+                // CoD's unlock: a big check stamps down (130% → 100% in 0.18 s), glows, then fades out by 1.3 s
+                if (_stamp != null && _stamp.enabled)
+                {
+                    float st = Mathf.Clamp01(t / .18f), se = 1 - Mathf.Pow(1 - st, 3);
+                    _stamp.rectTransform.localScale = Vector3.one * Mathf.Lerp(1.3f, 1f, se);
+                    float sa = t < .18f ? se : Mathf.Clamp01(1 - (t - .7f) / .6f);
+                    _stamp.color = new Color(.95f, .82f, .45f, .95f * sa); // warm gold, like CoD's
+                    if (t > 1.3f) { _stamp.enabled = false; }
+                }
+                // and the level number above it pulses
+                var hs = 1 + .22f * Mathf.Sin(Mathf.Clamp01(t / .35f) * Mathf.PI);
+                ((RectTransform)((Component)_head).transform).localScale = new Vector3(hs, hs, 1);
+                if (t > 1.3f) { _flash.enabled = false; _body.localScale = Vector3.one; ((RectTransform)((Component)_head).transform).localScale = Vector3.one; }
             }
 
             private void TickFloat()
@@ -2867,9 +2971,18 @@ namespace LevelGate.Progression
                 _top = Ui.Img(Ui.Rect(inner, "Top", new Vector2(0, 1), Vector2.one, new Vector2(10, -2), Vector2.zero), Select); // clear of the cut corner
                 _top.enabled = false;
                 // selected: a fine dot-matrix fill over the face (MW's picked card), under the pictures
-                _selDots = Ui.Img(Ui.Fill(inner, "SelDots"), new Color(1, 1, 1, .07f), Ui.DotGrid());
+                var dotsMask = Ui.Fill(inner, "SelDotsMask");
+                var dm = Ui.Img(dotsMask, Color.white, Ui.Chamfer()); dm.type = Image.Type.Sliced; dm.raycastTarget = false;
+                dotsMask.gameObject.AddComponent<Mask>().showMaskGraphic = false; // the dots follow the card's cut corners
+                dotsMask.SetSiblingIndex(1);
+                _selDots = Ui.Img(Ui.Fill(dotsMask, "SelDots"), new Color(1, 1, 1, .13f), Ui.DotGrid());
                 _selDots.type = Image.Type.Tiled; _selDots.raycastTarget = false; _selDots.enabled = false;
-                _selDots.transform.SetSiblingIndex(1);
+                // locked: a small lock top-left on the picture area, like CoD's locked unlocks
+                _cardLock = Ui.Img(Ui.Rect(inner, "Lock", new Vector2(0, 1), new Vector2(0, 1), new Vector2(Pad + 6, -Pad - 20), new Vector2(Pad + 18, -Pad - 6)), Ui.Hex("#c9cccd", .9f), Ui.Lock());
+                _cardLock.raycastTarget = false; _cardLock.enabled = false;
+                // unlocked (XP animation): a big check stamps onto the card and settles
+                _stamp = Ui.Img(Ui.Box(inner, "Stamp", new Vector2(.5f, .55f), Vector2.zero, new Vector2(84, 84)), new Color(1, 1, 1, 0), Ui.Tick());
+                _stamp.raycastTarget = false; _stamp.enabled = false;
                 // your level: one thin orange line along the top (orange only ever means "you")
                 _cur = Ui.Img(Ui.Rect(inner, "Current", new Vector2(0, 1), Vector2.one, new Vector2(10, -3), Vector2.zero), Ui.Hex(Orange));
                 _cur.enabled = false;
@@ -2994,6 +3107,7 @@ namespace LevelGate.Progression
                 _cur.enabled = current;       // a thin orange line: your level
                 _cardBadge.Still = !(sel || current); // five emblems playing at once was busy (and cost frames)
                 _selDots.enabled = sel;       // the picked card's dot-matrix fill
+                _cardLock.enabled = locked && ProgData.CountAt(_level) > 0;
                 FadeTo(_bg, sel ? Ui.Hex("#1b1d1e", .92f) : _hover ? Ui.Hex("#161718", .9f) : locked ? Ui.Hex("#08090a", .94f) : Ui.Hex("#111213", .88f));
                 _glow.color = new Color(0, 0, 0, 0);
                 Ui.SetColor(_tier, locked ? Dim : Grey);
@@ -3001,7 +3115,7 @@ namespace LevelGate.Progression
                 // head: the number bright on the picked / current card, quieter elsewhere, dim when locked
                 var head = sel || current ? Ui.Hex("#eceeef") : locked ? Dim : Grey;
                 Ui.SetColor(_head, head);
-                _headL.color = _headR.color = new Color(head.r, head.g, head.b, current || sel ? .7f : .35f);
+                _headL.color = _headR.color = new Color(head.r, head.g, head.b, current || sel ? .75f : .5f); // on every card, fainter
                 float nw = Ui.PreferredWidth(_head, _level.ToString());
                 ((RectTransform)_cardBadge.Root).anchoredPosition = new Vector2(-(nw / 2 + 22), 0);
                 float hw = nw / 2 + 44; // clear of the emblem on the left, the same on the right
@@ -3020,9 +3134,9 @@ namespace LevelGate.Progression
                 }
                 bool empty = ProgData.CountAt(_level) == 0;
                 bool nextUp = player > 0 && _level == player + 1;
-                string state = player <= 0 || empty ? "" : fresh ? "<color=#e0562f>NEW</color>" : reached ? "" : nextUp ? "LOCKED" : ""; // said once, on the next level
+                string state = player <= 0 || empty ? "" : fresh ? "<color=#e0562f>NEW</color>" : ""; // NEXT under the number says it; no LOCKED again
                 Ui.SetText(_state, state);
-                _stateLock.enabled = locked && !empty && nextUp;
+                _stateLock.enabled = false;
                 if (_stateLock.enabled)
                 {
                     float w = Ui.PreferredWidth(_state, "LOCKED");

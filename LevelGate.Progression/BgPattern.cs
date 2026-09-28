@@ -89,7 +89,7 @@ namespace LevelGate.Progression
                 Start(kept, _t);
                 return;
             }
-            if (motion <= 0 || Time.unscaledTime < _nextAt) return;
+            if (motion <= 0 || Time.unscaledTime < _nextAt || ProgScreen.Dragging) return; // holds still while you drag the cards
             _nextAt = Time.unscaledTime + (ProgressionPlugin.Low ? .2f : .1f) / Mathf.Clamp(motion, 1f, 2f);
             Start(_core, _t);
         }

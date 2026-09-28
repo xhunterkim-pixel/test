@@ -25,12 +25,12 @@ namespace LevelGate.Progression
         public const string Guid = "com.kkyangg.levelgate.progression";
         public const string Name = "LevelGate Progression";
         // MAJOR.MINOR.PATCH — see CHANGELOG.md
-        public const string Version = "0.9.56";
+        public const string Version = "0.9.57";
 
         internal static ProgressionPlugin Instance;
         internal static ConfigEntry<KeyboardShortcut> OpenKey;
         internal static ConfigEntry<KeyboardShortcut> DumpKey;
-        internal static ConfigEntry<bool> InjectButton;
+        internal static ConfigEntry<bool> InjectButton, CharacterEmblem;
         internal static ConfigEntry<string> ButtonTemplate;
         internal static ConfigEntry<string> ButtonLabel;
         internal static ConfigEntry<bool> VerboseLog;
@@ -81,6 +81,8 @@ namespace LevelGate.Progression
                 "Level up / new rank: the game's own UI sounds instead of the plugin's (sounds folder). SoundVolume doesn't apply to them.", 54));
             BlurBackground = Config.Bind(G, "BlurBackground", true, Desc(
                 "Blur the menu's 3D background while the screen is open (if the game's camera has a blur effect).", 60));
+            CharacterEmblem = Config.Bind(G, "CharacterEmblem", true, Desc(
+                "Show your animated rank emblem and rank name on the game's Character > Overall screen, next to your level.", 50));
 
             Quality = Config.Bind(Gfx, "Quality", GraphicsQuality.Medium, Desc(
                 "Low: lighter pictures and still rank emblems, for slower PCs (same as the PERFORMANCE MODE box on the screen).\n" +
@@ -305,6 +307,7 @@ namespace LevelGate.Progression
                 MenuHook.Tick();
                 ProgScreen.Tick();
                 MenuWidget.Tick();
+                OverallEmblem.Tick();
                 GameItems.RepairTick();
                 Toast.Tick();
                 Sfx.Tick();

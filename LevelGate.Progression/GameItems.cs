@@ -558,7 +558,9 @@ namespace LevelGate.Progression
                 if (D(Num("RecoilForceUp")) is double rec && rec > 0) list.Add(("Recoil", $"{rec:0}"));
                 if (D(Num("bEffDist")) is double eff && eff > 0) list.Add(("Eff. range", $"{eff:0}<size=65%> m</size>"));
                 // gear (only what the template has, not zero): armor, rigs, backpacks, headwear
-                if (D(Num("MaxDurability", "Durability")) is double dur && dur > 0 && !(Num("bFirerate") != null)) list.Add(("Durability", $"{dur:0}"));
+                double durNow = D(Num("MaxDurability", "Durability")) ?? 0;
+                if (durNow <= 0 && armored) durNow = OriginalArmor.Durability(tpl); // helmets / carriers: from their armor parts on disk
+                if (durNow > 0 && !(Num("bFirerate") != null)) list.Add(("Durability", $"{durNow:0}"));
                 if (Num("ArmorMaterial") is object mat && mat.ToString() is string ms && ms.Length > 0 && ms != "None") list.Add(("Material", Spaced(ms)));
                 int cap = Capacity(t);
                 if (cap > 0) list.Add(("Container size", cap.ToString())); // how many cells it holds, as the game's inspect says it

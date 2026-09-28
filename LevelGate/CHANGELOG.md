@@ -40,6 +40,28 @@ Versions are **MAJOR.MINOR.PATCH**:
 
 ## LevelGate Progression (BepInEx plugin, separate DLL)
 
+### 0.9.57
+Performance (from the 0.9.56 log):
+- Pictures drawn once are kept for the visit: dragging the row back and forth redrew the AS VAL's card picture six times in 3 s (70–84 ms each, 6 of 21 slow frames).
+- The game's inspect window opens on the frame after the click (its own ~220 ms for a modded gun no longer swallows the click's sound and highlight); the big picture waits 0.12 s after a click.
+- Background patterns hold still while you drag.
+Drag:
+- No hover sounds or highlights while dragging (it was a flood of sounds); one soft tick per level passing, at most every 80 ms.
+- Flick it: let go while moving and the row keeps going, slows down and settles.
+Fixes:
+- The requirement box is one line: "Reach level 44 ........ 819 081 EXP to go" (LOCKED / levels away are said by the list's chip); NEXT cards no longer also say LOCKED.
+- The timeline shows where you are when your level isn't on the row: "◀ 40" / "40 ▶" at its edge.
+- Two-line tile names get a soft dark fade behind them.
+- Helmets and plate carriers show DURABILITY (read from the game data's armor parts, next to the armor class).
+- NEW on tiles: a small dark chip with an orange outline, bottom-left (it was a loud solid block in the cut bottom-right corner).
+- Selected card: stronger dot fill that follows the cut corners; faint rules beside the number on every card; locked cards get a small lock top-left.
+CoD-style level up (XP animation):
+- A bright beam rides the timeline's fill to your new level.
+- Each unlocked card gets a gold check stamped onto it, and its level number pulses.
+- A big "+12 345 EXP" counts up under the picture while the bar fills, then fades.
+Character screen:
+- Your animated rank emblem and rank name next to the level number on Character > Overall (only animates while shown; F12 > General > CharacterEmblem turns it off; what it found is logged).
+
 ### 0.9.56
 - **Drag the level cards with the mouse**: the row follows the pointer, a level comes in each time it passes half a card (so it can show 44–48, not only pages), and it settles into place when let go; a drag is never a click. The mouse wheel, A / D and the arrows slide the row by one card at its edges (a gentle slide, the new card fading in) instead of flipping a whole page; Q / E and the page bar still jump by pages (and line the row up again). The page bar marks the page the row's middle is on.
 - **Names**: modded variants without a short name borrow their base item's ("SR-25 (Taupe)" instead of "Knight's Armament Company SR-25 7…"); fallback names lose their calibre and "special" ("AS VAL MOD.4", "Custom Guns NL545 (DI)"); modded guns the handbook doesn't list say their kind from the game data (ASSAULT RIFLE…) instead of "WEAPONS".

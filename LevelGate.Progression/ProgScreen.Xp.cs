@@ -46,7 +46,7 @@ namespace LevelGate.Progression
         private static int _xpFrom, _xpTo, _xpStep, _xpLa, _xpLb, _xpLand, _xpItems;
         private static float _xpT, _xpPop = -1, _xpRankPop = -1, _xpTickAt = -10, _xpStartedAt, _cmSeenAt = -10;
         private static bool _xpRankSwapped, _xpPopBig;
-        private static Component _xpGain;
+        private static Component _xpGain, _xpBig;
         private static Image _xpRankGlow;
         private static CanvasGroup _headTextGroup;
 
@@ -98,6 +98,7 @@ namespace LevelGate.Progression
             if (_headTextGroup != null) { _headTextGroup.alpha = 1; ((RectTransform)_headTextGroup.transform).anchoredPosition = Vector2.zero; }
             if (_xpCaption != null) { Ui.SetText(_xpCaption, "CURRENT LEVEL"); _xpCaption.gameObject.SetActive(true); }
             if (_xpGain != null) _xpGain.gameObject.SetActive(false);
+            if (_xpBig != null) _xpBig.gameObject.SetActive(false);
             if (_xpLevelOld != null) _xpLevelOld.gameObject.SetActive(false);
             if (_xpLevel != null) ((RectTransform)_xpLevel.transform).anchoredPosition = Vector2.zero;
             if (_xpLevelUp != null) _xpLevelUp.gameObject.SetActive(false);
@@ -549,6 +550,8 @@ namespace LevelGate.Progression
         {
             if (_xpGain == null || !_xpGain.gameObject.activeSelf) return;
             Ui.SetText(_xpGain, $"+{Thousands(Mathf.Max(0, _xpTo - shownTotal))}");
+            // CoD-style big counter under the picture: what you've earned so far, counting up as the bar takes it
+            if (_xpBig != null) Ui.SetText(_xpBig, $"+{Thousands(Mathf.Clamp(shownTotal - _xpFrom, 0, _xpTo - _xpFrom))} <size=60%><color=#e0562f>EXP</color></size>");
         }
 
         /// <summary>The level square's pop, the number's roll, the bar's flash and reset, LEVEL UP, the rank emblem, the cards.</summary>
@@ -830,6 +833,12 @@ namespace LevelGate.Progression
             if (_xpGain == null && _xpRight != null)
                 _xpGain = Ui.Label(Ui.Rect(_xpRight, "Gain", new Vector2(0, 1), new Vector2(0, 1), new Vector2(0, -44), new Vector2(260, -18)), "Text", "", TStrong, Ui.Hex(Orange), TextAnchor.MiddleLeft, true);
             if (_xpGain == null) return;
+            if (_xpBig == null && _focusStage != null)
+            {
+                _xpBig = Ui.Label(Ui.Rect(_focusStage, "BigGain", new Vector2(0, 0), new Vector2(1, 0), new Vector2(0, 34), new Vector2(0, 96)), "Text", "", 52, Ui.Hex("#eceeef"), TextAnchor.MiddleCenter, true, 2);
+                _xpBig.gameObject.AddComponent<CanvasGroup>().blocksRaycasts = false;
+            }
+            if (_xpBig != null) { _xpBig.gameObject.SetActive(on); if (on) Ui.SetText(_xpBig, "+0 <size=60%><color=#e0562f>EXP</color></size>"); }
             _xpGain.gameObject.SetActive(on);
             if (!on) return;
             Ui.SetText(_xpGain, $"+{Thousands(_xpTo - _xpFrom)}");
@@ -845,7 +854,8 @@ namespace LevelGate.Progression
             if (_xpGain == null || !_xpGain.gameObject.activeSelf || _xpGainFadeAt < 0) return;
             float a = Mathf.Clamp01(1 - (Time.unscaledTime - _xpGainFadeAt) / .6f);
             Ui.SetColor(_xpGain, Ui.Hex(Orange, a));
-            if (a <= 0) _xpGain.gameObject.SetActive(false);
+            if (_xpBig != null) { var cg = _xpBig.GetComponent<CanvasGroup>(); if (cg != null) cg.alpha = a; }
+            if (a <= 0) { _xpGain.gameObject.SetActive(false); if (_xpBig != null) { _xpBig.gameObject.SetActive(false); var cg = _xpBig.GetComponent<CanvasGroup>(); if (cg != null) cg.alpha = 1; } }
         }
 
         private static void PlaceGain()

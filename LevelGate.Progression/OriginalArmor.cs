@@ -17,6 +17,7 @@ namespace LevelGate.Progression
     {
         private static Dictionary<string, int> _class;
         private static Dictionary<string, List<string>> _plates;
+        private static Dictionary<string, int> _dur;
         private static volatile bool _ready;
         private static bool _started;
 
@@ -59,6 +60,7 @@ namespace LevelGate.Progression
         {
             var cls = new Dictionary<string, int>();
             var plates = new Dictionary<string, List<string>>();
+            var dur = new Dictionary<string, int>();
             int depth = 0, i = 0, n = s.Length;
             string item = null, key = null;
             while (i < n)
@@ -87,17 +89,20 @@ namespace LevelGate.Progression
                     }
                     continue;
                 }
-                if ((c == '-' || char.IsDigit(c)) && item != null && key == "armorClass" && depth >= 3)
+                if ((c == '-' || char.IsDigit(c)) && item != null && (key == "armorClass" || key == "MaxDurability") && depth >= 3)
                 {
                     int start = i;
                     while (i < n && (char.IsDigit(s[i]) || s[i] == '-' || s[i] == '.')) i++;
                     if (double.TryParse(s.Substring(start, i - start), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double d))
-                        cls[item] = Math.Max(cls.TryGetValue(item, out var o) ? o : 0, (int)d);
+                    {
+                        if (key == "armorClass") cls[item] = Math.Max(cls.TryGetValue(item, out var o) ? o : 0, (int)d);
+                        else dur[item] = Math.Max(dur.TryGetValue(item, out var od) ? od : 0, (int)d);
+                    }
                     continue;
                 }
                 i++;
             }
-            _class = cls; _plates = plates;
+            _class = cls; _plates = plates; _dur = dur;
         }
 
         /// <summary>The item's armor class from the game data (its own, else its best default plate); 0 if none / not read yet.</summary>
@@ -110,6 +115,21 @@ namespace LevelGate.Progression
             if (_plates.TryGetValue(tpl, out var list))
                 foreach (var p in list) if (_class.TryGetValue(p, out var pc) && pc > best) best = pc;
             return best;
+        }
+
+        /// <summary>
+        /// Durability as the game data has it: the item's own, else the sum of its default armor parts (helmets and plate
+        /// carriers keep theirs in their parts); 0 if none / not read yet.
+        /// </summary>
+        public static int Durability(string tpl)
+        {
+            if (!_ready || tpl == null) return 0;
+            int own = _dur.TryGetValue(tpl, out var d) ? d : 0;
+            if (own > 0) return own;
+            int sum = 0;
+            if (_plates.TryGetValue(tpl, out var list))
+                foreach (var p in list) if (_dur.TryGetValue(p, out var pd)) sum += pd;
+            return sum;
         }
 
         public static bool Ready => _ready;

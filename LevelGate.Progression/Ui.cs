@@ -740,7 +740,8 @@ namespace LevelGate.Progression
             h.On = on;
             return h;
         }
-        public void OnPointerEnter(UnityEngine.EventSystems.PointerEventData e) { try { On?.Invoke(true); } catch (Exception x) { L.ErrorOnce("hover", x); } }
+        // while the card row is being dragged, nothing under the pointer lights up or plays its hover sound (it was a flood of sounds)
+        public void OnPointerEnter(UnityEngine.EventSystems.PointerEventData e) { if (ProgScreen.Dragging) return; try { On?.Invoke(true); } catch (Exception x) { L.ErrorOnce("hover", x); } }
         public void OnPointerExit(UnityEngine.EventSystems.PointerEventData e) { try { On?.Invoke(false); } catch (Exception x) { L.ErrorOnce("hover", x); } }
         private void OnDisable() { try { On?.Invoke(false); } catch { } }
     }
