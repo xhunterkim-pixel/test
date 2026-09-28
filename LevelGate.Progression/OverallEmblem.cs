@@ -57,6 +57,7 @@ namespace LevelGate.Progression
             int level = ProgData.PlayerLevel();
             if (level <= 0) return;
             if (_root == null && !Build(level)) return;
+            Place(); // follows the game's column if it moves (the prestige icon showing up later…)
             if (level != _shown)
             {
                 _shown = level;
@@ -101,24 +102,18 @@ namespace LevelGate.Progression
                 // the column of the game's own icons (faction logo, prestige…): ours goes below the lowest of them, in that
                 // column's spacing — as its next child when the column lays itself out, else placed under the lowest one
                 var column = logo != null ? logo.parent?.parent as RectTransform : null; // …/IconsContainer
-                var layout = column != null ? column.GetComponent<VerticalLayoutGroup>() : null;
-                if (column != null && layout != null)
-                {
-                    _root = Ui.Rect(column, "LevelGateEmblem", Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
-                    var le = _root.gameObject.AddComponent<LayoutElement>();
-                    le.minWidth = le.preferredWidth = size2; le.minHeight = le.preferredHeight = size2 + 20;
-                    _root.SetAsLastSibling();
-                }
-                else
-                {
-                    RectTransform lowest = column != null ? LowestChild(column) : null;
-                    var anchor = lowest ?? logo ?? text;
-                    _root = Ui.Rect(anchor, "LevelGateEmblem", new Vector2(.5f, 0), new Vector2(.5f, 0), Vector2.zero, Vector2.zero);
-                    _root.sizeDelta = new Vector2(size2, size2 + 20);
-                    _root.pivot = new Vector2(.5f, 1);
-                    _root.anchoredPosition = new Vector2(0, -28);
-                    L.Info($"character emblem: under {(lowest != null ? MenuHook.Path(lowest) : "the faction logo")}");
-                }
+                // never part of the game's own layout (0.9.60 joined its icon column, which centres its items, and pushed the
+                // faction logo up into the level number): ours floats just below the column's lowest icon (prestige)
+                RectTransform lowest = column != null ? LowestChild(column) : null;
+                var host = column ?? (RectTransform)(logo ?? text).parent;
+                var below = lowest ?? logo ?? text;
+                _root = Ui.Rect(host, "LevelGateEmblem", new Vector2(.5f, .5f), new Vector2(.5f, .5f), Vector2.zero, Vector2.zero);
+                _root.gameObject.AddComponent<LayoutElement>().ignoreLayout = true;
+                _root.sizeDelta = new Vector2(size2, size2 + 20);
+                _root.pivot = new Vector2(.5f, 1);
+                _host = host; _column = column; _below = below;
+                Place();
+                L.Info($"character emblem: below {MenuHook.Path(below)} (kept out of the game's layout)");
                 _img = Ui.Img(Ui.Rect(_root, "Emblem", new Vector2(0, 1), Vector2.one, new Vector2(0, -size2), Vector2.zero), Color.white);
                 _img.preserveAspect = true; _img.raycastTarget = false;
                 _rank = Ui.Label(Ui.Rect(_root, "Rank", new Vector2(.5f, 0), new Vector2(.5f, 0), new Vector2(-90, 0), new Vector2(90, 18)), "Text", "", 13, Ui.Hex("#b9bdbf"), TextAnchor.MiddleCenter, false, 2);
@@ -127,6 +122,21 @@ namespace LevelGate.Progression
                 return true;
             }
             catch (Exception e) { _gaveUp = true; L.Info("character emblem: " + e.GetBaseException().Message); return false; }
+        }
+
+        private static RectTransform _host, _column, _below;
+
+        /// <summary>Just below the column's lowest icon (its bottom-centre in the host's space, then the column's gap).</summary>
+        private static void Place()
+        {
+            if (_root == null || _host == null) return;
+            if (_column != null) { var low = LowestChild(_column); if (low != null) _below = low; }
+            if (_below == null) return;
+            var corners = new Vector3[4];
+            _below.GetWorldCorners(corners);
+            Vector2 local = _host.InverseTransformPoint((corners[0] + corners[3]) * .5f);
+            var want = new Vector2(local.x - _host.rect.center.x, local.y - _host.rect.center.y - 22);
+            if ((_root.anchoredPosition - want).sqrMagnitude > .25f) _root.anchoredPosition = want;
         }
 
         /// <summary>The active child of a column that reaches lowest on screen (the game's last icon: prestige, else the logo).</summary>

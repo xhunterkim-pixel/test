@@ -87,6 +87,9 @@ namespace LevelGate.Progression
         /// <summary>ellipsis: cut long text with "…" (tiles); otherwise text may run past its box (titles).</summary>
         public static Component AddText(GameObject go, string text, float size, Color color, TextAnchor align, bool bold = false, float spacing = 0, bool ellipsis = false)
         {
+            // F12 Text Size: the small text grows (labels, tags, names); big numbers and titles stay as designed
+            int pct = ProgressionPlugin.TextSize?.Value ?? 100;
+            if (pct != 100 && size <= 15) size = Mathf.Round(size * pct / 100f * 2) / 2;
             var tmp = TmpType;
             if (tmp != null)
             {

@@ -153,6 +153,18 @@ namespace LevelGate.Progression
         private static double _sLogMs;
         private static int _sLogLines;
 
+        /// <summary>The screen is thrown away and built again on the next open (text size changed…).</summary>
+        public static void Rebuild(string why)
+        {
+            if (IsOpen) Close(why);
+            if (_canvas != null) UnityEngine.Object.Destroy(_canvas);
+            _canvas = null; _built = false;
+            L.Info($"screen will be rebuilt on the next open ({why})");
+        }
+
+        /// <summary>F12 Reduce Motion.</summary>
+        internal static bool Calm => ProgressionPlugin.ReduceMotion?.Value ?? false;
+
         public static void Close(string why)
         {
             if (!IsOpen) return;
@@ -1366,7 +1378,7 @@ namespace LevelGate.Progression
             Adopt(_cardIcons); DropRequests(_cardIcons);
             for (int i = 0; i < PerPage; i++) _cards[i].Show(_first + i);
             _cardsDir = dir;
-            _cardsStart = dir != 0 ? Time.unscaledTime : -10;
+            _cardsStart = dir != 0 && !Calm ? Time.unscaledTime : -10;
             if (changed && dir != 0) { Sounds.Page(); if (_xpPaging) UpdateSelection(); else ShowLevel(_level); }
             else UpdateSelection();
         }
@@ -1407,7 +1419,7 @@ namespace LevelGate.Progression
             Adopt(_cardIcons); DropRequests(_cardIcons);
             for (int i = 0; i < PerPage; i++) _cards[i].Show(_first + i);
             _cardsStart = -10;
-            if (animate) { _shiftFrom = Mathf.Sign(delta) * SlotWidth; _shiftStart = Time.unscaledTime; _shiftFade = true; }
+            if (animate && !Calm) { _shiftFrom = Mathf.Sign(delta) * SlotWidth; _shiftStart = Time.unscaledTime; _shiftFade = true; }
             UpdatePageBar();
             UpdateSelection();
         }
@@ -1466,7 +1478,7 @@ namespace LevelGate.Progression
                 if (_dragging)
                 {
                     _dragSuppressUntil = Time.unscaledTime + .2f; // the release isn't a click on a card
-                    if (Mathf.Abs(_flingV) < 500) { _flingV = 0; _shiftStart = Time.unscaledTime; _shiftFade = false; } // settle from where it was let go
+                    if (Calm || Mathf.Abs(_flingV) < 500) { _flingV = 0; _shiftStart = Time.unscaledTime; _shiftFade = false; } // settle from where it was let go
                     L.Debug($"cards: dropped at levels {_first}–{Mathf.Min(ProgData.MaxLevel, _first + PerPage - 1)}{(_flingV != 0 ? $", flicked ({_flingV:0}/s)" : "")}");
                 }
                 else _flingV = 0;
@@ -1575,6 +1587,7 @@ namespace LevelGate.Progression
             _scrollTopFrames = 2;
             _tiles.Clear();
             _tileViews.Clear();
+            _tileOrder.Clear();
             ShowTip(null);
             Adopt(_icons); DropRequests(_icons);
             _hits.RemoveAll(h => h.Rect == null || !h.Rect.IsChildOf(_bottom));
@@ -1794,6 +1807,34 @@ namespace LevelGate.Progression
         }
 
         private static readonly Dictionary<string, TileView> _tileViews = new Dictionary<string, TileView>();
+        private static readonly List<TileView> _tileOrder = new List<TileView>(); // the list's tiles in reading order (keyboard)
+
+        /// <summary>Up / Down (or W / S): the previous / next reward in the list; it's selected and scrolled into view.</summary>
+        private static void StepTile(int dir)
+        {
+            var shown = _tileOrder.Where(t => t?.Rt != null && t.Rt.gameObject.activeInHierarchy).ToList();
+            if (shown.Count == 0) return;
+            int at = shown.FindIndex(t => t.Item.Tpl == _featTpl);
+            int to = Mathf.Clamp(at < 0 ? 0 : at + dir, 0, shown.Count - 1);
+            if (to == at) return;
+            var v = shown[to];
+            ClickedNew(v.Item);
+            Feature(v.Item);
+            Sounds.Play("ButtonOver");
+            ScrollIntoView(v.Rt);
+        }
+
+        private static void ScrollIntoView(RectTransform rt)
+        {
+            if (_listScroll == null || _listScroll.viewport == null || _content == null) return;
+            var vp = _listScroll.viewport; var c = new Vector3[4]; var vc = new Vector3[4];
+            rt.GetWorldCorners(c); vp.GetWorldCorners(vc);
+            float scale = vp.lossyScale.y > 0 ? vp.lossyScale.y : 1;
+            float above = (c[1].y - vc[1].y) / scale, below = (vc[0].y - c[0].y) / scale; // how far the tile sticks out, in canvas units
+            var p = _content.anchoredPosition;
+            if (above > 0) p.y -= above + S2; else if (below > 0) p.y += below + S2;
+            _content.anchoredPosition = p;
+        }
         private static int _newFrom; // your level when you last opened the screen: rewards above it (up to yours) are new
 
         /// <summary>An inventory-style tile: thin frame, dark lit surface, big centred thumbnail, the name under it.</summary>
@@ -1825,7 +1866,7 @@ namespace LevelGate.Progression
             // texture: light from above and a fine grit on the face; picked: a pixel dissolve along the top edge
             Ui.Img(Ui.Rect(inner, "TopLight", new Vector2(0, .5f), Vector2.one, Vector2.zero, Vector2.zero), new Color(1, 1, 1, .025f), Ui.VerticalFade()).raycastTarget = false;
             Ui.Grit(inner, _gritSeed++, .045f);
-            v.Dither = Ui.Img(Ui.Rect(inner, "Dither", new Vector2(0, 1), new Vector2(.7f, 1), new Vector2(9, -8), new Vector2(0, -2)), new Color(1, 1, 1, .28f), Ui.Dither());
+            v.Dither = Ui.Img(Ui.Rect(inner, "Dither", new Vector2(0, 1), new Vector2(.7f, 1), new Vector2(9, -8), new Vector2(0, -2)), new Color(1, 1, 1, .16f), Ui.Dither());
             v.Dither.raycastTarget = false; v.Dither.enabled = false;
             // the short name, top-right like the game's cells (two lines at most; look-alikes say what sets them apart)
             // a soft dark fade under the name, so two-line names stay readable over the picture
@@ -1862,8 +1903,9 @@ namespace LevelGate.Progression
                 ShowTip(on ? v : null);
             });
             _tileViews[it.Tpl] = v;
+            _tileOrder.Add(v);
             ApplyTile(v, true);
-            if (_fastTiles) group.alpha = 1; // browsing: no one-by-one fade (it flickered while scrolling)
+            if (_fastTiles || Calm) group.alpha = 1; // browsing: no one-by-one fade (it flickered while scrolling)
             else _tiles.Add((group, inner, Mathf.Min(index, 40) * .012f));
         }
 
@@ -2520,7 +2562,7 @@ namespace LevelGate.Progression
             if (_railShown < 0) _railShown = _railTarget;
             if (_railBeam != null)
             {
-                bool moving = XpAnimating && Mathf.Abs(_railShown - _railTarget) > .001f;
+                bool moving = !Calm && XpAnimating && Mathf.Abs(_railShown - _railTarget) > .001f;
                 float ba = Mathf.MoveTowards(_railBeam.color.a, moving ? .9f : 0f, dt * 4);
                 if (ba != _railBeam.color.a || moving)
                 {
@@ -2642,6 +2684,9 @@ namespace LevelGate.Progression
                 else if (input.GetKeyDown(KeyCode.Q) || input.GetKeyDown(KeyCode.PageUp)) ShowPage(_page - 1, -1);
                 else if (input.GetKeyDown(KeyCode.Home)) { int me = ProgData.PlayerLevel(); ShowLevel(me > 0 ? Mathf.Min(me, ProgData.MaxLevel) : 1); } // your level
                 else if (input.GetKeyDown(KeyCode.End)) ShowLevel(ProgData.MaxLevel);
+                else if (input.GetKeyDown(KeyCode.DownArrow) || input.GetKeyDown(KeyCode.S)) StepTile(1);
+                else if (input.GetKeyDown(KeyCode.UpArrow) || input.GetKeyDown(KeyCode.W)) StepTile(-1);
+                else if ((input.GetKeyDown(KeyCode.Return) || input.GetKeyDown(KeyCode.KeypadEnter) || input.GetKeyDown(KeyCode.R)) && _featTpl != null) InspectSoon(_featTpl);
                 // Esc closes us only when no game window (inspect…) is open — otherwise it's the window's Esc
                 else if (input.GetKeyDown(KeyCode.Escape)) { Close("Escape"); return; }
             }
@@ -2912,19 +2957,19 @@ namespace LevelGate.Progression
                 float a = t < .12f ? 1 - Mathf.Pow(1 - t / .12f, 2) : Mathf.Pow(Mathf.Clamp01(1 - (t - .12f) / .9f), 2.2f);
                 _flash.color = new Color(1f, 1f, 1f, .24f * a);
                 // and a gentle lift: up to 102% and back in 0.35 s
-                float sc = 1 + .02f * Mathf.Sin(Mathf.Clamp01(t / .35f) * Mathf.PI);
+                float sc = Calm ? 1f : 1 + .02f * Mathf.Sin(Mathf.Clamp01(t / .35f) * Mathf.PI);
                 _body.localScale = new Vector3(sc, sc, 1);
                 // CoD's unlock: a big check stamps down (130% → 100% in 0.18 s), glows, then fades out by 1.3 s
                 if (_stamp != null && _stamp.enabled)
                 {
                     float st = Mathf.Clamp01(t / .18f), se = 1 - Mathf.Pow(1 - st, 3);
-                    _stamp.rectTransform.localScale = Vector3.one * Mathf.Lerp(1.3f, 1f, se);
+                    _stamp.rectTransform.localScale = Vector3.one * (Calm ? 1f : Mathf.Lerp(1.3f, 1f, se));
                     float sa = t < .18f ? se : Mathf.Clamp01(1 - (t - .7f) / .6f);
                     _stamp.color = new Color(1f, 1f, 1f, .95f * sa); // hollow white
                     if (t > 1.3f) { _stamp.enabled = false; }
                 }
                 // and the level number above it pulses
-                var hs = 1 + .22f * Mathf.Sin(Mathf.Clamp01(t / .35f) * Mathf.PI);
+                var hs = Calm ? 1f : 1 + .22f * Mathf.Sin(Mathf.Clamp01(t / .35f) * Mathf.PI);
                 ((RectTransform)((Component)_head).transform).localScale = new Vector3(hs, hs, 1);
                 if (t > 1.3f) { _flash.enabled = false; _body.localScale = Vector3.one; ((RectTransform)((Component)_head).transform).localScale = Vector3.one; }
             }
@@ -3023,7 +3068,7 @@ namespace LevelGate.Progression
                 _stamp = Ui.Img(Ui.Box(pics, "Stamp", new Vector2(.5f, .5f), Vector2.zero, new Vector2(96, 96)), new Color(1, 1, 1, 0), Ui.HollowTick());
                 _stamp.raycastTarget = false; _stamp.enabled = false;
                 // your level: one thin orange line along the top (orange only ever means "you")
-                _cardDither = Ui.Img(Ui.Rect(inner, "Dither", new Vector2(0, 1), new Vector2(.6f, 1), new Vector2(10, -12), new Vector2(0, -3)), new Color(1, 1, 1, .22f), Ui.Dither());
+                _cardDither = Ui.Img(Ui.Rect(inner, "Dither", new Vector2(0, 1), new Vector2(.6f, 1), new Vector2(10, -12), new Vector2(0, -3)), new Color(1, 1, 1, .12f), Ui.Dither());
                 _cardDither.raycastTarget = false; _cardDither.enabled = false;
                 _cur = Ui.Img(Ui.Rect(inner, "Current", new Vector2(0, 1), Vector2.one, new Vector2(10, -3), Vector2.zero), Ui.Hex(Orange));
                 _cur.enabled = false;

@@ -40,6 +40,13 @@ Versions are **MAJOR.MINOR.PATCH**:
 
 ## LevelGate Progression (BepInEx plugin, separate DLL)
 
+### 0.9.61
+- **Character > Overall emblem fixed**: 0.9.60 added it to the game's icon column, which centres its items, so the USEC logo was pushed up into the level number. Ours now stays out of the game's layout and floats just below the column's lowest icon (the prestige mark), following it if the column moves.
+- **Text Size** (F12 > General, 100 / 115 / 130%): the small text (labels, tags, tile names, stat names) grows; titles and big numbers stay. Applies on the next open.
+- **Reduce Motion** (F12 > General): patterns stand still; cards and pages change without sliding; no flicks, flashes, pulses, stamps scaling or rail beam; tiles appear at once.
+- **Keyboard in the reward list**: Up / Down (or W / S) move to the previous / next reward (selected and scrolled into view), Enter (or R) opens the game's inspect.
+- The dotted strips on the picked card / tile are softer (they read as a glitch bar).
+
 ### 0.9.60
 - **Armor / helmet / rig stats for every item**: armor class and durability are now also read from built-in parts (a slot allowing exactly one item: soft armor inserts, helmet tops / ears…), not only default "Plate" parts — the 6B45, Titan helmets and others showed neither.
 - **Character > Overall emblem**: bigger (96 px), placed below the game's icon column (faction logo, prestige) in that column's own spacing, instead of over the prestige icon.

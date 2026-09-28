@@ -26,12 +26,13 @@ namespace LevelGate.Progression
         public const string Guid = "com.kkyangg.levelgate.progression";
         public const string Name = "LevelGate Progression";
         // MAJOR.MINOR.PATCH — see CHANGELOG.md
-        public const string Version = "0.9.60";
+        public const string Version = "0.9.61";
 
         internal static ProgressionPlugin Instance;
         internal static ConfigEntry<KeyboardShortcut> OpenKey;
         internal static ConfigEntry<KeyboardShortcut> DumpKey;
-        internal static ConfigEntry<bool> InjectButton, CharacterEmblem;
+        internal static ConfigEntry<bool> InjectButton, CharacterEmblem, ReduceMotion;
+        internal static ConfigEntry<int> TextSize;
         internal static ConfigEntry<string> ButtonTemplate;
         internal static ConfigEntry<string> ButtonLabel;
         internal static ConfigEntry<bool> VerboseLog;
@@ -82,6 +83,13 @@ namespace LevelGate.Progression
                 "Level up / new rank: the game's own UI sounds instead of the plugin's (sounds folder). SoundVolume doesn't apply to them.", 54));
             BlurBackground = Config.Bind(G, "BlurBackground", true, Desc(
                 "Blur the menu's 3D background while the screen is open (if the game's camera has a blur effect).", 60));
+            TextSize = Config.Bind(G, "TextSize", 100, Desc(
+                "Size of the screen's small text (labels, tags, tile names, stat names) in percent: 100, 115 or 130. Takes effect the next time the screen opens.",
+                45, new AcceptableValueList<int>(100, 115, 130)));
+            TextSize.SettingChanged += (_, __) => ProgScreen.Rebuild("text size changed");
+            ReduceMotion = Config.Bind(G, "ReduceMotion", false, Desc(
+                "Less movement: background patterns stand still, cards and pages change without sliding, no flashes, pulses, beams or flicks (the XP animation still counts up).",
+                44));
             CharacterEmblem = Config.Bind(G, "CharacterEmblem", true, Desc(
                 "Show your animated rank emblem and rank name on the game's Character > Overall screen, next to your level.", 50));
 
@@ -213,7 +221,7 @@ namespace LevelGate.Progression
             {
                 ["OpenScreenKey"] = "Open Screen Key", ["MenuBarButton"] = "Menu Bar Button", ["MainMenuShortcut"] = "Main Menu Shortcut",
                 ["HideMainMenu"] = "Hide Main Menu While Open", ["BlurBackground"] = "Blur Background", ["SoundVolume"] = "Sound Volume",
-                ["UseGameSounds"] = "Use Game Sounds", ["CharacterEmblem"] = "Rank Emblem On Character Screen",
+                ["UseGameSounds"] = "Use Game Sounds", ["CharacterEmblem"] = "Rank Emblem On Character Screen", ["TextSize"] = "Text Size (%)", ["ReduceMotion"] = "Reduce Motion",
                 ["Quality"] = "Picture Quality", ["XpAnimation"] = "Level Up Animation", ["RefreshIcons"] = "Redraw All Item Pictures",
                 ["Pattern"] = "Background Pattern", ["PatternMotion"] = "Pattern Animation Speed", ["Scratches"] = "Wear And Scratches",
                 ["Vignette"] = "Dark Corners", ["RedGlow"] = "Red Glow",
