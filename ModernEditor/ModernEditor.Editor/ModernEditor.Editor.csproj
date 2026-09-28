@@ -1,0 +1,42 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    ModernEditor.exe — one Windows editor for traders (offers / barters / quests), Level Gate's level limits,
+    item stats and the progression view. The window hosts a web page (ui\, built into the exe) drawn by the
+    Edge engine (WebView2, part of Windows 10/11). Files:
+      SPT_Runtime\user\mods\ModernEditor\traders\<trader>\trader.json, item_stats.json, disabled_levels.json
+      BepInEx\plugins\LevelGate\config\level_requirements.json (Level Gate's own file, same layout)
+    Needs the .NET 10 SDK to build (Windows).
+  -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <ApplicationIcon>app.ico</ApplicationIcon>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AssemblyName>ModernEditor</AssemblyName>
+    <RootNamespace>ModernEditor.Editor</RootNamespace>
+    <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
+    <!-- WFO1000: designer-serialization hint; the window is built in code, not the designer. -->
+    <NoWarn>$(NoWarn);WFO5001;WFO1000</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4191.47" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="..\Shared\TraderModels.cs" Link="Shared\TraderModels.cs" />
+    <!-- The interface, built into the exe (served as https://app.local/…). -->
+    <EmbeddedResource Include="ui\**\*" LogicalName="ui/%(RecursiveDir)%(Filename)%(Extension)" />
+  </ItemGroup>
+
+  <!-- WinForms only, so the WebView2 WPF reference (MSB3277 warning) is dropped. -->
+  <Target Name="DropWebView2Wpf" BeforeTargets="ResolveAssemblyReferences">
+    <ItemGroup>
+      <Reference Remove="@(Reference)" Condition="'%(Filename)' == 'Microsoft.Web.WebView2.Wpf'" />
+    </ItemGroup>
+  </Target>
+
+</Project>
