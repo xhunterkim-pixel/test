@@ -315,7 +315,7 @@ namespace LevelGate.Progression
         private static readonly Queue<string> _copyOrder = new Queue<string>();
 
         /// <summary>Our own copy of a bigger render of this item, if we made one already.</summary>
-        public static Sprite CopyOf(string tpl, int scale) => _copies.TryGetValue(tpl + "@" + scale, out var sp) && sp != null ? sp : null;
+        public static Sprite CopyOf(string tpl, int scale) => _copies.TryGetValue(tpl + "@" + scale, out var sp) && sp != null && sp.texture != null ? sp : null;
 
         /// <summary>The picture to show for an icon: normal ones as they are; bigger ones copied (then the game's is put back).</summary>
         /// <summary>done = false: a stand-in (the stash-size picture) while the bigger one is still being drawn — show it and ask again.</summary>
@@ -343,15 +343,46 @@ namespace LevelGate.Progression
             try { CallIcon(_loadIcon, p.Item, 1, true); } catch (Exception e) { L.ErrorOnce("putting an icon back to stash size", e); }
             if (copy == null) return sp;
             var key = tpl + "@" + p.Scale;
+            // drawn twice (asked for again before the first came back): keep the first, drop the new one. 0.9.66 and older
+            // queued the key twice, and the first entry's turn to go deleted the newer copy — a white box where it showed.
+            if (_copies.TryGetValue(key, out var had) && had != null && had.texture != null)
+            {
+                UnityEngine.Object.Destroy(copy.texture);
+                L.Debug($"icon: {tpl} at {p.Scale}x was already kept — using that one");
+                return had;
+            }
             _copies[key] = copy;
             _copyOrder.Enqueue(key);
-            while (_copyOrder.Count > 150) // the pages around the current one are kept ready too (the loading screen draws ~60)
-            {
-                var old = _copyOrder.Dequeue();
-                if (_copies.TryGetValue(old, out var o) && o != null && old != key) { UnityEngine.Object.Destroy(o.texture); _copies.Remove(old); }
-            }
+            Trim(key);
             L.Debug($"icon: kept a {copy.rect.width:0}x{copy.rect.height:0} copy of {tpl} and put the game's back to stash size");
             return copy;
+        }
+
+        /// <summary>Set by the screen: every picture it shows right now (those are never deleted).</summary>
+        internal static Func<HashSet<Sprite>> Shown;
+        /// <summary>Set by the screen: take these pictures off every image (they're about to be deleted).</summary>
+        internal static Action<HashSet<Sprite>> Dropping;
+
+        /// <summary>
+        /// Keeps at most ~150 copies (the pages around the current one are kept ready too): the oldest go first, but never
+        /// one that's on screen (a deleted texture draws as a white box) — those wait for the next round.
+        /// </summary>
+        private static void Trim(string keep)
+        {
+            if (_copyOrder.Count <= 150) return;
+            HashSet<Sprite> shown = null;
+            try { shown = Shown?.Invoke(); } catch (Exception e) { L.ErrorOnce("pictures on screen", e); }
+            var back = new List<string>();
+            int guard = _copyOrder.Count;
+            while (_copyOrder.Count > 150 && guard-- > 0)
+            {
+                var old = _copyOrder.Dequeue();
+                if (!_copies.TryGetValue(old, out var o) || o == null) { _copies.Remove(old); continue; }
+                if (old == keep || (shown != null && shown.Contains(o))) { back.Add(old); continue; }
+                UnityEngine.Object.Destroy(o.texture);
+                _copies.Remove(old);
+            }
+            foreach (var k in back) _copyOrder.Enqueue(k);
         }
 
         private static Sprite Copy(Sprite sp)
@@ -413,7 +444,11 @@ namespace LevelGate.Progression
         public static int ClearCopies()
         {
             int n = 0;
-            foreach (var sp in _copies.Values) if (sp != null) { UnityEngine.Object.Destroy(sp.texture); n++; }
+            // the screen lets go of them first: an image left pointing at a deleted texture shows whatever the GPU puts
+            // there next (another item, the emblem sheet, a glow) — the "wrong pictures" of 0.9.66
+            var all = new HashSet<Sprite>(_copies.Values.Where(x => x != null));
+            try { Dropping?.Invoke(all); } catch (Exception e) { L.ErrorOnce("letting go of pictures", e); }
+            foreach (var sp in all) { UnityEngine.Object.Destroy(sp.texture); n++; }
             _copies.Clear(); _copyOrder.Clear(); _pending.Clear();
             L.Info($"items: {n} kept picture(s) cleared");
             return n;

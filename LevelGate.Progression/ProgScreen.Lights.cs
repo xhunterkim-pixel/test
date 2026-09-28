@@ -34,6 +34,34 @@ namespace LevelGate.Progression
             foreach (var c in _cards) c?.TickLight(t, k);
         }
 
+        // ---------------------------------------------------------------- pictures whose texture is gone
+
+        private static float _sweepAt;
+
+        /// <summary>
+        /// Twice a second while open: an image whose picture was deleted underneath it (the game redraws its own icons —
+        /// High redraws the stash's weapons after the screen closes — and a tile at stash size shows the game's icon itself)
+        /// draws whatever the GPU puts in that memory next: another item, the emblem sheet, a white glow. Such pictures are
+        /// taken off and the screen asks for them again.
+        /// </summary>
+        private static void SweepPictures()
+        {
+            if (Time.unscaledTime < _sweepAt || _canvas == null) return;
+            _sweepAt = Time.unscaledTime + .5f;
+            int n = 0;
+            foreach (var img in _canvas.GetComponentsInChildren<Image>(true))
+            {
+                var sp = img.sprite;
+                if (ReferenceEquals(sp, null)) continue;
+                if (sp != null && sp.texture != null) continue;
+                img.sprite = null; img.enabled = false; n++;
+            }
+            if (n == 0) return;
+            L.Info($"pictures: {n} had lost their texture (the game redrew them) — asked for again");
+            ForgetPictures();
+            Refresh();
+        }
+
         // ---------------------------------------------------------------- specks of light over the background
 
         private const int Motes = 26;

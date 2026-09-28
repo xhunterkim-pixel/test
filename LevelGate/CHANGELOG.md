@@ -40,6 +40,14 @@ Versions are **MAJOR.MINOR.PATCH**:
 
 ## LevelGate Progression (BepInEx plugin, separate DLL)
 
+### 0.9.67
+- **Fixed: wrong pictures on tiles and cards** (a white box or a white chamfer shape, a white glow, a grid of rank emblems where an item should be). A picture's texture was deleted while a tile or card still showed it, and the graphics card then drew whatever came into that memory next. Three causes, all fixed:
+  - an item drawn twice at the same size was kept twice, and removing the older copy deleted the newer one (the one on screen); now the first copy is reused;
+  - making room (more than ~150 kept pictures) could delete pictures that were on screen; those are now skipped until they're off screen;
+  - switching Quality / Performance Mode (and the pre-raid clean-up) deleted every kept picture while tiles still showed them; the screen now lets go of them first.
+  A safety net covers the game's own redraws (High redraws the stash's weapons after you close the screen): twice a second, any picture whose texture is gone is taken off and asked for again (logged as "pictures: … lost their texture").
+- **The picked card's dotted light moved bottom-right**, away from its name and "ASSAULT RIFLE · +9 ITEMS", which were hard to read over it; its bloom sits behind the pictures.
+
 ### 0.9.66
 - **The Performance Mode tip fits on screen**: long tips were cut at 420 px and their text ran past the box off the right edge; tips can be wider now and that one is shorter.
 - **Lights that move a little** (new F12 **Detail Animation**, 0–100%): the red glow top-right drifts, faint specks of light float up over the background, the header's rank emblem glow breathes, the picked card's bloom and the light under the big picture drift. Every moving piece is on its own small canvas, so only it redraws. 0, Reduce Motion or Performance Mode: all still.

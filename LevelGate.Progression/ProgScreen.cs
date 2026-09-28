@@ -252,6 +252,19 @@ namespace LevelGate.Progression
             _bloom.Add(Ui.Img(Ui.Rect(root, "Bloom", new Vector2(.25f, 0), Vector2.one, Vector2.zero, Vector2.zero), new Color(0, 0, 0, 0), Ui.CornerGlow()));
             _bloom.Add(Ui.Img(Ui.Box(root, "BloomCore", new Vector2(1, .66f), Vector2.zero, new Vector2(1200, 1300)), new Color(0, 0, 0, 0), Ui.Radial()));
             _mood = -1; // forces the first ApplyMood to paint
+            // the kept bigger pictures that are on screen now are never deleted to make room (they turned into white boxes)
+            GameItems.Shown = () =>
+            {
+                var set = new HashSet<Sprite>();
+                if (_canvas != null) foreach (var img in _canvas.GetComponentsInChildren<Image>(true)) if (img.sprite != null) set.Add(img.sprite);
+                return set;
+            };
+            GameItems.Dropping = gone =>
+            {
+                if (_canvas == null) return;
+                foreach (var img in _canvas.GetComponentsInChildren<Image>(true))
+                    if (img.sprite != null && gone.Contains(img.sprite)) { img.sprite = null; img.enabled = false; }
+            };
             BuildMotes(root); // faint specks of light drifting over the background (MW's title screen)
 
             // the level strip is navigation: ~30% of the height, the rest goes to the reward content
@@ -2032,7 +2045,7 @@ namespace LevelGate.Progression
                 if (r.Pic == null) continue;
                 var have = r.Scale != 1 ? GameItems.CopyOf(r.Tpl, r.Scale) : null;
                 // drawn earlier this visit: reuse it (dragging the row back and forth redrew the AS VAL six times, 70–84 ms each)
-                if (have == null && r.Scale == 1 && _drawn.TryGetValue(r.Tpl, out var seen) && seen != null) have = seen;
+                if (have == null && r.Scale == 1 && _drawn.TryGetValue(r.Tpl, out var seen) && seen != null && seen.texture != null) have = seen; // (not one the game has since redrawn)
                 if (have != null) { r.Pic.sprite = have; r.Pic.enabled = true; if (r.Placeholder != null) r.Placeholder.gameObject.SetActive(false); budget++; continue; }
                 r.Target.Add((GameItems.IconOf(GameItems.ItemOf(r.Tpl), r.Scale), r.Pic, r.Placeholder, r.Tpl));
             }
@@ -2694,6 +2707,7 @@ namespace LevelGate.Progression
             if (!IsOpen) { CheckMenuShown(); return; }
             BgPattern.Tick(); // the background pattern's slow motion: only ever while open
             TickLights();     // the drifting lights, the XP bar's tracer (F12 Detail Animation)
+            SweepPictures();  // no picture left pointing at a deleted texture (the "wrong pictures")
             // the game can fade its main menu back in behind us (its own tween after a screen change): keep it hidden while open
             if (_menuGroup != null && (_menuGroup.alpha > 0 || _menuGroup.blocksRaycasts)) { _menuGroup.alpha = 0; _menuGroup.blocksRaycasts = false; }
             if (!_xpKnown && ProgData.HasExpTable) { _xpKnown = true; UpdateXp(); } // the SPT server's answer came in
@@ -2956,7 +2970,7 @@ namespace LevelGate.Progression
                 if (_selLights == null || !_selLights.activeSelf) return;
                 float t = phase + _lightSeed;
                 _selBloom.rectTransform.anchoredPosition = new Vector2(60 * amount * Mathf.Sin(t * .31f), 14 * amount * Mathf.Sin(t * .23f + 1));
-                _selDotLight.rectTransform.anchoredPosition = new Vector2(80 * amount * Mathf.Sin(t * .19f + 2), 6 * amount * Mathf.Sin(t * .37f));
+                _selDotLight.rectTransform.anchoredPosition = new Vector2(30 * amount * Mathf.Sin(t * .19f + 2), 4 * amount * Mathf.Sin(t * .37f));
             }
             private readonly GameObject _handled;
             private readonly Badge _cardBadge;
@@ -3175,8 +3189,9 @@ namespace LevelGate.Progression
                 var lit = Ui.Fill(dotsMask, "Lights");
                 Ui.OwnCanvas(lit);
                 _selLights = lit.gameObject;
-                _selBloom = Ui.Detail(Ui.Img(Ui.Box(lit, "Bloom", new Vector2(.3f, .15f), Vector2.zero, new Vector2(460, 300)), new Color(1, 1, 1, .12f), Ui.Radial()), .12f);
-                _selDotLight = Ui.Detail(Ui.Img(Ui.Box(lit, "DotLight", new Vector2(.3f, .05f), Vector2.zero, new Vector2(420, 150)), new Color(1, 1, 1, .2f), Ui.HalftoneGlow()), .2f);
+                _selBloom = Ui.Detail(Ui.Img(Ui.Box(lit, "Bloom", new Vector2(.6f, .5f), Vector2.zero, new Vector2(460, 300)), new Color(1, 1, 1, .1f), Ui.Radial()), .1f);
+                // bottom-right, clear of the name and "ASSAULT RIFLE · +9 ITEMS" on the left (0.9.66 lit them up and they were hard to read)
+                _selDotLight = Ui.Detail(Ui.Img(Ui.Box(lit, "DotLight", new Vector2(.8f, .04f), Vector2.zero, new Vector2(300, 110)), new Color(1, 1, 1, .16f), Ui.HalftoneGlow()), .16f);
                 _selBloom.raycastTarget = _selDotLight.raycastTarget = false;
                 _selLights.SetActive(false);
                 // locked: a small lock top-left on the picture area, like CoD's locked unlocks
