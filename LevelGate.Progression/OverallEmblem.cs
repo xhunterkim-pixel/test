@@ -76,7 +76,7 @@ namespace LevelGate.Progression
                 foreach (var c in _screen.GetComponentsInChildren<Component>(true))
                 {
                     if (c == null || c.GetType().Name.IndexOf("TextMeshPro", StringComparison.Ordinal) < 0) continue;
-                    if (!(Refl.Get(c, "text") is string t) || t.Trim() != want) continue;
+                    if (!(Refl.Get(c, "text") is string t) || !int.TryParse(t.Trim(), out int n) || n != level) continue; // "01" at level 1 (0.9.94: was an exact "1", so levels 1–9 found nothing)
                     float size = Refl.Get(c, "fontSize") is float f ? f : 0;
                     if (size > bestSize) { best = c; bestSize = size; }
                 }

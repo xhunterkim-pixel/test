@@ -35,7 +35,7 @@ namespace LevelGate.Progression
             public static float BorderFade => On ? Pct(ProgressionPlugin.TestBorderFade, 70) : 0f;
             // 0.9.92: back to 0.9.81's panels and cards (you preferred them): new keys so the saved 90 / 72 don't stick
             public static float CardRest => On ? Pct(ProgressionPlugin.TestCardOpacity, 100) : 1f;
-            public static float CardLocked => On ? Pct(ProgressionPlugin.TestCardLockedOpacity, 85) : .85f;
+            public static float CardLocked => On ? Pct(ProgressionPlugin.TestCardLockedOpacity, 100) : .85f;
             /// <summary>The panels' and cards' soft light layers (inner glow, lit edge, glass, sheen, gloss); 100 = 0.9.81.</summary>
             public static float PanelLight => On ? Pct(ProgressionPlugin.TestPanelLight, 100) : 1f;
             public static float SmallText => On ? (ProgressionPlugin.TestSmallText?.Value ?? 10.5f) : 0f;
@@ -44,9 +44,9 @@ namespace LevelGate.Progression
             // 0.9.91: off — the glow behind the name was wanted, not a line (fixed: a saved 0.9.9 value doesn't bring it back)
             public static HeroLine Subtitle => HeroLine.Off;
             // 0.9.92: the name's glow became a light reflection falling down (MW4 "HAN 86"); new keys, so the 0.9.91 values don't carry over
-            public static float NameGlowK => On ? Pct(ProgressionPlugin.TestNameShadow, 50) : 0f;
-            public static float NameGlowSoft => Pct(ProgressionPlugin.TestNameShadowSoftness, 55);
-            public static float NameGlowDrop => Pct(ProgressionPlugin.TestNameShadowDistance, 60);
+            public static float NameGlowK => On ? Pct(ProgressionPlugin.TestNameShadow, 29) : 0f;
+            public static float NameGlowSoft => Pct(ProgressionPlugin.TestNameShadowSoftness, 26);
+            public static float NameGlowDrop => Pct(ProgressionPlugin.TestNameShadowDistance, 47);
             public static bool Mw4NewTag => (ProgressionPlugin.TestNewTag?.Value ?? NewTagLook.MW4) == NewTagLook.MW4;
             public static float SubtitleAlpha => Pct(ProgressionPlugin.TestHeroSubtitleOpacity, 70);
             public static float AmbientLightK => On ? Pct(ProgressionPlugin.TestAmbientLight, 140) : 1f;
