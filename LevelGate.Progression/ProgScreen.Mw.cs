@@ -196,8 +196,9 @@ namespace LevelGate.Progression
                 for (int i = 0; i < 2; i++)
                 {
                     float jitter = (float)(_glitchRng.NextDouble() * 2 - 1);
-                    ((RectTransform)g[i].transform).anchoredPosition = new Vector2((i == 0 ? -1 : 1) * (4 + 10 * jitter) * v, (_glitchRng.NextDouble() < .3 ? 2 : 0) * v);
-                    Ui.SetColor(g[i], i == 0 ? new Color(1f, .25f, .3f, .55f * v) : new Color(.3f, .9f, 1f, .55f * v));
+                    // half of 0.9.74's (asked for after testing): smaller offsets, fainter copies
+                    ((RectTransform)g[i].transform).anchoredPosition = new Vector2((i == 0 ? -1 : 1) * (2 + 5 * jitter) * v, (_glitchRng.NextDouble() < .3 ? 1 : 0) * v);
+                    Ui.SetColor(g[i], i == 0 ? new Color(1f, .25f, .3f, .275f * v) : new Color(.3f, .9f, 1f, .275f * v));
                 }
             }, 0, () => { foreach (var x in g) if (x != null) x.gameObject.SetActive(false); });
         }

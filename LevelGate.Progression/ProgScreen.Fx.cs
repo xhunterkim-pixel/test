@@ -72,7 +72,7 @@ namespace LevelGate.Progression
         }
 
         /// <summary>F12 > CURRENTLY TESTING > Hover Glitch, as a multiple of 0.9.70's strength (default 50%).</summary>
-        private static float GlitchK => (ProgressionPlugin.TestGlitch?.Value ?? 50) / 100f;
+        private static float GlitchK => (ProgressionPlugin.TestGlitch?.Value ?? 23) / 100f;
 
         /// <summary>Hover: glitch streaks slide across and fade (Motion: Fast × 1.8, linear, stepped flicker on the shared clock).</summary>
         private static void PlayGlitch(RectTransform host)
@@ -92,16 +92,18 @@ namespace LevelGate.Progression
         /// <summary>Picked: one soft shine sweeps across (Motion: Slow, OutCubic travel, pulse brightness).</summary>
         private static void PlayShine(RectTransform host)
         {
-            if (host == null || Motion.Still || Ui.DetailK <= 0) return;
+            float strength = (ProgressionPlugin.TestShine?.Value ?? 100) / 100f, width = (ProgressionPlugin.TestShineWidth?.Value ?? 100) / 100f;
+            if (host == null || Motion.Still || Ui.DetailK <= 0 || strength <= 0) return;
             var f = FxOf(host); var sh = f.Shine;
             sh.enabled = true;
+            sh.rectTransform.offsetMin = new Vector2(-60 * width, 0); sh.rectTransform.offsetMax = new Vector2(60 * width, 0); // F12 width
             Motion.Reset(sh, "shine");
             Motion.To(sh, "shine", 0, 1, Motion.D(Motion.Slow), Motion.Ease.Linear, t =>
             {
                 var r = sh.rectTransform;
                 float x = Mathf.Lerp(-.2f, 1.2f, Motion.Eval(Motion.Ease.OutCubic, t));
                 r.anchorMin = new Vector2(x, 0); r.anchorMax = new Vector2(x, 1);
-                sh.color = new Color(1, 1, 1, .22f * Motion.Eval(Motion.Ease.Pulse, t));
+                sh.color = new Color(1, 1, 1, Mathf.Clamp01(.22f * strength * Motion.Eval(Motion.Ease.Pulse, t)));
             }, 0, () => { if (sh != null) sh.enabled = false; });
         }
 
@@ -231,26 +233,48 @@ namespace LevelGate.Progression
 
         // ---------------------------------------------------------------- the big picture's load-in
 
-        private static Image _revealMask, _revealLines;
+        /// <summary>
+        /// A newly picked item appears from the top down in 20 vertical strips, each starting at its own moment (a ragged
+        /// front, not one line), the part still coming covered in light in its rank's colour — only on the item's own shape.
+        /// The light (F12 Picture Load-In Style): Dot Columns / Dot Cloud / Lines, breathing (each dot pulses its size and
+        /// brightness, drawn as a few frames and cycled). Time and Randomness from F12; Reduce Motion: none.
+        /// </summary>
+        private const int Strips = 20, DotFrames = 6;
+        private static RectTransform _revealHost;
+        private static readonly Image[] _stripPic = new Image[Strips], _stripMask = new Image[Strips], _stripLight = new Image[Strips];
+        private static readonly float[] _stripDelay = new float[Strips];
         private static float _revealAt = -10;
         private static bool _revealWanted;
-        private static int _revealVariant;
-        private static float _revealNextSwap;
+        private static float _revealFrameAt;
+        private static int _revealFrame;
         private static readonly System.Random _revealRng = new System.Random();
-        private static float RevealTime => Mathf.Max(.1f, ProgressionPlugin.TestRevealTime?.Value ?? .6f);   // F12 > CURRENTLY TESTING
-        private static float RevealRandom => Mathf.Clamp01((ProgressionPlugin.TestRevealRandom?.Value ?? 60) / 100f);
+        private static readonly Dictionary<int, Sprite[]> _dotFrames = new Dictionary<int, Sprite[]>();
+        private static float RevealTime => Mathf.Max(.1f, ProgressionPlugin.TestRevealTime?.Value ?? .2f) / Motion.Speed;
+        private static float RevealRandom => Mathf.Clamp01((ProgressionPlugin.TestRevealRandom?.Value ?? 100) / 100f);
+        private static int RevealStyle => (int)(ProgressionPlugin.TestRevealStyle?.Value ?? LoadInStyle.DotColumns);
 
         private static void BuildReveal()
         {
             if (_featPic == null) return;
-            // a copy of the picture as a mask (same sprite, same fit): the lines show only on the item's own shape
-            var host = Ui.Fill(_featPic.rectTransform, "Reveal");
-            _revealMask = Ui.Img(host, Color.white);
-            _revealMask.preserveAspect = true; _revealMask.raycastTarget = false;
-            host.gameObject.AddComponent<Mask>().showMaskGraphic = false;
-            _revealLines = Ui.Img(Ui.Rect(host, "Lines", new Vector2(0, 0), new Vector2(1, 1), Vector2.zero, Vector2.zero), new Color(1, 1, 1, 0), Ui.RevealStreaks());
-            _revealLines.raycastTarget = false;
-            host.gameObject.SetActive(false);
+            _revealHost = Ui.Fill(_featPic.rectTransform, "Reveal");
+            for (int i = 0; i < Strips; i++)
+            {
+                // a strip of the picture's width: a full-size copy clipped to it, and the light on the item's shape
+                var strip = Ui.Rect(_revealHost, "Strip", new Vector2(i / (float)Strips, 0), new Vector2((i + 1) / (float)Strips, 1), Vector2.zero, Vector2.zero);
+                strip.gameObject.AddComponent<RectMask2D>();
+                var full = new Vector2(-i, 0); var fullMax = new Vector2(Strips - i, 1); // the whole picture, in this strip's units
+                _stripPic[i] = Ui.Img(Ui.Rect(strip, "Pic", full, fullMax, Vector2.zero, Vector2.zero), Color.white);
+                _stripPic[i].preserveAspect = true;
+                _stripPic[i].type = Image.Type.Filled; _stripPic[i].fillMethod = Image.FillMethod.Vertical; _stripPic[i].fillOrigin = (int)Image.OriginVertical.Top;
+                var shape = Ui.Rect(strip, "Shape", full, fullMax, Vector2.zero, Vector2.zero);
+                _stripMask[i] = Ui.Img(shape, Color.white);
+                _stripMask[i].preserveAspect = true;
+                shape.gameObject.AddComponent<Mask>().showMaskGraphic = false;
+                _stripLight[i] = Ui.Img(Ui.Rect(shape, "Light", Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero), new Color(1, 1, 1, 0));
+                _stripLight[i].type = Image.Type.Tiled;
+                foreach (var g in new Graphic[] { _stripPic[i], _stripMask[i], _stripLight[i] }) g.raycastTarget = false;
+            }
+            _revealHost.gameObject.SetActive(false);
         }
 
         /// <summary>The picture just appeared for a newly picked item: play the load-in (once per pick).</summary>
@@ -258,61 +282,125 @@ namespace LevelGate.Progression
         {
             if (!_revealWanted) return;
             _revealWanted = false;
-            if (Calm || _revealMask == null) { EndReveal(); return; }
-            _revealAt = Time.unscaledTime;
-            _revealMask.transform.gameObject.SetActive(true);
-            // the mask is a copy of the picture: always the current sprite, always on (0.9.70: clearing pictures on a
-            // Performance Mode switch emptied it, and an empty mask let the lines cover the whole box as a flat band)
-            _revealMask.sprite = _featPic.sprite; _revealMask.enabled = true;
-            _revealVariant = _revealRng.Next(4); _revealNextSwap = 0;
-            SetRevealLines();
-            _featPic.type = Image.Type.Filled;
-            _featPic.fillMethod = Image.FillMethod.Vertical;
-            _featPic.fillOrigin = (int)Image.OriginVertical.Top;
-            _featPic.fillAmount = 0;
+            if (Motion.Still || _revealHost == null || _featPic.sprite == null) { EndReveal(); return; }
+            _revealAt = Motion.Now;
+            float rk = RevealRandom;
+            for (int i = 0; i < Strips; i++)
+            {
+                // ragged front: each strip waits a little (neighbours roughly agree, plus noise)
+                float ridge = .5f + .5f * Mathf.Sin(i * .7f + (float)_revealRng.NextDouble() * 6.28f);
+                _stripDelay[i] = rk * .45f * Mathf.Clamp01(.6f * ridge + .4f * (float)_revealRng.NextDouble());
+            }
+            _revealHost.gameObject.SetActive(true);
+            _featPic.canvasRenderer.SetAlpha(0); // the strips draw it while it comes in
+            SyncStrips();
+        }
+
+        private static void SyncStrips()
+        {
+            var sp = _featPic.sprite;
+            for (int i = 0; i < Strips; i++)
+            {
+                if (_stripPic[i].sprite != sp) { _stripPic[i].sprite = sp; _stripMask[i].sprite = sp; }
+                if (!_stripMask[i].enabled) _stripMask[i].enabled = true; // (picture clearing can switch it off: never a flat band)
+                if (!_stripPic[i].enabled) _stripPic[i].enabled = true;
+            }
         }
 
         private static void EndReveal()
         {
             _revealAt = -10;
-            if (_featPic != null) { _featPic.fillAmount = 1; _featPic.type = Image.Type.Simple; }
-            if (_revealMask != null) _revealMask.transform.gameObject.SetActive(false);
-        }
-
-        private static void SetRevealLines()
-        {
-            _revealLines.sprite = Ui.RevealStreaks(_revealVariant);
-            float rk = RevealRandom;
-            var lr = _revealLines.rectTransform;
-            float shift = (float)(_revealRng.NextDouble() * 2 - 1) * 40 * rk;
-            lr.offsetMin = new Vector2(-40 * rk + shift, lr.offsetMin.y); lr.offsetMax = new Vector2(40 * rk + shift, lr.offsetMax.y);
-            lr.localScale = new Vector3(rk > 0 && _revealRng.NextDouble() < .5 ? -1 : 1, 1, 1);
+            if (_featPic != null) _featPic.canvasRenderer.SetAlpha(1);
+            if (_revealHost != null) _revealHost.gameObject.SetActive(false);
         }
 
         private static void TickReveal()
         {
             if (_revealAt < 0 || _featPic == null) return;
-            float t = (Time.unscaledTime - _revealAt) / RevealTime;
-            if (t >= 1 || !_featPic.enabled) { EndReveal(); return; }
-            float r = EaseOutCubic(t);
-            _featPic.fillAmount = r;
-            if (_revealMask.sprite != _featPic.sprite) _revealMask.sprite = _featPic.sprite; // the sharper render may arrive mid-way
-            if (!_revealMask.enabled) _revealMask.enabled = true;
-            if (_revealMask.sprite == null) { EndReveal(); return; } // no shape to draw the lines on: never a flat band
-            // randomness: the lines swap pattern, shift and flip while it plays (0 = one fixed pattern)
-            float rk = RevealRandom;
-            if (rk > 0 && Time.unscaledTime >= _revealNextSwap)
-            {
-                _revealNextSwap = Time.unscaledTime + Mathf.Lerp(.25f, .03f, rk);
-                _revealVariant = _revealRng.Next(4);
-                SetRevealLines();
-            }
-            // the lines hang from the front down over the part still coming, in the item's rank colour
-            var lr = _revealLines.rectTransform;
-            float front = 1 - r;
-            lr.anchorMin = new Vector2(0, Mathf.Max(0, front - .6f)); lr.anchorMax = new Vector2(1, front);
+            float dur = RevealTime;
+            float t = (Motion.Now - _revealAt) / dur;
+            if (t >= 1.45f || !_featPic.enabled || _featPic.sprite == null) { EndReveal(); return; }
+            SyncStrips();
+            // breathing: the light's frames cycle (each dot pulses its size and brightness)
+            if (Motion.Now >= _revealFrameAt) { _revealFrameAt = Motion.Now + Motion.Micro * .9f; _revealFrame = (_revealFrame + 1) % DotFrames; }
+            var frames = DotFramesOf(RevealStyle);
             var light = Ui.Hex(TierOf(Mathf.Max(1, _featLevel)).Light);
-            _revealLines.color = new Color(light.r, light.g, light.b, .9f * Mathf.Clamp01((1 - t) / .25f));
+            for (int i = 0; i < Strips; i++)
+            {
+                // each strip: its own start, the same pace
+                float u = Mathf.Clamp01(t - _stripDelay[i]); // t runs past 1 so the latest strips finish too
+                float r = Motion.Eval(Motion.Ease.OutCubic, u);
+                _stripPic[i].fillAmount = r;
+                var lr = _stripLight[i].rectTransform;
+                float front = 1 - r;
+                lr.anchorMin = new Vector2(0, Mathf.Max(0, front - .55f)); lr.anchorMax = new Vector2(1, front);
+                var fr = frames[(_revealFrame + i) % DotFrames]; // neighbouring strips out of step: it shimmers, not blinks
+                if (_stripLight[i].sprite != fr) _stripLight[i].sprite = fr;
+                _stripLight[i].color = new Color(light.r, light.g, light.b, .95f * Mathf.Clamp01((1 - u) / .3f));
+            }
+        }
+
+        public enum LoadInStyle { DotColumns, DotCloud, Lines }
+
+        /// <summary>The load-in light's breathing frames for a style (built once, 128x384, white, tiles sideways).</summary>
+        private static Sprite[] DotFramesOf(int style)
+        {
+            if (_dotFrames.TryGetValue(style, out var have)) return have;
+            const int w = 128, h = 384;
+            var rnd = new System.Random(97 + style * 31);
+            // the dots: position, size, brightness, breathing phase — shared by all frames
+            var dots = new List<(int X, int Y, float S, float A, float P)>();
+            if (style == (int)LoadInStyle.Lines) { }
+            else if (style == (int)LoadInStyle.DotColumns)
+            {
+                for (int x = 1; x < w; x += 3)
+                {
+                    int len = (int)(h * Mathf.Pow((float)rnd.NextDouble(), 1.4f) * (.35f + .65f * (.5f + .5f * Mathf.Sin(x * .09f + 1))));
+                    for (int d = 0; d < len; d += 3 + rnd.Next(2))
+                    {
+                        if (rnd.NextDouble() < .18 * d / (float)Mathf.Max(1, len)) continue; // longer columns break up toward their ends
+                        dots.Add((x + (rnd.NextDouble() < .15 ? 1 : 0), h - 1 - d, 1 + (float)rnd.NextDouble() * .9f, (1 - d / (float)Mathf.Max(1, len)) * (.5f + .5f * (float)rnd.NextDouble()), (float)rnd.NextDouble() * 6.28f));
+                    }
+                }
+            }
+            else
+            {
+                for (int k = 0; k < 900; k++)
+                {
+                    float depth = Mathf.Pow((float)rnd.NextDouble(), 1.8f);     // most near the front, thinning out below
+                    dots.Add((rnd.Next(w), h - 1 - (int)(depth * h), 1 + (float)rnd.NextDouble() * 1.4f, (1 - depth) * (.4f + .6f * (float)rnd.NextDouble()), (float)rnd.NextDouble() * 6.28f));
+                }
+            }
+            var frames = new Sprite[DotFrames];
+            for (int f = 0; f < DotFrames; f++)
+            {
+                if (style == (int)LoadInStyle.Lines) { frames[f] = Ui.RevealStreaks(f % 4); continue; }
+                var tex = new Texture2D(w, h, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Repeat, filterMode = FilterMode.Bilinear, name = "LevelGate loadin" };
+                var px = new Color32[w * h];
+                float ph = f / (float)DotFrames * 6.28f;
+                foreach (var d in dots)
+                {
+                    float breath = .5f + .5f * Mathf.Sin(ph + d.P);                 // this dot's pulse
+                    float size = d.S * (.55f + .6f * breath);
+                    float a = d.A * (.45f + .55f * breath);
+                    int r = Mathf.CeilToInt(size);
+                    for (int dy = -r; dy <= r; dy++)
+                        for (int dx = -r; dx <= r; dx++)
+                        {
+                            int X = d.X + dx, Y = d.Y + dy;
+                            if (X < 0 || X >= w || Y < 0 || Y >= h) continue;
+                            float cover = Mathf.Clamp01(size - Mathf.Max(Mathf.Abs(dx), Mathf.Abs(dy)) + .5f); // soft square dots
+                            if (cover <= 0) continue;
+                            byte v = (byte)(255 * Mathf.Clamp01(a * cover));
+                            if (v > px[Y * w + X].a) px[Y * w + X] = new Color32(255, 255, 255, v);
+                        }
+                }
+                tex.SetPixels32(px);
+                tex.Apply(false, true);
+                frames[f] = Sprite.Create(tex, new Rect(0, 0, w, h), new Vector2(.5f, .5f), 100, 0, SpriteMeshType.FullRect);
+            }
+            _dotFrames[style] = frames;
+            return frames;
         }
     }
 }

@@ -621,9 +621,7 @@ namespace LevelGate.Progression
             // a measuring scale along the bottom, fading out to both ends
             var ruler = Ui.Detail(Ui.Img(Ui.Rect(face, "Ruler", new Vector2(.1f, 0), new Vector2(.9f, 0), new Vector2(0, 14), new Vector2(0, 23)), Ui.Hex("#8f989b", .3f), Ui.Ruler()), .3f);
             ruler.type = Image.Type.Tiled; ruler.raycastTarget = false;
-            // a short hatch strip top-right, under the pips (MW's FIELD UPGRADE plate)
-            var hatch = Ui.Detail(Ui.Img(Ui.Rect(face, "Hatch", new Vector2(1, 1), new Vector2(1, 1), new Vector2(-122, -44), new Vector2(-22, -38)), new Color(1, 1, 1, .12f), Ui.Hatch()), .12f);
-            hatch.type = Image.Type.Tiled; hatch.raycastTarget = false;
+            // (0.9.74 had a hatch strip under the pips: too much, removed)
             // top-left: what it is, in the rank's colour, and its short name (MW: "Assault Rifle / M4")
             _heroKind = Ui.Label(Ui.Rect(face, "Kind", new Vector2(0, 1), new Vector2(.6f, 1), new Vector2(24, -42), new Vector2(0, -22)), "Text", "", TBody, Ui.Hex("#c9b77a"), TextAnchor.MiddleLeft, false, 1);
             _heroName = Ui.Label(Ui.Rect(face, "Name", new Vector2(0, 1), new Vector2(.6f, 1), new Vector2(24, -68), new Vector2(0, -42)), "Text", "", TTitle, Ui.Hex("#e4e7e8"), TextAnchor.MiddleLeft, true, 1);
@@ -1458,6 +1456,43 @@ namespace LevelGate.Progression
             return false;
         }
 
+        /// <summary>Is the pointer over one of the game's open windows (the topmost UI under it belongs to a window)?</summary>
+        private static bool OverGameWindow()
+        {
+            try
+            {
+                var es = UnityEngine.EventSystems.EventSystem.current;
+                var holder = WindowsHolder();
+                if (es == null || holder == null) return false;
+                var data = new UnityEngine.EventSystems.PointerEventData(es) { position = UnityInput.Current.mousePosition };
+                var hits = new List<UnityEngine.EventSystems.RaycastResult>();
+                es.RaycastAll(data, hits);
+                return hits.Count > 0 && hits[0].gameObject != null && hits[0].gameObject.transform.IsChildOf(holder);
+            }
+            catch (Exception e) { L.ErrorOnce("pointer over a game window", e); return true; } // unsure: leave the click to the window
+        }
+
+        /// <summary>Closes the game's open windows (an inspect window before the next one opens), with their own Close.</summary>
+        private static void CloseGameWindows(string why)
+        {
+            var holder = WindowsHolder();
+            if (holder == null) return;
+            foreach (Transform t in holder)
+            {
+                if (!t.gameObject.activeSelf) continue;
+                bool closed = false;
+                foreach (var c in t.GetComponents<Component>())
+                {
+                    if (c == null) continue;
+                    var m = c.GetType().GetMethod("Close", Refl.All, null, Type.EmptyTypes, null);
+                    if (m == null) continue;
+                    try { m.Invoke(c, null); closed = true; L.Debug($"closed game window {t.name} ({c.GetType().Name}.Close) — {why}"); break; }
+                    catch (Exception e) { L.Debug($"closing {t.name} with {c.GetType().Name}.Close failed: {e.GetBaseException().Message}"); }
+                }
+                if (!closed) L.Debug($"game window {t.name}: no Close found — left open");
+            }
+        }
+
         private static void Inspect(string tpl)
         {
             _sInspects++;
@@ -2104,9 +2139,10 @@ namespace LevelGate.Progression
             bool sel = v.Item.Tpl == _featTpl;
             if (sel && !v.WasSel && !instant) PlayShine(v.Face.rectTransform); // picked: one soft shine across it
             v.WasSel = sel;
-            if (sel && v.SelFx == null) v.SelFx = MakeSelFrame(v.Rt, 3);
+            if (sel && v.SelFx == null) v.SelFx = MakeSelFrame(v.Rt, 2); // on the outline itself (the sprite's line is 2 px in)
             if (v.SelFx != null) v.SelFx.On = sel;
-            FadeTo(v.Frame, sel ? Select : v.Hover ? HoverEdge : Border, instant);
+            // picked: the selection border takes over the outline (one border, not two); the outline itself steps back
+            FadeTo(v.Frame, sel ? (Ui.DetailK > 0 ? Border : Select) : v.Hover ? HoverEdge : Border, instant);
             FadeTo(v.Face, sel ? FaceSelect : v.Hover ? FaceHover : Face, instant);
             v.Top.enabled = sel;
             if (v.Dither != null) v.Dither.enabled = sel;
@@ -2943,7 +2979,8 @@ namespace LevelGate.Progression
 
             // mouse over an item: feature it; right-click: the game's inspect (checked here: the game's input
             // doesn't send right-clicks to our tiles)
-            if (!window && !xpBusy)
+            // with a game window (inspect) open, clicks on the screen still work — unless they're on the window itself
+            if (!xpBusy && (!window || ((input.GetMouseButtonDown(0) || input.GetMouseButtonDown(1)) && !OverGameWindow())))
             {
                 var mouse = (Vector2)input.mousePosition;
                 ProgItem over = null;
@@ -2957,7 +2994,7 @@ namespace LevelGate.Progression
                 if (input.GetMouseButtonDown(1))
                 {
                     L.Debug($"right-click at {mouse} over {(over == null ? "nothing" : over.Name + " (" + over.Tpl + ")")}");
-                    if (over != null) InspectSoon(over.Tpl);
+                    if (over != null) { if (window) CloseGameWindows("inspecting another item"); InspectSoon(over.Tpl); } // one inspect at a time
                 }
             }
             FeatureDeferred();
@@ -3566,7 +3603,7 @@ namespace LevelGate.Progression
                 bool sel = _level == picked, current = player > 0 && _level == player;
                 bool locked = player > 0 && _level > player, reached = player > 0 && _level <= player;
                 bool fresh = reached && NewTags.Level(_level); // kept until you pick the level or click its new rewards
-                FadeTo(_frame, sel ? Select : _hover ? HoverEdge : Border);
+                FadeTo(_frame, sel ? (Ui.DetailK > 0 ? Border : Select) : _hover ? HoverEdge : Border); // picked: the selection border is the outline
                 _top.enabled = sel && !current;
                 _cardDither.enabled = sel;
                 _sheen.enabled = _gloss.enabled = sel; // a very light reflection on the picked card
@@ -3602,7 +3639,7 @@ namespace LevelGate.Progression
                 _bloomFrame.enabled = current || (sel && !locked); _curScan.enabled = current; _ticks.gameObject.SetActive(current);
                 if (_selLights.activeSelf != sel) _selLights.SetActive(sel);
                 if (sel && !_wasSel) PlayShine(_bg.rectTransform); // picked: one soft shine across it
-                if (_selFx == null) _selFx = MakeSelFrame((RectTransform)_frame.transform, 4);
+                if (_selFx == null) _selFx = MakeSelFrame((RectTransform)_frame.transform, 2); // on the outline itself
                 _selFx.On = sel;
                 _wasSel = sel; _isCurrent = current;
                 if (sel)

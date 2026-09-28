@@ -40,6 +40,16 @@ Versions are **MAJOR.MINOR.PATCH**:
 
 ## LevelGate Progression (BepInEx plugin, separate DLL)
 
+### 0.9.75
+- **Your F12 picks are the new defaults**: Damascus 1 pattern at 82% moving at 2.5, sound 100%, Hover Glitch 23%, Motion Speed 145%, Picture Load-In 0.2 s at 100% randomness, Item Bloom 166% / 120%, Light Wall 122%, MW 1–5, 7, 9, 10 on, MW 6 (screen flashes) and MW 8 (row pips) off. Existing settings files keep their values.
+- **Fixed: picking an item cost frames** (most of the 0.9.74 log's "Feature" slow frames): the item-bloom colour was read back from the graphics card and waited for. It's read in the background now (the colour arrives a frame or two later).
+- **Inspect another item while one is open**: right-click another item and the open inspect window closes and the new one opens (no more Esc in between). Clicks on the screen work while a window is open, unless they're on the window itself.
+- **Selection border fixed**: it follows the tiles' and cards' own cut corners and replaces their outline while picked (one border, not two that disagreed at the corners).
+- **The big picture's load-in, reworked**: it comes in as 20 strips, each starting at its own moment (a ragged front instead of one line), the light only on the item's shape, and the light now breathes — each dot pulses its size and brightness. New **Picture Load-In Style**: Dot Columns (default), Dot Cloud, Lines.
+- **Rank Up Style** (new, CURRENTLY TESTING): Banner (default — a dark tactical strip wipes across mid-screen, emblem in a bracketed box, rank typed in, data line, ruler), Dossier (a personnel file with a photo box, typed fields and a red PROMOTED stamp slammed on the peak), Terminal (a comms readout typing line by line, the emblem coming online), Dogtag (a worn metal tag dropping in on its bead chain and swinging to rest), Full (0.9.74's full-screen splash). All timed to the emblem sound; no full-screen flash in the new ones.
+- **Selection Shine** and **Selection Shine Width** sliders (the light sweeping across a tile or card when you pick it).
+- **Title glitch at half strength**; the hatch strip under the big picture's pips is gone.
+
 ### 0.9.74 — shared motion system + ten MW4 features (all switchable)
 - **Motion, the screen's one motion system** (new Motion.cs): durations are tokens (Micro 0.08 s, Fast 0.15, Base 0.25, Slow 0.4, Hero 0.6, Epic 1.2) scaled by one F12 **Motion Speed** and instant under Reduce Motion / Performance Mode; one easing library (OutCubic, OutQuint, OutExpo, OutBack, InCubic, InOutSine, InOutCubic, Spring, Pulse); tweens keyed by owner + channel that continue from where the last one got to (hover on → off → on never jumps) and end themselves when their object is gone; a shared **Stagger** step (F12); sequences (Then / With / Wait / Call); one clock for every pulse and flicker (Wave, Flicker) so they stay in phase. On it now: the selection border, the section light-up, hover glitch, selection shine, card flood, level-number glow, screen flashes, title glitch, wave surfaces.
 - **F12 > CURRENTLY TESTING > MW 1 … MW 10**, each on its own switch (all on to start; every change is written to the log as "testing: MW05 off — …"):

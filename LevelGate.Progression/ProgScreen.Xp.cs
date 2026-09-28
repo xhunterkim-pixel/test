@@ -308,7 +308,7 @@ namespace LevelGate.Progression
                     break;
                 case StepKind.Rank:
                     if (quiet) { EndRank(); break; }
-                    RankSplash(st.Level, _xpT, st.Dur, RankLead + Sfx.Extra("emblemup")); // MW4's level-up screen, over everything
+                    RankMoment(st.Level, _xpT, st.Dur, RankLead + Sfx.Extra("emblemup")); // the new-rank moment in the F12 style (Full = MW4's splash)
                     if (enter)
                     {
                         _xpRankSwapped = false;

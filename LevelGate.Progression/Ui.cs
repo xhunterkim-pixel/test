@@ -490,21 +490,26 @@ namespace LevelGate.Progression
         {
             variant = ((variant % 3) + 3) % 3;
             if (_dashFrames[variant] != null) return _dashFrames[variant];
-            const int n = 48, b = 6, line = 3; // the line runs 3 px in from the edge
+            // the cards' / tiles' own shape: the line runs 2 px in from the sprite's edge (use it 2 px outside the outline so
+            // they coincide), with the same 8 px cuts top-left and bottom-right as Chamfer (0.9.72–0.9.74 drew a plain
+            // rectangle 3–4 px outside: two borders that didn't agree at the cut corners — "broken")
+            const int n = 48, L = 2, c = 8, b = L + c + 2;
             var tex = new Texture2D(n, n, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Clamp, filterMode = FilterMode.Point, name = "LevelGate dashframe" };
             var px = new Color32[n * n];
             var rnd = new System.Random(71 + variant * 13);
             void Put(int x, int y, float a) { if (x >= 0 && x < n && y >= 0 && y < n) px[y * n + x] = new Color32(255, 255, 255, (byte)Mathf.Max(px[y * n + x].a, 255 * a)); }
-            // MW: top, left and right are a steady line; only the bottom breaks up — dashes of random length and stray
-            // dots below it, which is what moves (the variants differ only there)
-            for (int x = line; x < n - line; x++) Put(x, n - line - 1, .9f);          // top
-            for (int y = line; y < n - line; y++) { Put(line, y, .9f); Put(n - line - 1, y, .9f); } // left, right
+            int top = n - 1 - L, right = n - 1 - L;
+            for (int x = L + c; x <= right; x++) Put(x, top, .92f);                       // top (after the top-left cut)
+            for (int y = L; y <= top - c; y++) Put(L, y, .92f);                           // left (below the cut)
+            for (int y = L + c; y <= top; y++) Put(right, y, .92f);                       // right (above the bottom-right cut)
+            for (int k = 0; k <= c; k++) { Put(L + k, top - c + k, .92f); }                // the top-left cut
+            for (int k = 0; k <= c; k++) { Put(right - c + k, L + k, .7f); }               // the bottom-right cut (part of the broken bottom)
             bool on = true; int run = 0;
-            for (int x = line; x < n - line; x++)                                     // bottom
+            for (int x = L; x <= right - c; x++)                                            // bottom: broken, stray dots below it
             {
                 if (run-- <= 0) { on = !on; run = on ? 2 + rnd.Next(9) : 1 + rnd.Next(4); }
-                if (on) Put(x, line, .7f + .3f * (float)rnd.NextDouble());
-                if (rnd.NextDouble() < .14) Put(x, line - 1 - rnd.Next(2), .55f + .45f * (float)rnd.NextDouble()); // stray dots just below
+                if (on) Put(x, L, .7f + .3f * (float)rnd.NextDouble());
+                if (rnd.NextDouble() < .14) Put(x, L - 1 - rnd.Next(2), .55f + .45f * (float)rnd.NextDouble());
             }
             tex.SetPixels32(px);
             tex.Apply(false, true);

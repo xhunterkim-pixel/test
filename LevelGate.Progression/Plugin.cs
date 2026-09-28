@@ -26,7 +26,7 @@ namespace LevelGate.Progression
         public const string Guid = "com.kkyangg.levelgate.progression";
         public const string Name = "LevelGate Progression";
         // MAJOR.MINOR.PATCH — see CHANGELOG.md
-        public const string Version = "0.9.74";
+        public const string Version = "0.9.75";
 
         internal static ProgressionPlugin Instance;
         internal static ConfigEntry<KeyboardShortcut> OpenKey;
@@ -34,11 +34,13 @@ namespace LevelGate.Progression
         internal static ConfigEntry<bool> InjectButton, CharacterEmblem, ReduceMotion;
         internal static ConfigEntry<int> TextSize, Detailing, PatternOpacity, DetailAnimation;
         // 5. CURRENTLY TESTING: new animation features to tune in game; the chosen values become the defaults after the patch
-        internal static ConfigEntry<int> TestGlitch, TestRevealRandom, TestBloomOpacity, TestBloomSize, TestWallBrightness, TestMotionSpeed, TestStagger;
+        internal static ConfigEntry<int> TestShine, TestShineWidth, TestGlitch, TestRevealRandom, TestBloomOpacity, TestBloomSize, TestWallBrightness, TestMotionSpeed, TestStagger;
         /// <summary>The ten MW4 features, each switchable while they're being tried (index 1…10; [0] unused).</summary>
         internal static readonly ConfigEntry<bool>[] TestMw = new ConfigEntry<bool>[11];
         internal static bool Mw(int n) => TestMw[n]?.Value ?? true;
         internal static ConfigEntry<float> TestRevealTime;
+        internal static ConfigEntry<ProgScreen.LoadInStyle> TestRevealStyle;
+        internal static ConfigEntry<ProgScreen.RankUpStyle> TestRankStyle;
         internal static ConfigEntry<string> ButtonTemplate;
         internal static ConfigEntry<string> ButtonLabel;
         internal static ConfigEntry<bool> VerboseLog;
@@ -83,7 +85,7 @@ namespace LevelGate.Progression
                 "A PROGRESSION block in the main menu's bottom-left corner (like the game's EXPANSIONS one) that opens the screen.", 80));
             HideMainMenu = Config.Bind(G, "HideMainMenu", true, Desc(
                 "Fade out the main menu (ESCAPE FROM TARKOV, CHARACTER, TRADING, EXIT…) while the screen is open.", 70));
-            SoundVolume = Config.Bind(G, "SoundVolume", .8f, Desc(
+            SoundVolume = Config.Bind(G, "SoundVolume", 1f, Desc(
                 "Volume of the level-up and new-rank sounds (sounds folder). 0 = off.", 55, new AcceptableValueRange<float>(0f, 1f)));
             GameSounds = Config.Bind(G, "UseGameSounds", false, Desc(
                 "Level up / new rank: the game's own UI sounds instead of the plugin's (sounds folder). SoundVolume doesn't apply to them.", 54));
@@ -126,7 +128,7 @@ namespace LevelGate.Progression
                 "How much the lights move: the red glow drifting, the rank emblem's glow breathing, the picked card's coloured bloom and dotted light, " +
                 "the light under the big picture, and the tracer running along the XP bar. 100 = a gentle drift, 0 = all still. Off with Reduce Motion / Performance Mode.",
                 84, new AcceptableValueRange<int>(0, 100)));
-            PatternOpacity = Config.Bind(Gfx, "PatternOpacity", 100, Desc(
+            PatternOpacity = Config.Bind(Gfx, "PatternOpacity", 82, Desc(
                 "How visible the background pattern is, on its own (UI Detailing no longer changes it). 100 = as designed, 0 = no pattern (not worked out or drawn).",
                 88, new AcceptableValueRange<int>(0, 100)));
             // the old Wear And Scratches (0–5): now part of UI Detailing (hidden; carried over once below)
@@ -140,10 +142,10 @@ namespace LevelGate.Progression
             }
             Vignette = Config.Bind(Gfx, "Vignette", 1f, Desc("How dark the screen's corners are (1 = the original, 0 = none).", 84, new AcceptableValueRange<float>(0f, 3f)));
             RedGlow = Config.Bind(Gfx, "RedGlow", 1.1f, Desc("How strong the red glow in the top-right is (1 = the original, 0 = none).", 83, new AcceptableValueRange<float>(0f, 3f)));
-            Pattern = Config.Bind(Gfx, "Pattern", BackgroundPattern.Dots, Desc(
+            Pattern = Config.Bind(Gfx, "Pattern", BackgroundPattern.Damascus1, Desc(
                 "The faint pattern behind the screen: Dots (grid of dots), Streaks (vertical streaks), Damascus 1 (busy topographic lines), Damascus 2 (big organic flowing lines), Damascus 3 (rings), Damascus 4 (mirrored lines), Marble (mirrored marbling), Pixels (LED wall with light bands), Terrain (3D ridge lines), Random (a different one each open). Its strength: Background Pattern Opacity.",
                 89));
-            PatternMotion = Config.Bind(Gfx, "PatternMotion", 1f, Desc(
+            PatternMotion = Config.Bind(Gfx, "PatternMotion", 2.5f, Desc(
                 "How fast the animated patterns move (0 = still, 1 = a gentle drift). Only while the screen is open; it stops completely when you leave it.",
                 87, new AcceptableValueRange<float>(0f, 3f)));
             Pattern.SettingChanged += (_, __) => ProgScreen.PatternChanged();
@@ -164,19 +166,30 @@ namespace LevelGate.Progression
 
             // 5. CURRENTLY TESTING — animation features being tuned; their values here become the defaults after the patch
             const string T = "5. Testing";
-            TestGlitch = Config.Bind(T, "HoverGlitch", 50, Desc(
+            TestGlitch = Config.Bind(T, "HoverGlitch", 23, Desc(
                 "Hover: how strong the burst of glitch streaks across a tile or card is, in % of 0.9.70's (0 = off).", 100, new AcceptableValueRange<int>(0, 200)));
-            TestRevealTime = Config.Bind(T, "RevealTime", .6f, Desc(
+            TestShine = Config.Bind(T, "SelectShine", 100, Desc(
+                "Picking a tile or card: how bright the light sweeping across it is, in % (0 = off).", 96, new AcceptableValueRange<int>(0, 300)));
+            TestShineWidth = Config.Bind(T, "SelectShineWidth", 100, Desc(
+                "Picking a tile or card: how wide the sweeping light is, in %.", 95, new AcceptableValueRange<int>(30, 300)));
+            TestRevealTime = Config.Bind(T, "RevealTime", .2f, Desc(
                 "The big picture's load-in: how long it takes to appear from the top down, in seconds.", 90, new AcceptableValueRange<float>(.2f, 2.5f)));
-            TestRevealRandom = Config.Bind(T, "RevealRandom", 60, Desc(
+            TestRevealStyle = Config.Bind(T, "RevealStyle", ProgScreen.LoadInStyle.DotColumns, Desc(
+                "The big picture's load-in light: Dot Columns (loose vertical columns of dots), Dot Cloud (a scattered cluster), Lines (0.9.71's lines). The dots breathe (size and brightness).", 89));
+            TestRevealStyle.SettingChanged += (_, __) => L.Info($"testing: RevealStyle = {TestRevealStyle.Value}");
+            TestRankStyle = Config.Bind(T, "RankUpStyle", ProgScreen.RankUpStyle.Banner, Desc(
+                "The new-rank moment in a level up: Banner (a dark tactical strip across mid-screen), Dossier (a personnel file with a PROMOTED stamp), " +
+                "Terminal (a comms readout typing it out), Dogtag (a metal tag dropping in on its chain), Full (0.9.74's full-screen splash). Try them with 3. Preview > Play Next Rank.", 88));
+            TestRankStyle.SettingChanged += (_, __) => L.Info($"testing: RankUpStyle = {TestRankStyle.Value}");
+            TestRevealRandom = Config.Bind(T, "RevealRandom", 100, Desc(
                 "The big picture's load-in: how much the lines of light vary and flicker while it appears (0 = one fixed pattern, 100 = changing every frame).", 85, new AcceptableValueRange<int>(0, 100)));
-            TestBloomOpacity = Config.Bind(T, "BloomOpacity", 100, Desc(
+            TestBloomOpacity = Config.Bind(T, "BloomOpacity", 166, Desc(
                 "Item bloom: how strong the glow in the picked item's own colours is (behind the big picture, the picked tile and card), in %. 0 = off.", 80, new AcceptableValueRange<int>(0, 250)));
-            TestBloomSize = Config.Bind(T, "BloomSize", 100, Desc(
+            TestBloomSize = Config.Bind(T, "BloomSize", 120, Desc(
                 "Item bloom: how far the glow spreads, in %.", 75, new AcceptableValueRange<int>(40, 250)));
-            TestWallBrightness = Config.Bind(T, "LightWall", 100, Desc(
+            TestWallBrightness = Config.Bind(T, "LightWall", 122, Desc(
                 "The light wall on the level track during level ups: brightness of the wall, its wash and trail, in %.", 70, new AcceptableValueRange<int>(0, 250)));
-            TestMotionSpeed = Config.Bind(T, "MotionSpeed", 100, Desc(
+            TestMotionSpeed = Config.Bind(T, "MotionSpeed", 145, Desc(
                 "The shared motion system: how fast every transition on the screen plays, in % (100 = as designed, 200 = twice as fast).", 99, new AcceptableValueRange<int>(25, 300)));
             TestStagger = Config.Bind(T, "Stagger", 30, Desc(
                 "The shared motion system: the step between items coming in one after another (lights, specks, rows), in milliseconds.", 98, new AcceptableValueRange<int>(0, 120)));
@@ -197,10 +210,11 @@ namespace LevelGate.Progression
             for (int i = 1; i <= 10; i++)
             {
                 int n = i;
-                TestMw[n] = Config.Bind(T, $"MW{n:00}", true, Desc($"MW4 feature {n} — {mw[n]}. On/off is written to the log.", 60 - n));
+                TestMw[n] = Config.Bind(T, $"MW{n:00}", n != 6 && n != 8, // your picks after testing 0.9.74: all on but 6 and 8
+                    Desc($"MW4 feature {n} — {mw[n]}. On/off is written to the log.", 60 - n));
                 TestMw[n].SettingChanged += (_, __) => { L.Info($"testing: MW{n:00} {(TestMw[n].Value ? "on" : "off")} — {mw[n].Split(':')[0]}"); ProgScreen.MwChanged(n); };
             }
-            foreach (var e in new ConfigEntryBase[] { TestGlitch, TestRevealTime, TestRevealRandom, TestBloomOpacity, TestBloomSize, TestWallBrightness, TestMotionSpeed, TestStagger })
+            foreach (var e in new ConfigEntryBase[] { TestShine, TestShineWidth, TestGlitch, TestRevealTime, TestRevealRandom, TestBloomOpacity, TestBloomSize, TestWallBrightness, TestMotionSpeed, TestStagger })
             {
                 var entry = e;
                 if (entry is ConfigEntry<int> ei) ei.SettingChanged += (_, __) => L.Info($"testing: {entry.Definition.Key} = {entry.BoxedValue}");
@@ -298,7 +312,7 @@ namespace LevelGate.Progression
                 ["UseGameSounds"] = "Use Game Sounds", ["CharacterEmblem"] = "Rank Emblem On Character Screen", ["TextSize"] = "Text Size (%)", ["ReduceMotion"] = "Reduce Motion",
                 ["Quality"] = "Picture Quality", ["XpAnimation"] = "Level Up Animation", ["RefreshIcons"] = "Redraw All Item Pictures",
                 ["Pattern"] = "Background Pattern", ["PatternMotion"] = "Pattern Animation Speed", ["UIDetailing"] = "UI Detailing (%)", ["HoverGlitch"] = "Hover Glitch (%)", ["RevealTime"] = "Picture Load-In Time (s)",
-                ["RevealRandom"] = "Picture Load-In Randomness (%)", ["BloomOpacity"] = "Item Bloom Opacity (%)", ["BloomSize"] = "Item Bloom Size (%)", ["LightWall"] = "Light Wall Brightness (%)", ["MotionSpeed"] = "Motion Speed (%)", ["Stagger"] = "Stagger (ms)",
+                ["RevealRandom"] = "Picture Load-In Randomness (%)", ["RevealStyle"] = "Picture Load-In Style", ["RankUpStyle"] = "Rank Up Style", ["BloomOpacity"] = "Item Bloom Opacity (%)", ["BloomSize"] = "Item Bloom Size (%)", ["LightWall"] = "Light Wall Brightness (%)", ["MotionSpeed"] = "Motion Speed (%)", ["SelectShine"] = "Selection Shine (%)", ["SelectShineWidth"] = "Selection Shine Width (%)", ["Stagger"] = "Stagger (ms)",
                 ["MW01"] = "MW 1 · Additive Glow", ["MW02"] = "MW 2 · Card Flood", ["MW03"] = "MW 3 · Level Numbers Glow", ["MW04"] = "MW 4 · XP Counter On Light Wall",
                 ["MW05"] = "MW 5 · Reactive Waveform", ["MW06"] = "MW 6 · Screen Flashes", ["MW07"] = "MW 7 · Title Glitch", ["MW08"] = "MW 8 · Row Pips",
                 ["MW09"] = "MW 9 · Locked Hologram", ["MW10"] = "MW 10 · Wave Surfaces", ["DetailAnimation"] = "Detail Animation (%)", ["PatternOpacity"] = "Background Pattern Opacity (%)",

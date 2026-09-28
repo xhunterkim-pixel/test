@@ -25,6 +25,7 @@ namespace LevelGate.Progression
             TickWave(k);
             TickWall();
             TickSplash();
+            TickRankViews();
             TickWaves();
             TickLoaders();
             TickFx();

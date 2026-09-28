@@ -38,7 +38,7 @@ namespace LevelGate.Progression
         public const float Epic = 1.2f;
 
         /// <summary>F12 > CURRENTLY TESTING > Motion Speed (1 = as designed; 2 = twice as fast).</summary>
-        public static float Speed => Mathf.Clamp((ProgressionPlugin.TestMotionSpeed?.Value ?? 100) / 100f, .25f, 4f);
+        public static float Speed => Mathf.Clamp((ProgressionPlugin.TestMotionSpeed?.Value ?? 145) / 100f, .25f, 4f);
 
         /// <summary>Reduce Motion / Performance Mode: everything lands at once.</summary>
         public static bool Still => ProgScreen.Calm;

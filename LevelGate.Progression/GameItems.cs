@@ -404,55 +404,61 @@ namespace LevelGate.Progression
         }
 
         private static readonly Dictionary<Sprite, Color> _bloomColors = new Dictionary<Sprite, Color>();
-        private static Texture2D _probe;
 
         /// <summary>
-        /// The colour an item's picture glows in: its picture shrunk to 16x16 on the GPU and read back; opaque, colourful
-        /// pixels count most (a red item blooms red), then brightened for light. Mostly grey: a neutral warm light.
-        /// Cached per picture; null when it can't be read.
+        /// The colour an item's picture glows in: its picture shrunk to 16x16 on the GPU and read back WITHOUT waiting
+        /// (AsyncGPUReadback: 0.9.71–0.9.74 read it back at once, which stalled the frame — most of the "Feature" slow
+        /// frames in the 0.9.74 log). Opaque, colourful pixels count most (a red item blooms red), then brightened for
+        /// light; mostly grey: a neutral warm light. Null until the answer is in (asked again next time), cached per picture.
         /// </summary>
         public static Color? BloomColor(Sprite sp)
         {
             if (sp == null || sp.texture == null) return null;
             if (_bloomColors.TryGetValue(sp, out var have)) return have;
-            RenderTexture rt = null, prev = RenderTexture.active;
+            if (_bloomAsked.Contains(sp)) return null; // on its way
             try
             {
                 const int n = 16;
                 var src = sp.texture; var r = sp.textureRect;
-                rt = RenderTexture.GetTemporary(n, n, 0, RenderTextureFormat.ARGB32);
+                var rt = RenderTexture.GetTemporary(n, n, 0, RenderTextureFormat.ARGB32);
                 Graphics.Blit(src, rt, new Vector2(r.width / src.width, r.height / src.height), new Vector2(r.x / src.width, r.y / src.height));
-                RenderTexture.active = rt;
-                if (_probe == null) _probe = new Texture2D(n, n, TextureFormat.RGBA32, false);
-                _probe.ReadPixels(new Rect(0, 0, n, n), 0, 0);
-                _probe.Apply(false, false);
-                float wr = 0, wg = 0, wb = 0, wsum = 0, satSum = 0, aSum = 0;
-                foreach (var c in _probe.GetPixels32())
+                _bloomAsked.Add(sp);
+                UnityEngine.Rendering.AsyncGPUReadback.Request(rt, 0, TextureFormat.RGBA32, req =>
                 {
-                    float a = c.a / 255f; if (a < .2f) continue;
-                    Color.RGBToHSV(new Color32(c.r, c.g, c.b, 255), out _, out float sat, out float val);
-                    float w = a * (.15f + sat * sat * 3f) * (.3f + val);
-                    wr += c.r / 255f * w; wg += c.g / 255f * w; wb += c.b / 255f * w; wsum += w; satSum += sat * a; aSum += a;
-                }
-                Color col;
-                if (wsum <= 0 || aSum <= 0) col = new Color(1f, .93f, .82f);
-                else
-                {
-                    var avg = new Color(wr / wsum, wg / wsum, wb / wsum);
-                    Color.RGBToHSV(avg, out float h, out float s2, out float v);
-                    float colourful = satSum / aSum; // how colourful the item is overall
-                    col = colourful < .12f ? new Color(1f, .93f, .82f) : Color.HSVToRGB(h, Mathf.Clamp01(s2 * 1.3f + .1f), Mathf.Max(v, .85f));
-                }
-                if (_bloomColors.Count > 600) _bloomColors.Clear();
-                _bloomColors[sp] = col;
-                return col;
+                    try
+                    {
+                        _bloomAsked.Remove(sp);
+                        if (req.hasError || sp == null) return;
+                        var data = req.GetData<Color32>();
+                        if (_bloomColors.Count > 600) _bloomColors.Clear();
+                        _bloomColors[sp] = ColorFrom(data);
+                    }
+                    catch (Exception e) { L.ErrorOnce("item bloom colour (read)", e); }
+                    finally { RenderTexture.ReleaseTemporary(rt); }
+                });
+                return null;
             }
             catch (Exception e) { L.ErrorOnce("item bloom colour", e); return null; }
-            finally
+        }
+
+        private static readonly HashSet<Sprite> _bloomAsked = new HashSet<Sprite>();
+
+        private static Color ColorFrom(Unity.Collections.NativeArray<Color32> px)
+        {
+            float wr = 0, wg = 0, wb = 0, wsum = 0, satSum = 0, aSum = 0;
+            for (int i = 0; i < px.Length; i++)
             {
-                RenderTexture.active = prev;
-                if (rt != null) RenderTexture.ReleaseTemporary(rt);
+                var c = px[i];
+                float a = c.a / 255f; if (a < .2f) continue;
+                Color.RGBToHSV(new Color32(c.r, c.g, c.b, 255), out _, out float sat, out float val);
+                float w = a * (.15f + sat * sat * 3f) * (.3f + val);
+                wr += c.r / 255f * w; wg += c.g / 255f * w; wb += c.b / 255f * w; wsum += w; satSum += sat * a; aSum += a;
             }
+            if (wsum <= 0 || aSum <= 0) return new Color(1f, .93f, .82f);
+            var avg = new Color(wr / wsum, wg / wsum, wb / wsum);
+            Color.RGBToHSV(avg, out float h, out float s2, out float v);
+            float colourful = satSum / aSum;
+            return colourful < .12f ? new Color(1f, .93f, .82f) : Color.HSVToRGB(h, Mathf.Clamp01(s2 * 1.3f + .1f), Mathf.Max(v, .85f));
         }
 
         private static Sprite Copy(Sprite sp)
