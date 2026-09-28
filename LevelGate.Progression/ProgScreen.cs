@@ -1640,14 +1640,9 @@ namespace LevelGate.Progression
                 nm, nm.Length > 16 ? 12.5f : 13.5f, Grey, TextAnchor.UpperRight, false, 0, true);
             Ui.SetWrap(v.Name, true);
             Refl.Set(v.Name, "lineSpacing", -8f);
-            // locked: a lock and the level it opens at, bottom-left, like the traders' loyalty-locked items
+            // locked: just a small lock, bottom-left (the level is said once, in the list's head)
             if (!reached)
-            {
-                var lk = Ui.Rect(inner, "Lock", Vector2.zero, Vector2.zero, new Vector2(S1, S1), new Vector2(S1 + 46, S1 + 16));
-                Ui.Img(lk, Ui.Hex("#0b0f11", .85f));
-                Ui.Img(Ui.Rect(lk, "Icon", new Vector2(0, .5f), new Vector2(0, .5f), new Vector2(4, -5), new Vector2(13, 5)), Ui.Hex(Red, .95f), Ui.Lock());
-                Ui.Label(Ui.Rect(lk, "Text", Vector2.zero, Vector2.one, new Vector2(15, 0), new Vector2(-3, 0)), "Text", $"LV {it.Level}", 10, Ui.Hex("#c9cfd1"), TextAnchor.MiddleCenter, true, .5f);
-            }
+                Ui.Img(Ui.Rect(inner, "Lock", Vector2.zero, Vector2.zero, new Vector2(S1 + 2, S1 + 2), new Vector2(S1 + 13, S1 + 15)), Ui.Hex(Red, .95f), Ui.Lock());
             // newly reached since you last opened the screen: a small restrained tag (top-right)
             if (reached && NewTags.Item(it.Tpl))
             {

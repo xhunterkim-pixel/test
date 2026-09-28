@@ -40,6 +40,9 @@ Versions are **MAJOR.MINOR.PATCH**:
 
 ## LevelGate Progression (BepInEx plugin, separate DLL)
 
+### 0.9.55
+- Locked reward tiles show just a small lock bottom-left (the "LV 42" text is gone; the list head already says the level).
+
 ### 0.9.54
 Tarkov's textures:
 - **Neutral grey everywhere**: the panels, borders and text lose their blue tint (only real colours stay: orange = you, red = warning, blue / green = bonus); the panels are near-black and see-through, so the background shows faintly, like the game's.
