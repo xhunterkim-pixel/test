@@ -216,7 +216,38 @@ namespace LevelGate.Progression
         private static Sprite _hatch;
 
         /// <summary>Diagonal stripes like the game's empty slots (a 16 px tile, white; tint it faint and tile it).</summary>
-        private static Sprite _chamfer, _plate, _leader, _grain;
+        private static Sprite _chamfer, _plate, _leader, _grain, _hollowTick;
+
+        /// <summary>A hollow check mark (outline only), white, 256 px, antialiased: the unlock stamp.</summary>
+        public static Sprite HollowTick()
+        {
+            if (_hollowTick != null) return _hollowTick;
+            const int n = 256;
+            var tex = new Texture2D(n, n, TextureFormat.RGBA32, true) { wrapMode = TextureWrapMode.Clamp, filterMode = FilterMode.Trilinear };
+            var px = new Color32[n * n];
+            // the check's centre line: short leg down-right, long leg up-right
+            Vector2 a = new Vector2(.16f, .52f) * n, b = new Vector2(.40f, .26f) * n, c = new Vector2(.86f, .78f) * n;
+            float half = .075f * n, edge = .022f * n; // stroke half-width, outline thickness
+            for (int y = 0; y < n; y++)
+                for (int x = 0; x < n; x++)
+                {
+                    var p = new Vector2(x + .5f, y + .5f);
+                    float d = Mathf.Min(SegDist(p, a, b), SegDist(p, b, c));
+                    float ring = Mathf.Abs(d - half);                       // distance to the shape's outline
+                    float al = Mathf.Clamp01(1 - (ring - edge) / 1.2f);     // a thin antialiased line along it
+                    px[y * n + x] = new Color32(255, 255, 255, (byte)(255 * al));
+                }
+            tex.SetPixels32(px);
+            tex.Apply(true, true);
+            _hollowTick = Sprite.Create(tex, new Rect(0, 0, n, n), new Vector2(.5f, .5f));
+            return _hollowTick;
+        }
+
+        private static float SegDist(Vector2 p, Vector2 a, Vector2 b)
+        {
+            var ab = b - a; float t = Mathf.Clamp01(Vector2.Dot(p - a, ab) / ab.sqrMagnitude);
+            return Vector2.Distance(p, a + ab * t);
+        }
 
         /// <summary>
         /// A white shape with its top-left and bottom-right corners cut at 45° (Tarkov's prestige tiles, its tabs): 9-sliced,

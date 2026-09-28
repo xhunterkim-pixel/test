@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using BepInEx;
 using BepInEx.Configuration;
@@ -25,7 +26,7 @@ namespace LevelGate.Progression
         public const string Guid = "com.kkyangg.levelgate.progression";
         public const string Name = "LevelGate Progression";
         // MAJOR.MINOR.PATCH — see CHANGELOG.md
-        public const string Version = "0.9.57";
+        public const string Version = "0.9.58";
 
         internal static ProgressionPlugin Instance;
         internal static ConfigEntry<KeyboardShortcut> OpenKey;
@@ -104,10 +105,10 @@ namespace LevelGate.Progression
             Vignette = Config.Bind(Gfx, "Vignette", 1f, Desc("How dark the screen's corners are (1 = the original, 0 = none).", 84, new AcceptableValueRange<float>(0f, 3f)));
             RedGlow = Config.Bind(Gfx, "RedGlow", 1.1f, Desc("How strong the red glow in the top-right is (1 = the original, 0 = none).", 83, new AcceptableValueRange<float>(0f, 3f)));
             Pattern = Config.Bind(Gfx, "Pattern", BackgroundPattern.Dots, Desc(
-                "The faint pattern behind the screen: Dots (the grid of dots), Streaks (vertical streaks), Contours (long wavy lines), Topo (busy topographic lines), Marble (mirrored marbling with scan lines), Pixels (an LED wall with light bands), Terrain (3D ridge lines flying over hills), Random (a different one each time you open the screen). Its strength follows Scratches.",
+                "The faint pattern behind the screen: Dots (grid of dots), Streaks (vertical streaks), Damascus 1 (busy topographic lines), Damascus 2 (big organic flowing lines), Damascus 3 (rings), Damascus 4 (mirrored lines), Marble (mirrored marbling), Pixels (LED wall with light bands), Terrain (3D ridge lines), Random (a different one each open). Its strength follows Wear And Scratches.",
                 87));
             PatternMotion = Config.Bind(Gfx, "PatternMotion", 1f, Desc(
-                "How fast Streaks / Contours / Topo slowly move (0 = still, 1 = a gentle drift). Only while the screen is open; it stops completely when you leave it.",
+                "How fast the animated patterns move (0 = still, 1 = a gentle drift). Only while the screen is open; it stops completely when you leave it.",
                 86, new AcceptableValueRange<float>(0f, 3f)));
             Pattern.SettingChanged += (_, __) => ProgScreen.PatternChanged();
             Scratches.SettingChanged += (_, __) => ProgScreen.ApplyLook();
@@ -176,6 +177,8 @@ namespace LevelGate.Progression
                 "Your level when you last opened the screen (the NEW tag shows after a level-up). Set by the plugin.", null, new ConfigurationManagerAttributes { Browsable = false }));
 
             MigrateOldSettings();
+            MigratePatternNames();
+            NameSettings();
             if (Mathf.Abs(BottomMargin.Value - 68f) < .01f) { BottomMargin.Value = 26f; } // old default: the screen now reaches down to the menu bar
 
             L.Info($"{Name} {Version} starting. Unity {Application.unityVersion}, plugins folder: {Paths.PluginPath}");
@@ -198,6 +201,56 @@ namespace LevelGate.Progression
         internal static bool Low => Quality?.Value == GraphicsQuality.Low;
         /// <summary>Graphics High: extra-sharp weapons in the centre picture.</summary>
         internal static bool High => Quality?.Value == GraphicsQuality.High;
+
+        /// <summary>
+        /// How F12 shows the settings: readable names ("Background Pattern"), clear section titles, and the ones almost nobody
+        /// needs (margins, drawing order, debug…) only with F12's "Advanced settings" ticked. The stored names don't change,
+        /// so nobody's settings are lost.
+        /// </summary>
+        private void NameSettings()
+        {
+            var names = new Dictionary<string, string>
+            {
+                ["OpenScreenKey"] = "Open Screen Key", ["MenuBarButton"] = "Menu Bar Button", ["MainMenuShortcut"] = "Main Menu Shortcut",
+                ["HideMainMenu"] = "Hide Main Menu While Open", ["BlurBackground"] = "Blur Background", ["SoundVolume"] = "Sound Volume",
+                ["UseGameSounds"] = "Use Game Sounds", ["CharacterEmblem"] = "Rank Emblem On Character Screen",
+                ["Quality"] = "Picture Quality", ["XpAnimation"] = "Level Up Animation", ["RefreshIcons"] = "Redraw All Item Pictures",
+                ["Pattern"] = "Background Pattern", ["PatternMotion"] = "Pattern Animation Speed", ["Scratches"] = "Wear And Scratches",
+                ["Vignette"] = "Dark Corners", ["RedGlow"] = "Red Glow",
+                ["Levels"] = "Levels To Play", ["PlayLevelUp"] = "Play Level Ups", ["PlayNextRank"] = "Play Next Rank", ["PlayUnlock"] = "Play Card Unlocks",
+                ["ButtonLabel"] = "Menu Button Text", ["CopyButton"] = "Copy Look Of Button", ["TopMargin"] = "Top Margin", ["BottomMargin"] = "Bottom Margin",
+                ["TileSize"] = "Tile Size", ["MaxTilesPerCategory"] = "Max Items Per Category", ["Opacity"] = "Background Opacity",
+                ["CameraTurnDegrees"] = "Camera Turn (Degrees)", ["SortOrder"] = "Drawing Order", ["InsideGameUi"] = "Inside Game UI",
+                ["CountFreeItemsAtLevel1"] = "Count Free Items At Level 1", ["VerboseLog"] = "Detailed Log", ["DumpKey"] = "Debug Dump Key",
+            };
+            var titles = new Dictionary<string, string>
+            {
+                ["1. General"] = "1. General", ["2. Graphics"] = "2. Look & Graphics", ["4. Preview"] = "3. Preview (Test The Animations)", ["3. Advanced"] = "4. Advanced",
+            };
+            var advanced = new HashSet<string> { "RefreshIcons", "UseGameSounds" };
+            foreach (var kv in Config)
+            {
+                var a = kv.Value.Description?.Tags?.OfType<ConfigurationManagerAttributes>().FirstOrDefault();
+                if (a == null) continue;
+                if (names.TryGetValue(kv.Key.Key, out var dn)) a.DispName = dn;
+                if (titles.TryGetValue(kv.Key.Section, out var cat)) a.Category = cat;
+                if (kv.Key.Section == "3. Advanced" || advanced.Contains(kv.Key.Key)) a.IsAdvanced = true;
+            }
+        }
+
+        /// <summary>0.9.57 and older: Pattern = Topo / Contours → Damascus 1 / Damascus 2 (read from the settings file once).</summary>
+        private void MigratePatternNames()
+        {
+            try
+            {
+                var text = System.IO.File.Exists(Config.ConfigFilePath) ? System.IO.File.ReadAllText(Config.ConfigFilePath) : "";
+                var m = System.Text.RegularExpressions.Regex.Match(text, @"(?m)^Pattern\s*=\s*(Topo|Contours)\s*$");
+                if (!m.Success) return;
+                Pattern.Value = m.Groups[1].Value == "Topo" ? BackgroundPattern.Damascus1 : BackgroundPattern.Damascus2;
+                L.Info($"settings: Pattern {m.Groups[1].Value} is now called {Pattern.Value}");
+            }
+            catch { }
+        }
 
         private static ConfigDescription Desc(string text, int order, AcceptableValueBase range = null)
             => new ConfigDescription(text, range, new ConfigurationManagerAttributes { Order = order });
@@ -400,9 +453,20 @@ namespace LevelGate.Progression
     {
         public bool? Browsable;
         public int? Order;
+        public string DispName;   // the name F12 shows ("Background Pattern" instead of "Pattern")
+        public string Category;   // the section title F12 shows
+        public bool? IsAdvanced;  // only with F12's "Advanced settings" ticked
     }
 
     public enum GraphicsQuality { Low, Medium, High }
 
-    public enum BackgroundPattern { Dots, Streaks, Contours, Topo, Marble, Pixels, Terrain, Random }
+    public enum BackgroundPattern
+    {
+        Dots, Streaks,
+        [System.ComponentModel.Description("Damascus 1")] Damascus1,   // was Topo
+        [System.ComponentModel.Description("Damascus 2")] Damascus2,   // was Contours (redrawn: organic, uneven spacing)
+        [System.ComponentModel.Description("Damascus 3")] Damascus3,   // rings
+        [System.ComponentModel.Description("Damascus 4")] Damascus4,   // mirrored lines
+        Marble, Pixels, Terrain, Random
+    }
 }

@@ -144,7 +144,7 @@ namespace LevelGate.Progression
                         _v[y * w + x] = Fbm(fx + wx * 2.4f, fy + wy * 2.4f, 4, 43) * 16f;
                     }
             }
-            else if (Kind == "Topo")
+            else if (Kind == "Damascus1")
             {
                 // busy terrain: many octaves, lots of closed rings and tight bends
                 for (int y = 0; y < h; y++)
@@ -155,18 +155,44 @@ namespace LevelGate.Progression
                         _v[y * w + x] = Fbm(fx + wx * 1.6f, fy + wy * 1.6f, 4, 41) * 34f;
                     }
             }
-            else
+            else if (Kind == "Damascus3")
             {
-                // flowing bands across the screen: slightly tilted lines, bent by big soft waves
-                float spacing = 12.5f * k, amp = 150f * k;
-                float ca = (float)Math.Cos(.21), sa = (float)Math.Sin(.21);
+                // rings: growth rings around a few centres (some off screen), gently warped; where two ring sets meet they
+                // fold into each other like pattern-welded steel
+                var cx = new[] { .18f * w, .84f * w, .55f * w, -.2f * w }; var cy = new[] { .3f * h, .2f * h, 1.15f * h, .8f * h };
                 for (int y = 0; y < h; y++)
                     for (int x = 0; x < w; x++)
                     {
-                        float fx = x / k * .0021f, fy = y / k * .0021f;
-                        float warp = (Fbm(fx, fy, 3, 5) - .5f) * 2f * amp + (Fbm(fx * 3.1f, fy * 3.1f, 2, 13) - .5f) * .35f * amp;
-                        float across = y * ca + x * sa;
-                        _v[y * w + x] = (across + warp) / spacing + 1000f;
+                        float fx = x / k * .004f, fy = y / k * .004f;
+                        float wx = (Fbm(fx, fy, 3, 71) - .5f) * 90f * k, wy = (Fbm(fx + 4.1f, fy, 3, 73) - .5f) * 90f * k;
+                        float best = float.MaxValue;
+                        for (int c = 0; c < cx.Length; c++) { float dx = x + wx - cx[c], dy = y + wy - cy[c]; best = Math.Min(best, (float)Math.Sqrt(dx * dx + dy * dy)); }
+                        _v[y * w + x] = best / (15f * k);
+                    }
+            }
+            else if (Kind == "Damascus4")
+            {
+                // mirrored lines: the marbling folded down the middle of the screen, drawn as lines only (chevrons in the centre)
+                for (int y = 0; y < h; y++)
+                    for (int x = 0; x < w; x++)
+                    {
+                        float xm = Math.Abs(x - w * .5f);
+                        float fx = xm / k * .0036f, fy = y / k * .0036f;
+                        float wx = Fbm(fx * .8f + 2.3f, fy * .8f, 3, 81) - .5f, wy = Fbm(fx * .8f, fy * .8f + 6.7f, 3, 87) - .5f;
+                        _v[y * w + x] = Fbm(fx + wx * 2.2f, fy + wy * 2.2f, 3, 83) * 26f;
+                    }
+            }
+            else
+            {
+                // Damascus 2: big organic lines flowing across the screen; the warp squeezes them together in places and
+                // spreads them apart in others (uneven spacing, like forged steel), drawn thicker
+                for (int y = 0; y < h; y++)
+                    for (int x = 0; x < w; x++)
+                    {
+                        float fx = x / k * .0017f, fy = y / k * .0017f;
+                        // isolines of a smooth, strongly warped field: long meanders, U-bends, lines crowding and opening up
+                        float wx = (Fbm(fx * .7f + 3.3f, fy * .7f, 2, 91) - .5f) * 2.6f, wy = (Fbm(fx * .7f, fy * .7f + 8.8f, 2, 97) - .5f) * 2.6f;
+                        _v[y * w + x] = Fbm(fx + wx, fy + wy + fx * .35f, 2, 5) * 20f + fy * 1.5f;
                     }
             }
             for (int y = 0; y < h; y++)
@@ -204,8 +230,8 @@ namespace LevelGate.Progression
             if (Kind == "Pixels") { RenderPixels(t, rgba); return; }
             if (Kind == "Terrain") { RenderTerrain(t, rgba); return; }
             if (Kind == "Marble") { RenderMarble(t, rgba); return; }
-            bool topo = Kind == "Topo";
-            const float half = .55f; // half the line width, px
+            bool topo = Kind == "Damascus1";
+            float half = Kind == "Damascus2" ? 2.3f : .55f; // half the line width, px (Damascus 2's lines are bold)
             t %= 5f; // lines repeat every 1, index lines every 5: keeps the numbers small
             if (t < 0) t += 5f;
             var v = _v; var inv = _inv;

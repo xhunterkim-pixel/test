@@ -41,9 +41,15 @@ namespace LevelGate.Progression
             }
             if (_screen == null)
             {
+                // by its path (cheap), and only while the game's character screen is up — 0.9.57 searched every object in the
+                // game every 2 s until you first opened it (FindObjectOfType): 60–90 ms frames all over the log
                 if (Time.unscaledTime < _findAt) return;
-                _findAt = Time.unscaledTime + 2f; // looking for it costs a little: every 2 s until the screen has been opened once
-                _screen = UnityEngine.Object.FindObjectOfType(_type) as Component;
+                _findAt = Time.unscaledTime + 1.5f;
+                var inv = GameObject.Find("Common UI/Common UI/InventoryScreen");
+                if (inv == null) return;
+                var overall = inv.transform.Find("Overall Panel");
+                _screen = overall != null ? overall.GetComponent(_type) : null;
+                if (_screen == null) { _screen = inv.GetComponentInChildren(_type, true); }
                 if (_screen == null) return;
                 L.Info($"character emblem: Overall screen at {MenuHook.Path(_screen.transform)}");
             }
@@ -80,17 +86,28 @@ namespace LevelGate.Progression
                     return false;
                 }
                 var text = (RectTransform)best.transform;
-                float w = Refl.Get(best, "preferredWidth") is float pw ? pw : bestSize * .6f * want.Length;
-                float size2 = Mathf.Round(bestSize * 1.25f);
-                // right of the number: from the text's left edge + its width + a gap
-                _root = Ui.Rect(text, "LevelGateEmblem", new Vector2(0, .5f), new Vector2(0, .5f), Vector2.zero, Vector2.zero);
+                float size2 = 76;
+                // under the faction logo (USEC / BEAR) in the left column, in its own spacing; else under the level number
+                RectTransform logo = null;
+                var panel = text.parent != null ? text.parent.parent : null; // …/CharacterPanel
+                if (panel != null)
+                    foreach (var img in panel.GetComponentsInChildren<Image>(true))
+                    {
+                        var sn = img.sprite != null ? img.sprite.name.ToLowerInvariant() : "";
+                        var gn = img.gameObject.name.ToLowerInvariant();
+                        if (sn.Contains("usec") || sn.Contains("bear") || gn.Contains("side") || gn.Contains("faction") || sn.Contains("side"))
+                        { logo = (RectTransform)img.transform; break; }
+                    }
+                var anchor = logo ?? text;
+                _root = Ui.Rect(anchor, "LevelGateEmblem", new Vector2(.5f, 0), new Vector2(.5f, 0), Vector2.zero, Vector2.zero);
                 _root.sizeDelta = new Vector2(size2, size2);
-                _root.pivot = new Vector2(0, .5f);
-                _root.anchoredPosition = new Vector2(w + 14, 0);
+                _root.pivot = new Vector2(.5f, 1);
+                _root.anchoredPosition = new Vector2(0, -24); // the same gap the game leaves between its own blocks
                 _img = Ui.Img(_root, Color.white);
                 _img.preserveAspect = true; _img.raycastTarget = false;
-                _rank = Ui.Label(Ui.Rect(_root, "Rank", new Vector2(0, 0), new Vector2(0, 0), new Vector2(-10, -18), new Vector2(size2 + 60, -2)), "Text", "", 12, Ui.Hex("#b9bdbf"), TextAnchor.MiddleLeft, false, 2);
-                L.Info($"character emblem: added right of the level number ({MenuHook.Path(text)}, {bestSize:0} px text, emblem {size2:0} px)");
+                _rank = Ui.Label(Ui.Rect(_root, "Rank", new Vector2(.5f, 0), new Vector2(.5f, 0), new Vector2(-90, -24), new Vector2(90, -6)), "Text", "", 12, Ui.Hex("#b9bdbf"), TextAnchor.MiddleCenter, false, 2);
+                L.Info($"character emblem: placed under {(logo != null ? "the faction logo " + MenuHook.Path(logo) : "the level number (no faction logo found)")}");
+                L.Debug($"character emblem: level number at {MenuHook.Path(text)} ({bestSize:0} px text)");
                 return true;
             }
             catch (Exception e) { _gaveUp = true; L.Info("character emblem: " + e.GetBaseException().Message); return false; }

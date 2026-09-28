@@ -40,6 +40,16 @@ Versions are **MAJOR.MINOR.PATCH**:
 
 ## LevelGate Progression (BepInEx plugin, separate DLL)
 
+### 0.9.58
+- **Performance regression fixed**: 0.9.57's character-screen emblem searched every object in the game every 2 s until you first opened the Character screen (60–90 ms frames, most of that log's 92 slow frames). It now looks the screen up by its path, only while the Character screen is up.
+- **Character > Overall emblem** sits under the USEC / BEAR logo (in the column's own spacing) with the rank name under it, instead of next to the ✕.
+- **Unlock check mark**: hollow and white, drawn at high resolution, centred on the card's pictures (not the card).
+- **HOME / BACK TO LEVEL** also shows when your own level's card has been dragged out of view (even while it's the selected level) and brings its card back.
+- **F12 menu tidied**: readable names ("Background Pattern", "Wear And Scratches", "Rank Emblem On Character Screen"…), clearer sections ("2. Look & Graphics", "3. Preview (Test The Animations)"), and the settings almost nobody needs (margins, drawing order, button copy, debug, game sounds, redraw pictures) only with F12's "Advanced settings" ticked. Stored settings are kept.
+- **Patterns**: Topo is now **Damascus 1**, Contours is **Damascus 2** (redrawn: bold organic lines that crowd and open up, like forged steel), plus **Damascus 3** (growth rings folding into each other) and **Damascus 4** (mirrored lines); all animated. A saved Topo / Contours carries over.
+- **Rigs / backpacks show CONTAINER SIZE** again (from the game's own inspect row when the grids can't be counted: the JayPC's 15 was missing).
+- **Penalties keep their decimals** ("-0.5%" was rounded to "-1%").
+
 ### 0.9.57
 Performance (from the 0.9.56 log):
 - Pictures drawn once are kept for the visit: dragging the row back and forth redrew the AS VAL's card picture six times in 3 s (70–84 ms each, 6 of 21 slow frames).

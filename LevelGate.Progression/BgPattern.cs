@@ -95,7 +95,7 @@ namespace LevelGate.Progression
         }
 
         /// <summary>How fast the pattern moves at PatternMotion 1: line spacings per second (lines), or time for the streaks.</summary>
-        private static float Speed(string kind) => kind == "Streaks" ? 1f : kind == "Topo" ? .06f : kind == "Marble" ? .05f
+        private static float Speed(string kind) => kind == "Streaks" ? 1f : kind == "Damascus1" ? .06f : kind == "Damascus3" ? .05f : kind == "Damascus4" ? .05f : kind == "Marble" ? .05f
             : kind == "Pixels" ? .07f : kind == "Terrain" ? .25f : .08f;
 
         private static void Start(PatternCore core, float t)

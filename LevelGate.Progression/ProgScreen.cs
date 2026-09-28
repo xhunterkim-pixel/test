@@ -761,7 +761,8 @@ namespace LevelGate.Progression
                 if (pat == BackgroundPattern.Dots) { BgPattern.Use(_dotGrid, null); _dotGrid.sprite = Ui.DotGrid(); _dotGrid.type = Image.Type.Tiled; _dotGrid.enabled = true; }
                 else BgPattern.Use(_dotGrid, pat.ToString()); // worked out off the main thread; shows once ready, moves while open
                 float basis = pat == BackgroundPattern.Dots || pat == BackgroundPattern.Streaks ? .035f
-                    : pat == BackgroundPattern.Marble ? .03f : pat == BackgroundPattern.Pixels ? .04f : pat == BackgroundPattern.Terrain ? .055f : .045f;
+                    : pat == BackgroundPattern.Marble ? .03f : pat == BackgroundPattern.Pixels ? .04f : pat == BackgroundPattern.Terrain ? .055f
+                    : pat == BackgroundPattern.Damascus2 ? .04f : .045f;
                 _dotGrid.color = new Color(1, 1, 1, Mathf.Clamp01(basis * sc));
             }
             if (_vignette != null) _vignette.color = new Color(0, 0, 0, Mathf.Clamp01(.14f * vg));
@@ -1097,7 +1098,9 @@ namespace LevelGate.Progression
                 int p = ProgData.PlayerLevel();
                 if (p <= 0 || !_homeAway) return;
                 Sounds.Click();
-                ShowLevel(Mathf.Min(p, ProgData.MaxLevel));
+                int mine = Mathf.Min(p, ProgData.MaxLevel);
+                if (!InWindow(mine)) { int pg = (mine - 1) / PerPage; ShowPage(pg, pg >= _page ? 1 : -1, mine); } // bring its card back into the row
+                ShowLevel(mine);
             });
             HoverHook.Add(rt, on => { _homeHover = on; PaintHome(); if (on && _homeAway) Sounds.Play("ButtonOver"); });
             _homeBtn = rt.gameObject;
@@ -1112,7 +1115,7 @@ namespace LevelGate.Progression
             if (_homeBtn == null) return;
             int player = _xpCardLevel > 0 ? _xpCardLevel : ProgData.PlayerLevel();
             int mine = Mathf.Min(player, ProgData.MaxLevel);
-            _homeAway = player > 0 && _level != mine;
+            _homeAway = player > 0 && (_level != mine || !InWindow(mine)); // also when your card is dragged out of view
             if (_homeBtn.activeSelf != _homeAway) _homeBtn.SetActive(_homeAway);
             if (!_homeAway) return;
             string ht = $"BACK TO LEVEL {mine}";
@@ -2882,7 +2885,7 @@ namespace LevelGate.Progression
                     float st = Mathf.Clamp01(t / .18f), se = 1 - Mathf.Pow(1 - st, 3);
                     _stamp.rectTransform.localScale = Vector3.one * Mathf.Lerp(1.3f, 1f, se);
                     float sa = t < .18f ? se : Mathf.Clamp01(1 - (t - .7f) / .6f);
-                    _stamp.color = new Color(.95f, .82f, .45f, .95f * sa); // warm gold, like CoD's
+                    _stamp.color = new Color(1f, 1f, 1f, .95f * sa); // hollow white
                     if (t > 1.3f) { _stamp.enabled = false; }
                 }
                 // and the level number above it pulses
@@ -2981,7 +2984,8 @@ namespace LevelGate.Progression
                 _cardLock = Ui.Img(Ui.Rect(inner, "Lock", new Vector2(0, 1), new Vector2(0, 1), new Vector2(Pad + 6, -Pad - 20), new Vector2(Pad + 18, -Pad - 6)), Ui.Hex("#c9cccd", .9f), Ui.Lock());
                 _cardLock.raycastTarget = false; _cardLock.enabled = false;
                 // unlocked (XP animation): a big check stamps onto the card and settles
-                _stamp = Ui.Img(Ui.Box(inner, "Stamp", new Vector2(.5f, .55f), Vector2.zero, new Vector2(84, 84)), new Color(1, 1, 1, 0), Ui.Tick());
+                // centred on the pictures as a group (their area), not the card: the three pictures aren't centred on the card
+                _stamp = Ui.Img(Ui.Box(pics, "Stamp", new Vector2(.5f, .5f), Vector2.zero, new Vector2(96, 96)), new Color(1, 1, 1, 0), Ui.HollowTick());
                 _stamp.raycastTarget = false; _stamp.enabled = false;
                 // your level: one thin orange line along the top (orange only ever means "you")
                 _cur = Ui.Img(Ui.Rect(inner, "Current", new Vector2(0, 1), Vector2.one, new Vector2(10, -3), Vector2.zero), Ui.Hex(Orange));
