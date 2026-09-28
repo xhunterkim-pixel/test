@@ -1,5 +1,12 @@
 # Modern Editor changelog
 
+## 2.0.4 (editor only)
+- Right-click copying:
+  - Offers: Copy Item Name, Copy Short Name, Copy Item ID.
+  - Quests: Copy Quest Name, Copy Its Item Name, Copy Quest ID.
+  - Level Limits: Copy Item Name, Copy Short Name, Copy Item ID.
+  - With several rows picked, each one goes on its own line.
+
 ## 2.0.3
 - Quests without a picture use the picture of the item they unlock or give (the first reward or barter item):
   - It shows in the editor right away.

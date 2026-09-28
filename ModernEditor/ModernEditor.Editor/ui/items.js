@@ -662,7 +662,7 @@ const ACT = {
     S.sel = id; S.picked = new Set();
     renderAll(); scrollToRow(id);
   },
-  copyId(id) { navigator.clipboard?.writeText(id).then(() => toast('Id copied'), () => toast(id)); },
+  copyId(id) { copyText(id, 'id'); },
   clearSearch() { S.search = ''; $('#search').value = ''; S.limit = 300; renderHeader(); renderPage(false); },
   undo() { undo(false); },
   redo() { undo(true); },
@@ -765,6 +765,9 @@ function contextMenu(x, y, items) {
   setTimeout(() => document.addEventListener('mousedown', closePopover.fn), 0);
 }
 const CTX = {
+  copyName() { copyText([...new Set(ctxIds().map(id => itemOf(id)?.n).filter(Boolean))].join('\n'), 'item name'); },
+  copyShort() { copyText([...new Set(ctxIds().map(id => itemOf(id)?.s || itemOf(id)?.n).filter(Boolean))].join('\n'), 'short name'); },
+  copyIds() { copyText(ctxIds().join('\n'), 'item id'); },
   move(key) { moveCategory(ctxIds(), key); },
   moveBack() { moveCategory(ctxIds(), null); },
   setLevel() { ACT.bulkSet(); },
@@ -801,6 +804,10 @@ document.addEventListener('contextmenu', e => {
     ...(nOff ? [{ text: `Switch Limit On${nOff > 1 ? ` (${nOff})` : ''}`, act: 'on' }] : []),
     ...(nOn ? [{ text: `Remove Limit${nOn > 1 ? ` (${nOn})` : ''}`, act: 'remove' }] : []),
     { text: `⚡ Make Barters / Quests${ctxTargets.length > 1 ? ` (${ctxTargets.length})` : ''}…`, act: 'batch' },
+    { sep: true },
+    { text: ctxTargets.length > 1 ? 'Copy Item Names' : 'Copy Item Name', act: 'copyName' },
+    { text: 'Copy Short Name', act: 'copyShort' },
+    { text: 'Copy Item ID', act: 'copyIds' },
     { sep: true },
     { title: `Move ${ctxTargets.length > 1 ? ctxTargets.length + ' items' : 'to Category'} (this editor only)` },
     ...GROUPS.map(([k, n]) => ({ text: n, act: 'move', arg: k, on: cur === k })),

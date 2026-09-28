@@ -2650,6 +2650,32 @@ async function deletedTradersBox() {
   });
 }
 
+/** Copies text (several lines for several rows); falls back to a hidden text box when the clipboard API says no. */
+function copyText(text, what) {
+  const done = () => toast(`Copied ${what}`);
+  const old = () => {
+    const ta = document.createElement('textarea'); ta.value = text; ta.style.cssText = 'position:fixed;opacity:0';
+    document.body.appendChild(ta); ta.select();
+    try { document.execCommand('copy'); done(); } catch { toast(text); }
+    ta.remove();
+  };
+  if (navigator.clipboard?.writeText) navigator.clipboard.writeText(text).then(done, old); else old();
+}
+/** Right-click menu lines: copy the item's name / short name / id (offers), the quest's name and its item (quests). */
+function copyItems(kind, list) {
+  const many = list.length > 1, lines = f => [...new Set(list.map(f).filter(Boolean))].join('\n');
+  if (kind === 'offer') return [
+    { text: many ? 'Copy Item Names' : 'Copy Item Name', run: () => copyText(lines(o => itemName(o.itemTpl)), many ? 'item names' : 'item name') },
+    { text: 'Copy Short Name', run: () => copyText(lines(o => item(o.itemTpl)?.s || itemName(o.itemTpl)), 'short name') },
+    { text: 'Copy Item ID', run: () => copyText(lines(o => o.itemTpl), 'item id') },
+  ];
+  return [
+    { text: many ? 'Copy Quest Names' : 'Copy Quest Name', run: () => copyText(lines(q => q.name), many ? 'quest names' : 'quest name') },
+    { text: 'Copy Its Item Name', disabled: !list.some(q => validId(questItem(S.t, q))), run: () => copyText(lines(q => validId(questItem(S.t, q)) ? itemName(questItem(S.t, q)) : ''), 'item name') },
+    { text: 'Copy Quest ID', run: () => copyText(lines(q => q.id), 'quest id') },
+  ];
+}
+
 document.addEventListener('contextmenu', e => {
   if (lgActive() && !inShell(e.target)) return; // items.js has its own menus there
   if (/INPUT|TEXTAREA/.test(e.target.tagName)) return; // keep copy / paste
@@ -2682,6 +2708,8 @@ document.addEventListener('contextmenu', e => {
       { text: 'Move Down', disabled: n > 1, run: () => (kind === 'offer' ? ACT.moveOffer(1) : ACT.moveQuest(1)) },
       { text: picked(S[kind]).every(x => x.enabled) ? `Switch Off` : 'Switch On', run: () => { const l = picked(S[kind]); setEnabled(kind, l, !l.every(x => x.enabled)); changed(false); } },
       { text: 'Select All', key: 'Ctrl+A', run: () => pickMany(S.shownRows || []) },
+      '-',
+      ...copyItems(kind, picked(S[kind])),
       '-',
       { text: `Remove ${noun}`, key: 'Del', danger: true, run: () => (kind === 'offer' ? ACT.removeOffer() : ACT.removeQuest()) },
     ]);
