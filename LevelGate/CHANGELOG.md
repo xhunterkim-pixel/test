@@ -40,6 +40,9 @@ Versions are **MAJOR.MINOR.PATCH**:
 
 ## LevelGate Progression (BepInEx plugin, separate DLL)
 
+### 0.9.73
+- **MW panel edges**: the three main panels' flat 3 px border is now a thin, lighter 1 px line with a soft glow fading inward from it (over the panel's background, under its content), so each panel stands apart from what's around it. The glow follows UI Detailing.
+
 ### 0.9.72
 - **MW selection border**: the picked tile and card get a border that draws in smoothly from a little outside — a steady line on top, left and right, the bottom broken into dashes and stray dots that crawl while it's picked; it fades out when something else is picked. Unpicked borders stay low and faded.
 - **The picked item's section lights up**: its header (strong) and box (faint) light up from the left in the theme colour (the viewed rank's), fading in and out as the pick moves between sections.

@@ -320,7 +320,8 @@ namespace LevelGate.Progression
         }
 
         /// <summary>A panel like the battle pass ones: a 1 px frame around a dark see-through fill.</summary>
-        private const float BorderWidth = 3;
+        private const float BorderWidth = 1; // MW: a thin line with a soft glow fading inward (0.9.72 and older: a flat 3 px border)
+        private static readonly Color PanelLine = Ui.Hex("#7d878a", .75f);
         private static bool Perf => ProgressionPlugin.Low;
         private const string Orange = "#e0562f";
 
@@ -342,7 +343,7 @@ namespace LevelGate.Progression
         private static RectTransform Panel(RectTransform parent, string name, Vector2 aMin, Vector2 aMax, Vector2 oMin, Vector2 oMax)
         {
             var frame = Ui.Rect(parent, name, aMin, aMax, oMin, oMax);
-            _panelFrames.Add(Ui.Img(frame, Border));
+            _panelFrames.Add(Ui.Img(frame, PanelLine));
             Ui.CornerMarks(frame, Ui.Hex("#6f7375", .55f)); // CoD-style registration marks at the corners
             // light catches the border that faces the middle of the screen: the left panel's right edge, the right panel's
             // left edge, the centre panel's top edge (a glossy line fading out at both ends)
@@ -355,6 +356,9 @@ namespace LevelGate.Progression
             el.raycastTarget = false; el.type = Image.Type.Simple; el.preserveAspect = false;
             var inner = Ui.Fill(frame, "In", BorderWidth);
             Ui.Img(inner, PanelBg);
+            // the glow fading inward from the thin line, over the background and under the content
+            var ig = Ui.Detail(Ui.Img(Ui.Fill(inner, "InnerGlow"), new Color(.82f, .88f, .9f, .11f), Ui.InnerGlow()), .11f);
+            ig.type = Image.Type.Sliced; ig.raycastTarget = false;
             // 70 / 30: the panel bodies stay calm; the detail sits in the focal 30% (the list's head and tabs, the picked /
             // your card, the picked tile, the XP header). The details panel only keeps a soft glass light (low detail).
             if (mid > .6f)
@@ -2713,7 +2717,7 @@ namespace LevelGate.Progression
             float glow = ProgressionPlugin.RedGlow.Value; // F12 > Graphics > RedGlow
             if (_bloom.Count > 0 && _bloom[0] != null) _bloom[0].color = new Color(.85f, .14f, .08f, Mathf.Clamp01(Mathf.Lerp(.07f, .1f, m) * glow));
             if (_bloom.Count > 1 && _bloom[1] != null) _bloom[1].color = new Color(.95f, .2f, .1f, Mathf.Clamp01(Mathf.Lerp(.05f, .08f, m) * glow));
-            var border = Border; // the panel borders stay as they are (only the glow turns red)
+            var border = PanelLine; // the panel borders stay as they are (only the glow turns red)
             foreach (var f in _panelFrames) if (f != null) f.color = border;
         }
 

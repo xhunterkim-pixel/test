@@ -454,6 +454,30 @@ namespace LevelGate.Progression
             return sp;
         }
 
+        private static Sprite _innerGlow;
+
+        /// <summary>
+        /// MW's panel edge: a soft glow fading inward from all four edges (strongest right at the edge, gone ~20 px in),
+        /// drawn over a panel's background just inside its thin 1 px line. 9-sliced; white (tint it).
+        /// </summary>
+        public static Sprite InnerGlow()
+        {
+            if (_innerGlow != null) return _innerGlow;
+            const int n = 64, b = 26;
+            var tex = new Texture2D(n, n, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Clamp, filterMode = FilterMode.Bilinear, name = "LevelGate innerglow" };
+            var px = new Color32[n * n];
+            for (int y = 0; y < n; y++)
+                for (int x = 0; x < n; x++)
+                {
+                    float d = Mathf.Min(Mathf.Min(x, n - 1 - x), Mathf.Min(y, n - 1 - y)) + .5f;
+                    float a = Mathf.Exp(-d / 5.5f);
+                    px[y * n + x] = new Color32(255, 255, 255, (byte)(255 * Mathf.Clamp01(a)));
+                }
+            tex.SetPixels32(px);
+            tex.Apply(false, true);
+            return _innerGlow = Sprite.Create(tex, new Rect(0, 0, n, n), new Vector2(.5f, .5f), 100, 0, SpriteMeshType.FullRect, new Vector4(b, b, b, b));
+        }
+
         private static readonly Sprite[] _dashFrames = new Sprite[3];
 
         /// <summary>
