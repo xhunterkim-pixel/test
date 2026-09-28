@@ -40,6 +40,16 @@ Versions are **MAJOR.MINOR.PATCH**:
 
 ## LevelGate Progression (BepInEx plugin, separate DLL)
 
+### 0.9.70
+- **Fixed: the XP animation stopped at a new rank until clicked**, the emblem sound got cut off and the splash's text stayed on screen: the new-rank splash crashed while being built (two images on one object), every frame, so the rank beat never ended; the click was a skip, which stops the sounds. Fixed, and the splash can no longer hold the animation up whatever happens.
+- **Splash, MW tactical instead of a spotlight**: the rays are gone; viewfinder brackets snap in around the new emblem at the peak (RANK_UP // PROMOTION), a denser curtain of thin light lines, the rank's name big and vertical down the right side, a striped band under NEW RANK, a quieter glow.
+- **The light wall leaves a real trail**: specks of light shed at the wall as it moves stay where they were left, drift and fade out behind it (mostly along the rail, some up the wall), instead of a dotted patch sliding with the line. The wall, its glow, the wash and the waveform flare are brighter.
+- **Card unlocks without the check mark**: MW4's way — the card flashes white-hot and its face lights up in a dot matrix that settles back (the check read badly on "no new items" cards).
+- **Glow frames follow the cards' cut corners** (top-left, bottom-right) instead of sticking out square.
+- **Loading squares**: three small squares blink in turn wherever a picture is still being drawn (list tiles, card pictures, the big picture).
+- **Hover / selected / active each animate differently**: hover — a burst of horizontal glitch streaks across the tile or card; selected — one soft shine sweeps across it; active (your level's card) — its orange bloom breathes slowly.
+- **The big picture's load-in** (MW's weapon reveal): a newly picked item appears from the top down, the part still coming covered in lines of light in its rank's colour hanging from the edge — uneven, the longest ones breaking up — only on the item's own shape.
+
 ### 0.9.69 — animation and detail overhaul (MW4 level track)
 - **New-rank splash**: when the XP animation reaches a new rank, the screen goes to MW4's level-up moment, timed to the emblem sound. Build-up: the screen darkens, light streaks and specks rise, the old emblem gathers. Peak: a flash, the new emblem pops in with slowly turning rays, the glow turns the rank's colour. Hold: a perspective grid floor, NEW RANK over a scanline band with the rank's name and level, a LOG_ANALYSIS column top-left. Then it fades out. A skip hides it at once; Reduce Motion / Performance Mode show a still version.
 - **Light wall on the level track**: while the XP animation moves your place along the rail, a tall wall of light rides the front across the cards, everything already reached is washed in its light, and a pool of dotted light sits where it meets the rail.

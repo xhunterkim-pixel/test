@@ -70,6 +70,7 @@ namespace LevelGate.Progression
         private static RectTransform _content;
         // centre + right: the featured item
         private static Image _featPic, _featLock, _featLight;
+        private static int _featLevel;
         private static Component _featShort, _featType, _featName, _featReq, _featReqValue, _featStatus;
         private static Image _featCheck;
         private static Component _featDesc;
@@ -688,7 +689,9 @@ namespace LevelGate.Progression
             _featPic = Ui.Img(Ui.Fill(picFace, "Pic", 40), Color.white);
             _featPic.preserveAspect = true;
             _featPic.enabled = false;
+            BuildReveal(); // MW's load-in (ProgScreen.Fx)
             _featShort = Ui.Label(Ui.Fill(picFace, "Short", 40), "Text", "", THero, Dim, TextAnchor.MiddleCenter, false, 0, true);
+            AddLoader(_featShort, -34, 5);
             Ui.EdgeFade(picFace, .14f, .55f);
             Ui.Grit(picFace, 2, .017f);
             BuildHeroDetail(picFace);
@@ -1931,7 +1934,7 @@ namespace LevelGate.Progression
             public RectTransform Rt;
             public Image Frame, Face, Top, Pic, Dither, Sheen, Gloss;
             public Component Name;
-            public bool Locked, Hover;
+            public bool Locked, Hover, WasSel;
             public GameObject NewTag;
         }
 
@@ -1994,6 +1997,7 @@ namespace LevelGate.Progression
             var thumb = Ui.Rect(inner, "Thumb", Vector2.zero, Vector2.one, new Vector2(0, 4), new Vector2(0, -TileTop));
             Ui.Detail(Ui.Img(Ui.Fill(inner, "Light"), new Color(1, 1, 1, .045f), Ui.Radial()), .045f);
             var placeholder = Ui.Label(Ui.Fill(thumb, "Placeholder", S2), "Text", "", TCaps, Dim, TextAnchor.MiddleCenter, false, 0, true);
+            AddLoader(placeholder, -2);
             v.Pic = Ui.Img(Ui.Fill(thumb, "Icon", 0), Color.white);
             var prt = v.Pic.rectTransform;
             // long guns take the full width (they came out tiny at 80% of a box)
@@ -2040,7 +2044,7 @@ namespace LevelGate.Progression
             {
                 if (v.Hover == on) return;
                 v.Hover = on;
-                if (on) Sounds.Play("ButtonOver");
+                if (on) { Sounds.Play("ButtonOver"); PlayGlitch(v.Face.rectTransform); }
                 ApplyTile(v);
                 ShowTip(on ? v : null);
             });
@@ -2056,6 +2060,8 @@ namespace LevelGate.Progression
         {
             if (v?.Frame == null) return;
             bool sel = v.Item.Tpl == _featTpl;
+            if (sel && !v.WasSel && !instant) PlayShine(v.Face.rectTransform); // picked: one soft shine across it
+            v.WasSel = sel;
             FadeTo(v.Frame, sel ? Select : v.Hover ? HoverEdge : Border, instant);
             FadeTo(v.Face, sel ? FaceSelect : v.Hover ? FaceHover : Face, instant);
             v.Top.enabled = sel;
@@ -2468,6 +2474,7 @@ namespace LevelGate.Progression
         private static void Feature(ProgItem it)
         {
             L.Step("Feature " + it?.Tpl);
+            EndReveal(); _revealWanted = it != null; _featLevel = it?.Level ?? 0; // a new pick plays the load-in once its picture shows
             // the previous item's big picture may still be on its way: keep collecting it (else it came back blurry later)
             if (_featIcon != null && _featTpl != null) _prefetching.Add((_featIcon, _featTpl));
             _featIcon = null;
@@ -2591,7 +2598,7 @@ namespace LevelGate.Progression
             _featScale = featScale;
             var kept = GameItems.CopyOf(it.Tpl, featScale);
             FitFeat(null);
-            if (kept != null) { _featIcon = null; _featPic.sprite = kept; _featPic.enabled = true; _featShort.gameObject.SetActive(false); FitFeat(kept); LogSharpness(kept, "kept"); }
+            if (kept != null) { _featIcon = null; _featPic.sprite = kept; _featPic.enabled = true; _featShort.gameObject.SetActive(false); FitFeat(kept); LogSharpness(kept, "kept"); PictureShown(); }
             else if (!_loading) { _featWantTpl = it.Tpl; _featWantScale = featScale; _featWantAt = Time.unscaledTime + (Browsing ? .3f : .12f); } // drawn a moment later (it cost up to 136 ms right in the click)
             MarkSelectedTile();
         }
@@ -2916,6 +2923,7 @@ namespace LevelGate.Progression
                 {
                     if (_featPic.sprite != sp) _featPic.sprite = sp; // stand-in first, the full render when it arrives
                     _featPic.enabled = true; _featShort.gameObject.SetActive(false);
+                    PictureShown();
                     if (done)
                     {
                         _featIcon = null;
@@ -3057,6 +3065,8 @@ namespace LevelGate.Progression
             private readonly GameObject[] _stack = new GameObject[2];
             private readonly Component _activeTag;
             private readonly GameObject _activeMark;
+            private readonly Image _unlockDots;
+            private bool _wasSel, _isCurrent;
             private readonly GameObject _selLights;
             private readonly Image _selBloom, _selDotLight;
             private float _lightSeed = UnityEngine.Random.value * 10;
@@ -3064,6 +3074,11 @@ namespace LevelGate.Progression
             /// <summary>Every frame (only the picked card has its lights on): they drift slowly, F12 Detail Animation.</summary>
             public void TickLight(float phase, float amount)
             {
+                // active (your level): its bloom breathes slowly
+                if (_isCurrent && _bloomFrame != null && _bloomFrame.enabled)
+                {
+                    var bc = _bloomFrame.color; bc.a = .5f * Ui.DetailK * (.7f + .3f * Mathf.Sin(phase * 1.6f) * amount + .3f * (1 - amount)); _bloomFrame.color = bc;
+                }
                 if (_selLights == null || !_selLights.activeSelf) return;
                 float t = phase + _lightSeed;
                 _selBloom.rectTransform.anchoredPosition = new Vector2(60 * amount * Mathf.Sin(t * .31f), 14 * amount * Mathf.Sin(t * .23f + 1));
@@ -3144,7 +3159,9 @@ namespace LevelGate.Progression
                 if (_flash == null) return;
                 _flashAt = Time.unscaledTime;
                 _flash.enabled = true;
-                if (_stamp != null) _stamp.enabled = true;
+                // MW4's unlock: no check stamp (0.9.69's read badly on "no new items" cards) — the card flashes white-hot and
+                // its face lights up in a dot matrix that settles back
+                if (_unlockDots != null) _unlockDots.enabled = true;
             }
 
             public void TickFlash()
@@ -3154,7 +3171,13 @@ namespace LevelGate.Progression
                 float t = Time.unscaledTime - _flashAt;
                 // unlocked: the card lifts to a soft white (0.12 s, eased) and settles back to its unlocked look over 0.9 s
                 float a = t < .12f ? 1 - Mathf.Pow(1 - t / .12f, 2) : Mathf.Pow(Mathf.Clamp01(1 - (t - .12f) / .9f), 2.2f);
-                _flash.color = new Color(1f, 1f, 1f, .24f * a);
+                _flash.color = new Color(1f, .98f, .92f, .5f * a);
+                if (_unlockDots != null)
+                {
+                    float da = t < .1f ? t / .1f : Mathf.Pow(Mathf.Clamp01(1 - (t - .1f) / 1.2f), 1.6f);
+                    _unlockDots.color = new Color(1f, .93f, .78f, .5f * da);
+                    if (t > 1.3f) _unlockDots.enabled = false;
+                }
                 // and a gentle lift: up to 102% and back in 0.35 s
                 float sc = Calm ? 1f : 1 + .02f * Mathf.Sin(Mathf.Clamp01(t / .35f) * Mathf.PI);
                 _body.localScale = new Vector3(sc, sc, 1);
@@ -3230,6 +3253,7 @@ namespace LevelGate.Progression
                 // your level: CoD's "important" look — a bloom around the border, scanlines inside, tick marks under it
                 _bloomFrame = Ui.Img(Ui.Rect(_body, "Bloom", Vector2.zero, Vector2.one, new Vector2(-16, -16), new Vector2(16, -HeadH - 4 + 16)), Ui.Hex(Orange, .5f), Ui.GlowFrame());
                 _bloomFrame.type = Image.Type.Sliced; _bloomFrame.raycastTarget = false; _bloomFrame.enabled = false; Ui.Detail(_bloomFrame, .5f);
+                Ui.OwnCanvas(_bloomFrame.rectTransform); // your card's bloom breathes: only it redraws
                 _ticks = Ui.Rect(_body, "Ticks", new Vector2(0, 0), new Vector2(1, 0), new Vector2(12, -6), new Vector2(-12, -3));
                 for (int k = 0; k < 9; k++)
                 {
@@ -3281,6 +3305,8 @@ namespace LevelGate.Progression
                 _handled.SetActive(false);
                 _selDots = Ui.Img(Ui.Fill(dotsMask, "SelDots"), new Color(1, 1, 1, .13f), Ui.DotGrid());
                 _selDots.type = Image.Type.Tiled; _selDots.raycastTarget = false; _selDots.enabled = false;
+                _unlockDots = Ui.Img(Ui.Fill(dotsMask, "UnlockDots"), new Color(1, 1, 1, 0), Ui.DotGrid());
+                _unlockDots.type = Image.Type.Tiled; _unlockDots.raycastTarget = false; _unlockDots.enabled = false;
                 // picked: a bloom in the rank's colour and a light made of dots under the pictures, both drifting a little
                 // (their own canvas: moving them redraws only them), clipped to the card's cut shape
                 var lit = Ui.Fill(dotsMask, "Lights");
@@ -3336,6 +3362,7 @@ namespace LevelGate.Progression
                     Ui.Img(face, Ui.Hex("#0f1315"));
                     Ui.Img(Ui.Fill(face, "Light"), new Color(1, 1, 1, .05f), Ui.Radial());
                     _picNames[i] = Ui.Label(face, "Name", "", TCaps, Grey, TextAnchor.MiddleCenter, false, 0, true);
+                    AddLoader(_picNames[i], 0, i == 0 ? 4 : 3);
                     _pics[i] = Ui.Img(Ui.Fill(face, "Img", i == 0 ? 8 : 4), Color.white);
                     _pics[i].preserveAspect = true;
                     _pics[i].enabled = false;
@@ -3375,7 +3402,7 @@ namespace LevelGate.Progression
                     ShowLevel(_level);
                     UpdateSelection();
                 });
-                HoverHook.Add(_frame, on => { if (_hover == on) return; _hover = on; if (on) Sounds.Play("ButtonOver"); Mark(_picked, _player); });
+                HoverHook.Add(_frame, on => { if (_hover == on) return; _hover = on; if (on) { Sounds.Play("ButtonOver"); PlayGlitch(_bg.rectTransform); } Mark(_picked, _player); });
                 // XP animation: a warm flash over the whole card when it unlocks (on top of everything in it)
                 _flash = Ui.Img(Ui.Fill(card, "Flash"), new Color(0, 0, 0, 0), Ui.Radial());
                 _flash.raycastTarget = false;
@@ -3462,6 +3489,8 @@ namespace LevelGate.Progression
                 var bc = current ? Ui.Hex(Orange) : Color.Lerp(rank, Color.white, .15f); bc.a = _bloomFrame.color.a; _bloomFrame.color = bc;
                 _bloomFrame.enabled = current || (sel && !locked); _curScan.enabled = current; _ticks.gameObject.SetActive(current);
                 if (_selLights.activeSelf != sel) _selLights.SetActive(sel);
+                if (sel && !_wasSel) PlayShine(_bg.rectTransform); // picked: one soft shine across it
+                _wasSel = sel; _isCurrent = current;
                 if (sel)
                 {
                     var light = Ui.Hex(TierOf(_level).Light);

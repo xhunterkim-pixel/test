@@ -378,25 +378,41 @@ namespace LevelGate.Progression
 
         /// <summary>A soft glow around a frame (bloom): see-through in the middle, bright at the frame's line, fading outward.
         /// 9-sliced; give it a rect ~16 px bigger than the thing it lights on every side.</summary>
+        // GlowFrame's outline (80 px sprite, 16 px pad, 8 px cuts), counter-clockwise from the top edge's cut end
+        private static readonly Vector2[] _gfv = { new Vector2(24, 64), new Vector2(64, 64), new Vector2(64, 24), new Vector2(56, 16), new Vector2(16, 16), new Vector2(16, 56) };
+
+        private static float SegDist(float x, float y, Vector2 a, Vector2 b)
+        {
+            var ab = b - a; var ap = new Vector2(x - a.x, y - a.y);
+            float t = Mathf.Clamp01(Vector2.Dot(ap, ab) / ab.sqrMagnitude);
+            return (ap - ab * t).magnitude;
+        }
+
         public static Sprite GlowFrame()
         {
             if (_glowFrame != null) return _glowFrame;
-            const int n = 64, pad = 16;
+            // the glow follows the cards' shape: the same 8 px cuts top-left and bottom-right as Chamfer (0.9.69's square
+            // corners stuck out past the cut)
+            const int n = 80, pad = 16, c = 8, border = pad + c + 4;
+            const float r2 = 1.41421356f;
             var tex = new Texture2D(n, n, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Clamp, filterMode = FilterMode.Bilinear };
             var px = new Color32[n * n];
             for (int y = 0; y < n; y++)
                 for (int x = 0; x < n; x++)
                 {
-                    // distance outside the inner rect (pad … n-pad); inside: a faint inner glow along the line
-                    float dx = Mathf.Max(pad - (x + .5f), (x + .5f) - (n - pad), 0), dy = Mathf.Max(pad - (y + .5f), (y + .5f) - (n - pad), 0);
-                    float outD = Mathf.Sqrt(dx * dx + dy * dy);
-                    float inD = Mathf.Min(Mathf.Min(x + .5f - pad, n - pad - x - .5f), Mathf.Min(y + .5f - pad, n - pad - y - .5f));
+                    float fx = x + .5f, fy = y + .5f;
+                    // exact distance to the six-sided outline (the card's rect with its two cut corners)
+                    float tl = ((fx - pad) + ((n - pad) - fy) - c) / r2, br = (((n - pad) - fx) + (fy - pad) - c) / r2; // > 0: inside
+                    bool inside = fx >= pad && fx <= n - pad && fy >= pad && fy <= n - pad && tl >= 0 && br >= 0;
+                    float edge = float.MaxValue;
+                    for (int k = 0; k < 6; k++) edge = Mathf.Min(edge, SegDist(fx, fy, _gfv[k], _gfv[(k + 1) % 6]));
+                    float outD = inside ? 0 : edge, inD = inside ? edge : 0;
                     float a = outD > 0 ? Mathf.Pow(Mathf.Clamp01(1 - outD / pad), 2.2f) : Mathf.Pow(Mathf.Clamp01(1 - inD / 6f), 2f) * .6f;
                     px[y * n + x] = new Color32(255, 255, 255, (byte)(255 * a));
                 }
             tex.SetPixels32(px);
             tex.Apply(false, true);
-            return _glowFrame = Sprite.Create(tex, new Rect(0, 0, n, n), new Vector2(.5f, .5f), 100, 0, SpriteMeshType.FullRect, new Vector4(pad + 6, pad + 6, pad + 6, pad + 6));
+            return _glowFrame = Sprite.Create(tex, new Rect(0, 0, n, n), new Vector2(.5f, .5f), 100, 0, SpriteMeshType.FullRect, new Vector4(border, border, border, border));
         }
 
         private static Sprite _wave, _waveHot;
@@ -436,6 +452,64 @@ namespace LevelGate.Progression
             var sp = Sprite.Create(tex, new Rect(0, 0, w, h), new Vector2(.5f, .5f), 100, 0, SpriteMeshType.FullRect);
             if (hot) _waveHot = sp; else _wave = sp;
             return sp;
+        }
+
+        private static Sprite _hstreaks, _vstreaks;
+
+        /// <summary>MW's hover glitch: thin horizontal streaks of random length and brightness, broken up. White.</summary>
+        public static Sprite HStreaks()
+        {
+            if (_hstreaks != null) return _hstreaks;
+            const int w = 256, h = 96;
+            var tex = new Texture2D(w, h, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Clamp, filterMode = FilterMode.Point, name = "LevelGate hstreaks" };
+            var px = new Color32[w * h];
+            var rnd = new System.Random(41);
+            for (int k = 0; k < 46; k++)
+            {
+                int y = rnd.Next(h), x0 = rnd.Next(-40, w), len = 12 + rnd.Next(170), thick = rnd.NextDouble() < .2 ? 2 : 1;
+                float a0 = .25f + (float)rnd.NextDouble() * .75f;
+                for (int x = Mathf.Max(0, x0); x < Mathf.Min(w, x0 + len); x++)
+                {
+                    if (rnd.NextDouble() < .12) continue; // broken up
+                    float u = (x - x0) / (float)len, a = a0 * Mathf.Sin(u * Mathf.PI) * (.6f + .4f * (float)rnd.NextDouble());
+                    for (int t = 0; t < thick && y + t < h; t++) { var c = px[(y + t) * w + x]; px[(y + t) * w + x] = new Color32(255, 255, 255, (byte)Mathf.Max(c.a, 255 * a)); }
+                }
+            }
+            tex.SetPixels32(px);
+            tex.Apply(false, true);
+            return _hstreaks = Sprite.Create(tex, new Rect(0, 0, w, h), new Vector2(.5f, .5f), 100, 0, SpriteMeshType.FullRect);
+        }
+
+        /// <summary>
+        /// MW's picture load-in: lines hanging down from the top edge, one every 2 px, of uneven length; the longer a line,
+        /// the more it breaks up (gaps, brighter flecks). Fades toward each line's end. Tiles sideways. White.
+        /// </summary>
+        public static Sprite RevealStreaks()
+        {
+            if (_vstreaks != null) return _vstreaks;
+            const int w = 256, h = 256;
+            var tex = new Texture2D(w, h, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Repeat, filterMode = FilterMode.Point, name = "LevelGate reveal" };
+            var px = new Color32[w * h];
+            var rnd = new System.Random(59);
+            for (int x = 0; x < w; x += 2)
+            {
+                // lengths: mostly short, some very long (a smooth ridge plus noise, so neighbours roughly agree)
+                float ridge = .5f + .3f * Mathf.Sin(x * .045f) + .2f * Mathf.Sin(x * .13f + 1);
+                int len = Mathf.Clamp((int)(h * Mathf.Pow((float)rnd.NextDouble(), 1.6f) * (.4f + .8f * ridge)), 6, h);
+                float broken = len / (float)h; // longer = more artifacts
+                for (int d = 0; d < len; d++)
+                {
+                    float u = d / (float)len;
+                    if (rnd.NextDouble() < broken * .45f * u) continue;          // gaps, more toward the end of long lines
+                    float a = Mathf.Pow(1 - u, .8f) * (.55f + .45f * (float)rnd.NextDouble());
+                    if (rnd.NextDouble() < broken * .08f) a = 1;                  // bright flecks
+                    int y = h - 1 - d;                                             // hangs down from the top edge
+                    px[y * w + x] = new Color32(255, 255, 255, (byte)(255 * Mathf.Clamp01(a)));
+                }
+            }
+            tex.SetPixels32(px);
+            tex.Apply(false, true);
+            return _vstreaks = Sprite.Create(tex, new Rect(0, 0, w, h), new Vector2(.5f, .5f), 100, 0, SpriteMeshType.FullRect);
         }
 
         private static Sprite _ruler;
