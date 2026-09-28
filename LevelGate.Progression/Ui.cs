@@ -324,14 +324,14 @@ namespace LevelGate.Progression
 
         /// <summary>
         /// "Handled" texture on an important surface: fingerprints / smudges and a faint purple + green colour mottling
-        /// (like CoD's cards). Faint; follows F12 Wear And Scratches.
+        /// (like CoD's cards). Faint; follows F12 UI Detailing.
         /// </summary>
         public static RectTransform Handled(RectTransform parent, int variant, float alpha = .05f)
         {
             var box = Fill(parent, "Handled"); // one container, so a surface can switch its handled look on / off
             var fp = Img(Fill(box, "Prints"), new Color(.9f, .9f, .92f, alpha), Fingerprints(variant));
             fp.raycastTarget = false; fp.preserveAspect = false;
-            Grits.Add((fp, alpha));
+            AddGrit(fp, alpha);
             var rnd = new System.Random(variant * 31 + 5);
             var tints = new[] { new Color(.65f, .35f, .7f), new Color(.45f, .7f, .4f) };
             for (int i = 0; i < 2; i++)
@@ -339,7 +339,7 @@ namespace LevelGate.Progression
                 var anchor = new Vector2((float)rnd.NextDouble() * .8f + .1f, (float)rnd.NextDouble() * .8f + .1f);
                 var blob = Img(Box(box, "Mottle", anchor, Vector2.zero, new Vector2(220, 160)), new Color(tints[i].r, tints[i].g, tints[i].b, alpha * .9f), Radial());
                 blob.raycastTarget = false;
-                Grits.Add((blob, alpha * .9f));
+                AddGrit(blob, alpha * .9f);
             }
             return box;
         }
@@ -418,8 +418,8 @@ namespace LevelGate.Progression
             foreach (var c in corners)
             {
                 var off = new Vector2(c.x == 0 ? -gap : gap, c.y == 0 ? -gap : gap);
-                var h = Box(frame, "MarkH", c, off, new Vector2(arm * 2 + 1, 1)); Img(h, color).raycastTarget = false;
-                var v = Box(frame, "MarkV", c, off, new Vector2(1, arm * 2 + 1)); Img(v, color).raycastTarget = false;
+                var h = Box(frame, "MarkH", c, off, new Vector2(arm * 2 + 1, 1)); Detail(Img(h, color), color.a).raycastTarget = false;
+                var v = Box(frame, "MarkV", c, off, new Vector2(1, arm * 2 + 1)); Detail(Img(v, color), color.a).raycastTarget = false;
             }
         }
 
@@ -756,11 +756,52 @@ namespace LevelGate.Progression
             if ((variant / 2) % 2 == 1) rt.localScale = new Vector3(-1, 1, 1);
             var img = Img(rt, new Color(.82f, .85f, .86f, alpha), Grime(variant));
             img.raycastTarget = false;
-            Grits.Add((img, alpha));
+            AddGrit(img, alpha);
         }
 
-        /// <summary>Every scratch / smudge overlay with its base opacity (F12 > Graphics > Scratches scales them).</summary>
+        /// <summary>Every scratch / smudge overlay with its base opacity (F12 > Graphics > UI Detailing scales them).</summary>
         internal static readonly List<(Image Img, float Alpha)> Grits = new List<(Image, float)>();
+        /// <summary>The other texture details (corner marks, edge lights, dither, scanlines, sheen, bloom…) with their base opacity.</summary>
+        internal static readonly List<(Graphic G, float Alpha)> Details = new List<(Graphic, float)>();
+
+        /// <summary>F12 > Graphics > UI Detailing as 0–1 (0 in Performance Mode: every texture layer off).</summary>
+        internal static float DetailK => ProgressionPlugin.Low ? 0f : Mathf.Clamp01((ProgressionPlugin.Detailing?.Value ?? 100) / 100f);
+        /// <summary>The scratches / smudges: 100% detailing = twice their original strength (the old Scratches default).</summary>
+        internal static float GritK => 2f * DetailK;
+
+        /// <summary>A scratch / smudge / grain layer: registered and shown at the current detailing (culled at 0).</summary>
+        internal static Image AddGrit(Image img, float alpha)
+        {
+            if (Grits.Count > 3000) Grits.RemoveAll(x => x.Img == null);
+            Grits.Add((img, alpha));
+            Fade(img, alpha * GritK);
+            return img;
+        }
+
+        /// <summary>A texture detail (not information): registered and shown at the current detailing (culled at 0).</summary>
+        internal static T Detail<T>(T g, float alpha) where T : Graphic
+        {
+            if (Details.Count > 3000) Details.RemoveAll(x => x.G == null); // tiles come and go while browsing
+            Details.Add((g, alpha));
+            Fade(g, alpha * DetailK);
+            return g;
+        }
+
+        internal static void Fade(Graphic g, float a)
+        {
+            if (g == null) return;
+            g.canvasRenderer.cullTransparentMesh = true; // alpha 0 = not drawn at all (no overdraw)
+            var c = g.color; c.a = Mathf.Clamp01(a); g.color = c;
+        }
+
+        /// <summary>Re-applies UI Detailing to every registered layer (and forgets destroyed ones).</summary>
+        internal static void ApplyDetail()
+        {
+            Grits.RemoveAll(x => x.Img == null); Details.RemoveAll(x => x.G == null);
+            float gk = GritK, dk = DetailK;
+            foreach (var (img, a) in Grits) Fade(img, a * gk);
+            foreach (var (g, a) in Details) Fade(g, a * dk);
+        }
 
         /// <summary>A small padlock (white, tint it), drawn with 4x supersampling for smooth edges.</summary>
         public static Sprite Lock()

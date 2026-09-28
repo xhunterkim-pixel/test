@@ -26,13 +26,13 @@ namespace LevelGate.Progression
         public const string Guid = "com.kkyangg.levelgate.progression";
         public const string Name = "LevelGate Progression";
         // MAJOR.MINOR.PATCH — see CHANGELOG.md
-        public const string Version = "0.9.64";
+        public const string Version = "0.9.65";
 
         internal static ProgressionPlugin Instance;
         internal static ConfigEntry<KeyboardShortcut> OpenKey;
         internal static ConfigEntry<KeyboardShortcut> DumpKey;
         internal static ConfigEntry<bool> InjectButton, CharacterEmblem, ReduceMotion;
-        internal static ConfigEntry<int> TextSize;
+        internal static ConfigEntry<int> TextSize, Detailing;
         internal static ConfigEntry<string> ButtonTemplate;
         internal static ConfigEntry<string> ButtonLabel;
         internal static ConfigEntry<bool> VerboseLog;
@@ -94,32 +94,47 @@ namespace LevelGate.Progression
                 "Show your animated rank emblem and rank name on the game's Character > Overall screen, next to your level.", 50));
 
             Quality = Config.Bind(Gfx, "Quality", GraphicsQuality.Medium, Desc(
-                "Low: lighter pictures and still rank emblems, for slower PCs (same as the PERFORMANCE MODE box on the screen).\n" +
+                "Low = Performance Mode (the box on the screen), for slower PCs. It turns off what costs the most: item pictures drawn smaller, fewer and " +
+                "one at a time; no moving background (and no pattern); no background blur; no texture layers (UI Detailing off); still rank emblems and " +
+                "no slides, flashes or pulses.\n" +
                 "Medium: sharp item pictures; weapons drawn at stash size.\n" +
                 "High: weapons drawn extra sharp too. The game can carry big weapon pictures over to weapons in your stash, so every level-list weapon " +
                 "(~160) is redrawn at stash size in the background after you close the screen (main menu only, never in a raid, at most every 10 minutes).", 100));
             Quality.SettingChanged += (_, __) =>
             {
                 L.Info($"graphics quality: {Quality.Value}");
+                ProgScreen.ApplyLook();  // texture layers / pattern on or off
+                MenuCamera.ReBlur();     // background blur on or off while the screen is open
                 RefreshPictures(false);
                 Toast.Show($"Graphics: {Quality.Value} — pictures redrawn");
             };
             XpAnimation = Config.Bind(Gfx, "XpAnimation", true, Desc(
                 "After you gain experience (a raid, a quest…), the next time you open the screen the XP bar fills up from where you last saw it: " +
                 "level ups, the new level number, a new rank emblem. Click or Space skips it. Off: the screen just shows your current XP.", 95));
-                        Scratches = Config.Bind(Gfx, "Scratches", 2f, Desc(
-                "How strong the worn surface is: scratches / smudges on the panels, cards and pictures, and the faint dot grid. 1 = the original, 0 = clean.",
-                85, new AcceptableValueRange<float>(0f, 5f)));
+            Detailing = Config.Bind(Gfx, "UIDetailing", 100, Desc(
+                "How much surface detail the screen has, all in one: scratches, smudges and fingerprints, film grain, the background pattern, " +
+                "corner marks, edge lights, dither, scanlines, the reflection on the picked card, the bloom around your card and behind the rank emblems. " +
+                "100 = the full look, 0 = clean and flat (those layers aren't drawn at all). Performance Mode turns them all off.",
+                85, new AcceptableValueRange<int>(0, 100)));
+            // the old Wear And Scratches (0–5): now part of UI Detailing (hidden; carried over once below)
+            Scratches = Config.Bind(Gfx, "Scratches", 2f, new ConfigDescription(
+                "Replaced by UI Detailing.", null, new ConfigurationManagerAttributes { Browsable = false }));
+            if (Mathf.Abs(Scratches.Value - 2f) > .01f)
+            {
+                Detailing.Value = Mathf.Clamp(Mathf.RoundToInt(Scratches.Value / 2f * 100f), 0, 100);
+                L.Info($"settings: Wear And Scratches {Scratches.Value:0.##} → UI Detailing {Detailing.Value}%");
+                Scratches.Value = 2f;
+            }
             Vignette = Config.Bind(Gfx, "Vignette", 1f, Desc("How dark the screen's corners are (1 = the original, 0 = none).", 84, new AcceptableValueRange<float>(0f, 3f)));
             RedGlow = Config.Bind(Gfx, "RedGlow", 1.1f, Desc("How strong the red glow in the top-right is (1 = the original, 0 = none).", 83, new AcceptableValueRange<float>(0f, 3f)));
             Pattern = Config.Bind(Gfx, "Pattern", BackgroundPattern.Dots, Desc(
-                "The faint pattern behind the screen: Dots (grid of dots), Streaks (vertical streaks), Damascus 1 (busy topographic lines), Damascus 2 (big organic flowing lines), Damascus 3 (rings), Damascus 4 (mirrored lines), Marble (mirrored marbling), Pixels (LED wall with light bands), Terrain (3D ridge lines), Random (a different one each open). Its strength follows Wear And Scratches.",
+                "The faint pattern behind the screen: Dots (grid of dots), Streaks (vertical streaks), Damascus 1 (busy topographic lines), Damascus 2 (big organic flowing lines), Damascus 3 (rings), Damascus 4 (mirrored lines), Marble (mirrored marbling), Pixels (LED wall with light bands), Terrain (3D ridge lines), Random (a different one each open). Its strength follows UI Detailing.",
                 87));
             PatternMotion = Config.Bind(Gfx, "PatternMotion", 1f, Desc(
                 "How fast the animated patterns move (0 = still, 1 = a gentle drift). Only while the screen is open; it stops completely when you leave it.",
                 86, new AcceptableValueRange<float>(0f, 3f)));
             Pattern.SettingChanged += (_, __) => ProgScreen.PatternChanged();
-            Scratches.SettingChanged += (_, __) => ProgScreen.ApplyLook();
+            Detailing.SettingChanged += (_, __) => ProgScreen.ApplyLook();
             Vignette.SettingChanged += (_, __) => ProgScreen.ApplyLook();
             RedGlow.SettingChanged += (_, __) => ProgScreen.ApplyLook();
             RefreshIcons = Config.Bind(Gfx, "RefreshIcons", false, Desc(
@@ -205,7 +220,7 @@ namespace LevelGate.Progression
             L.Info($"{Name} started. Open key: {OpenKey.Value}, dump key: {DumpKey.Value}, menu button: {(InjectButton.Value ? "on" : "off")}.");
         }
 
-        /// <summary>Graphics Low: lighter pictures, still emblems (the screen's PERFORMANCE MODE box).</summary>
+        /// <summary>Graphics Low = the screen's PERFORMANCE MODE box: lighter / fewer pictures, no pattern, blur or texture layers, still emblems, no motion.</summary>
         internal static bool Low => Quality?.Value == GraphicsQuality.Low;
         /// <summary>Graphics High: extra-sharp weapons in the centre picture.</summary>
         internal static bool High => Quality?.Value == GraphicsQuality.High;
@@ -223,7 +238,7 @@ namespace LevelGate.Progression
                 ["HideMainMenu"] = "Hide Main Menu While Open", ["BlurBackground"] = "Blur Background", ["SoundVolume"] = "Sound Volume",
                 ["UseGameSounds"] = "Use Game Sounds", ["CharacterEmblem"] = "Rank Emblem On Character Screen", ["TextSize"] = "Text Size (%)", ["ReduceMotion"] = "Reduce Motion",
                 ["Quality"] = "Picture Quality", ["XpAnimation"] = "Level Up Animation", ["RefreshIcons"] = "Redraw All Item Pictures",
-                ["Pattern"] = "Background Pattern", ["PatternMotion"] = "Pattern Animation Speed", ["Scratches"] = "Wear And Scratches",
+                ["Pattern"] = "Background Pattern", ["PatternMotion"] = "Pattern Animation Speed", ["UIDetailing"] = "UI Detailing (%)",
                 ["Vignette"] = "Dark Corners", ["RedGlow"] = "Red Glow",
                 ["Levels"] = "Levels To Play", ["PlayLevelUp"] = "Play Level Ups", ["PlayNextRank"] = "Play Next Rank", ["PlayUnlock"] = "Play Card Unlocks",
                 ["ButtonLabel"] = "Menu Button Text", ["CopyButton"] = "Copy Look Of Button", ["TopMargin"] = "Top Margin", ["BottomMargin"] = "Bottom Margin",
@@ -235,7 +250,7 @@ namespace LevelGate.Progression
             {
                 ["1. General"] = "1. General", ["2. Graphics"] = "2. Look & Graphics", ["4. Preview"] = "3. Preview (Test The Animations)", ["3. Advanced"] = "4. Advanced",
             };
-            var advanced = new HashSet<string> { "RefreshIcons", "UseGameSounds" };
+            var advanced = new HashSet<string> { "RefreshIcons", "UseGameSounds", "Vignette", "RedGlow" };
             foreach (var kv in Config)
             {
                 var a = kv.Value.Description?.Tags?.OfType<ConfigurationManagerAttributes>().FirstOrDefault();

@@ -40,6 +40,11 @@ Versions are **MAJOR.MINOR.PATCH**:
 
 ## LevelGate Progression (BepInEx plugin, separate DLL)
 
+### 0.9.65
+- **Bloom behind the rank emblem**: the header's rank emblem sits in a soft glow in its rank's colour; the emblems on your level's card and the picked card glow too (the others don't, locked ones never).
+- **One UI Detailing slider (F12 > Look & Graphics, 0–100%)**: every texture layer follows it — scratches, smudges, fingerprints, film grain, the background pattern, corner marks, edge lights, dither, scanlines, the selection reflection, the bloom and tick marks on your card, the micro labels. At 0 those layers aren't drawn at all. It replaces Wear And Scratches (your old value is carried over); Dark Corners and Red Glow moved to Advanced.
+- **Performance Mode is a real performance mode**: besides smaller / fewer pictures drawn one at a time and still emblems, it now also turns off the moving background pattern (not worked out or drawn), the background blur (a full-screen effect; switches live), every texture layer (UI Detailing 0: less overdraw), and the slides, flashes and pulses.
+
 ### 0.9.64
 - **Detail follows the 70 / 30 rule**: texture had spread evenly over everything, so nothing stood out. The calm 70% (panel bodies, the picture area, ordinary tiles, ordinary cards) is plain again: no full-panel stripes / grid / hatching, no grit on every tile, no fingerprints on every card. The detail sits in the focal 30%: the reward list's head (stripes + fingerprints) and its category tabs, the picked card and your level's card (fingerprints, dots, bloom, scanlines, ticks), the picked tile (dissolve, sheen, gloss) and the XP header. The details panel keeps only a soft glass light.
 

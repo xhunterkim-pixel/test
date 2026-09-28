@@ -163,7 +163,7 @@ namespace LevelGate.Progression
         }
 
         /// <summary>F12 Reduce Motion.</summary>
-        internal static bool Calm => ProgressionPlugin.ReduceMotion?.Value ?? false;
+        internal static bool Calm => (ProgressionPlugin.ReduceMotion?.Value ?? false) || ProgressionPlugin.Low; // Performance Mode moves less too
 
         public static void Close(string why)
         {
@@ -269,11 +269,10 @@ namespace LevelGate.Progression
             SubCanvas(vig);
             _vignette = Ui.Img(vig, new Color(0, 0, 0, .14f), Ui.Vignette());
             _vignette.raycastTarget = false;
-            // film grain over the whole screen, like the game's menus (very faint; follows Graphics > Scratches)
+            // film grain over the whole screen, like the game's menus (very faint; follows Graphics > UI Detailing)
             var grain = Ui.Img(Ui.Fill(vig, "Grain"), new Color(1, 1, 1, .02f), Ui.Grain());
             grain.type = Image.Type.Tiled; grain.raycastTarget = false;
-            Ui.Grits.Add((grain, .02f));
-            Ui.Grits.RemoveAll(g => g.Img == null);
+            Ui.AddGrit(grain, .02f);
             ApplyLook();
             _fade = root.gameObject.AddComponent<CanvasGroup>();
 
@@ -335,7 +334,7 @@ namespace LevelGate.Progression
                 : mid > .6f ? Ui.Rect(frame, "EdgeLight", new Vector2(0, .08f), new Vector2(0, .92f), new Vector2(0, 0), new Vector2(2, 0))
                 : Ui.Rect(frame, "EdgeLight", new Vector2(.08f, 1), new Vector2(.92f, 1), new Vector2(0, -2), new Vector2(0, 0));
             if (mid >= .4f && mid <= .6f) edge.localEulerAngles = Vector3.zero;
-            var el = Ui.Img(edge, new Color(1, 1, 1, .16f), mid >= .4f && mid <= .6f ? Ui.Radial() : Ui.VerticalFade());
+            var el = Ui.Detail(Ui.Img(edge, new Color(1, 1, 1, .16f), mid >= .4f && mid <= .6f ? Ui.Radial() : Ui.VerticalFade()), .16f);
             el.raycastTarget = false; el.type = Image.Type.Simple; el.preserveAspect = false;
             var inner = Ui.Fill(frame, "In", BorderWidth);
             Ui.Img(inner, PanelBg);
@@ -344,7 +343,7 @@ namespace LevelGate.Progression
             if (mid > .6f)
             {
                 var glass = Ui.Img(Ui.Box(inner, "Glass", new Vector2(.15f, .9f), Vector2.zero, new Vector2(520, 360)), new Color(1, 1, 1, .03f), Ui.Radial());
-                glass.raycastTarget = false; Ui.Grits.Add((glass, .03f));
+                glass.raycastTarget = false; Ui.AddGrit(glass, .03f);
             }
             return inner;
         }
@@ -359,6 +358,7 @@ namespace LevelGate.Progression
             {
                 var l = Ui.Label(Ui.Rect(parent, name, aMin, aMax, oMin, oMax), "Text", "", 8.5f, c, al, false, 2);
                 ((Graphic)l).raycastTarget = false;
+                Ui.Detail((Graphic)l, c.a);
                 return l;
             }
             if (_focusList != null) _microList = Micro(_focusList, "Micro", Vector2.zero, new Vector2(1, 0), new Vector2(PanelPad, 2), new Vector2(-PanelPad, 12), TextAnchor.LowerLeft);
@@ -378,7 +378,7 @@ namespace LevelGate.Progression
             const float badge = 72;
             // 8 px lower than before: the emblem's bottom meets the level square's, the last line meets "Next level …"
             const float drop = 8;
-            _headBadge = new Badge(top, new Vector2(0, 1), new Vector2(Margin + badge / 2, -(S3 + drop + badge / 2)), badge);
+            _headBadge = new Badge(top, new Vector2(0, 1), new Vector2(Margin + badge / 2, -(S3 + drop + badge / 2)), badge, .3f);
             float x = Margin + badge + S3;
             // breadcrumb over the page title (like the game's "Weapons > Assault rifles" and MW's "CAREER / PROGRESSION /")
             Ui.Label(Ui.Rect(top, "Crumb", new Vector2(0, 1), new Vector2(.34f, 1), new Vector2(x, -S3 - drop + 4), new Vector2(-Gutter, -drop + 4 + 2)), "Text", "CHARACTER  /  PROGRESSION  /", TCaps - 1, Dim, TextAnchor.LowerLeft, false, 1);
@@ -535,7 +535,7 @@ namespace LevelGate.Progression
             strip.gameObject.AddComponent<RectMask2D>();
             Ui.Handled(strip, 7, .06f);
             var headStripes = Ui.Img(Ui.Fill(strip, "Stripes"), new Color(1, 1, 1, .035f), Ui.VStripes()); // detail where the eye lands
-            headStripes.type = Image.Type.Tiled; headStripes.raycastTarget = false; Ui.Grits.Add((headStripes, .035f));
+            headStripes.type = Image.Type.Tiled; headStripes.raycastTarget = false; Ui.AddGrit(headStripes, .035f);
             Ui.Img(Ui.Rect(panel, "Bracket", new Vector2(0, 1), new Vector2(0, 1), new Vector2(PanelPad, -HeadH + 12), new Vector2(PanelPad + 1, -12)), Ui.Hex("#8a8e90", .8f));
             Ui.Img(Ui.Rect(panel, "BracketTick", new Vector2(0, 1), new Vector2(0, 1), new Vector2(PanelPad - 6, -21), new Vector2(PanelPad, -20)), Ui.Hex("#8a8e90", .8f));
             float hx = PanelPad + 12;
@@ -788,7 +788,7 @@ namespace LevelGate.Progression
         private static Image _dotGrid, _vignette;
 
         /// <summary>
-        /// The surface texture from F12 > Graphics: Scratches (grime / scratches on the panels and pictures, and the dot grid)
+        /// The surface texture from F12 > Graphics: UI Detailing (grime, scratches, texture layers, the pattern)
         /// and Vignette, as multiples of their built-in strength. Live: changed in F12, it updates at once.
         /// </summary>
         private static BackgroundPattern _randomPattern = BackgroundPattern.Dots;
@@ -811,14 +811,15 @@ namespace LevelGate.Progression
 
         public static void ApplyLook()
         {
-            float sc = ProgressionPlugin.Scratches?.Value ?? 1f, vg = ProgressionPlugin.Vignette?.Value ?? 1f;
-            foreach (var (img, a) in Ui.Grits) if (img != null) { var c = img.color; c.a = Mathf.Clamp01(a * sc); img.color = c; }
+            float sc = Ui.GritK, vg = ProgressionPlugin.Vignette?.Value ?? 1f;
+            Ui.ApplyDetail(); // F12 > Graphics > UI Detailing (0 in Performance Mode)
             if (_dotGrid != null)
             {
                 // the background pattern (F12 > Graphics > Pattern): the dots tile; the line patterns cover the screen once
                 var pat = ProgressionPlugin.Pattern?.Value ?? BackgroundPattern.Dots;
                 if (pat == BackgroundPattern.Random) pat = _randomPattern;
-                if (pat == BackgroundPattern.Dots) { BgPattern.Use(_dotGrid, null); _dotGrid.sprite = Ui.DotGrid(); _dotGrid.type = Image.Type.Tiled; _dotGrid.enabled = true; }
+                if (sc <= 0) { BgPattern.Use(_dotGrid, null); _dotGrid.enabled = false; } // no detail: no pattern at all (nothing worked out or drawn)
+                else if (pat == BackgroundPattern.Dots) { BgPattern.Use(_dotGrid, null); _dotGrid.sprite = Ui.DotGrid(); _dotGrid.type = Image.Type.Tiled; _dotGrid.enabled = true; }
                 else BgPattern.Use(_dotGrid, pat.ToString()); // worked out off the main thread; shows once ready, moves while open
                 float basis = pat == BackgroundPattern.Dots || pat == BackgroundPattern.Streaks ? .035f
                     : pat == BackgroundPattern.Marble ? .03f : pat == BackgroundPattern.Pixels ? .04f : pat == BackgroundPattern.Terrain ? .055f
@@ -1124,7 +1125,7 @@ namespace LevelGate.Progression
             HoverHook.Add(rt, on =>
             {
                 FadeTo(label as Graphic, on ? Grey : Dim); FadeTo(edge, on ? HoverEdge : Ui.Hex("#5a6468"));
-                ShowTip(on ? rt : null, "Lighter pictures, still emblems, fewer items per category");
+                ShowTip(on ? rt : null, "Smaller, fewer pictures; no background pattern, blur or texture layers; still emblems; no slides or flashes");
             });
         }
 
@@ -1695,7 +1696,7 @@ namespace LevelGate.Progression
             Color dim = Ui.Hex("#7d8588"), dimHover = Ui.Hex("#3a4245"), chevInk = Ui.Hex("#aab2b5");
             var tabFace = Ui.Img(head, face, null, true);
             var stripes = Ui.Img(Ui.Fill(head, "Stripes"), new Color(1, 1, 1, .05f), Ui.VStripes()); // like CoD's BONUS bar
-            stripes.type = Image.Type.Tiled; stripes.raycastTarget = false;
+            stripes.type = Image.Type.Tiled; stripes.raycastTarget = false; Ui.Detail(stripes, .05f);
             var top = Ui.Img(Ui.Rect(head, "Top", new Vector2(0, 1), Vector2.one, new Vector2(0, -1), Vector2.zero), Ui.Hex("#3f494d"));
             var shade = Ui.Img(Ui.Rect(head, "Shade", Vector2.zero, new Vector2(1, .5f), Vector2.zero, Vector2.zero), new Color(0, 0, 0, .18f));
             string count = list.Count > max ? $"{max} of {list.Count}" : list.Count.ToString();
@@ -1877,7 +1878,7 @@ namespace LevelGate.Progression
             // like a stash cell / the prestige reward tiles: the picture using the whole tile, its short name top-right over it
             // (no per-item background tint: removed on request)
             var thumb = Ui.Rect(inner, "Thumb", Vector2.zero, Vector2.one, new Vector2(0, 4), new Vector2(0, -TileTop));
-            Ui.Img(Ui.Fill(inner, "Light"), new Color(1, 1, 1, .045f), Ui.Radial());
+            Ui.Detail(Ui.Img(Ui.Fill(inner, "Light"), new Color(1, 1, 1, .045f), Ui.Radial()), .045f);
             var placeholder = Ui.Label(Ui.Fill(thumb, "Placeholder", S2), "Text", "", TCaps, Dim, TextAnchor.MiddleCenter, false, 0, true);
             v.Pic = Ui.Img(Ui.Fill(thumb, "Icon", 0), Color.white);
             var prt = v.Pic.rectTransform;
@@ -1891,12 +1892,12 @@ namespace LevelGate.Progression
             // texture: light from above and a fine grit on the face; picked: a pixel dissolve along the top edge
             Ui.Img(Ui.Rect(inner, "TopLight", new Vector2(0, .5f), Vector2.one, Vector2.zero, Vector2.zero), new Color(1, 1, 1, .025f), Ui.VerticalFade()).raycastTarget = false;
             v.Dither = Ui.Img(Ui.Rect(inner, "Dither", new Vector2(0, 1), new Vector2(.7f, 1), new Vector2(9, -8), new Vector2(0, -2)), new Color(1, 1, 1, .16f), Ui.Dither());
-            v.Dither.raycastTarget = false; v.Dither.enabled = false;
+            v.Dither.raycastTarget = false; v.Dither.enabled = false; Ui.Detail(v.Dither, .16f);
             // picked: a very light reflection (a soft sheen over the upper half, a glossy line down the right edge), like CoD's
             v.Sheen = Ui.Img(Ui.Box(inner, "Sheen", new Vector2(.62f, .66f), Vector2.zero, new Vector2(170, 110)), new Color(1, 1, 1, .07f), Ui.Radial());
-            v.Sheen.raycastTarget = false; v.Sheen.enabled = false;
+            v.Sheen.raycastTarget = false; v.Sheen.enabled = false; Ui.Detail(v.Sheen, .07f);
             v.Gloss = Ui.Img(Ui.Rect(inner, "Gloss", new Vector2(1, .1f), new Vector2(1, .9f), new Vector2(-3, 0), new Vector2(-2, 0)), new Color(1, 1, 1, .22f), Ui.VerticalFade());
-            v.Gloss.raycastTarget = false; v.Gloss.enabled = false;
+            v.Gloss.raycastTarget = false; v.Gloss.enabled = false; Ui.Detail(v.Gloss, .22f);
             // the short name, top-right like the game's cells (two lines at most; look-alikes say what sets them apart)
             // a soft dark fade under the name, so two-line names stay readable over the picture
             var nameFade = Ui.Img(Ui.Rect(inner, "NameFade", new Vector2(0, 1), Vector2.one, new Vector2(0, -40), Vector2.zero), new Color(0, 0, 0, .5f), Ui.VerticalFade());
@@ -2852,9 +2853,21 @@ namespace LevelGate.Progression
             private readonly Image _rim, _inner;
             private readonly Component _num;
 
-            public Badge(RectTransform parent, Vector2 anchor, Vector2 pos, float size)
+            private readonly Image _bloom;
+            private readonly float _bloomA;
+            private bool _bloomOn = true, _dim;
+
+            /// <summary>bloom: the strength of a soft glow in the rank's colour behind the emblem (0 = none).</summary>
+            public Badge(RectTransform parent, Vector2 anchor, Vector2 pos, float size, float bloom = 0)
             {
                 _root = Ui.Box(parent, "Badge", anchor, pos, new Vector2(size, size));
+                if (bloom > 0)
+                {
+                    // behind everything else of the badge; follows UI Detailing (off in Performance Mode)
+                    _bloomA = bloom;
+                    _bloom = Ui.Detail(Ui.Img(Ui.Box(_root, "Bloom", new Vector2(.5f, .5f), Vector2.zero, new Vector2(size * 2.1f, size * 2.1f)), new Color(1, 1, 1, bloom), Ui.Radial()), bloom);
+                    _bloom.raycastTarget = false;
+                }
                 var rim = Ui.Box(_root, "Rim", new Vector2(.5f, .5f), Vector2.zero, new Vector2(size * .68f, size * .68f));
                 rim.localEulerAngles = new Vector3(0, 0, 45);
                 _rim = Ui.Img(rim, Color.white);
@@ -2877,6 +2890,9 @@ namespace LevelGate.Progression
 
             public bool Visible { set { if (_root.gameObject.activeSelf != value) _root.gameObject.SetActive(value); } }
 
+            /// <summary>The glow behind the emblem on / off (a card's badge: only your card and the picked one glow).</summary>
+            public bool Bloom { set { _bloomOn = value; if (_bloom != null) { bool on = value && !_dim; if (_bloom.enabled != on) _bloom.enabled = on; } } }
+
             public void Set(int level, bool dim = false)
             {
                 var tier = TierOf(level);
@@ -2888,6 +2904,12 @@ namespace LevelGate.Progression
                 Ui.SetColor(_num, dim ? Dim : light);
                 bool emblem = Emblems.Show(_emblem, level);
                 _emblem.color = dim ? new Color(.55f, .55f, .55f, .6f) : Color.white;
+                if (_bloom != null)
+                {
+                    // the rank's own colour, a little warmer toward white at the core; locked (dim) badges don't glow
+                    var g = Color.Lerp(light, Color.white, .25f); g.a = _bloom.color.a; _bloom.color = g;
+                    _dim = dim; Bloom = _bloomOn;
+                }
                 _rim.enabled = _inner.enabled = !emblem;
                 _num.gameObject.SetActive(!emblem);
             }
@@ -3053,7 +3075,7 @@ namespace LevelGate.Progression
                 var head = Ui.Rect(_body, "Head", new Vector2(0, 1), Vector2.one, new Vector2(0, -HeadH), Vector2.zero);
                 var numRow = Ui.Rect(head, "NumRow", new Vector2(0, 1), Vector2.one, new Vector2(0, -26), Vector2.zero);
                 _head = Ui.Label(numRow, "Text", "", TTitle, Grey, TextAnchor.MiddleCenter, true);
-                _cardBadge = new Badge(numRow, new Vector2(.5f, .5f), new Vector2(-30, 0), 30);
+                _cardBadge = new Badge(numRow, new Vector2(.5f, .5f), new Vector2(-30, 0), 30, .35f);
                 _headL = DottedLine.Add(Ui.Rect(numRow, "L", new Vector2(0, 0), new Vector2(.5f, 1), Vector2.zero, new Vector2(-46, 0)), false);
                 _headR = DottedLine.Add(Ui.Rect(numRow, "R", new Vector2(.5f, 0), new Vector2(1, 1), new Vector2(46, 0), Vector2.zero), true);
                 foreach (var d in new[] { _headL, _headR }) { d.Dash = 6; d.Gap = 0; d.Thickness = 1; } // gap 0: a continuous line that still fades out
@@ -3064,12 +3086,12 @@ namespace LevelGate.Progression
 
                 // your level: CoD's "important" look — a bloom around the border, scanlines inside, tick marks under it
                 _bloomFrame = Ui.Img(Ui.Rect(_body, "Bloom", Vector2.zero, Vector2.one, new Vector2(-16, -16), new Vector2(16, -HeadH - 4 + 16)), Ui.Hex(Orange, .5f), Ui.GlowFrame());
-                _bloomFrame.type = Image.Type.Sliced; _bloomFrame.raycastTarget = false; _bloomFrame.enabled = false;
+                _bloomFrame.type = Image.Type.Sliced; _bloomFrame.raycastTarget = false; _bloomFrame.enabled = false; Ui.Detail(_bloomFrame, .5f);
                 _ticks = Ui.Rect(_body, "Ticks", new Vector2(0, 0), new Vector2(1, 0), new Vector2(12, -6), new Vector2(-12, -3));
                 for (int k = 0; k < 9; k++)
                 {
                     float x0 = k / 9f;
-                    Ui.Img(Ui.Rect(_ticks, "T" + k, new Vector2(x0, 0), new Vector2(x0, 1), new Vector2(0, 0), new Vector2(k % 3 == 0 ? 14 : 5, 0)), Ui.Hex(Orange, k % 3 == 0 ? .55f : .3f)).raycastTarget = false;
+                    Ui.Detail(Ui.Img(Ui.Rect(_ticks, "T" + k, new Vector2(x0, 0), new Vector2(x0, 1), new Vector2(0, 0), new Vector2(k % 3 == 0 ? 14 : 5, 0)), Ui.Hex(Orange, k % 3 == 0 ? .55f : .3f)), k % 3 == 0 ? .55f : .3f).raycastTarget = false;
                 }
                 _ticks.gameObject.SetActive(false);
                 var card = Ui.Rect(_body, "Box", Vector2.zero, Vector2.one, Vector2.zero, new Vector2(0, -HeadH - 4));
@@ -3115,13 +3137,13 @@ namespace LevelGate.Progression
                 _stamp.raycastTarget = false; _stamp.enabled = false;
                 // your level: one thin orange line along the top (orange only ever means "you")
                 _cardDither = Ui.Img(Ui.Rect(inner, "Dither", new Vector2(0, 1), new Vector2(.6f, 1), new Vector2(10, -12), new Vector2(0, -3)), new Color(1, 1, 1, .12f), Ui.Dither());
-                _cardDither.raycastTarget = false; _cardDither.enabled = false;
+                _cardDither.raycastTarget = false; _cardDither.enabled = false; Ui.Detail(_cardDither, .12f);
                 _sheen = Ui.Img(Ui.Box(inner, "Sheen", new Vector2(.6f, .7f), Vector2.zero, new Vector2(320, 170)), new Color(1, 1, 1, .06f), Ui.Radial());
-                _sheen.raycastTarget = false; _sheen.enabled = false;
+                _sheen.raycastTarget = false; _sheen.enabled = false; Ui.Detail(_sheen, .06f);
                 _gloss = Ui.Img(Ui.Rect(inner, "Gloss", new Vector2(1, .12f), new Vector2(1, .88f), new Vector2(-4, 0), new Vector2(-3, 0)), new Color(1, 1, 1, .2f), Ui.VerticalFade());
-                _gloss.raycastTarget = false; _gloss.enabled = false;
+                _gloss.raycastTarget = false; _gloss.enabled = false; Ui.Detail(_gloss, .2f);
                 _curScan = Ui.Img(Ui.Fill(inner, "Scan"), Ui.Hex(Orange, .045f), Ui.Scanlines());
-                _curScan.type = Image.Type.Tiled; _curScan.raycastTarget = false; _curScan.enabled = false;
+                _curScan.type = Image.Type.Tiled; _curScan.raycastTarget = false; _curScan.enabled = false; Ui.Detail(_curScan, .045f);
                 _cur = Ui.Img(Ui.Rect(inner, "Current", new Vector2(0, 1), Vector2.one, new Vector2(10, -3), Vector2.zero), Ui.Hex(Orange));
                 _newBadge = Ui.NewBadge(card, new Vector2(1, 1), new Vector2(-24, 0), 40, 19, 12.5f).gameObject;
                 _newBadge.SetActive(false);
@@ -3262,6 +3284,7 @@ namespace LevelGate.Progression
                 if (_handled.activeSelf != (sel || current)) _handled.SetActive(sel || current); // detail only on the focal cards
                 if (current && !sel) FadeTo(_frame, Ui.Hex(Orange, .85f)); // its border glows orange
                 _cardBadge.Still = !(sel || current); // five emblems playing at once was busy (and cost frames)
+                _cardBadge.Bloom = sel || current; // a soft glow behind the emblem: only the focal cards
                 _selDots.enabled = sel;       // the picked card's dot-matrix fill
                 _cardLock.enabled = locked && ProgData.CountAt(_level) > 0;
                 FadeTo(_bg, sel ? Ui.Hex("#1b1d1e", .92f) : _hover ? Ui.Hex("#161718", .9f) : locked ? Ui.Hex("#08090a", .94f) : Ui.Hex("#111213", .88f));

@@ -1,4 +1,4 @@
-# LevelGate Progression (0.9.64, test build)
+# LevelGate Progression (0.9.65, test build)
 
 A Call of Duty style **Progression** screen inside Tarkov's main menu. It adds a
 **PROGRESSION** button to the menu bar next to Character, Trading, Flea Market and the rest.
@@ -35,13 +35,14 @@ Everything it does is written to `BepInEx\LogOutput.log` in lines starting with 
 Settings are in `BepInEx\config\com.kkyangg.levelgate.progression.cfg` (or the F12 menu):
 - **1. General**: OpenScreenKey (P), MenuBarButton, MainMenuShortcut, HideMainMenu, SoundVolume (level-up / new-rank sounds), UseGameSounds, BlurBackground.
 - **2. Graphics > Quality**:
-  - Low: lighter pictures and still emblems, for slower PCs (same as the PERFORMANCE MODE box bottom-right on the screen).
+  - Low = Performance Mode (the box bottom-right on the screen): the five heaviest things off — pictures drawn smaller, fewer and one at a time; no moving background pattern; no background blur; no texture layers (UI Detailing off); still emblems and no slides / flashes / pulses.
   - Medium (default): sharp item pictures; weapons at stash size.
   - High: extra-sharp weapons too (every level-list weapon is redrawn at stash size after the screen closes, since the game can carry big weapon pictures over to stash weapons).
 - **2. Graphics > XpAnimation** (on by default): after you gain XP, the next open plays it out in beats: the XP bar and level ups, then a new rank emblem, then the new levels' cards unlocking, then your new level is selected. Space (or a click): tap = next moment (next level up, the rank, the cards, the summary, the end), hold Space = next part. Esc closes.
-- **2. Graphics > Scratches / Vignette / RedGlow**: how strong the worn surface (scratches, smudges, dot grid), the dark corners and the red top-right glow are (1 = original; live).
+- **2. Graphics > UI Detailing (0–100%)**: all the surface detail in one slider: scratches, smudges, fingerprints, grain, the background pattern, corner marks, edge lights, dither, scanlines, the selection reflection and the bloom (your card, the rank emblems). 0 = clean and flat; those layers aren't drawn at all. Live.
+- **Advanced > Vignette / RedGlow**: the dark corners and the red top-right glow (1 = original; live).
 - The right panel shows each stat with the game's own inspect icon; the small stats are inspect-style strips, two per line. Each reward category is a full-width title tab with its items in a framed box under it, like the game's containers; click the tab to fold / open it.
-- **2. Graphics > Pattern**: the faint background pattern: Dots (default grid), Streaks (vertical grain), Contours (smooth wavy lines), Topo (busy topographic lines), Marble (mirrored marbling), Pixels (LED wall with light bands), Terrain (3D ridge lines) or Random (a different one each open). Neutral white; its strength follows Scratches. Live.
+- **2. Graphics > Pattern**: the faint background pattern: Dots (default grid), Streaks (vertical grain), Contours (smooth wavy lines), Topo (busy topographic lines), Marble (mirrored marbling), Pixels (LED wall with light bands), Terrain (3D ridge lines) or Random (a different one each open). Neutral white; its strength follows UI Detailing. Live.
 - **2. Graphics > PatternMotion** (0–3, default 1): how fast Streaks / Contours / Topo slowly move (0 = still). The pattern is worked out on a worker thread and refreshed about 10 times a second (5 on Low), only while the screen is open; closed, it does nothing, and going into a raid frees it.
 - **2. Graphics > RefreshIcons**: tick once to redraw every item picture (the screen's own and the stash icons). A message at the top of the screen shows the progress and when it's done. Changing Quality does this by itself for the pictures it affects.
 - The first open of a menu visit shows a short LOADING PROGRESSION screen while the pictures of your page and the pages next to it are drawn. Going into a raid lets them go (memory); the next open loads them again.

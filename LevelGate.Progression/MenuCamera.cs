@@ -90,10 +90,18 @@ namespace LevelGate.Progression
             _angle = 0;
         }
 
+        /// <summary>Performance Mode switched while the screen is open: the blur goes off / comes back at once.</summary>
+        internal static void ReBlur()
+        {
+            if (!_active) return;
+            Blur(false);
+            Blur(true);
+        }
+
         /// <summary>A blur-type effect already on the background camera (name has Blur / DepthOfField / Bokeh).</summary>
         private static void Blur(bool on)
         {
-            if (!ProgressionPlugin.BlurBackground.Value) return;
+            if (on && (!ProgressionPlugin.BlurBackground.Value || ProgressionPlugin.Low)) return; // Performance Mode: no full-screen blur
             try
             {
                 if (on)
