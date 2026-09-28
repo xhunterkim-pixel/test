@@ -27,7 +27,7 @@ public sealed class HostForm : Form
     private const string FilesHost = "files.local";
 
     // MAJOR.MINOR.PATCH — 2.0.0: the Custom Trader Creator (1.0.0) and the Level & Item Editor (1.1.0) merged.
-    public const string Version = "2.0.2";
+    public const string Version = "2.0.3";
     public const string AppTitle = "Modern Editor";
 
     private readonly WebView2 _web = new() { Dock = DockStyle.Fill, DefaultBackgroundColor = Color.Black };
@@ -168,6 +168,8 @@ public sealed class HostForm : Form
         "purgeDeleted" => PurgeDeleted(Str(a, "name")),
         "chooseAvatar" => ChooseAvatar(Str(a, "folder")),
         "chooseQuestImage" => ChooseQuestImage(Str(a, "folder"), Str(a, "questId")),
+        "saveConvertedImage" => SaveConvertedImage(Str(a, "kind"), Str(a, "folder"), Str(a, "questId"), Str(a, "png")),
+        "saveQuestAutoImage" => SaveQuestAutoImage(Str(a, "folder"), Str(a, "questId"), Str(a, "png")),
         "chooseBackground" => ChooseBackground(),
         "clearBackground" => ClearBackground(),
         "openFolder" => OpenFolder(Str(a, "folder")),
@@ -369,7 +371,7 @@ public sealed class HostForm : Form
     }
 
     private static bool IsImage(string path) =>
-        Path.GetExtension(path).ToLowerInvariant() is ".png" or ".jpg" or ".jpeg" or ".webp" or ".gif" or ".bmp";
+        Path.GetExtension(path).ToLowerInvariant() is ".png" or ".jpg" or ".jpeg" or ".webp" or ".gif" or ".bmp" or ".avif" or ".svg" or ".ico";
 
     /// <summary>URL of a file in a trader folder; the ?v= changes with the file so the page never shows an old copy.</summary>
     private string ImageUrl(string folder, string file)
@@ -1097,7 +1099,7 @@ public sealed class HostForm : Form
 
     private string? PickImage(string title)
     {
-        using var dialog = new OpenFileDialog { Title = title, Filter = "Images|*.png;*.jpg;*.jpeg;*.bmp;*.gif;*.webp" };
+        using var dialog = new OpenFileDialog { Title = title, Filter = "Pictures|*.png;*.jpg;*.jpeg;*.webp;*.avif;*.bmp;*.gif;*.tif;*.tiff;*.ico;*.svg|All files|*.*" };
         return dialog.ShowDialog(this) == DialogResult.OK ? dialog.FileName : null;
     }
 
@@ -1106,9 +1108,38 @@ public sealed class HostForm : Form
         var dir = TraderDir(folder);
         var source = PickImage("Choose trader icon");
         if (source == null) return null;
-        var target = Path.Combine(dir, "avatar.png");
-        SaveSquareImage(source, target, 256);
-        return new JsonObject { ["file"] = "avatar.png", ["url"] = ImageUrl(folder, "avatar.png"), ["avatarColor"] = AverageColor(target) };
+        var bytes = File.ReadAllBytes(source);
+        return TryLoadBitmap(bytes) is { } input ? SaveAvatar(folder, input) : AskPageToConvert(source, bytes, "avatar", folder, "");
+    }
+
+    private JsonObject SaveAvatar(string folder, Bitmap input)
+    {
+        using (input)
+        {
+            var target = Path.Combine(TraderDir(folder), "avatar.png");
+            SaveSquareImage(input, target, 256);
+            return new JsonObject { ["file"] = "avatar.png", ["url"] = ImageUrl(folder, "avatar.png"), ["avatarColor"] = AverageColor(target) };
+        }
+    }
+
+    /// <summary>
+    /// Pictures Windows can't open itself (webp, avif, svg…): the page decodes them (the Edge engine reads them all) and sends
+    /// them back as PNG through saveConvertedImage — the game gets a normal PNG either way.
+    /// </summary>
+    private static JsonObject AskPageToConvert(string source, byte[] bytes, string kind, string folder, string questId)
+    {
+        var ext = Path.GetExtension(source).ToLowerInvariant().TrimStart('.');
+        var mime = ext switch { "jpg" or "jpeg" => "image/jpeg", "svg" => "image/svg+xml", "ico" => "image/x-icon", "tif" or "tiff" => "image/tiff", "" => "image/png", _ => "image/" + ext };
+        EditorLog.Info("image", $"{Path.GetFileName(source)} is converted to PNG by the page ({bytes.Length:N0} bytes, {mime})");
+        return new JsonObject { ["convert"] = $"data:{mime};base64,{Convert.ToBase64String(bytes)}", ["kind"] = kind, ["folder"] = folder, ["questId"] = questId };
+    }
+
+    private JsonNode SaveConvertedImage(string kind, string folder, string questId, string png)
+    {
+        var comma = png.IndexOf(',');
+        var bytes = Convert.FromBase64String(comma >= 0 ? png[(comma + 1)..] : png);
+        var input = TryLoadBitmap(bytes) ?? throw new InvalidOperationException("That picture couldn't be read.");
+        return kind == "avatar" ? SaveAvatar(folder, input) : SaveQuestImage(folder, questId, input);
     }
 
     private JsonNode? ChooseQuestImage(string folder, string questId)
@@ -1117,10 +1148,29 @@ public sealed class HostForm : Form
         if (!Ids.IsValid(questId)) throw new InvalidOperationException("Invalid quest id.");
         var source = PickImage("Choose quest image");
         if (source == null) return null;
+        var bytes = File.ReadAllBytes(source);
+        return TryLoadBitmap(bytes) is { } input ? SaveQuestImage(folder, questId, input) : AskPageToConvert(source, bytes, "quest", folder, questId);
+    }
+
+    private JsonObject SaveQuestImage(string folder, string questId, Bitmap input)
+    {
+        if (!Ids.IsValid(questId)) throw new InvalidOperationException("Invalid quest id.");
         string name = $"quest_{questId}.png";
-        using (var input = LoadBitmap(source))
-            input.Save(Path.Combine(dir, name), ImageFormat.Png);
+        using (input) input.Save(Path.Combine(TraderDir(folder), name), ImageFormat.Png);
         return new JsonObject { ["file"] = name, ["url"] = ImageUrl(folder, name) };
+    }
+
+    /// <summary>A quest picture the page drew from an item's picture (PNG, base64) — saved as quest_&lt;id&gt;_item.png in the trader's folder.</summary>
+    private JsonNode SaveQuestAutoImage(string folder, string questId, string png)
+    {
+        var dir = TraderDir(folder);
+        if (!Ids.IsValid(questId)) throw new InvalidOperationException("Invalid quest id.");
+        var comma = png.IndexOf(',');
+        var bytes = Convert.FromBase64String(comma >= 0 ? png[(comma + 1)..] : png);
+        if (bytes.Length < 8 || bytes[0] != 0x89 || bytes[1] != (byte)'P') throw new InvalidOperationException("Not a PNG picture.");
+        string name = $"quest_{questId}_item.png";
+        File.WriteAllBytes(Path.Combine(dir, name), bytes);
+        return new JsonObject { ["file"] = name, ["url"] = ImageUrl(folder, name) + "?v=" + DateTime.UtcNow.Ticks };
     }
 
     private JsonNode? ChooseBackground()
@@ -1189,10 +1239,12 @@ public sealed class HostForm : Form
         ".gif" => "image/gif",
         ".webp" => "image/webp",
         ".bmp" => "image/bmp",
+        ".avif" => "image/avif",
+        ".svg" => "image/svg+xml",
+        ".ico" => "image/x-icon",
         ".html" => "text/html; charset=utf-8",
         ".js" => "text/javascript; charset=utf-8",
         ".css" => "text/css; charset=utf-8",
-        ".ico" => "image/x-icon",
         _ => "application/octet-stream",
     };
 
@@ -1230,16 +1282,22 @@ public sealed class HostForm : Form
         });
     }
 
-    private static Bitmap LoadBitmap(string path)
+    private static Bitmap LoadBitmap(string path) => TryLoadBitmap(File.ReadAllBytes(path)) ?? throw new InvalidOperationException($"{Path.GetFileName(path)} couldn't be read as a picture.");
+
+    /// <summary>The picture, or null when Windows can't read that format (webp, avif, svg…).</summary>
+    private static Bitmap? TryLoadBitmap(byte[] bytes)
     {
-        using var stream = new MemoryStream(File.ReadAllBytes(path));
-        using var image = Image.FromStream(stream);
-        return new Bitmap(image);
+        try
+        {
+            using var stream = new MemoryStream(bytes);
+            using var image = Image.FromStream(stream);
+            return new Bitmap(image);
+        }
+        catch (Exception) { return null; }
     }
 
-    private static void SaveSquareImage(string source, string target, int size)
+    private static void SaveSquareImage(Bitmap input, string target, int size)
     {
-        using var input = LoadBitmap(source);
         using var output = new Bitmap(size, size);
         using (var g = Graphics.FromImage(output))
         {

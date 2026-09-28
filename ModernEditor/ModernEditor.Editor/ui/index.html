@@ -10,7 +10,7 @@
   <div id="bg"></div>
 
   <header id="top">
-    <div class="logo" data-act="home" title="Start page (Ctrl+M)"><div>Modern Editor</div><div class="credit"><span id="appVersion">v2.0.2</span> · discord : k_kyangg</div></div>
+    <div class="logo" data-act="home" title="Start page (Ctrl+M)"><div>Modern Editor</div><div class="credit"><span id="appVersion">v2.0.3</span> · discord : k_kyangg</div></div>
     <div class="search-pill" id="modPill">
       <span class="ico">📁</span>
       <span id="folder" class="folder">Pick your SPT folder (Modern Editor keeps its files in SPT_Runtime\user\mods\ModernEditor)</span>
@@ -43,19 +43,20 @@
         <button class="nav" data-act="page" data-arg="mods" title="Mods"><svg viewBox="0 0 24 24"><path d="M10 2a2.5 2.5 0 0 1 2.5 2.5V5H17a2 2 0 0 1 2 2v4.5h.5a2.5 2.5 0 0 1 0 5H19V21a1 1 0 0 1-1 1h-4.5v-1a2 2 0 1 0-4 0v1H5a1 1 0 0 1-1-1v-4.5h1a2 2 0 1 0 0-4H4V7a2 2 0 0 1 2-2h1.5v-.5A2.5 2.5 0 0 1 10 2Z"/></svg><span>Mods</span><em id="navMods"></em></button>
         <button class="nav" data-act="page" data-arg="checks" title="Checks &amp; Log"><svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 1 1 0 20 10 10 0 0 1 0-20Zm-1.2 13.6 6.3-6.3-1.4-1.4-4.9 4.9-2.3-2.3-1.4 1.4 3.7 3.7Z"/></svg><span>Checks &amp; Log</span><em id="navChecks"></em></button>
       </nav>
-      <!-- the item pages' categories (Level Limits, Item Stats) -->
-      <div id="lgNavBox" hidden>
-        <div class="nav-title" id="lgNavTitle">Categories</div>
-        <nav id="lgNav" class="scroll"></nav>
-      </div>
-      <div class="grow"></div>
+      <!-- the trader you edit; click for the list of all traders (opens right under it) -->
+      <div id="me" data-act="toggleTraders" title="Show all traders (right-click for more)"></div>
       <div id="traderMenu" hidden>
         <div class="menu-title">All Traders</div>
         <div id="traders" class="scroll"></div>
         <button class="menu-add" data-act="newTrader" title="New Trader"><b>＋</b><span> New Trader</span></button>
         <button class="menu-add" id="trashBtn" data-act="deletedTraders" title="Deleted Traders">🗑  Deleted Traders</button>
       </div>
-      <div id="me" data-act="toggleTraders" title="Show all traders (right-click for more)"></div>
+      <!-- the item pages' categories (Level Limits, Item Stats) -->
+      <div id="lgNavBox" hidden>
+        <div class="nav-title" id="lgNavTitle">Categories</div>
+        <nav id="lgNav" class="scroll"></nav>
+      </div>
+      <div class="grow"></div>
     </aside>
 
     <div class="splitter" id="splitLeft" title="Drag to resize · double-click to reset"></div>

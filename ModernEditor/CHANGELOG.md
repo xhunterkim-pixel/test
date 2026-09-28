@@ -1,5 +1,16 @@
 # Modern Editor changelog
 
+## 2.0.3
+- Quests without a picture use the picture of the item they unlock or give (the first reward or barter item):
+  - It shows in the editor right away.
+  - On Save it's drawn as a picture file (quest_<id>_item.png in the trader's folder), so the game shows it too.
+  - It follows the item if you change it, and your own or a game picture always wins.
+- The quest editor is ordered the way you work: Quest (name, level, hardcore) → Objectives → Rewards → Unlock Requirements → Required Quests → Text & Picture → Tags & Notes.
+- Appearance → Show → Help Text: hide the grey explanations once you know the editor. Warnings stay.
+- The trader list opens right under the trader button instead of at the bottom of the panel.
+- Pictures of any type are accepted for trader icons and quest pictures (webp, avif, svg, ico, png, jpg, bmp, gif, tif). They're converted to PNG, which the game reads.
+  - A webp / avif / svg you put into a trader's folder by hand is converted on the next Save, and the trader file is updated.
+
 ## 2.0.2
 - **Section switches** in the left panel replace the Add-ons page. The switches are saved in user\mods\ModernEditor\config.json, which the server mod reads too:
   - Traders off: the server loads none of your custom traders (files kept), and the trader pages are hidden.

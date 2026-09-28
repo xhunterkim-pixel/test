@@ -573,8 +573,12 @@ function thumb(t) {
 const DEFAULT_QUEST_IMAGE = '65899d03adeac0191c51e880';
 function gameImageUrl(name) { return S.gameQuestImages.find(g => g.n === name)?.u || null; }
 function questPic(t, q) {
-  if (q.image && t.images[q.image]) return { url: t.images[q.image], kind: 'mine' };
+  if (q.image && t.images[q.image]) return { url: t.images[q.image], kind: q.autoImage ? 'item' : 'mine' };
   if (q.gameImage && gameImageUrl(q.gameImage)) return { url: gameImageUrl(q.gameImage), kind: 'game' };
+  // no picture picked: the first reward / barter item's picture (made into a picture file when you save)
+  const tied = typeof questItem === 'function' ? questItem(t, q) : '';
+  const itemUrl = validId(tied) && itemPic(tied, '512');
+  if (itemUrl) return { url: itemUrl, kind: 'item' };
   const d = gameImageUrl(DEFAULT_QUEST_IMAGE);
   return d ? { url: d, kind: 'default' } : null;
 }
@@ -650,8 +654,8 @@ function renderTraders() {
   me.dataset.trader = t ? S.traders.indexOf(t) : '';
   me.innerHTML = t ? `${img ? `<img src="${esc(img)}" alt="">` : '<div class="ph"></div>'}
       <div style="min-width:0"><div class="name">${esc(f.name)}${t.dirty ? ' <span style="color:var(--pink)">•</span>' : ''}</div>
-      <div class="sub">${f.enabled ? `${f.offers.length} Offers · ${f.quests.length} Quests` : 'Switched OFF'}</div></div><div class="arrow">▲</div>`
-    : `<div class="ph"></div><div><div class="name">No Trader</div><div class="sub">Click to Add One</div></div><div class="arrow">▲</div>`;
+      <div class="sub">${f.enabled ? `${f.offers.length} Offers · ${f.quests.length} Quests` : 'Switched OFF'}</div></div><div class="arrow">▼</div>`
+    : `<div class="ph"></div><div><div class="name">No Trader</div><div class="sub">Click to Add One</div></div><div class="arrow">▼</div>`;
 
   // page links with counts
   const errors = S.checks.filter(c => c.level === 'error').length, warnings = S.checks.filter(c => c.level === 'warning').length;
@@ -1583,31 +1587,13 @@ function detailsQuest() {
       <div class="text"><div class="title">${esc(d.title)}</div></div><span class="side">${esc(d.side || '')}</span></div></div>`;
   }).join('');
 
+  // the order a designer works in: what it is → what to do → what it gives → when it opens → texts & picture → own notes
   return [q.name, `${onOffBar('quest', q)}
-    ${card('q-req', `<span style="color:${reqBad ? 'var(--red)' : 'var(--violet)'}">Unlock Requirements</span>`, `<div class="req">${esc(reqLines.join('\n'))}</div>`)}
     ${card('q-info', 'Quest', `
       ${ui.text('Name', () => q.name, v => { q.name = v; $('#detailsTitle').textContent = v; })}
       ${questLevelFields(t, q)}
-      ${ui.area('Description', () => q.description, v => { q.description = v; }, { extra: '<br><button class="outline gen" data-act="genText" data-arg="description" title="Write it from the objectives">✨ Generate</button>', placeholder: 'Empty = a description is made from the objectives. Or click ✨ Generate.' })}
-      ${ui.area('When Completed', () => q.successMessage, v => { q.successMessage = v; }, { rows: 2, extra: '<br><button class="outline gen" data-act="genText" data-arg="successMessage">✨ Generate</button>' })}
       ${ui.toggle('Fails If the Player Dies, Goes Missing or Leaves a Raid (Can Be Restarted)', () => q.failOnDeath, v => { q.failOnDeath = v; }, { label: 'Hardcore', refresh: 'light' })}
-      ${tagField(q, allQuests().map(x => x.q), 'Your own labels (e.g. "Kappa Path", "Main 1") — shown on the list and usable as a filter. Right-click a tag to rename, recolor or remove it. The game never sees them.')}
-      <div class="field top"><label>Picture</label><div>
-        ${pic ? `<img class="preview" src="${esc(pic.url)}" alt="">` : ''}
-        ${ui.hint(pic?.kind === 'mine' ? 'Your own picture.' : pic?.kind === 'game' ? "One of the game's quest pictures." : pic ? "No picture picked — the game's default picture is used." : 'No picture — the game shows its default one.')}
-        ${S.gameQuestImages.length ? '' : ui.hint(`The game's quest pictures weren't found${S.gameQuestImagesLooked ? ` (looked for an images\\quests folder in ${esc(S.gameQuestImagesLooked)})` : ''}. Pick your SPT folder with Browse… at the top if it isn't already.`)}
-        <div class="toolbar" style="padding:0">
-          ${S.gameQuestImages.length ? '<button class="primary" data-act="pickGameImage">Pick a Game Picture…</button><button class="outline" data-act="randomGameImage" title="Another random game picture">🎲 Random</button>' : ''}
-          <button class="outline" data-act="chooseQuestImage">From PC…</button>
-          ${q.image || q.gameImage ? '<button class="danger" data-act="removeQuestImage">Remove</button>' : ''}</div></div></div>
-      ${ui.area('Notes', () => q.notes, v => { q.notes = v; }, { rows: 2, placeholder: 'Only you see these (shown in the Notes column).' })}`)}
-    ${card('q-prereq', 'Required Quests', `
-      ${ui.hint('Switch on every quest that must be finished first. For a quest with several ways, <b>any one finished way counts</b>. Game quests (Prapor, Therapist…) can be required too.')}
-      <div class="req-tools"><input type="text" id="reqSearch" placeholder="Search quests or tags…" value="${esc(S.reqSearch || '')}" spellcheck="false">
-        <button class="chip ${S.reqOnlyPicked ? 'on' : ''}" data-act="reqOnlyPicked" style="--c:var(--accent)">Selected Only</button></div>
-      ${mineSwitches || gameSwitches ? mineSwitches + gameSwitches : `<div class="hint">${reqQuery || S.reqOnlyPicked ? 'Nothing matches.' : 'No other quests yet.'}</div>`}
-      ${others ? `<div class="switches" style="margin-top:8px">${others}</div>` : ''}
-      ${S.gameQuests.size ? '' : '<div class="toolbar" style="margin-top:8px"><button class="outline" data-act="addGamePrereq">+ Game Quest by Id…</button></div>'}`)}
+`)}
     ${card('q-obj', 'Objectives', `
       <div class="waytabs">${tabs}</div>
       ${ui.hint(waysHint)}
@@ -1629,7 +1615,30 @@ function detailsQuest() {
         <button class="danger" data-act="removeReward" ${S.reward ? '' : 'disabled'}>Remove</button>
         <button class="icon-btn" data-act="moveReward" data-arg="-1">▲</button><button class="icon-btn" data-act="moveReward" data-arg="1">▼</button>
       </div>
-      ${S.reward ? rewardEditor(t, S.reward) : ''}`)}`];
+      ${S.reward ? rewardEditor(t, S.reward) : ''}`)}
+    ${card('q-req', `<span style="color:${reqBad ? 'var(--red)' : 'var(--violet)'}">Unlock Requirements</span>`, `<div class="req">${esc(reqLines.join('\n'))}</div>`)}
+    ${card('q-prereq', 'Required Quests', `
+      ${ui.hint('Switch on every quest that must be finished first. For a quest with several ways, <b>any one finished way counts</b>. Game quests (Prapor, Therapist…) can be required too.')}
+      <div class="req-tools"><input type="text" id="reqSearch" placeholder="Search quests or tags…" value="${esc(S.reqSearch || '')}" spellcheck="false">
+        <button class="chip ${S.reqOnlyPicked ? 'on' : ''}" data-act="reqOnlyPicked" style="--c:var(--accent)">Selected Only</button></div>
+      ${mineSwitches || gameSwitches ? mineSwitches + gameSwitches : `<div class="hint">${reqQuery || S.reqOnlyPicked ? 'Nothing matches.' : 'No other quests yet.'}</div>`}
+      ${others ? `<div class="switches" style="margin-top:8px">${others}</div>` : ''}
+      ${S.gameQuests.size ? '' : '<div class="toolbar" style="margin-top:8px"><button class="outline" data-act="addGamePrereq">+ Game Quest by Id…</button></div>'}`)}
+    ${card('q-text', 'Text & Picture', `
+      ${ui.area('Description', () => q.description, v => { q.description = v; }, { extra: '<br><button class="outline gen" data-act="genText" data-arg="description" title="Write it from the objectives">✨ Generate</button>', placeholder: 'Empty = a description is made from the objectives. Or click ✨ Generate.' })}
+      ${ui.area('When Completed', () => q.successMessage, v => { q.successMessage = v; }, { rows: 2, extra: '<br><button class="outline gen" data-act="genText" data-arg="successMessage">✨ Generate</button>' })}
+      <div class="field top"><label>Picture</label><div>
+        ${pic ? `<img class="preview" src="${esc(pic.url)}" alt="">` : ''}
+        ${ui.hint(pic?.kind === 'mine' ? 'Your own picture.' : pic?.kind === 'game' ? "One of the game's quest pictures." : pic?.kind === 'item' ? `No picture picked — the picture of ${esc(shortName(questItem(t, q)))} (the item it gives / unlocks) is used. It's saved as a picture file when you Save, and follows the item if you change it.` : pic ? "No picture picked — the game's default picture is used." : 'No picture — the game shows its default one.')}
+        ${S.gameQuestImages.length ? '' : ui.hint(`The game's quest pictures weren't found${S.gameQuestImagesLooked ? ` (looked for an images\\quests folder in ${esc(S.gameQuestImagesLooked)})` : ''}. Pick your SPT folder with Browse… at the top if it isn't already.`)}
+        <div class="toolbar" style="padding:0">
+          ${S.gameQuestImages.length ? '<button class="primary" data-act="pickGameImage">Pick a Game Picture…</button><button class="outline" data-act="randomGameImage" title="Another random game picture">🎲 Random</button>' : ''}
+          <button class="outline" data-act="chooseQuestImage">From PC…</button>
+          ${(q.image && !q.autoImage) || q.gameImage ? '<button class="danger" data-act="removeQuestImage">Remove</button>' : ''}</div></div></div>
+`)}
+    ${card('q-notes', 'Tags & Notes', `
+      ${tagField(q, allQuests().map(x => x.q), 'Your own labels (e.g. "Kappa Path", "Main 1") — shown on the list and usable as a filter. Right-click a tag to rename, recolor or remove it. The game never sees them.')}
+      ${ui.area('Notes', () => q.notes, v => { q.notes = v; }, { rows: 2, placeholder: 'Only you see these (shown in the Notes column).' })}`)}`];
 }
 
 function objectiveEditor(c) {
@@ -3226,9 +3235,9 @@ const ACT = {
   removeTag(tag) { const o = tagTarget(); if (!o) return; o.tags = o.tags.filter(x => x !== tag); changed(false); },
   async pickGameImage() {
     const name = await pickGameImage(S.quest.gameImage);
-    if (name) { S.quest.gameImage = name; delete S.quest.image; changed(false); }
+    if (name) { S.quest.gameImage = name; delete S.quest.image; delete S.quest.autoImage; changed(false); }
   },
-  randomGameImage() { const n = randomGameImage(S.quest.gameImage); if (n) { S.quest.gameImage = n; delete S.quest.image; changed(false); } },
+  randomGameImage() { const n = randomGameImage(S.quest.gameImage); if (n) { S.quest.gameImage = n; delete S.quest.image; delete S.quest.autoImage; changed(false); } },
   async deletedTraders() { S.tradersOpen = false; renderTraders(); await deletedTradersBox(); },
   async addGamePrereq() {
     const id = await pickQuest('Pick a quest that must be finished first', true);
@@ -3356,13 +3365,13 @@ const ACT = {
   moveReward: d => { if (S.reward && move(S.quest.rewards, S.reward, d)) changed(false); },
   async chooseQuestImage() {
     try {
-      const r = await host.call('chooseQuestImage', { folder: S.t.folder, questId: S.quest.id });
+      const r = await convertPicked(await host.call('chooseQuestImage', { folder: S.t.folder, questId: S.quest.id }));
       if (!r) return;
-      S.t.images[r.file] = r.url; S.quest.image = r.file; delete S.quest.gameImage;
+      S.t.images[r.file] = r.url; S.quest.image = r.file; delete S.quest.gameImage; delete S.quest.autoImage;
       changed(false); toast('Quest image saved');
     } catch (err) { errorBox(err); }
   },
-  removeQuestImage() { delete S.quest.image; delete S.quest.gameImage; changed(false); },
+  removeQuestImage() { delete S.quest.image; delete S.quest.gameImage; delete S.quest.autoImage; changed(false); },
 
   // ---- generic list helpers (inline ✕, pickers, chips)
   removeAt(arg) { const [k, i] = arg.split('|'); const l = L.get(k); if (!l) return; l.splice(Number(i), 1); changed(false); },
@@ -3397,7 +3406,7 @@ const ACT = {
   removeLoyalty() { S.t.file.loyaltyLevels.pop(); changed(true); },
   async chooseAvatar() {
     try {
-      const r = await host.call('chooseAvatar', { folder: S.t.folder });
+      const r = await convertPicked(await host.call('chooseAvatar', { folder: S.t.folder }));
       if (!r) return;
       S.t.images[r.file] = r.url; S.t.file.avatar = r.file; S.t.avatarColor = r.avatarColor;
       changed(true); toast('New icon saved — restart the SPT server to see it in game');
@@ -3482,6 +3491,8 @@ const ACT = {
   async save() {
     const items = S.lgStarted ? LG.unsavedCount() : 0;
     if (items) await LG.save();
+    // quests without a picture get their item's picture (drawn here, saved next to the trader.json)
+    if (typeof makeItemPictures === 'function') { await convertOddPictures(); await makeItemPictures(); }
     runChecks();
     const dirty = S.traders.filter(t => t.dirty);
     if (!dirty.length) { renderAll(false); if (!items) toast('Nothing to save'); return; }
@@ -3560,6 +3571,7 @@ function applyUi() {
   if (u.left) root.setProperty('--left', clamp(u.left, LEFT_MIN, 460) + 'px');
   document.body.classList.toggle('left-mini', !!u.leftMini);
   document.body.classList.toggle('grey', !!u.grey);
+  document.body.classList.toggle('no-help', !!u.noHelp);
   if (u.page && !S.pageRestored) { S.page = u.page; S.pageRestored = true; }
   applyZoom();
 }
@@ -3601,7 +3613,7 @@ function appearanceMenu(anchor) {
       { title: 'Button Color', items: [{ key: 'green', text: 'Default Green', on: !u.accent }, { key: 'pick', text: 'Custom…', on: !!u.accent, icon: `<span class="dot" style="--c:${u.accent || '#1ed760'}"></span>` }] },
       { title: 'Size', items: [{ key: 'zoom:auto', text: `Auto (Fits the Window · ${Math.round(zoomNow * 100)}%)`, on: typeof u.zoom !== 'number' },
         ...[1, 1.25, 1.5, 1.75, 2].map(z => ({ key: 'zoom:' + z, text: Math.round(z * 100) + '%', on: u.zoom === z }))] },
-      { title: 'Show', items: [{ key: 'pics', text: 'Item Pictures', on: !view().noItemPics }, { key: 'grey', text: 'Grey Colors', on: !!u.grey }] },
+      { title: 'Show', items: [{ key: 'help', text: 'Help Text (Grey Explanations)', on: !u.noHelp }, { key: 'pics', text: 'Item Pictures', on: !view().noItemPics }, { key: 'grey', text: 'Grey Colors', on: !!u.grey }] },
     ]) + '<input type="color" id="accentPick" value="' + (u.accent || '#1ed760') + '" style="position:absolute;opacity:0;pointer-events:none;width:0;height:0">';
     pop.querySelector('#accentPick').addEventListener('input', e => { u.accent = e.target.value; applyUi(); saveUi(); draw(); });
   };
@@ -3617,6 +3629,7 @@ function appearanceMenu(anchor) {
     if (what === 'pick') { pop.querySelector('#accentPick').click(); return; }
     if (what === 'pics') { view().noItemPics = !view().noItemPics; badPics.clear(); saveUi(); renderPage(false); renderDetails(false); }
     if (what === 'grey') { u.grey = !u.grey; applyUi(); saveUi(); }
+    if (what === 'help') { u.noHelp = !u.noHelp; applyUi(); saveUi(); }
     if (what.startsWith('zoom:')) { const z = what.slice(5); if (z === 'auto') delete u.zoom; else u.zoom = Number(z); applyZoom(); saveUi(); closePopover(); return; }
     draw();
   });

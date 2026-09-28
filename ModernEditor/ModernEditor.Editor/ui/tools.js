@@ -393,6 +393,115 @@ function homeNotes() {
 }
 
 // =====================================================================
+// Quest pictures from items: a quest without a picture shows the item it gives / unlocks
+// =====================================================================
+
+/** Draws the item's picture on a dark 1024×512 background (the game's quest picture shape) → PNG data url, or null. */
+function drawItemPicture(tpl) {
+  return new Promise(resolve => {
+    const urls = [itemPic(tpl, '512'), itemPic(tpl, 'base-image'), itemPic(tpl, 'icon')].filter(Boolean);
+    const tryNext = () => {
+      const url = urls.shift();
+      if (!url) return resolve(null);
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.onload = () => {
+        try {
+          const c = document.createElement('canvas'); c.width = 1024; c.height = 512;
+          const g = c.getContext('2d');
+          const bg = g.createLinearGradient(0, 0, 0, 512); bg.addColorStop(0, '#2a2f35'); bg.addColorStop(1, '#101316');
+          g.fillStyle = bg; g.fillRect(0, 0, 1024, 512);
+          const glow = g.createRadialGradient(512, 256, 20, 512, 256, 360); glow.addColorStop(0, 'rgba(255,255,255,.10)'); glow.addColorStop(1, 'rgba(255,255,255,0)');
+          g.fillStyle = glow; g.fillRect(0, 0, 1024, 512);
+          const k = Math.min(860 / img.width, 420 / img.height);
+          const w = img.width * k, h = img.height * k;
+          g.shadowColor = 'rgba(0,0,0,.6)'; g.shadowBlur = 24; g.shadowOffsetY = 8;
+          g.drawImage(img, (1024 - w) / 2, (512 - h) / 2, w, h);
+          resolve(c.toDataURL('image/png'));
+        } catch (e) { console.warn('item picture', tpl, e); tryNext(); }
+      };
+      img.onerror = tryNext;
+      img.src = url;
+    };
+    tryNext();
+  });
+}
+
+/** Any picture the Edge engine can show (webp, avif, svg…) → PNG data url, or null. maxSide shrinks huge pictures. */
+function toPng(url, maxSide = 2048) {
+  return new Promise(resolve => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      try {
+        const k = Math.min(1, maxSide / Math.max(img.naturalWidth || 1, img.naturalHeight || 1));
+        const c = document.createElement('canvas');
+        c.width = Math.max(1, Math.round((img.naturalWidth || 512) * k)); c.height = Math.max(1, Math.round((img.naturalHeight || 512) * k));
+        c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+        resolve(c.toDataURL('image/png'));
+      } catch (e) { console.warn('picture conversion', e); resolve(null); }
+    };
+    img.onerror = () => resolve(null);
+    img.src = url;
+  });
+}
+
+/** A picture picked on the PC that Windows can't read (webp…): the host hands it here, it goes back as PNG. */
+async function convertPicked(r) {
+  if (!r?.convert) return r;
+  const png = await toPng(r.convert);
+  if (!png) throw new Error('That picture couldn\'t be read — try a png, jpg or webp.');
+  return host.call('saveConvertedImage', { kind: r.kind, folder: r.folder, questId: r.questId, png });
+}
+
+/** Before saving: trader icons / quest pictures put in the folder by hand as webp, avif… become PNG (the game reads png / jpg). */
+async function convertOddPictures() {
+  const odd = name => !!name && !/\.(png|jpe?g)$/i.test(name);
+  for (const t of S.traders) {
+    const f = t.file;
+    if (odd(f.avatar) && t.images[f.avatar]) {
+      const png = await toPng(t.images[f.avatar]);
+      if (png) try {
+        const r = await host.call('saveConvertedImage', { kind: 'avatar', folder: t.folder, questId: '', png });
+        t.images[r.file] = r.url; f.avatar = r.file; t.avatarColor = r.avatarColor; t.dirty = true;
+        log('info', f.name, 'Trader icon converted to PNG for the game');
+      } catch (e) { console.warn('icon', e); }
+    }
+    for (const q of f.quests) {
+      if (!odd(q.image) || !t.images[q.image]) continue;
+      const png = await toPng(t.images[q.image]);
+      if (!png) continue;
+      try {
+        const r = await host.call('saveConvertedImage', { kind: 'quest', folder: t.folder, questId: q.id, png });
+        t.images[r.file] = r.url; q.image = r.file; delete q.autoImage; t.dirty = true;
+        log('info', f.name, `${q.name}: picture converted to PNG for the game`);
+      } catch (e) { console.warn('quest picture', e); }
+    }
+  }
+}
+
+/** Before saving: every quest without a picture of its own gets its item's picture as a file (again if the item changed). */
+async function makeItemPictures() {
+  if (!S.modFolder) return;
+  let made = 0;
+  for (const t of S.traders) {
+    for (const q of t.file.quests) {
+      if (q.gameImage || (q.image && !q.autoImage)) continue;           // a picture you picked stays
+      const tpl = questItem(t, q);
+      if (!validId(tpl)) { if (q.autoImage) { delete q.image; delete q.autoImage; t.dirty = true; } continue; }
+      if (q.autoImage === tpl && q.image && t.images[q.image]) continue; // already made from this item
+      const png = await drawItemPicture(tpl);
+      if (!png) continue;
+      try {
+        const r = await host.call('saveQuestAutoImage', { folder: t.folder, questId: q.id, png });
+        t.images[r.file] = r.url; q.image = r.file; q.autoImage = tpl; t.dirty = true; made++;
+      } catch (e) { console.warn('quest picture', q.name, e); }
+    }
+  }
+  if (made) log('info', 'Pictures', `${made} quest picture${made === 1 ? '' : 's'} made from their items`);
+}
+
+// =====================================================================
 // Section switches (left panel): Traders / Level Gate / Items
 // =====================================================================
 

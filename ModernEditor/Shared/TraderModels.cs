@@ -215,6 +215,10 @@ public class QuestDef
     /// <summary>Off = the server skips this quest (nothing is deleted).</summary>
     public bool Enabled { get; set; } = true;
 
+    /// <summary>Set when Image was made by the editor from an item's picture (the quest had none): the item's id.
+    /// The editor draws it again when that item changes, and drops it when you pick a picture yourself.</summary>
+    public string? AutoImage { get; set; }
+
     /// <summary>One of the game's own quest pictures (file name without extension in SPT_Data/images/quests), used when Image is empty.</summary>
     public string? GameImage { get; set; }
 
