@@ -25,7 +25,7 @@ namespace LevelGate.Progression
         public const string Guid = "com.kkyangg.levelgate.progression";
         public const string Name = "LevelGate Progression";
         // MAJOR.MINOR.PATCH — see CHANGELOG.md
-        public const string Version = "0.9.52";
+        public const string Version = "0.9.53";
 
         internal static ProgressionPlugin Instance;
         internal static ConfigEntry<KeyboardShortcut> OpenKey;
@@ -184,6 +184,7 @@ namespace LevelGate.Progression
                 ProgData.Init();
                 Sfx.Load();
                 OriginalArmor.Load(); // background thread, read-only
+                GameText.Load();      // short names / handbook categories from the game data (background thread, read-only)
                 var harmony = new Harmony(Guid);
                 MenuHook.Apply(harmony);
             }

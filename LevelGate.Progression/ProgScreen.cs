@@ -378,10 +378,16 @@ namespace LevelGate.Progression
             _xpText = Ui.Label(Ui.Rect(right, "Exp", new Vector2(0, 1), new Vector2(1, 1), new Vector2(0, -44), new Vector2(0, -18)), "Text", "", THero, Ui.Hex("#b9c0c3"), TextAnchor.MiddleLeft, true);
             // the orange EXP tag right after the numbers (moved to the text's end whenever it changes)
             _xpTag = Ui.Rect(right, "ExpTag", new Vector2(0, 1), new Vector2(0, 1), new Vector2(0, -40), new Vector2(40, -22));
-            // outlined, not a solid block: the level square is the one solid orange shape here
-            Ui.Img(_xpTag, Ui.Hex("#e0562f", .9f));
-            Ui.Img(Ui.Fill(_xpTag, "In", 1), Ui.Hex("#1c1310"));
-            Ui.Label(_xpTag, "Text", "EXP", TCaps, Ui.Hex("#e0562f"), TextAnchor.MiddleCenter, true, 1);
+            // the game's own EXP badge (as on the character screen) when it can be found; else one drawn like it:
+            // pale grey plate, dark rim, dark bold EXP
+            var expSprite = Ui.GameSprite("exp");
+            if (expSprite != null) { var ei = Ui.Img(_xpTag, Color.white, expSprite); ei.preserveAspect = true; }
+            else
+            {
+                Ui.Img(_xpTag, Ui.Hex("#15191b"));
+                Ui.Img(Ui.Fill(_xpTag, "In", 1), Ui.Hex("#c4c9cb"));
+                Ui.Label(_xpTag, "Text", "EXP", TCaps, Ui.Hex("#15191b"), TextAnchor.MiddleCenter, true, .5f);
+            }
             var next = Ui.Rect(right, "Next", new Vector2(0, 1), new Vector2(0, 1), new Vector2(0, -80), new Vector2(420, -62));
             _xpNext = Ui.Label(next, "Text", "", TBody, Grey, TextAnchor.MiddleLeft, false);
             var hit = Ui.Img(next, new Color(0, 0, 0, 0), null, true);
@@ -542,10 +548,23 @@ namespace LevelGate.Progression
             var vl = info.gameObject.AddComponent<VerticalLayoutGroup>();
             vl.spacing = S2; vl.childControlHeight = true; vl.childControlWidth = true; vl.childForceExpandHeight = false; vl.childForceExpandWidth = true;
 
-            _featType = FlowText(info, "Category", TCaps, Grey, false, Caps);                  // CATEGORY
+            // CATEGORY (the handbook's path for everything but weapons) · the weight top-right, like the inspect window's header
+            var typeRow = Ui.Rect(info, "TypeRow", Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
+            var trl = typeRow.gameObject.AddComponent<HorizontalLayoutGroup>();
+            trl.spacing = 5; trl.childAlignment = TextAnchor.MiddleLeft;
+            trl.childControlWidth = trl.childControlHeight = true; trl.childForceExpandWidth = trl.childForceExpandHeight = false;
+            _featType = FlowText(typeRow, "Category", TCaps, Grey, false, Caps);
+            var tle = ((Component)_featType).gameObject.AddComponent<LayoutElement>();
+            tle.flexibleWidth = 1; tle.minWidth = 0;
+            var wIcon = Ui.Rect(typeRow, "WeightIcon", Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
+            var wle = wIcon.gameObject.AddComponent<LayoutElement>();
+            wle.minWidth = wle.preferredWidth = wle.minHeight = wle.preferredHeight = 14;
+            _featWeightIcon = Ui.Img(wIcon, Grey);
+            _featWeightIcon.preserveAspect = true;
+            _featWeight = FlowText(typeRow, "Weight", TBody, Text, false, 0);
             _featName = FlowText(info, "Name", THero, Text, false, 0, wrap: true);             // Item name
             // never squeezed when a long list of stats fills the panel (the name slid up into the category)
-            ((Component)_featType).gameObject.AddComponent<LayoutElement>().minHeight = 15;
+            { var tl = ((Component)_featType).gameObject.GetComponent<LayoutElement>(); if (tl != null) tl.minHeight = 15; }
             ((Component)_featName).gameObject.AddComponent<LayoutElement>().minHeight = 28;
             Rule(info, S1);
             _majorRow = Row(info, "Major", S4);                                                 // DAMAGE  PENETRATION …
@@ -583,16 +602,29 @@ namespace LevelGate.Progression
             var btn = Ui.Rect(info, "Inspect", Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
             var ble = btn.gameObject.AddComponent<LayoutElement>();
             ble.minHeight = ble.preferredHeight = 40;
-            var bimg = Ui.Img(btn, Ui.Hex("#34464c"), null, true);
-            Ui.Label(btn, "Text", "INSPECT", TStrong, Text, TextAnchor.MiddleCenter, false, 1);
+            // the game's grey button: pale with dark text while hovered (like its tabs and FILTER BY ITEM / category titles)
+            Color bFace = Ui.Hex("#2c3538"), bFaceOn = Ui.Hex("#c4c9cb"), bInk = Text, bInkOn = Ui.Hex("#15191b");
+            var bimg = Ui.Img(btn, bFace, null, true);
+            var bTop = Ui.Img(Ui.Rect(btn, "Top", new Vector2(0, 1), Vector2.one, new Vector2(0, -1), Vector2.zero), Ui.Hex("#465155"));
+            var bText = Ui.Label(btn, "Text", "INSPECT", TStrong, bInk, TextAnchor.MiddleCenter, false, 1);
             var cap = Ui.Rect(btn, "Key", new Vector2(1, .5f), new Vector2(1, .5f), new Vector2(-S3 - 38, -11), new Vector2(-S3, 11));
-            Ui.Img(cap, Ui.Hex("#6a767b"));
-            Ui.Img(Ui.Fill(cap, "In", 2), Ui.Hex("#22303a"));
-            Ui.Label(cap, "Text", "RMB", TCaps, Ui.Hex("#c3ccd0"), TextAnchor.MiddleCenter, true);
+            var capEdge = Ui.Img(cap, Ui.Hex("#6a767b"));
+            var capFace = Ui.Img(Ui.Fill(cap, "In", 2), Ui.Hex("#1b2326"));
+            var capText = Ui.Label(cap, "Text", "RMB", TCaps, Ui.Hex("#c3ccd0"), TextAnchor.MiddleCenter, true);
             var b = btn.gameObject.AddComponent<Button>();
             b.targetGraphic = bimg;
-            var colors = b.colors; colors.highlightedColor = new Color(1.25f, 1.25f, 1.25f, 1f); colors.pressedColor = new Color(.8f, .8f, .8f, 1f); b.colors = colors;
+            b.transition = Selectable.Transition.None;
             b.onClick.AddListener(() => { if (_featTpl != null) Inspect(_featTpl); });
+            HoverHook.Add(bimg, on =>
+            {
+                if (on) Sounds.Play("ButtonOver");
+                FadeTo(bimg, on ? bFaceOn : bFace, true);
+                FadeTo(bTop, on ? Ui.Hex("#e1e5e6") : Ui.Hex("#465155"), true);
+                FadeTo(bText as Graphic, on ? bInkOn : bInk, true);
+                FadeTo(capEdge, on ? Ui.Hex("#3a4245") : Ui.Hex("#6a767b"), true);
+                FadeTo(capFace, on ? Ui.Hex("#aeb4b6") : Ui.Hex("#1b2326"), true);
+                FadeTo(capText as Graphic, on ? bInkOn : Ui.Hex("#c3ccd0"), true);
+            });
         }
 
         private static LayoutElement _reqSize, _descSize, _inspectGap;
@@ -616,7 +648,8 @@ namespace LevelGate.Progression
             if (_inspectGap != null) _inspectGap.flexibleHeight = 1;
             LayoutRebuilder.ForceRebuildLayoutImmediate(_info);
         }
-        private static Component _featNote;
+        private static Component _featNote, _featWeight;
+        private static Image _featWeightIcon;
 
         /// <summary>The one place that says whether a reward is yours: REQUIREMENT · state, "Reach level X  n / X",
         /// and for a locked one how much XP is left (and that it's a preview).</summary>
@@ -694,19 +727,21 @@ namespace LevelGate.Progression
         private static int _scrollTopFrames;
         private static Image _listFade;
 
-        /// <summary>A thin 2 px scroll thumb on the right edge, shown only when the content is taller than its view.</summary>
+        /// <summary>A thin scrollbar on the right edge (the game's look), shown only when the content is taller than its view.</summary>
         private static void AddScrollCue(ScrollRect scroll, RectTransform view)
         {
             // 12 px wide to grab, 2 px wide to see
             var bar = Ui.Rect(view, "ScrollCue", new Vector2(1, 0), Vector2.one, new Vector2(-12, 0), Vector2.zero);
             var sb = bar.gameObject.AddComponent<Scrollbar>();
             sb.direction = Scrollbar.Direction.BottomToTop;
+            // like the game's: a dark 4 px track with a light thumb in it (brighter while hovered)
+            Ui.Img(Ui.Rect(bar, "Track", new Vector2(1, 0), Vector2.one, new Vector2(-4, 0), Vector2.zero), Ui.Hex("#07090a", .75f)).raycastTarget = false;
             var area = Ui.Fill(bar, "Area");
             var handle = Ui.Fill(area, "Handle");
             var himg = Ui.Img(handle, new Color(0, 0, 0, 0), null, true);
-            var line = Ui.Img(Ui.Rect(handle, "Line", new Vector2(1, 0), Vector2.one, new Vector2(-2, 0), Vector2.zero), Ui.Hex("#56636a", .9f));
+            var line = Ui.Img(Ui.Rect(handle, "Line", new Vector2(1, 0), Vector2.one, new Vector2(-4, 0), Vector2.zero), Ui.Hex("#aeb5b8", .9f));
             line.raycastTarget = false;
-            HoverHook.Add(handle, on => FadeTo(line, on ? Ui.Hex("#8a969b") : Ui.Hex("#56636a", .9f)));
+            HoverHook.Add(handle, on => FadeTo(line, on ? Ui.Hex("#e1e5e6") : Ui.Hex("#aeb5b8", .9f)));
             sb.handleRect = handle;
             sb.targetGraphic = himg;
             sb.transition = Selectable.Transition.None;
@@ -820,6 +855,8 @@ namespace LevelGate.Progression
         /// One small stat as the game's inspect window shows them (CALIBER · 762x51, EFFECTIVE DISTANCE · 500 meters):
         /// a dark strip, icon and caps label on the left, the value on the right.
         /// </summary>
+        private static readonly HashSet<string> WeaponExtras = new HashSet<string> { "CenterOfImpact", "Accuracy", "SightingRange", "RecoilBack", "Velocity", "BulletSpeed", "WeaponFireType" };
+
         /// <summary>A strip that fits half the panel: short label and value (else it gets a whole line).</summary>
         private static bool StripFitsHalf((string Label, string Value, Sprite Icon, bool Game) f)
             => (f.Label?.Length ?? 0) <= 13 && System.Text.RegularExpressions.Regex.Replace(f.Value ?? "", "<[^>]+>", "").Length <= 12;
@@ -929,7 +966,7 @@ namespace LevelGate.Progression
 
         private static GraphicsQuality _beforeLow = GraphicsQuality.Medium;
         private static Component _homeText;
-        private static Image _homeEdge;
+        private static Image _homeEdge, _homePlate;
         private static bool _homeAway, _homeHover;
 
         /// <summary>
@@ -938,8 +975,9 @@ namespace LevelGate.Progression
         /// </summary>
         private static void HomeButton(RectTransform bottom)
         {
-            var rt = Ui.Rect(bottom, "Home", Vector2.zero, Vector2.zero, new Vector2(Margin, 25), new Vector2(Margin + 260, 25 + 24));
+            var rt = Ui.Rect(bottom, "Home", Vector2.zero, Vector2.zero, new Vector2(Margin, 25), new Vector2(Margin + 214, 25 + 24));
             var hit = Ui.Img(rt, new Color(0, 0, 0, 0), null, true);
+            _homePlate = hit;
             // the keycap, like Q / E: grey rim, dark face, bold caps
             var cap = Ui.Rect(rt, "Key", new Vector2(0, .5f), new Vector2(0, .5f), new Vector2(0, -11), new Vector2(46, 11));
             _homeEdge = Ui.Img(cap, Ui.Hex("#5a6468"));
@@ -981,7 +1019,10 @@ namespace LevelGate.Progression
         {
             if (_homeText == null) return;
             // away from your page: readable (brighter on hover) · on it: dimmed, nothing to go back to
-            FadeTo(_homeText as Graphic, !_homeAway ? Ui.Hex("#6a7376", .45f) : _homeHover ? Text : Grey);
+            // hovered: the game's pale plate with dark text, like its buttons
+            bool on = _homeAway && _homeHover;
+            FadeTo(_homePlate, on ? Ui.Hex("#c4c9cb") : new Color(0, 0, 0, 0), true);
+            FadeTo(_homeText as Graphic, !_homeAway ? Ui.Hex("#6a7376", .45f) : on ? Ui.Hex("#15191b") : Grey, true);
             FadeTo(_homeEdge, _homeAway && _homeHover ? HoverEdge : Ui.Hex("#5a6468", _homeAway ? 1f : .45f));
         }
 
@@ -1357,7 +1398,7 @@ namespace LevelGate.Progression
             bl.childForceExpandHeight = false; bl.childForceExpandWidth = true;
             var grid = Ui.Rect(body, "Grid", Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
             var gl = grid.gameObject.AddComponent<GridLayoutGroup>();
-            gl.cellSize = new Vector2(tileCell, Mathf.Round(tileCell * .78f) + TileLabel); // 4:3 thumbnails
+            gl.cellSize = new Vector2(tileCell, Mathf.Round(tileCell * TileAspect));
             gl.spacing = new Vector2(S2, S2);
             gl.startCorner = GridLayoutGroup.Corner.UpperLeft;
             gl.constraint = GridLayoutGroup.Constraint.FixedColumnCount;
@@ -1398,7 +1439,8 @@ namespace LevelGate.Progression
 
         private const int BoxPad = 6;        // a category box's inner padding
         private const float TileMin = 118;   // smallest tile width before a column is dropped
-        private const float TileLabel = 40;  // name area under the thumbnail (two lines of 13.5 px)
+        private const float TileTop = 18;    // room at the top for the name's first line (it overlaps the picture's edge, like the game's cells)
+        private const float TileAspect = .8f; // tile height / width
 
         /// <summary>
         /// Tile names for items whose short names collide (three "Bastion" helmets): the short name plus what tells them
@@ -1420,6 +1462,23 @@ namespace LevelGate.Progression
                 }
             }
             return r;
+        }
+
+        /// <summary>The item's own background colour in the game's cells (its template's BackgroundColor), dark and see-through.</summary>
+        private static Color TintOf(string tpl)
+        {
+            switch ((GameItems.BackgroundOf(tpl) ?? "").ToLowerInvariant())
+            {
+                case "blue": return Ui.Hex("#1f3b57", .45f);
+                case "green": case "tracergreen": return Ui.Hex("#24421f", .45f);
+                case "orange": return Ui.Hex("#5a3413", .45f);
+                case "red": case "tracerred": return Ui.Hex("#5a1a18", .45f);
+                case "violet": return Ui.Hex("#3f2757", .45f);
+                case "yellow": case "traceryellow": return Ui.Hex("#56501a", .42f);
+                case "black": return Ui.Hex("#050606", .5f);
+                case "grey": return Ui.Hex("#3a3e40", .4f);
+                default: return new Color(0, 0, 0, 0);
+            }
         }
 
         /// <summary>One reward tile's parts, so hover / selection / locked can be restyled without rebuilding it.</summary>
@@ -1457,34 +1516,39 @@ namespace LevelGate.Progression
             v.Frame = Ui.Img(rt, Border, null, true);
             var inner = Ui.Fill(rt, "Inner", 1);
             v.Face = Ui.Img(inner, Face);
-            // thumbnail: a square on top, lit like the big preview; the icon uses ~80% of it
-            var thumb = Ui.Rect(inner, "Thumb", new Vector2(0, 0), Vector2.one, new Vector2(0, TileLabel - 1), new Vector2(0, category.HasValue ? -16 : 0));
-            Ui.Img(Ui.Fill(thumb, "Light"), new Color(1, 1, 1, .05f), Ui.Radial());
+            // like a stash cell / the prestige reward tiles: the item's own background tint (violet keys, yellow ammo…), the
+            // picture using the whole tile, its short name top-right over it
+            var tint = TintOf(it.Tpl);
+            if (tint.a > 0) Ui.Img(Ui.Fill(inner, "Tint"), tint);
+            var thumb = Ui.Rect(inner, "Thumb", Vector2.zero, Vector2.one, new Vector2(0, 4), new Vector2(0, -TileTop));
+            Ui.Img(Ui.Fill(inner, "Light"), new Color(1, 1, 1, .045f), Ui.Radial());
             var placeholder = Ui.Label(Ui.Fill(thumb, "Placeholder", S2), "Text", "", TCaps, Dim, TextAnchor.MiddleCenter, false, 0, true);
             v.Pic = Ui.Img(Ui.Fill(thumb, "Icon", 0), Color.white);
             var prt = v.Pic.rectTransform;
-            prt.anchorMin = new Vector2(.1f, .1f); prt.anchorMax = new Vector2(.9f, .9f); prt.offsetMin = prt.offsetMax = Vector2.zero;
+            // long guns take the full width (they came out tiny at 80% of a box)
+            prt.anchorMin = new Vector2(.05f, .04f); prt.anchorMax = new Vector2(.95f, .96f); prt.offsetMin = prt.offsetMax = Vector2.zero;
             v.Pic.preserveAspect = true;
             v.Pic.enabled = false;
             // selection: a 2 px light bar along the top (so selected isn't told by colour alone)
             v.Top = Ui.Img(Ui.Rect(inner, "Top", new Vector2(0, 1), Vector2.one, new Vector2(0, -2), Vector2.zero), Select);
             v.Top.enabled = false;
-            // name: two lines of 12 px, the full name when short names collide
-            v.Name = Ui.Label(Ui.Rect(inner, "Name", Vector2.zero, new Vector2(1, 0), new Vector2(S2, S1), new Vector2(-S2, TileLabel - S1)), "Text",
-                shownName ?? it.Short, 13.5f, Grey, TextAnchor.MiddleLeft, false, 0, true);
+            // the short name, top-right like the game's cells (two lines at most; look-alikes say what sets them apart)
+            v.Name = Ui.Label(Ui.Rect(inner, "Name", new Vector2(0, 1), Vector2.one, new Vector2(S2, -TileTop - 8), new Vector2(-S1 - 2, -S1)), "Text",
+                shownName ?? it.Short, 13.5f, Grey, TextAnchor.UpperRight, false, 0, true);
             Ui.SetWrap(v.Name, true);
             Refl.Set(v.Name, "lineSpacing", -8f);
-            // compact list: the category on the tile itself (its colour bar + small caps), top-left
-            if (category is var cat && cat.HasValue)
+            // locked: a lock and the level it opens at, bottom-left, like the traders' loyalty-locked items
+            if (!reached)
             {
-                Ui.Img(Ui.Rect(inner, "CatBar", new Vector2(0, 1), new Vector2(0, 1), new Vector2(S2, -S2 - 10), new Vector2(S2 + 2, -S2)), Ui.Hex(cat.Value.Color, .85f));
-                Ui.Label(Ui.Rect(inner, "Cat", new Vector2(0, 1), Vector2.one, new Vector2(S2 + 2 + S1, -S2 - 12), new Vector2(-S2, -S2 + 2)), "Text",
-                    cat.Value.Name.ToUpperInvariant(), 10, Grey, TextAnchor.MiddleLeft, false, 1, true);
+                var lk = Ui.Rect(inner, "Lock", Vector2.zero, Vector2.zero, new Vector2(S1, S1), new Vector2(S1 + 46, S1 + 16));
+                Ui.Img(lk, Ui.Hex("#0b0f11", .85f));
+                Ui.Img(Ui.Rect(lk, "Icon", new Vector2(0, .5f), new Vector2(0, .5f), new Vector2(4, -5), new Vector2(13, 5)), Ui.Hex(Red, .95f), Ui.Lock());
+                Ui.Label(Ui.Rect(lk, "Text", Vector2.zero, Vector2.one, new Vector2(15, 0), new Vector2(-3, 0)), "Text", $"LV {it.Level}", 10, Ui.Hex("#c9cfd1"), TextAnchor.MiddleCenter, true, .5f);
             }
             // newly reached since you last opened the screen: a small restrained tag (top-right)
             if (reached && NewTags.Item(it.Tpl))
             {
-                var tag = Ui.Rect(inner, "New", new Vector2(1, 1), new Vector2(1, 1), new Vector2(-S1 - 30, -S1 - 14), new Vector2(-S1, -S1));
+                var tag = Ui.Rect(inner, "New", new Vector2(1, 0), new Vector2(1, 0), new Vector2(-S1 - 30, S1), new Vector2(-S1, S1 + 14)); // bottom-right
                 v.NewTag = tag.gameObject;
                 Ui.Img(tag, Ui.Hex(Orange, .9f));
                 Ui.Label(tag, "Text", "NEW", 10, Ui.Hex("#1a1210"), TextAnchor.MiddleCenter, true, 1);
@@ -1923,7 +1987,8 @@ namespace LevelGate.Progression
             foreach (Transform ch in _minorRow) UnityEngine.Object.Destroy(ch.gameObject);
             if (it == null)
             {
-                foreach (var c in new[] { _featType, _featName, _featReq, _featReqValue, _featStatus, _featDesc, _featNote }) Ui.SetText(c, "");
+                foreach (var c in new[] { _featType, _featName, _featReq, _featReqValue, _featStatus, _featDesc, _featNote, _featWeight }) Ui.SetText(c, "");
+                if (_featWeightIcon != null) _featWeightIcon.enabled = false;
                 _featCheck.enabled = false;
                 _featReqLock.enabled = false;
                 _featBand.SetActive(false);
@@ -1936,7 +2001,9 @@ namespace LevelGate.Progression
             int player = Me;
             bool met = player <= 0 || it.Level <= player;
             Ui.SetText(_featShort, it.Short);
-            Ui.SetText(_featType, (g.Name ?? "Item").ToUpperInvariant());
+            // weapons keep "WEAPONS"; everything else says where the handbook files it ("MEDICATION  ›  INJECTORS")
+            string path = it.Group == "Weapons" ? null : GameText.CategoryPath(it.Tpl);
+            Ui.SetText(_featType, (path ?? g.Name ?? "Item").ToUpperInvariant());
             Ui.SetText(_featName, it.Name);
             Ui.SetSize(_featName, it.Name.Length > 34 ? TTitle - 2 : it.Name.Length > 26 ? TTitle : THero); // long names: smaller, not a lone word on line 2
             // stats: damage / penetration / armor class / resource big; weight / size / caliber small (nothing invented, nothing dropped)
@@ -1946,6 +2013,12 @@ namespace LevelGate.Progression
             if (facts.Any(f => f.Label == "Armor class")) majorKeys = majorKeys.Concat(new[] { "Durability" }).ToArray();
             var majors = facts.Where(f => majorKeys.Contains(f.Label)).ToList();
             facts.RemoveAll(f => f.Label == "Size"); // removed on request: not needed here
+            // the weight goes up by the category, with the game's weight icon (as in its inspect window)
+            var wf = facts.FirstOrDefault(f => f.Label == "Weight");
+            Ui.SetText(_featWeight, wf.Label != null ? wf.Value : "");
+            var wsp = wf.Label != null ? StatIcons.Of("Weight") : null;
+            _featWeightIcon.sprite = wsp; _featWeightIcon.enabled = wsp != null;
+            facts.RemoveAll(f => f.Label == "Weight");
             var minors = new[] { "Weight", "Caliber" }.Select(k => facts.FirstOrDefault(f => f.Label == k)).Where(f => f.Label != null)
                 .Concat(facts.Where(f => !majorKeys.Contains(f.Label) && f.Label != "Weight" && f.Label != "Size" && f.Label != "Caliber")).ToList();
             // one grid of equal columns for every row (3, or more only if there are more big stats): the big stats never get
@@ -1962,6 +2035,10 @@ namespace LevelGate.Progression
                 foreach (var (name, value, id) in GameItems.GameAttributes(it.Tpl))
                     if (!have.Contains(name.ToUpperInvariant())) strips.Add((name, value, StatIcons.OfId(id), true));
             }
+            // weapons: the rest of the inspect window's list (accuracy, sighting range, horizontal recoil, muzzle velocity, fire modes)
+            if (it.Group == "Weapons")
+                foreach (var (name, value, id) in GameItems.GameAttributes(it.Tpl))
+                    if (WeaponExtras.Contains(id?.ToString() ?? "")) strips.Add((name, value, StatIcons.OfId(id), true));
             for (int i = 0; i < strips.Count;)
             {
                 var line = Row(_minorRow, "Line", S1);

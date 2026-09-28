@@ -168,6 +168,28 @@ namespace LevelGate.Progression
             else Refl.Set(c, "color", color);
         }
 
+        /// <summary>
+        /// One of the game's own UI sprites by name: an exact match of the usual names for `what`, else null. All loaded
+        /// sprites with `what` in their name are logged once (verbose) so the right one can be picked.
+        /// </summary>
+        public static Sprite GameSprite(string what)
+        {
+            try
+            {
+                var all = Resources.FindObjectsOfTypeAll<Sprite>();
+                var hits = all.Where(sp => sp != null && sp.name.IndexOf(what, StringComparison.OrdinalIgnoreCase) >= 0).ToList();
+                if (L.Verbose) L.Debug($"game sprites with '{what}': {string.Join(", ", hits.Select(h => $"{h.name} {h.rect.width:0}x{h.rect.height:0}").Distinct().Take(40).ToArray())}");
+                string[] wanted = what == "exp" ? new[] { "exp", "icon_exp", "exp_icon", "icon_experience", "experience", "experience_icon", "ExpIcon", "exp_big", "Exp" } : new[] { what };
+                foreach (var w in wanted)
+                {
+                    var sp = hits.FirstOrDefault(h => string.Equals(h.name, w, StringComparison.OrdinalIgnoreCase));
+                    if (sp != null) { L.Info($"game sprite for '{what}': {sp.name}"); return sp; }
+                }
+            }
+            catch (Exception e) { L.Debug($"game sprite '{what}': {e.Message}"); }
+            return null;
+        }
+
         public static void SetSize(Component c, float size)
         {
             if (c is Text t) t.fontSize = Mathf.RoundToInt(size);

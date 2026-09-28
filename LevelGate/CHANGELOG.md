@@ -40,6 +40,17 @@ Versions are **MAJOR.MINOR.PATCH**:
 
 ## LevelGate Progression (BepInEx plugin, separate DLL)
 
+### 0.9.53
+- **Locked items show their real short names** ("AXMC", "AP SX" instead of "Accuracy International A…" / "4.6x30mm AP SX"): LevelGate blanks the short names of items still locked for you, so they're now read from the game data on disk (locales, read-only, background thread; LevelGate untouched).
+- **Reward tiles like the game's cells / prestige rewards**: the short name top-right over the picture, the picture using the whole tile (long rifles were tiny), the item's own background tint from its template (violet keys, yellow ammo, green meds…), NEW bottom-right, and locked items get a lock + "LV 45" badge bottom-left like the traders' loyalty-locked items.
+- **Penalties coloured like the inspect window**: red when it costs you (movement / turning / ergo penalties), blue when it helps.
+- **Category path from the handbook** for everything but weapons ("MEDICATION › INJECTORS", "GEAR › BACKPACKS"); weapons still say WEAPONS.
+- **Weight moved up by the category**, top-right with the game's weight icon, like the inspect window's header (one strip less below).
+- **Buttons like the game's**: INSPECT and HOME turn pale with dark text while hovered.
+- **Scrollbars like the game's**: a dark track with a light thumb (brighter while hovered).
+- **Weapons list more of the inspect window**: accuracy, sighting range, horizontal recoil, muzzle velocity and fire modes, from the game's own rows.
+- **EXP badge like the game's**: its own EXP sprite when found (the candidates are logged), else a pale-grey badge with dark bold EXP.
+
 ### 0.9.52
 - **Backpacks (and rigs) lead with CONTAINER SIZE**: how many cells they hold, as a big stat with its meter (it was a small "Capacity … slots" strip).
 - **Mouse wheel over the cards moves one level** at a time (it jumped a whole page); the page turns when you scroll past its edge.

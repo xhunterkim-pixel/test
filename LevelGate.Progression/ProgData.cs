@@ -309,7 +309,10 @@ namespace LevelGate.Progression
             var s = Localize(tpl + " ShortName");
             s = string.IsNullOrEmpty(s) || s == tpl + " ShortName" ? "" : LevelGateLabel.Replace(s, "");
             if (!string.IsNullOrEmpty(s)) return s;
-            if (_noShort++ < 5) L.Debug($"no short name for {tpl} — shortened from its full name");
+            // LevelGate blanks locked items' short names: the game data's own (read from disk) instead of a cut-off full name
+            var disk = GameText.Short(tpl);
+            if (disk != null) return disk;
+            if (_noShort++ < 5) L.Debug($"no short name for {tpl} — shortened from its full name{(GameText.Ready ? "" : " (game data names not read yet)")}");
             return Shorten(NameOf(tpl));
         }
 

@@ -562,12 +562,26 @@ namespace LevelGate.Progression
                 if (Num("ArmorMaterial") is object mat && mat.ToString() is string ms && ms.Length > 0 && ms != "None") list.Add(("Material", Spaced(ms)));
                 int cap = Capacity(t);
                 if (cap > 0) list.Add(("Container size", cap.ToString())); // how many cells it holds, as the game's inspect says it
-                if (D(Num("speedPenaltyPercent")) is double sp && Math.Abs(sp) >= .5) list.Add(("Movement", $"{sp:+0;-0}<size=65%>%</size>"));
-                if (D(Num("mousePenalty")) is double mp && Math.Abs(mp) >= .5) list.Add(("Turning", $"{mp:+0;-0}<size=65%>%</size>"));
-                if (D(Num("weaponErgonomicPenalty")) is double ep && Math.Abs(ep) >= .5) list.Add(("Ergo penalty", $"{ep:+0;-0}"));
+                // penalties coloured like the game's inspect: red when it costs you, blue when it helps
+                string Tone(double v, string text) => $"<color={(v < 0 ? "#e0473a" : "#54c1ff")}>{text}</color>";
+                if (D(Num("speedPenaltyPercent")) is double sp && Math.Abs(sp) >= .5) list.Add(("Movement", Tone(sp, $"{sp:+0;-0}<size=65%>%</size>")));
+                if (D(Num("mousePenalty")) is double mp && Math.Abs(mp) >= .5) list.Add(("Turning", Tone(mp, $"{mp:+0;-0}<size=65%>%</size>")));
+                if (D(Num("weaponErgonomicPenalty")) is double ep && Math.Abs(ep) >= .5) list.Add(("Ergo penalty", Tone(ep, $"{ep:+0;-0}")));
             }
             catch (Exception e) { L.ErrorOnce("item facts", e); }
             return list;
+        }
+
+        private static readonly Dictionary<string, string> _bg = new Dictionary<string, string>();
+
+        /// <summary>The template's BackgroundColor ("violet", "yellow"…), the tint the game's cells give it; null if unknown.</summary>
+        public static string BackgroundOf(string tpl)
+        {
+            if (tpl == null) return null;
+            if (_bg.TryGetValue(tpl, out var c)) return c;
+            try { c = Refl.Get(Refl.Get(ItemOf(tpl), "Template"), "BackgroundColor")?.ToString(); } catch { c = null; }
+            _bg[tpl] = c;
+            return c;
         }
 
         private static readonly HashSet<string> _attrDumped = new HashSet<string>();
