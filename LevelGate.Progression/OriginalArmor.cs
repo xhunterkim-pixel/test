@@ -61,13 +61,29 @@ namespace LevelGate.Progression
             var cls = new Dictionary<string, int>();
             var plates = new Dictionary<string, List<string>>();
             var dur = new Dictionary<string, int>();
+            int filterDepth = -1; var filterIds = new List<string>();
             int depth = 0, i = 0, n = s.Length;
             string item = null, key = null;
             while (i < n)
             {
                 char c = s[i];
-                if (c == '{' || c == '[') { depth++; i++; continue; }
-                if (c == '}' || c == ']') { depth--; i++; if (depth <= 1) item = depth == 1 ? item : null; continue; }
+                if (c == '{' || c == '[')
+                {
+                    depth++; i++;
+                    if (c == '[' && key == "Filter" && item != null && depth >= 3) { filterDepth = depth; filterIds.Clear(); }
+                    continue;
+                }
+                if (c == '}' || c == ']')
+                {
+                    // a slot filter with exactly one allowed item: a built-in part (soft armor insert, helmet top / ears…),
+                    // counted like a default plate (6B45, Titan helmets… keep their protection there, not under "Plate")
+                    if (c == ']' && depth == filterDepth)
+                    {
+                        if (filterIds.Count == 1 && item != null) { if (!plates.TryGetValue(item, out var fl)) plates[item] = fl = new List<string>(); if (!fl.Contains(filterIds[0])) fl.Add(filterIds[0]); }
+                        filterDepth = -1;
+                    }
+                    depth--; i++; if (depth <= 1) item = depth == 1 ? item : null; continue;
+                }
                 if (c == '"')
                 {
                     int start = ++i;
@@ -82,9 +98,10 @@ namespace LevelGate.Progression
                         if (depth == 1) item = str; // the item's id (the root object's keys)
                         continue;
                     }
+                    if (depth == filterDepth && key == "Filter" && str.Length == 24) { filterIds.Add(str); continue; }
                     if (item != null && depth >= 3)
                     {
-                        if (key == "Plate" && str.Length == 24) { if (!plates.TryGetValue(item, out var l)) plates[item] = l = new List<string>(); l.Add(str); }
+                        if (key == "Plate" && str.Length == 24) { if (!plates.TryGetValue(item, out var l)) plates[item] = l = new List<string>(); if (!l.Contains(str)) l.Add(str); }
                         else if (key == "armorClass" && int.TryParse(str, out int v)) cls[item] = Math.Max(cls.TryGetValue(item, out var o) ? o : 0, v);
                     }
                     continue;

@@ -40,6 +40,12 @@ Versions are **MAJOR.MINOR.PATCH**:
 
 ## LevelGate Progression (BepInEx plugin, separate DLL)
 
+### 0.9.60
+- **Armor / helmet / rig stats for every item**: armor class and durability are now also read from built-in parts (a slot allowing exactly one item: soft armor inserts, helmet tops / ears…), not only default "Plate" parts — the 6B45, Titan helmets and others showed neither.
+- **Character > Overall emblem**: bigger (96 px), placed below the game's icon column (faction logo, prestige) in that column's own spacing, instead of over the prestige icon.
+- **Drag sounds**: one tick at most every 0.15 s while dragging, none while a flick coasts.
+- The micro-text line under the reward list no longer overlaps the last row of tiles.
+
 ### 0.9.59
 More texture, the CoD way (all drawn once, no per-frame cost):
 - Registration marks: a small "+" just outside each corner of the three main panels.

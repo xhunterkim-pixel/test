@@ -86,7 +86,6 @@ namespace LevelGate.Progression
                     return false;
                 }
                 var text = (RectTransform)best.transform;
-                float size2 = 76;
                 // under the faction logo (USEC / BEAR) in the left column, in its own spacing; else under the level number
                 RectTransform logo = null;
                 var panel = text.parent != null ? text.parent.parent : null; // …/CharacterPanel
@@ -98,19 +97,50 @@ namespace LevelGate.Progression
                         if (sn.Contains("usec") || sn.Contains("bear") || gn.Contains("side") || gn.Contains("faction") || sn.Contains("side"))
                         { logo = (RectTransform)img.transform; break; }
                     }
-                var anchor = logo ?? text;
-                _root = Ui.Rect(anchor, "LevelGateEmblem", new Vector2(.5f, 0), new Vector2(.5f, 0), Vector2.zero, Vector2.zero);
-                _root.sizeDelta = new Vector2(size2, size2);
-                _root.pivot = new Vector2(.5f, 1);
-                _root.anchoredPosition = new Vector2(0, -24); // the same gap the game leaves between its own blocks
-                _img = Ui.Img(_root, Color.white);
+                float size2 = 96;
+                // the column of the game's own icons (faction logo, prestige…): ours goes below the lowest of them, in that
+                // column's spacing — as its next child when the column lays itself out, else placed under the lowest one
+                var column = logo != null ? logo.parent?.parent as RectTransform : null; // …/IconsContainer
+                var layout = column != null ? column.GetComponent<VerticalLayoutGroup>() : null;
+                if (column != null && layout != null)
+                {
+                    _root = Ui.Rect(column, "LevelGateEmblem", Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
+                    var le = _root.gameObject.AddComponent<LayoutElement>();
+                    le.minWidth = le.preferredWidth = size2; le.minHeight = le.preferredHeight = size2 + 20;
+                    _root.SetAsLastSibling();
+                }
+                else
+                {
+                    RectTransform lowest = column != null ? LowestChild(column) : null;
+                    var anchor = lowest ?? logo ?? text;
+                    _root = Ui.Rect(anchor, "LevelGateEmblem", new Vector2(.5f, 0), new Vector2(.5f, 0), Vector2.zero, Vector2.zero);
+                    _root.sizeDelta = new Vector2(size2, size2 + 20);
+                    _root.pivot = new Vector2(.5f, 1);
+                    _root.anchoredPosition = new Vector2(0, -28);
+                    L.Info($"character emblem: under {(lowest != null ? MenuHook.Path(lowest) : "the faction logo")}");
+                }
+                _img = Ui.Img(Ui.Rect(_root, "Emblem", new Vector2(0, 1), Vector2.one, new Vector2(0, -size2), Vector2.zero), Color.white);
                 _img.preserveAspect = true; _img.raycastTarget = false;
-                _rank = Ui.Label(Ui.Rect(_root, "Rank", new Vector2(.5f, 0), new Vector2(.5f, 0), new Vector2(-90, -24), new Vector2(90, -6)), "Text", "", 12, Ui.Hex("#b9bdbf"), TextAnchor.MiddleCenter, false, 2);
+                _rank = Ui.Label(Ui.Rect(_root, "Rank", new Vector2(.5f, 0), new Vector2(.5f, 0), new Vector2(-90, 0), new Vector2(90, 18)), "Text", "", 13, Ui.Hex("#b9bdbf"), TextAnchor.MiddleCenter, false, 2);
                 L.Info($"character emblem: placed under {(logo != null ? "the faction logo " + MenuHook.Path(logo) : "the level number (no faction logo found)")}");
                 L.Debug($"character emblem: level number at {MenuHook.Path(text)} ({bestSize:0} px text)");
                 return true;
             }
             catch (Exception e) { _gaveUp = true; L.Info("character emblem: " + e.GetBaseException().Message); return false; }
+        }
+
+        /// <summary>The active child of a column that reaches lowest on screen (the game's last icon: prestige, else the logo).</summary>
+        private static RectTransform LowestChild(RectTransform column)
+        {
+            RectTransform best = null; float lowY = float.MaxValue;
+            var corners = new Vector3[4];
+            foreach (Transform ch in column)
+            {
+                if (!ch.gameObject.activeInHierarchy || !(ch is RectTransform rt) || ch.name == "LevelGateEmblem") continue;
+                rt.GetWorldCorners(corners);
+                if (corners[0].y < lowY) { lowY = corners[0].y; best = rt; }
+            }
+            return best;
         }
 
         /// <summary>Entering a raid: the reference goes (the menu is rebuilt / unloaded); found again next time.</summary>

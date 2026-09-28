@@ -333,7 +333,7 @@ namespace LevelGate.Progression
                 ((Graphic)l).raycastTarget = false;
                 return l;
             }
-            if (_focusList != null) _microList = Micro(_focusList, "Micro", Vector2.zero, new Vector2(1, 0), new Vector2(PanelPad, -1), new Vector2(-PanelPad, 9), TextAnchor.LowerLeft);
+            if (_focusList != null) _microList = Micro(_focusList, "Micro", Vector2.zero, new Vector2(1, 0), new Vector2(PanelPad, 2), new Vector2(-PanelPad, 12), TextAnchor.LowerLeft);
             if (_focusStage != null) _microStage = Micro(_focusStage, "Micro", new Vector2(0, 1), new Vector2(1, 1), new Vector2(S3, -16), new Vector2(-S3, -4), TextAnchor.UpperLeft);
             if (_focusSide != null)
             {
@@ -518,7 +518,7 @@ namespace LevelGate.Progression
             _listState = Ui.Label(Ui.Rect(panel, "State", new Vector2(0, 1), Vector2.one, new Vector2(PanelPad, -30), new Vector2(-PanelPad, -12)), "Text", "", TCaps, Grey, TextAnchor.MiddleRight, false, Caps);
             Ui.Img(Ui.Rect(panel, "Rule", new Vector2(0, 1), Vector2.one, new Vector2(0, -HeadH - 1), new Vector2(0, -HeadH)), Border);
 
-            var view = Ui.Rect(panel, "Scroll", Vector2.zero, Vector2.one, new Vector2(PanelPad, S2), new Vector2(-S2, -HeadH - S2));
+            var view = Ui.Rect(panel, "Scroll", Vector2.zero, Vector2.one, new Vector2(PanelPad, 14), new Vector2(-S2, -HeadH - S2)); // 14: room for the micro-text line
             SubCanvas(view); // its own drawing layer: tile fades / hovers redraw only the list, not the whole screen
             var scroll = view.gameObject.AddComponent<ScrollRect>();
             scroll.horizontal = false;
@@ -1428,10 +1428,10 @@ namespace LevelGate.Progression
             return dx;
         }
 
-        /// <summary>One soft tick as a level passes, at most every 80 ms.</summary>
+        /// <summary>One soft tick as a level passes while you drag (not while a flick coasts), at most every 150 ms.</summary>
         private static void DragTick()
         {
-            if (Time.unscaledTime - _dragTickAt < .08f) return;
+            if (!_dragging || Time.unscaledTime - _dragTickAt < .15f) return; // none while a flick coasts; at most ~6 a second
             _dragTickAt = Time.unscaledTime;
             Sounds.Play("ButtonOver");
         }
