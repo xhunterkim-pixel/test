@@ -597,6 +597,65 @@ namespace LevelGate.Progression
 
         }
 
+        // the hero's detail (MW's primary weapon panel): the most detailed place on the screen, because it's the most important
+        private static Component _heroKind, _heroName;
+        private static readonly Image[] _heroPips = new Image[5];
+        private static Image _heroDiamond, _heroDiamondIn;
+
+        private static void BuildHeroDetail(RectTransform face)
+        {
+            // viewfinder corners and faint scanlines over the lit face (the light has a texture)
+            Ui.Brackets(face, 12, 22, Ui.Hex("#aab2b5", .45f));
+            var scan = Ui.Detail(Ui.Img(Ui.Fill(face, "Scan"), new Color(1, 1, 1, .018f), Ui.Scanlines()), .018f);
+            scan.type = Image.Type.Tiled; scan.raycastTarget = false;
+            // a measuring scale along the bottom, fading out to both ends
+            var ruler = Ui.Detail(Ui.Img(Ui.Rect(face, "Ruler", new Vector2(.1f, 0), new Vector2(.9f, 0), new Vector2(0, 14), new Vector2(0, 23)), Ui.Hex("#8f989b", .3f), Ui.Ruler()), .3f);
+            ruler.type = Image.Type.Tiled; ruler.raycastTarget = false;
+            // a short hatch strip top-right, under the pips (MW's FIELD UPGRADE plate)
+            var hatch = Ui.Detail(Ui.Img(Ui.Rect(face, "Hatch", new Vector2(1, 1), new Vector2(1, 1), new Vector2(-122, -44), new Vector2(-22, -38)), new Color(1, 1, 1, .12f), Ui.Hatch()), .12f);
+            hatch.type = Image.Type.Tiled; hatch.raycastTarget = false;
+            // top-left: what it is, in the rank's colour, and its short name (MW: "Assault Rifle / M4")
+            _heroKind = Ui.Label(Ui.Rect(face, "Kind", new Vector2(0, 1), new Vector2(.6f, 1), new Vector2(24, -42), new Vector2(0, -22)), "Text", "", TBody, Ui.Hex("#c9b77a"), TextAnchor.MiddleLeft, false, 1);
+            _heroName = Ui.Label(Ui.Rect(face, "Name", new Vector2(0, 1), new Vector2(.6f, 1), new Vector2(24, -68), new Vector2(0, -42)), "Text", "", TTitle, Ui.Hex("#e4e7e8"), TextAnchor.MiddleLeft, true, 1);
+            // top-right: where this level sits in its rank (ranks are 5 levels): 5 squares, then + and a diamond for the next rank
+            var row = Ui.Rect(face, "Pips", new Vector2(1, 1), new Vector2(1, 1), new Vector2(-122, -32), new Vector2(-22, -22));
+            for (int i = 0; i < 5; i++)
+            {
+                _heroPips[i] = Ui.Img(Ui.Rect(row, "Pip" + i, new Vector2(0, 0), new Vector2(0, 1), new Vector2(i * 14, 0), new Vector2(i * 14 + 10, 0)), Color.white);
+                _heroPips[i].raycastTarget = false;
+            }
+            Ui.Label(Ui.Rect(row, "Plus", new Vector2(0, 0), new Vector2(0, 1), new Vector2(70, -2), new Vector2(82, 2)), "Text", "+", 11, Dim, TextAnchor.MiddleCenter, false);
+            var dia = Ui.Box(row, "Diamond", new Vector2(0, .5f), new Vector2(92, 0), new Vector2(9, 9));
+            dia.localEulerAngles = new Vector3(0, 0, 45);
+            _heroDiamond = Ui.Img(dia, Color.white);
+            _heroDiamondIn = Ui.Img(Ui.Fill(dia, "In", 1.5f), Face);
+            _heroDiamond.raycastTarget = _heroDiamondIn.raycastTarget = false;
+        }
+
+        /// <summary>The hero's caption and rank pips for the featured item.</summary>
+        private static void HeroFor(ProgItem it)
+        {
+            if (_heroKind == null) return;
+            if (it == null) { Ui.SetText(_heroKind, ""); Ui.SetText(_heroName, ""); foreach (var p in _heroPips) p.enabled = false; _heroDiamond.enabled = _heroDiamondIn.enabled = false; return; }
+            var tier = TierOf(it.Level);
+            var light = Ui.Hex(tier.Light);
+            string kind = KindOf(it.Tpl);
+            if (string.IsNullOrEmpty(kind)) kind = ProgData.Groups.FirstOrDefault(x => x.Key == it.Group).Name ?? "";
+            Ui.SetText(_heroKind, kind);
+            Ui.SetColor(_heroKind, Color.Lerp(Ui.Hex(tier.Rim), light, .5f));
+            Ui.SetText(_heroName, it.Short);
+            int into = Mathf.Clamp(it.Level - tier.From + 1, 1, 5);
+            for (int i = 0; i < 5; i++)
+            {
+                _heroPips[i].enabled = true;
+                _heroPips[i].color = i < into ? Color.Lerp(light, Color.white, .1f) : new Color(1, 1, 1, .12f);
+            }
+            // the diamond: the next rank — lit (orange) on a rank's last level, where the next level up is a new rank
+            _heroDiamond.enabled = _heroDiamondIn.enabled = true;
+            bool rankUpNext = TierOf(it.Level + 1).From != tier.From;
+            _heroDiamond.color = rankUpNext ? Ui.Hex(Orange, .9f) : new Color(1, 1, 1, .2f);
+        }
+
         private static void BuildFeatured(RectTransform top)
         {
             // centre: the selected reward, the hero of the screen — one big square preview filling the stage
@@ -631,6 +690,7 @@ namespace LevelGate.Progression
             _featShort = Ui.Label(Ui.Fill(picFace, "Short", 40), "Text", "", THero, Dim, TextAnchor.MiddleCenter, false, 0, true);
             Ui.EdgeFade(picFace, .14f, .55f);
             Ui.Grit(picFace, 2, .017f);
+            BuildHeroDetail(picFace);
             // secondary locked signal only (the requirement on the right is the primary one)
             _featLock = Ui.Img(Ui.Rect(picFace, "Lock", new Vector2(1, 0), new Vector2(1, 0), new Vector2(-S4 - 28, S4), new Vector2(-S4, S4 + 28)), Ui.Hex("#aeb6b9", .7f), Ui.Lock());
             _featLock.enabled = false;
@@ -1162,6 +1222,10 @@ namespace LevelGate.Progression
         /// </summary>
         private static void HomeButton(RectTransform bottom)
         {
+            // the plugin's version, very small, in the bottom-left corner under HOME (so a screenshot says which build it is)
+            var ver = Ui.Label(Ui.Rect(bottom, "Version", Vector2.zero, Vector2.zero, new Vector2(Margin, 4), new Vector2(Margin + 300, 18)), "Text",
+                "LEVELGATE PROGRESSION  v" + ProgressionPlugin.Version, 9, Ui.Hex("#6a7376", .7f), TextAnchor.MiddleLeft, false, 1.5f);
+            ((Graphic)ver).raycastTarget = false;
             var rt = Ui.Rect(bottom, "Home", Vector2.zero, Vector2.zero, new Vector2(Margin, 25), new Vector2(Margin + 214, 25 + 24));
             var hit = Ui.Img(rt, new Color(0, 0, 0, 0), null, true);
             // hovered: a pale plate just around the keycap + text (sized to the text in RefreshHome), like the game's MAIN MENU
@@ -2393,6 +2457,7 @@ namespace LevelGate.Progression
                 _featBand.SetActive(false);
                 _featLock.enabled = false;
                 _featIcon = null;
+                HeroFor(null);
                 MarkSelectedTile();
                 return;
             }
@@ -2400,6 +2465,7 @@ namespace LevelGate.Progression
             int player = Me;
             bool met = player <= 0 || it.Level <= player;
             Ui.SetText(_featShort, it.Short);
+            HeroFor(it);
             // weapons keep "WEAPONS"; everything else says where the handbook files it ("MEDICATION  ›  INJECTORS")
             string path = it.Group == "Weapons" ? null : GameText.CategoryPath(it.Tpl);
             Ui.SetText(_featType, (path ?? g.Name ?? "Item").ToUpperInvariant());

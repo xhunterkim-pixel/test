@@ -399,6 +399,40 @@ namespace LevelGate.Progression
             return _glowFrame = Sprite.Create(tex, new Rect(0, 0, n, n), new Vector2(.5f, .5f), 100, 0, SpriteMeshType.FullRect, new Vector4(pad + 6, pad + 6, pad + 6, pad + 6));
         }
 
+        private static Sprite _ruler;
+
+        /// <summary>A measuring scale (tile it along a bottom edge): a tall tick every 50 px, short ones every 10. White.</summary>
+        public static Sprite Ruler()
+        {
+            if (_ruler != null) return _ruler;
+            const int w = 50, h = 9;
+            var tex = new Texture2D(w, h, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Repeat, filterMode = FilterMode.Point };
+            var px = new Color32[w * h];
+            for (int x = 0; x < w; x += 10)
+            {
+                int th = x == 0 ? h : 3;
+                for (int y = 0; y < th; y++) px[y * w + x] = new Color32(255, 255, 255, (byte)(x == 0 ? 255 : 170));
+            }
+            tex.SetPixels32(px);
+            tex.Apply(false, true);
+            return _ruler = Sprite.Create(tex, new Rect(0, 0, w, h), new Vector2(.5f, .5f), 100, 0, SpriteMeshType.FullRect);
+        }
+
+        /// <summary>Viewfinder corners: an L at each corner of a box, inset, 1 px (texture detail: follows UI Detailing).</summary>
+        public static void Brackets(RectTransform box, float inset, float arm, Color color)
+        {
+            foreach (var c in new[] { new Vector2(0, 0), new Vector2(1, 0), new Vector2(0, 1), new Vector2(1, 1) })
+            {
+                float sx = c.x == 0 ? 1 : -1, sy = c.y == 0 ? 1 : -1;
+                var h = Rect(box, "BracketH", c, c, Vector2.zero, Vector2.zero);
+                h.pivot = new Vector2(c.x, c.y); h.sizeDelta = new Vector2(arm, 1); h.anchoredPosition = new Vector2(sx * inset, sy * inset);
+                var v = Rect(box, "BracketV", c, c, Vector2.zero, Vector2.zero);
+                v.pivot = new Vector2(c.x, c.y); v.sizeDelta = new Vector2(1, arm); v.anchoredPosition = new Vector2(sx * inset, sy * inset);
+                Detail(Img(h, color), color.a).raycastTarget = false;
+                Detail(Img(v, color), color.a).raycastTarget = false;
+            }
+        }
+
         private static Sprite _halftone;
 
         /// <summary>

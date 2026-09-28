@@ -40,6 +40,10 @@ Versions are **MAJOR.MINOR.PATCH**:
 
 ## LevelGate Progression (BepInEx plugin, separate DLL)
 
+### 0.9.68
+- **The hero picture gets the most detail** (MW's primary weapon panel): viewfinder corners, faint scanlines over the lit face, a measuring scale along the bottom, a hatch strip top-right; top-left the item's kind in its rank's colour with its short name under it ("Assault rifle / ASh-12"); top-right **rank pips**: five squares for where the level sits in its rank (ranks are five levels), then + and a diamond that lights orange on a rank's last level (the next level is a new rank). All of it follows UI Detailing except the caption and pips.
+- **Version in the bottom-left corner** of the screen, under HOME (so a screenshot says which build it is).
+
 ### 0.9.67
 - **Fixed: wrong pictures on tiles and cards** (a white box or a white chamfer shape, a white glow, a grid of rank emblems where an item should be). A picture's texture was deleted while a tile or card still showed it, and the graphics card then drew whatever came into that memory next. Three causes, all fixed:
   - an item drawn twice at the same size was kept twice, and removing the older copy deleted the newer one (the one on screen); now the first copy is reused;
