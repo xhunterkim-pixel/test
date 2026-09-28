@@ -29,6 +29,7 @@ namespace LevelGate.Progression
             TickFx();
             TickReveal();
             TickBloom();
+            TickSelection();
             if (k <= 0) return;
             _lightPhase += Mathf.Min(Time.unscaledDeltaTime, .1f);
             float t = _lightPhase;

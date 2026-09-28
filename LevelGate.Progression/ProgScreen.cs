@@ -1801,6 +1801,9 @@ namespace LevelGate.Progression
             stripes.type = Image.Type.Tiled; stripes.raycastTarget = false; Ui.Detail(stripes, .05f);
             var top = Ui.Img(Ui.Rect(head, "Top", new Vector2(0, 1), Vector2.one, new Vector2(0, -1), Vector2.zero), Ui.Hex("#3f494d"));
             var shade = Ui.Img(Ui.Rect(head, "Shade", Vector2.zero, new Vector2(1, .5f), Vector2.zero, Vector2.zero), new Color(0, 0, 0, .18f));
+            // lights up from the left while it holds the picked item (ProgScreen.Fx)
+            var headLit = Ui.Img(Ui.Fill(head, "Lit"), new Color(1, 1, 1, 0), Ui.HorizontalFade());
+            headLit.rectTransform.localScale = new Vector3(-1, 1, 1); headLit.raycastTarget = false;
             string count = list.Count > max ? $"{max} of {list.Count}" : list.Count.ToString();
             float countW = narrow ? 12 : 120;
             var name = Ui.Label(Ui.Rect(head, "Name", Vector2.zero, Vector2.one, new Vector2(narrow ? 7 : 10, 0), new Vector2(-(countW + 30), 0)), "Text",
@@ -1834,6 +1837,10 @@ namespace LevelGate.Progression
             Ui.Img(body, Ui.Hex("#2b3438", .9f));
             var boxIn = Ui.Img(Ui.Fill(body, "In", 1), Ui.Hex("#0a0e10", .7f));
             boxIn.gameObject.AddComponent<LayoutElement>().ignoreLayout = true;
+            var boxLit = Ui.Img(Ui.Fill(body, "Lit", 1), new Color(1, 1, 1, 0), Ui.HorizontalFade());
+            boxLit.rectTransform.localScale = new Vector3(-1, 1, 1); boxLit.raycastTarget = false;
+            boxLit.gameObject.AddComponent<LayoutElement>().ignoreLayout = true;
+            _sectionLit[g.Key] = (headLit, boxLit); _sectionA.Remove(g.Key);
             var bl = body.gameObject.AddComponent<VerticalLayoutGroup>();
             bl.padding = new RectOffset(BoxPad + 1, BoxPad + 1, BoxPad + 1, BoxPad + 1); bl.childControlHeight = true; bl.childControlWidth = true;
             bl.childForceExpandHeight = false; bl.childForceExpandWidth = true;
@@ -1939,6 +1946,7 @@ namespace LevelGate.Progression
             public Image Frame, Face, Top, Pic, Dither, Sheen, Gloss, Bloom;
             public Component Name;
             public bool Locked, Hover, WasSel;
+            public SelFrame SelFx;
             public GameObject NewTag;
         }
 
@@ -2068,6 +2076,8 @@ namespace LevelGate.Progression
             bool sel = v.Item.Tpl == _featTpl;
             if (sel && !v.WasSel && !instant) PlayShine(v.Face.rectTransform); // picked: one soft shine across it
             v.WasSel = sel;
+            if (sel && v.SelFx == null) v.SelFx = MakeSelFrame(v.Rt, 3);
+            if (v.SelFx != null) v.SelFx.On = sel;
             FadeTo(v.Frame, sel ? Select : v.Hover ? HoverEdge : Border, instant);
             FadeTo(v.Face, sel ? FaceSelect : v.Hover ? FaceHover : Face, instant);
             v.Top.enabled = sel;
@@ -3073,6 +3083,7 @@ namespace LevelGate.Progression
             private readonly GameObject _activeMark;
             private readonly Image _unlockDots;
             private bool _wasSel, _isCurrent;
+            private SelFrame _selFx;
             private readonly GameObject _selLights;
             private readonly Image _selBloom, _selDotLight;
             private float _lightSeed = UnityEngine.Random.value * 10;
@@ -3508,6 +3519,8 @@ namespace LevelGate.Progression
                 _bloomFrame.enabled = current || (sel && !locked); _curScan.enabled = current; _ticks.gameObject.SetActive(current);
                 if (_selLights.activeSelf != sel) _selLights.SetActive(sel);
                 if (sel && !_wasSel) PlayShine(_bg.rectTransform); // picked: one soft shine across it
+                if (_selFx == null) _selFx = MakeSelFrame((RectTransform)_frame.transform, 4);
+                _selFx.On = sel;
                 _wasSel = sel; _isCurrent = current;
                 if (sel)
                 {

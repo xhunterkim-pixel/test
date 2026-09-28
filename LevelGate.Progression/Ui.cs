@@ -454,6 +454,39 @@ namespace LevelGate.Progression
             return sp;
         }
 
+        private static readonly Sprite[] _dashFrames = new Sprite[3];
+
+        /// <summary>
+        /// MW's selection border: a steady 1 px line on top, left and right; the bottom broken into dashes of random length
+        /// with stray dots below it.
+        /// 9-sliced with tiled edges (Image.Type.Tiled), so the pattern repeats along any size. Three variants to swap
+        /// between (the border "crawls"). White.
+        /// </summary>
+        public static Sprite DashFrame(int variant)
+        {
+            variant = ((variant % 3) + 3) % 3;
+            if (_dashFrames[variant] != null) return _dashFrames[variant];
+            const int n = 48, b = 6, line = 3; // the line runs 3 px in from the edge
+            var tex = new Texture2D(n, n, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Clamp, filterMode = FilterMode.Point, name = "LevelGate dashframe" };
+            var px = new Color32[n * n];
+            var rnd = new System.Random(71 + variant * 13);
+            void Put(int x, int y, float a) { if (x >= 0 && x < n && y >= 0 && y < n) px[y * n + x] = new Color32(255, 255, 255, (byte)Mathf.Max(px[y * n + x].a, 255 * a)); }
+            // MW: top, left and right are a steady line; only the bottom breaks up — dashes of random length and stray
+            // dots below it, which is what moves (the variants differ only there)
+            for (int x = line; x < n - line; x++) Put(x, n - line - 1, .9f);          // top
+            for (int y = line; y < n - line; y++) { Put(line, y, .9f); Put(n - line - 1, y, .9f); } // left, right
+            bool on = true; int run = 0;
+            for (int x = line; x < n - line; x++)                                     // bottom
+            {
+                if (run-- <= 0) { on = !on; run = on ? 2 + rnd.Next(9) : 1 + rnd.Next(4); }
+                if (on) Put(x, line, .7f + .3f * (float)rnd.NextDouble());
+                if (rnd.NextDouble() < .14) Put(x, line - 1 - rnd.Next(2), .55f + .45f * (float)rnd.NextDouble()); // stray dots just below
+            }
+            tex.SetPixels32(px);
+            tex.Apply(false, true);
+            return _dashFrames[variant] = Sprite.Create(tex, new Rect(0, 0, n, n), new Vector2(.5f, .5f), 100, 0, SpriteMeshType.FullRect, new Vector4(b, b, b, b));
+        }
+
         private static Sprite _hstreaks;
         private static readonly Sprite[] _vstreaks = new Sprite[4];
 

@@ -40,6 +40,10 @@ Versions are **MAJOR.MINOR.PATCH**:
 
 ## LevelGate Progression (BepInEx plugin, separate DLL)
 
+### 0.9.72
+- **MW selection border**: the picked tile and card get a border that draws in smoothly from a little outside — a steady line on top, left and right, the bottom broken into dashes and stray dots that crawl while it's picked; it fades out when something else is picked. Unpicked borders stay low and faded.
+- **The picked item's section lights up**: its header (strong) and box (faint) light up from the left in the theme colour (the viewed rank's), fading in and out as the pick moves between sections.
+
 ### 0.9.71
 - **New F12 section: 5. CURRENTLY TESTING** — the animation features being tuned, with sliders: Hover Glitch (%, now 50% of 0.9.70's), Picture Load-In Time (s), Picture Load-In Randomness (%), Item Bloom Opacity (%), Item Bloom Size (%), Light Wall Brightness (%). The values chosen there become the defaults after the patch.
 - **Fixed: the big picture's load-in drew its lines as a flat band over the whole picture box** after a Performance Mode switch (or when a picture was redrawn): clearing pictures also emptied the invisible copy of the picture that limits the lines to the item's shape. It's restored every time the load-in plays, and without a shape the lines don't draw at all.

@@ -122,6 +122,66 @@ namespace LevelGate.Progression
             _fxDead.Clear();
         }
 
+        // ---------------------------------------------------------------- selection border, section light-up
+
+        /// <summary>A selection border: fades / settles in when picked, out when not; crawls while shown.</summary>
+        private sealed class SelFrame { public Image Img; public float A; public bool On; }
+        private static readonly List<SelFrame> _selFrames = new List<SelFrame>();
+        private static float _selSwapAt;
+        private static int _selVariant;
+
+        private static SelFrame MakeSelFrame(RectTransform around, float outset)
+        {
+            var img = Ui.Img(Ui.Rect(around, "SelFrame", Vector2.zero, Vector2.one, new Vector2(-outset, -outset), new Vector2(outset, outset)), new Color(1, 1, 1, 0), Ui.DashFrame(0));
+            img.type = Image.Type.Tiled; img.raycastTarget = false; img.enabled = false;
+            var f = new SelFrame { Img = img };
+            _selFrames.Add(f);
+            return f;
+        }
+
+        // the section holding the picked item lights up from the left in the theme colour (the viewed rank's)
+        private static readonly Dictionary<string, (Image Head, Image Box)> _sectionLit = new Dictionary<string, (Image, Image)>();
+        private static readonly Dictionary<string, float> _sectionA = new Dictionary<string, float>();
+
+        private static void TickSelection()
+        {
+            float dt = Mathf.Min(Time.unscaledDeltaTime, .1f);
+            bool swap = false;
+            if (!Calm && Time.unscaledTime >= _selSwapAt) { _selSwapAt = Time.unscaledTime + .11f; _selVariant++; swap = true; }
+            _selFrames.RemoveAll(f => f.Img == null);
+            foreach (var f in _selFrames)
+            {
+                float target = f.On ? 1 : 0;
+                if (f.A == target && !(f.On && swap)) continue;
+                f.A = Calm ? target : Mathf.MoveTowards(f.A, target, dt * (f.On ? 5f : 7f));
+                bool show = f.A > .001f && Ui.DetailK > 0;
+                if (f.Img.enabled != show) f.Img.enabled = show;
+                if (!show) continue;
+                float e = EaseOutCubic(f.A);
+                f.Img.color = new Color(1, 1, 1, .85f * e);
+                float sc = 1 + .035f * (1 - e); // draws in from a little outside
+                f.Img.rectTransform.localScale = new Vector3(sc, sc, 1);
+                if (swap) f.Img.sprite = Ui.DashFrame(_selVariant);
+            }
+            if (_sectionLit.Count == 0) return;
+            string lit = _featTpl != null ? ProgData.GroupOf(_featTpl) : null;
+            var theme = Ui.Hex(TierOf(Mathf.Max(1, _level)).Light);
+            var dead = (List<string>)null;
+            foreach (var kv in _sectionLit)
+            {
+                if (kv.Value.Head == null) { (dead = dead ?? new List<string>()).Add(kv.Key); continue; }
+                _sectionA.TryGetValue(kv.Key, out float a);
+                float target = kv.Key == lit ? 1 : 0;
+                if (a == target) continue;
+                a = Calm ? target : Mathf.MoveTowards(a, target, dt * 3f);
+                _sectionA[kv.Key] = a;
+                float e = EaseOutCubic(a);
+                kv.Value.Head.color = new Color(theme.r, theme.g, theme.b, .32f * e);
+                kv.Value.Box.color = new Color(theme.r, theme.g, theme.b, .07f * e);
+            }
+            if (dead != null) foreach (var k in dead) { _sectionLit.Remove(k); _sectionA.Remove(k); }
+        }
+
         // ---------------------------------------------------------------- item bloom
 
         private static float _bloomAt;
