@@ -87,6 +87,33 @@ namespace LevelGate.Progression
         private static Button _prev, _next;
         // animation / input
         private static float _cardsStart = -10, _tilesStart = -10, _wheelAt, _windowLogAt, _windowSeenAt = -10;
+
+        // ---- holding A / D: one level on the press; held 0.35 s it repeats, 4 a second ramping to ~16 a second over the
+        // next 2 s (79 levels end to end in about 6 s); once it's quicker than 5 a second the list waits until you let go
+        private static int _holdDir;
+        private static float _holdStart, _holdNext, _stepAt, _wheelAcc, _clickAt;
+        private static bool _skim, _skimDirty;
+
+        private static void StartHold(int dir) { _holdDir = dir; _holdStart = Time.unscaledTime; _holdNext = _holdStart + .35f; _stepAt = _holdStart; }
+
+        private static void TickHold(BepInEx.IInputSystem input, float now, bool blocked)
+        {
+            if (_holdDir == 0) return;
+            bool held = _holdDir > 0 ? input.GetKey(KeyCode.D) || input.GetKey(KeyCode.RightArrow) : input.GetKey(KeyCode.A) || input.GetKey(KeyCode.LeftArrow);
+            if (!held || blocked || ProgressionPlugin.Typing()) { _holdDir = 0; return; }
+            if (now < _holdNext) return;
+            float ramp = Mathf.SmoothStep(0, 1, (now - _holdStart - .35f) / 2f);
+            float every = Mathf.Lerp(.25f, .06f, ramp);
+            _holdNext = now + every;
+            int to = Mathf.Clamp(_level + _holdDir, 1, ProgData.MaxLevel);
+            if (to == _level) return; // at the end: stays
+            _skim = every < .2f;
+            ShineWay(_holdDir); ShowLevel(to); ClickSoon(now); _stepAt = now;
+            _skim = false;
+        }
+
+        /// <summary>The click, but not more than ~12 a second (fast holds / wheels were a buzz).</summary>
+        private static void ClickSoon(float now) { if (now - _clickAt < .08f) return; _clickAt = now; Sounds.Click(); }
         private static int _cardsDir;
         private static readonly List<(CanvasGroup Group, RectTransform Rt, float Delay)> _tiles = new List<(CanvasGroup, RectTransform, float)>();
         private static readonly List<(RectTransform Rect, ProgItem Item)> _hits = new List<(RectTransform, ProgItem)>();
@@ -460,6 +487,8 @@ namespace LevelGate.Progression
             Ui.Img(barIn, Ui.Hex("#101112", .9f));
             _xpFill = Ui.Rect(barIn, "Fill", Vector2.zero, new Vector2(0, 1), new Vector2(2, 2), new Vector2(0, -2));
             Ui.Img(_xpFill, XpFillColor);
+            _xpBarIn = barIn;
+            BuildXpEdge();
             _xpText = Ui.Label(Ui.Rect(right, "Exp", new Vector2(0, 1), new Vector2(1, 1), new Vector2(0, -44), new Vector2(0, -18)), "Text", "", THero, Ui.Hex("#b9c0c3"), TextAnchor.MiddleLeft, true);
             // the orange EXP tag right after the numbers (moved to the text's end whenever it changes)
             _xpTag = Ui.Rect(right, "ExpTag", new Vector2(0, 1), new Vector2(0, 1), new Vector2(0, -40), new Vector2(40, -22));
@@ -485,6 +514,58 @@ namespace LevelGate.Progression
         }
 
         private static bool _xpNextHover;
+
+        // ---- the XP bar's edge (F12 > CURRENTLY TESTING > XP Bar Edge): black on the empty side sets the light off
+        public enum XpEdgeLook { Shadow, LongFade, Notch, Off }
+        private static RectTransform _xpBarIn, _xpEdge;
+
+        internal static void XpEdgeChanged() { try { BuildXpEdge(); } catch (Exception e) { L.ErrorOnce("xp edge", e); } }
+
+        private static void BuildXpEdge()
+        {
+            if (_xpFill == null) return;
+            if (_xpEdge != null) UnityEngine.Object.Destroy(_xpEdge.gameObject);
+            _xpEdge = null;
+            var look = ProgressionPlugin.TestXpEdge?.Value ?? XpEdgeLook.Shadow;
+            if (look == XpEdgeLook.Off) return;
+            // hangs off the fill's right end, so it follows the fill (also through the XP animation) at no cost
+            var e = Ui.Rect(_xpFill, "Edge", new Vector2(1, 0), new Vector2(1, 1), Vector2.zero, Vector2.zero);
+            _xpEdge = e;
+            Image Fade(RectTransform parent, float x0, float x1, float a)
+            {
+                // HorizontalFade is clear → white left to right: flipped, it's strongest at the light and fades away from it
+                var img = Ui.Img(Ui.Rect(parent, "Fade", new Vector2(0, 0), new Vector2(0, 1), new Vector2(x0, -2), new Vector2(x1, 2)), new Color(0, 0, 0, a), Ui.HorizontalFade());
+                img.rectTransform.localScale = new Vector3(-1, 1, 1);
+                img.raycastTarget = false;
+                return img;
+            }
+            switch (look)
+            {
+                case XpEdgeLook.Shadow:
+                    Fade(e, 0, 70, .95f);
+                    Ui.Img(Ui.Rect(e, "Line", new Vector2(0, 0), new Vector2(0, 1), new Vector2(-1, -2), new Vector2(1, 2)), new Color(1, 1, 1, .9f)).raycastTarget = false;
+                    break;
+                case XpEdgeLook.LongFade:
+                {
+                    // a third of the whole bar, in canvas units
+                    float w = _xpBarIn != null && _xpBarIn.rect.width > 10 ? _xpBarIn.rect.width / 3 : 220;
+                    Fade(e, 0, w, 1f);
+                    Fade(e, 0, 24, .8f);
+                    Ui.Img(Ui.Rect(e, "Line", new Vector2(0, 0), new Vector2(0, 1), new Vector2(-1, -2), new Vector2(1, 2)), Color.white).raycastTarget = false;
+                    break;
+                }
+                case XpEdgeLook.Notch:
+                {
+                    // the light: a small white glow on the end; black gaps either side of it, then a short fade
+                    Ui.Img(Ui.Rect(e, "GapL", new Vector2(0, 0), new Vector2(0, 1), new Vector2(-7, -2), new Vector2(-4, 2)), new Color(0, 0, 0, .95f)).raycastTarget = false;
+                    Ui.Img(Ui.Rect(e, "GapR", new Vector2(0, 0), new Vector2(0, 1), new Vector2(0, -2), new Vector2(3, 2)), new Color(0, 0, 0, .95f)).raycastTarget = false;
+                    Fade(e, 3, 50, .85f);
+                    Ui.Img(Ui.Rect(e, "Tip", new Vector2(0, 0), new Vector2(0, 1), new Vector2(-4, -2), new Vector2(0, 2)), Color.white).raycastTarget = false;
+                    Ui.Img(Ui.Box(e, "Glow", new Vector2(0, .5f), new Vector2(-2, 0), new Vector2(26, 26)), new Color(1, 1, 1, .35f), Ui.Radial()).raycastTarget = false;
+                    break;
+                }
+            }
+        }
 
         /// <summary>The level the screen treats as yours: the XP animation's / an F12 preview's level while one shows it,
         /// else your real one (the requirement box said "40 / 44 · 4 levels away" under a previewed CURRENT LEVEL 44).</summary>
@@ -1072,6 +1153,8 @@ namespace LevelGate.Progression
             Ui.SetText(l, label.ToUpperInvariant());
             var v = FlowText(cell, "Value", major ? THero : TStrong, Text, major, 0);
             Ui.SetText(v, value);
+            // MW: a new pick counts its big numbers over from the last pick's (same stat) and the meters slide to size
+            if (major && label.Length > 0 && !Motion.Still) CountUp(v, label, value);
             // a meter under the number, like the bars in the game's inspect window (a scale per stat)
             if (major && MeterOf(label, value) is float frac)
             {
@@ -1079,8 +1162,34 @@ namespace LevelGate.Progression
                 var mle = m.gameObject.AddComponent<LayoutElement>();
                 mle.minHeight = mle.preferredHeight = 3;
                 Ui.Img(m, Ui.Hex("#1f272a"));
-                Ui.Img(Ui.Rect(m, "Fill", Vector2.zero, new Vector2(Mathf.Clamp(frac, .03f, 1f), 1), Vector2.zero, Vector2.zero), Ui.Hex("#9aa3a6"));
+                frac = Mathf.Clamp(frac, .03f, 1f);
+                var fill = Ui.Rect(m, "Fill", Vector2.zero, new Vector2(frac, 1), Vector2.zero, Vector2.zero);
+                Ui.Img(fill, Ui.Hex("#9aa3a6"));
+                float was = _lastMeter.TryGetValue(label, out var lm) ? lm : 0;
+                _lastMeter[label] = frac;
+                if (!Motion.Still)
+                    Motion.To(fill, "meter", was, frac, Motion.D(Motion.Slow), Motion.Ease.OutCubic, x => { if (fill != null) fill.anchorMax = new Vector2(x, 1); });
             }
+        }
+
+        private static readonly Dictionary<string, float> _lastStat = new Dictionary<string, float>(), _lastMeter = new Dictionary<string, float>();
+
+        /// <summary>The number at the start of a stat ("600 rpm", "13.41 MOA") counts from the last value shown for that stat.</summary>
+        private static void CountUp(Component v, string label, string value)
+        {
+            var m = System.Text.RegularExpressions.Regex.Match(value ?? "", @"^(\d+)(\.(\d+))?(.*)$", System.Text.RegularExpressions.RegexOptions.Singleline);
+            if (!m.Success || !float.TryParse(m.Groups[1].Value + m.Groups[2].Value, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out float to)) return;
+            int decimals = m.Groups[3].Value.Length;
+            string rest = m.Groups[4].Value;
+            float from = _lastStat.TryGetValue(label, out var f) ? f : 0;
+            _lastStat[label] = to;
+            if (Mathf.Approximately(from, to)) return;
+            string fmt = decimals > 0 ? "F" + decimals : "F0";
+            Motion.To(v, "count", from, to, Motion.D(Motion.Slow), Motion.Ease.OutCubic, x =>
+            {
+                if (v == null) return;
+                Ui.SetText(v, (x >= to - 1e-4f && x <= to + 1e-4f ? to : x).ToString(fmt, System.Globalization.CultureInfo.InvariantCulture) + rest);
+            }, 0, () => { if (v != null) Ui.SetText(v, value); });
         }
 
         /// <summary>How full a stat's meter is (0..1), or null for stats without one.</summary>
@@ -1287,12 +1396,35 @@ namespace LevelGate.Progression
         /// [HOME] BACK TO LEVEL 40 — bottom-left, the mirror of PERFORMANCE MODE bottom-right: same row, same small caps,
         /// left-aligned with the card strip's edge. Always there (the two sides balance); dimmed while you're on your own page.
         /// </summary>
+        private static Component _perfText;
+        private static float _perfAt, _perfWorst, _perfSum;
+        private static int _perfFrames;
+
+        /// <summary>The readout: fps and the slowest frame over the last half second, the last level's build, tiles showing.</summary>
+        private static void TickPerf()
+        {
+            if (_perfText == null) return;
+            bool on = ProgressionPlugin.PerfReadout?.Value ?? false;
+            if (!on) { if (_perfAt > 0) { Ui.SetText(_perfText, ""); _perfAt = 0; } return; }
+            float dt = Time.unscaledDeltaTime;
+            _perfFrames++; _perfSum += dt; _perfWorst = Mathf.Max(_perfWorst, dt);
+            if (Time.unscaledTime - _perfAt < .5f) return;
+            _perfAt = Time.unscaledTime;
+            float fps = _perfSum > 0 ? _perfFrames / _perfSum : 0;
+            Ui.SetText(_perfText, $"{fps:0} FPS  ·  WORST {_perfWorst * 1000:0} ms  ·  LEVEL BUILT IN {_lastBuildMs:0} ms  ·  {_tileViews.Count} TILES{(_buildQueue.Count > 0 ? $" (+{_buildQueue.Count} QUEUED)" : "")}");
+            Ui.SetColor(_perfText, _perfWorst > .05f ? Ui.Hex("#d86a4a") : Ui.Hex("#9aa3a6", .9f));
+            _perfFrames = 0; _perfSum = 0; _perfWorst = 0;
+        }
+
         private static void HomeButton(RectTransform bottom)
         {
             // the plugin's version, very small, in the bottom-left corner under HOME (so a screenshot says which build it is)
             var ver = Ui.Label(Ui.Rect(bottom, "Version", Vector2.zero, Vector2.zero, new Vector2(Margin, 4), new Vector2(Margin + 300, 18)), "Text",
                 "LEVELGATE PROGRESSION  v" + ProgressionPlugin.Version, 9, Ui.Hex("#6a7376", .7f), TextAnchor.MiddleLeft, false, 1.5f);
             ((Graphic)ver).raycastTarget = false;
+            // F12 > Advanced > Performance Readout: next to it
+            _perfText = Ui.Label(Ui.Rect(bottom, "Perf", Vector2.zero, Vector2.zero, new Vector2(Margin + 230, 4), new Vector2(Margin + 760, 18)), "Text", "", 9, Ui.Hex("#9aa3a6", .9f), TextAnchor.MiddleLeft, false, 1f);
+            ((Graphic)_perfText).raycastTarget = false;
             var rt = Ui.Rect(bottom, "Home", Vector2.zero, Vector2.zero, new Vector2(Margin, 25), new Vector2(Margin + 214, 25 + 24));
             var hit = Ui.Img(rt, new Color(0, 0, 0, 0), null, true);
             // hovered: a pale plate just around the keycap + text (sized to the text in RefreshHome), like the game's MAIN MENU
@@ -1762,6 +1894,9 @@ namespace LevelGate.Progression
                 if (!XpAnimating && (level == _first - 1 || level == _first + PerPage)) ShiftWindow(level < _first ? level : level - PerPage + 1, true);
                 else { ShowPage(page, page > _page ? 1 : -1, level); return; }
             }
+            // holding A / D (or a fast wheel): the cards and the header follow, the list is built once you settle
+            if (_skim) { _skimDirty = true; SetMood(Me > 0 && level > Me); UpdateXp(); UpdateSelection(); return; }
+            _skimDirty = false;
             // (a card's NEW goes when you click that card, or once all its new rewards are clicked — not when you merely
             // scroll / arrow past it: scrolling one level per notch cleared every card on the way)
             bool fast = Time.unscaledTime - _lastScrollAt < .4f; // levels changing quickly: tiles show at once, no stagger
@@ -1797,6 +1932,7 @@ namespace LevelGate.Progression
             // old tiles out of the layout right away (Destroy only happens at the end of the frame, and for that frame the
             // new list was laid out under them — it opened scrolled down), and back to the top once it's built
             foreach (Transform ch in _content) { ch.gameObject.SetActive(false); UnityEngine.Object.Destroy(ch.gameObject); }
+            _buildQueue.Clear(); _regroup.Clear();
             _scrollTopFrames = _keepScrollY >= 0 ? 0 : 2;
             _tiles.Clear();
             _tileViews.Clear();
@@ -1854,7 +1990,17 @@ namespace LevelGate.Progression
             {
                 // inside a category's framed box (1 px frame + 6 px each side) the same columns, a little narrower
                 float boxCell = Mathf.Floor((width - Frame - (cols - 1) * S2) / cols);
-                foreach (var (g, list) in groups) CategoryBlock(_content, g, list, max, cols, boxCell, false, AddTile);
+                // only what fits in the list's window (plus a row) is built now; the categories below it are built over the
+                // next frames (a few ms each frame) — a 148-item level cost 60–100 ms in one frame
+                float viewH = _listScroll != null && _listScroll.viewport != null ? _listScroll.viewport.rect.height : 500;
+                float budget = (viewH > 50 ? viewH : 500) + boxCell, used = 0;
+                foreach (var (g, list) in groups)
+                {
+                    bool defer = _keepScrollY < 0 && used > budget;
+                    CategoryBlock(_content, g, list, max, cols, boxCell, false, AddTile, defer);
+                    int rows = Mathf.CeilToInt(Mathf.Min(list.Count, max) / (float)cols);
+                    used += 26 + Frame + rows * (Mathf.Round(boxCell * TileAspect) + S2);
+                }
             }
             if (groups.Count == 0)
             {
@@ -1863,11 +2009,30 @@ namespace LevelGate.Progression
                 Ui.Label(empty, "Text", $"Nothing unlocks at level {level}\n<size=13><color=#7d8588>Set items to this level in the Level & Item Editor.</color></size>", TStrong, Text, TextAnchor.MiddleCenter, false);
             }
             _content.anchoredPosition = _keepScrollY >= 0 ? new Vector2(0, _keepScrollY) : Vector2.zero;
+            if (_keepScrollY < 0 && _shownLevel > 0 && _shownLevel != level) SlideList(level > _shownLevel ? 1 : -1);
             _shownLevel = level;
             _sLevels++;
             _tilesStart = Time.unscaledTime;
             UpdateSelection();
-            L.Debug($"level {level}: {items.Count} item(s) in {groups.Count} categories, {n} tiles drawn in {(Time.realtimeSinceStartup - t0) * 1000:0} ms");
+            _lastBuildMs = (Time.realtimeSinceStartup - t0) * 1000;
+            L.Debug($"level {level}: {items.Count} item(s) in {groups.Count} categories, {n} tiles drawn in {_lastBuildMs:0} ms{(_buildQueue.Count > 0 ? $" (+{_buildQueue.Count} categories over the next frames)" : "")}");
+        }
+
+        private static CanvasGroup _listSlideFade;
+
+        /// <summary>
+        /// MW's panel change: the new level's list comes in from the side you moved to (on: from the right, back: from the
+        /// left), 28 px, fading up (Motion: Base, OutCubic). Fast browsing: shorter.
+        /// </summary>
+        private static void SlideList(int dir)
+        {
+            if (_content == null || _listScroll == null || _listScroll.viewport == null || Motion.Still) return;
+            if (_listSlideFade == null) _listSlideFade = _listScroll.viewport.GetComponent<CanvasGroup>() ?? _listScroll.viewport.gameObject.AddComponent<CanvasGroup>();
+            var c = _content; var fade = _listSlideFade;
+            float d = Motion.D(Motion.Base) * (_fastTiles ? .6f : 1);
+            Motion.Reset(c, "slide"); Motion.Reset(fade, "fade");
+            Motion.To(c, "slide", 28 * dir, 0, d, Motion.Ease.OutCubic, x => { if (c != null) c.anchoredPosition = new Vector2(x, c.anchoredPosition.y); });
+            Motion.To(fade, "fade", _fastTiles ? .5f : .15f, 1, d, Motion.Ease.OutCubic, a => { if (fade != null) fade.alpha = a; });
         }
 
         /// <summary>
@@ -1876,7 +2041,7 @@ namespace LevelGate.Progression
         /// text, like the game's. Click: fold / open. Narrow: a small slot (a few tiles wide) instead of the panel's width.
         /// </summary>
         private static RectTransform CategoryBlock(RectTransform parent, (string Key, string Name, string Color, string[] Ids) g, List<ProgItem> list,
-            int max, int tileCols, float tileCell, bool narrow, Action<RectTransform, ProgItem> addTile)
+            int max, int tileCols, float tileCell, bool narrow, Action<RectTransform, ProgItem> addTile, bool defer = false)
         {
             var section = Ui.Rect(parent, "Cat_" + g.Key, Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
             var sl = section.gameObject.AddComponent<VerticalLayoutGroup>();
@@ -1969,11 +2134,65 @@ namespace LevelGate.Progression
                 FadeTo(countText as Graphic, on ? dimHover : dim, true);
                 FadeTo(chevText as Graphic, on ? inkHover : chevInk, true);
             });
-            AddGrouped(body, grid, catKey, list.Take(max).ToList(), narrow, tileCols, tileCell, addTile); // similar items grouped (ProgScreen.Groups)
+            var shownItems = list.Take(max).ToList();
+            // a group opened / closed rebuilds just this category's tiles (it used to rebuild the whole level)
+            _regroup[catKey] = () =>
+            {
+                if (grid == null) return;
+                var gone = new HashSet<Transform>();
+                foreach (Transform ch in grid) { gone.Add(ch); ch.gameObject.SetActive(false); UnityEngine.Object.Destroy(ch.gameObject); }
+                foreach (var kv in _tileViews.Where(kv => kv.Value.Rt == null || gone.Contains(kv.Value.Rt)).ToList()) _tileViews.Remove(kv.Key);
+                _tileOrder.RemoveAll(v => v.Rt == null || gone.Contains(v.Rt));
+                _hits.RemoveAll(h => h.Rect == null || gone.Contains(h.Rect));
+                AddGrouped(body, grid, catKey, shownItems, narrow, tileCols, tileCell, addTile);
+                SortTileOrder();
+            };
+            if (!defer) AddGrouped(body, grid, catKey, shownItems, narrow, tileCols, tileCell, addTile); // similar items grouped (ProgScreen.Groups)
+            else
+            {
+                // built a few frames later: until then the box keeps its height, so the list doesn't jump
+                int rows = Mathf.CeilToInt(shownItems.Count / (float)tileCols);
+                var hold = grid.gameObject.AddComponent<LayoutElement>();
+                hold.minHeight = rows * gl.cellSize.y + Mathf.Max(0, rows - 1) * S2;
+                _buildQueue.Add(() =>
+                {
+                    if (grid == null) return;
+                    AddGrouped(body, grid, catKey, shownItems, narrow, tileCols, tileCell, addTile);
+                    UnityEngine.Object.Destroy(hold);
+                });
+            }
             return section;
         }
 
         private static readonly HashSet<string> _foldedCats = new HashSet<string>(); // categories folded away (click their title)
+
+        // categories waiting to be built (a few ms a frame), and each category's own rebuild (a group opened / closed)
+        private static readonly List<Action> _buildQueue = new List<Action>();
+        private static readonly Dictionary<string, Action> _regroup = new Dictionary<string, Action>();
+        private static float _lastBuildMs;
+
+        private static void RunBuildQueue()
+        {
+            if (_buildQueue.Count == 0) return;
+            float t0 = Time.realtimeSinceStartup;
+            do
+            {
+                var a = _buildQueue[0]; _buildQueue.RemoveAt(0);
+                try { a(); } catch (Exception e) { L.ErrorOnce("deferred category", e); }
+            } while (_buildQueue.Count > 0 && Time.realtimeSinceStartup - t0 < .004f);
+            if (_buildQueue.Count == 0) UpdateSelection();
+        }
+
+        /// <summary>The keyboard order (W / S) is the list's reading order: tiles by where they sit in the hierarchy.</summary>
+        private static void SortTileOrder()
+        {
+            if (_content == null) return;
+            var rank = new Dictionary<Transform, int>();
+            int i = 0;
+            foreach (var t in _content.GetComponentsInChildren<Transform>(true)) rank[t] = i++;
+            _tileOrder.RemoveAll(v => v?.Rt == null);
+            _tileOrder.Sort((a, b) => (rank.TryGetValue(a.Rt, out var x) ? x : int.MaxValue).CompareTo(rank.TryGetValue(b.Rt, out var y) ? y : int.MaxValue));
+        }
 
         private const int BoxPad = 6;        // a category box's inner padding
         private const float TileMin = 118;   // smallest tile width before a column is dropped
@@ -2939,6 +3158,8 @@ namespace LevelGate.Progression
             if (!IsOpen) { CheckMenuShown(); return; }
             BgPattern.Tick(); // the background pattern's slow motion: only ever while open
             Motion.Tick();    // the shared motion system: every tween and sequence advances here, once
+            RunBuildQueue();  // categories below the list's window, built a few ms a frame
+            TickPerf();       // F12 > Advanced > Performance Readout
             TickLights();     // the drifting lights, the XP bar's tracer (F12 Detail Animation)
             SweepPictures();  // no picture left pointing at a deleted texture (the "wrong pictures")
             // the game can fade its main menu back in behind us (its own tween after a screen change): keep it hidden while open
@@ -2965,8 +3186,8 @@ namespace LevelGate.Progression
             {
                 bool typing = ProgressionPlugin.Typing();
                 if (typing) { }
-                else if (input.GetKeyDown(KeyCode.RightArrow) || input.GetKeyDown(KeyCode.D)) { ShineWay(1); ShowLevel(_level + 1); Sounds.Click(); }
-                else if (input.GetKeyDown(KeyCode.LeftArrow) || input.GetKeyDown(KeyCode.A)) { ShineWay(-1); ShowLevel(_level - 1); Sounds.Click(); }
+                else if (input.GetKeyDown(KeyCode.RightArrow) || input.GetKeyDown(KeyCode.D)) { StartHold(1); ShineWay(1); ShowLevel(_level + 1); Sounds.Click(); }
+                else if (input.GetKeyDown(KeyCode.LeftArrow) || input.GetKeyDown(KeyCode.A)) { StartHold(-1); ShineWay(-1); ShowLevel(_level - 1); Sounds.Click(); }
                 else if (input.GetKeyDown(KeyCode.E) || input.GetKeyDown(KeyCode.PageDown)) ShowPage(_page + 1, 1);
                 else if (input.GetKeyDown(KeyCode.Q) || input.GetKeyDown(KeyCode.PageUp)) ShowPage(_page - 1, -1);
                 else if (input.GetKeyDown(KeyCode.Home)) { int me = ProgData.PlayerLevel(); ShowLevel(me > 0 ? Mathf.Min(me, ProgData.MaxLevel) : 1); } // your level
@@ -2980,14 +3201,25 @@ namespace LevelGate.Progression
             else if (!xpBusy && input.GetKeyDown(KeyCode.Escape)) L.Debug("Esc with a game window open: left to the window");
 
             float now = Time.unscaledTime;
+            TickHold(input, now, windowRecently || xpBusy);
             float wheel = input.mouseScrollDelta.y;
-            if (!window && !xpBusy && Mathf.Abs(wheel) > .01f && now - _wheelAt > .2f && MenuHook.Contains(_bottom, input.mousePosition))
+            // the wheel over the cards: every notch counts (0.9.80 and older dropped notches that came within 0.2 s), one level
+            // per notch, drained one step every 0.07 s; while more are queued the list waits (see _skim)
+            if (!window && !xpBusy && Mathf.Abs(wheel) > .01f && MenuHook.Contains(_bottom, input.mousePosition))
+                _wheelAcc = Mathf.Clamp(_wheelAcc + Mathf.Sign(wheel) * Mathf.Max(1, Mathf.Round(Mathf.Abs(wheel))), -8, 8);
+            if (window || xpBusy) _wheelAcc = 0;
+            if (Mathf.Abs(_wheelAcc) >= 1 && now - _wheelAt > .07f)
             {
                 _wheelAt = now;
-                // one level per notch (it used to jump a whole page); ShowLevel turns the page when it has to
-                int to = Mathf.Clamp(_level + (wheel < 0 ? 1 : -1), 1, ProgData.MaxLevel);
-                if (to != _level) { ShowLevel(to); Sounds.Click(); }
+                int dir = _wheelAcc < 0 ? 1 : -1;
+                _wheelAcc -= Mathf.Sign(_wheelAcc);
+                int to = Mathf.Clamp(_level + dir, 1, ProgData.MaxLevel);
+                _skim = Mathf.Abs(_wheelAcc) >= 1; // more notches queued: skim
+                if (to != _level) { ShineWay(dir); ShowLevel(to); ClickSoon(now); _stepAt = now; }
+                _skim = false;
             }
+            // settled (key let go, wheel drained): the list catches up with the card you're on
+            if (_skimDirty && _holdDir == 0 && Mathf.Abs(_wheelAcc) < 1 && now - _stepAt > .12f) { if (_level == _shownLevel) _skimDirty = false; else ShowLevel(_level, true); }
 
             DragCards(input, window || xpBusy);
             TickRail(Time.unscaledDeltaTime);

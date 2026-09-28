@@ -40,6 +40,26 @@ Versions are **MAJOR.MINOR.PATCH**:
 
 ## LevelGate Progression (BepInEx plugin, separate DLL)
 
+### 0.9.81
+- **Dogtag rank-up:**
+  - The game's window now fades out with the rest of the moment and is then closed for you.
+  - Its DEATH TIME and WEAPON rows are hidden; they're given back before the window closes, in case the game reuses it.
+- **XP bar edge (F12 > CURRENTLY TESTING > XP Bar Edge):** black on the empty side makes the bar's light stand out. Pick one of:
+  - Shadow (default): a short black fade;
+  - Long Fade: the empty bar darkened over a third of its length;
+  - Notch: black gaps either side of a small glow;
+  - Off.
+- **Hold A / D to move fast:**
+  - Pressing moves one level.
+  - Held for 0.35 s, it repeats at 4 levels a second, ramping to about 16 a second over the next 2 s (level 1 to 79 in about 6 s).
+  - While it's fast, only the cards and header move; the list is built once you let go.
+- **Mouse wheel over the cards:** every notch now counts; 0.9.80 dropped notches that came within 0.2 s. Queued notches play one every 0.07 s, and the list catches up when the wheel stops. Clicks are capped at about 12 a second.
+- **Level change slides the list:** it comes in from the side you moved to (28 px) and fades up.
+- **Stats count up:** a new pick counts its big numbers over from the last pick's (600 → 450 rpm), and the meters slide to size.
+- **Faster level builds:** only the categories that fit in the list's window are built right away. The rest follow over the next frames, a few ms each, and keep their height so the list doesn't jump. Level 1 (148 items) cost 60–100 ms in one frame before.
+- **Opening or closing a group rebuilds just that category** instead of the whole level. W / S follow the list's order, including after that rebuild.
+- **F12 > Advanced > Performance Readout:** shows FPS, the slowest frame in the last half second, the last level's build time and the tile count, next to the version. The line turns orange above 50 ms.
+
 ### 0.9.80
 - **Dogtag rank-up has a real moment now.** Before the game's window opens, a promotion stage plays in the middle of the screen:
   - the rank emblem settles in its brackets while a rule draws out under it, over "RANK DATA · SYNCING";

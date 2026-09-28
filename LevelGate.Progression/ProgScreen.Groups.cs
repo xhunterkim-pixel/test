@@ -156,6 +156,16 @@ namespace LevelGate.Progression
             {
                 Sounds.Click();
                 if (!_openGroups.Remove(groupKey)) _openGroups.Add(groupKey);
+                // just this category's tiles are rebuilt (the pick and the scroll stay as they are)
+                string cat = groupKey.Substring(0, Math.Max(0, groupKey.IndexOf('/')));
+                if (_regroup.TryGetValue(cat, out var rebuild))
+                {
+                    float t0 = Time.realtimeSinceStartup;
+                    rebuild();
+                    UpdateSelection();
+                    L.Debug($"group {groupKey} {(_openGroups.Contains(groupKey) ? "opened" : "closed")} in {(Time.realtimeSinceStartup - t0) * 1000:0} ms");
+                    return;
+                }
                 _keepPickTpl = _featTpl; _keepScrollY = _content != null ? _content.anchoredPosition.y : -1;
                 try { ShowLevel(_level, true); }
                 finally { _keepPickTpl = null; _keepScrollY = -1; }

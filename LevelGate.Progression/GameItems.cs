@@ -981,7 +981,9 @@ namespace LevelGate.Progression
                 // the window the game opens for it: the inspect panel that wasn't open before (so the rank-up can fade it in)
                 var before = new HashSet<int>(OpenInspectPanels().Select(c => c.GetInstanceID()));
                 if (!InspectObject(item, tpl)) return false;
-                DogtagWindow = OpenInspectPanels().Where(c => !before.Contains(c.GetInstanceID())).Select(c => c.transform as RectTransform).LastOrDefault();
+                _dogtagPanel = OpenInspectPanels().Where(c => !before.Contains(c.GetInstanceID())).LastOrDefault();
+                _hiddenRows.Clear(); _rowsTried = 0;
+                DogtagWindow = _dogtagPanel != null ? _dogtagPanel.transform as RectTransform : null;
                 if (DogtagWindow != null) { var cg = DogtagWindow.GetComponent<CanvasGroup>() ?? DogtagWindow.gameObject.AddComponent<CanvasGroup>(); cg.alpha = 0; }
                 L.Info(DogtagWindow != null ? $"dogtag: fading in {DogtagWindow.name}" : "dogtag: the game's window wasn't found (no fade-in)");
                 return true;
@@ -991,6 +993,62 @@ namespace LevelGate.Progression
 
         /// <summary>The game's inspect window the rank-up opened (null once it's faded in).</summary>
         public static RectTransform DogtagWindow;
+        private static Component _dogtagPanel;
+        private static readonly List<GameObject> _hiddenRows = new List<GameObject>();
+        private static int _rowsTried;
+
+        /// <summary>
+        /// The rows a promotion has no use for (DEATH TIME, WEAPON) hidden in the rank-up's window. Its rows are filled in a
+        /// frame or two after it opens, so this is called every frame for a while; given back before the window closes.
+        /// </summary>
+        public static void HideDogtagRows()
+        {
+            if (_dogtagPanel == null || _hiddenRows.Count >= 2 || _rowsTried > 90) return;
+            _rowsTried++;
+            try
+            {
+                foreach (var c in _dogtagPanel.GetComponentsInChildren<Component>(false))
+                {
+                    if (c == null) continue;
+                    var tn = c.GetType().Name;
+                    if (tn.IndexOf("TextMeshPro", StringComparison.Ordinal) < 0 && !(c is UnityEngine.UI.Text)) continue;
+                    string txt = (Refl.Get(c, "text") as string ?? "").Trim().TrimEnd(':').Trim();
+                    if (!txt.Equals("death time", StringComparison.OrdinalIgnoreCase) && !txt.Equals("weapon", StringComparison.OrdinalIgnoreCase)) continue;
+                    // up to the row: the child of the list (a grid / vertical layout), not the row's own horizontal layout
+                    var row = c.transform;
+                    for (int d = 0; d < 6 && row.parent != null && row.parent != _dogtagPanel.transform; d++)
+                    {
+                        if (row.parent.GetComponent<UnityEngine.UI.GridLayoutGroup>() != null || row.parent.GetComponent<UnityEngine.UI.VerticalLayoutGroup>() != null) break;
+                        row = row.parent;
+                    }
+                    if (!row.gameObject.activeSelf || _hiddenRows.Contains(row.gameObject)) continue;
+                    row.gameObject.SetActive(false);
+                    _hiddenRows.Add(row.gameObject);
+                    L.Info($"dogtag: hid the {txt.ToUpperInvariant()} row ({row.name} under {row.parent?.name})");
+                }
+            }
+            catch (Exception e) { L.Debug("dogtag rows: " + e.GetBaseException().Message); _rowsTried = 999; }
+        }
+
+        /// <summary>Closes the rank-up's window (once the moment is over), giving back the rows it hid.</summary>
+        public static void CloseDogtag()
+        {
+            var p = _dogtagPanel;
+            _dogtagPanel = null; DogtagWindow = null;
+            foreach (var g in _hiddenRows) if (g != null) g.SetActive(true);
+            _hiddenRows.Clear();
+            if (p == null || !p.gameObject.activeInHierarchy) return;
+            var cg = p.GetComponent<CanvasGroup>(); if (cg != null) cg.alpha = 1;
+            foreach (var c in p.GetComponents<Component>())
+            {
+                if (c == null) continue;
+                var m = c.GetType().GetMethod("Close", Refl.All, null, Type.EmptyTypes, null);
+                if (m == null) continue;
+                try { m.Invoke(c, null); L.Info($"dogtag: closed the window ({c.GetType().Name}.Close)"); return; }
+                catch (Exception e) { L.Debug($"dogtag: {c.GetType().Name}.Close failed: {e.GetBaseException().Message}"); }
+            }
+            L.Info("dogtag: no Close on the window — left open");
+        }
 
         private static Type _inspectPanel;
         private static IEnumerable<Component> OpenInspectPanels()

@@ -26,7 +26,7 @@ namespace LevelGate.Progression
         public const string Guid = "com.kkyangg.levelgate.progression";
         public const string Name = "LevelGate Progression";
         // MAJOR.MINOR.PATCH — see CHANGELOG.md
-        public const string Version = "0.9.80";
+        public const string Version = "0.9.81";
 
         internal static ProgressionPlugin Instance;
         internal static ConfigEntry<KeyboardShortcut> OpenKey;
@@ -45,6 +45,8 @@ namespace LevelGate.Progression
         internal static ConfigEntry<string> ButtonTemplate;
         internal static ConfigEntry<string> ButtonLabel;
         internal static ConfigEntry<bool> VerboseLog;
+        internal static ConfigEntry<bool> PerfReadout;
+        internal static ConfigEntry<ProgScreen.XpEdgeLook> TestXpEdge;
         internal static ConfigEntry<float> TopMargin;
         internal static ConfigEntry<float> BottomMargin;
         internal static ConfigEntry<int> SortOrder;
@@ -187,6 +189,10 @@ namespace LevelGate.Progression
                 "The new-rank moment in a level up: Banner (a dark tactical strip across mid-screen), Dossier (a personnel file with a PROMOTED stamp), " +
                 "Terminal (a comms readout typing it out), Dogtag (a metal tag dropping in on its chain), Full (0.9.74's full-screen splash). Try them with 3. Preview > Play Next Rank.", 88));
             TestRankStyle.SettingChanged += (_, __) => L.Info($"testing: RankUpStyle = {TestRankStyle.Value}");
+            TestXpEdge = Config.Bind(T, "XpBarEdge", ProgScreen.XpEdgeLook.Shadow, Desc(
+                "The XP bar's light (how far into this level you are), set off by black on the empty side: Shadow (a short black fade right after it), " +
+                "Long Fade (the empty bar darkened from the light, fading out over a third of it), Notch (a black gap each side of a small glow at the light), Off.", 87));
+            TestXpEdge.SettingChanged += (_, __) => { L.Info($"testing: XpBarEdge = {TestXpEdge.Value}"); ProgScreen.XpEdgeChanged(); };
             TestRevealRandom = Config.Bind(T, "RevealRandom", 100, Desc(
                 "The big picture's load-in: how much the lines of light vary and flicker while it appears (0 = one fixed pattern, 100 = changing every frame).", 85, new AcceptableValueRange<int>(0, 100)));
             TestBloomOpacity = Config.Bind(T, "BloomOpacity", 166, Desc(
@@ -265,6 +271,8 @@ namespace LevelGate.Progression
                 "Put the screen inside the game's own UI (right after the main menu), so the game's windows (inspect…) open on top of it. Off: its own canvas over everything.", 55));
             FreeItemsAtLevel1 = Config.Bind(A, "CountFreeItemsAtLevel1", false, Desc(
                 "Count items without a limit as level 1 unlocks (that's most of the game's items).", 50));
+            PerfReadout = Config.Bind(A, "PerformanceReadout", false, Desc(
+                "A small readout in the screen's bottom-left corner: frames per second, the slowest frame of the last second, how long the last level took to build and how many tiles are showing. For measuring, not for play.", 22));
             VerboseLog = Config.Bind(A, "VerboseLog", true, Desc(
                 "Write detailed lines to the log (icons, menu objects, screen changes…). Its cost is measured and written in each session line of Progression.log; turn it off if that ever gets noticeable.", 20));
             DumpKey = Config.Bind(A, "DumpKey", new KeyboardShortcut(KeyCode.F10, KeyCode.LeftControl), Desc(
@@ -327,7 +335,7 @@ namespace LevelGate.Progression
                 ["ButtonLabel"] = "Menu Button Text", ["CopyButton"] = "Copy Look Of Button", ["TopMargin"] = "Top Margin", ["BottomMargin"] = "Bottom Margin",
                 ["TileSize"] = "Tile Size", ["MaxTilesPerCategory"] = "Max Items Per Category", ["Opacity"] = "Background Opacity",
                 ["CameraTurnDegrees"] = "Camera Turn (Degrees)", ["SortOrder"] = "Drawing Order", ["InsideGameUi"] = "Inside Game UI",
-                ["CountFreeItemsAtLevel1"] = "Count Free Items At Level 1", ["VerboseLog"] = "Detailed Log", ["DumpKey"] = "Debug Dump Key",
+                ["CountFreeItemsAtLevel1"] = "Count Free Items At Level 1", ["VerboseLog"] = "Detailed Log", ["DumpKey"] = "Debug Dump Key", ["PerformanceReadout"] = "Performance Readout", ["XpBarEdge"] = "XP Bar Edge",
             };
             var titles = new Dictionary<string, string>
             {
@@ -335,6 +343,7 @@ namespace LevelGate.Progression
                 ["5. Testing"] = "5. CURRENTLY TESTING",
             };
             // what most players never touch: under F12's "Advanced settings" (the Preview tools too); the tuning section is hidden
+            var testingNow = new HashSet<string> { "XpBarEdge" }; // still being tried: shown under CURRENTLY TESTING
             var advanced = new HashSet<string> { "RefreshIcons", "UseGameSounds", "Vignette", "RedGlow", "BlurBackground", "HideMainMenu", "PatternMotion" };
             foreach (var kv in Config)
             {
@@ -343,7 +352,7 @@ namespace LevelGate.Progression
                 if (names.TryGetValue(kv.Key.Key, out var dn)) a.DispName = dn;
                 if (titles.TryGetValue(kv.Key.Section, out var cat)) a.Category = cat;
                 if (kv.Key.Section == "3. Advanced" || kv.Key.Section == "4. Preview" || advanced.Contains(kv.Key.Key)) a.IsAdvanced = true;
-                if (kv.Key.Section == "5. Testing") a.Browsable = false; // tuned: its values are the defaults now
+                if (kv.Key.Section == "5. Testing" && !testingNow.Contains(kv.Key.Key)) a.Browsable = false; // tuned: its values are the defaults now
             }
         }
 

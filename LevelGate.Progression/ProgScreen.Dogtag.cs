@@ -281,7 +281,7 @@ namespace LevelGate.Progression
 
         private const float DtOpen = .7f; // after the peak: the emblem's moment first, then the window
 
-        /// <summary>The game's window fades in and settles (it opens with no transition of its own); always ends at 1.</summary>
+        /// <summary>The game's window fades in and settles (it opens with no transition of its own), and out at the end.</summary>
         private static void FadeGameWindow(float k)
         {
             var w = GameItems.DogtagWindow;
@@ -292,7 +292,6 @@ namespace LevelGate.Progression
                 k = Mathf.Clamp01(k);
                 cg.alpha = k;
                 w.localScale = Vector3.one * Mathf.Lerp(.95f, 1, Motion.Eval(Motion.Ease.OutCubic, k));
-                if (k >= 1) GameItems.DogtagWindow = null;
             }
             catch { GameItems.DogtagWindow = null; }
         }
@@ -317,7 +316,8 @@ namespace LevelGate.Progression
                 _dtReal = GameItems.InspectDogtag(side == "BEAR", nick, level, TierOf(level).Name);
                 if (!_dtReal) { _dtWin.gameObject.SetActive(true); L.Info("dogtag: showing the drawn window instead"); }
             }
-            if (_dtReal) { FadeGameWindow(still ? 1 : (after - _dtOpenAt) / .35f); return; }
+            // the game's window fades in once it opens, and out with the rest at the end (then it's closed: HideRankViews)
+            if (_dtReal) { FadeGameWindow(still ? 1 : Mathf.Min((after - _dtOpenAt) / .35f, (dur - t) / .35f)); GameItems.HideDogtagRows(); return; }
             if (!_dtWin.gameObject.activeSelf) return;
             // the drawn window opens the same way: a fade and settle
             float o = still ? 1 : Motion.Eval(Motion.Ease.OutCubic, (after - _dtOpenAt) / .35f);
