@@ -40,6 +40,18 @@ Versions are **MAJOR.MINOR.PATCH**:
 
 ## LevelGate Progression (BepInEx plugin, separate DLL)
 
+### 0.9.80
+- **Dogtag rank-up has a real moment now.** Before the game's window opens, a promotion stage plays in the middle of the screen:
+  - the rank emblem settles in its brackets while a rule draws out under it, over "RANK DATA · SYNCING";
+  - on the peak, the new emblem flashes and punches in, and the rank name types out with the level line;
+  - it then lifts to the top of the screen, and your real dogtag opens under it in the game's inspect window.
+- **The game's inspect window now fades in and settles.** On its own it opens with no transition. If the screen closes early, the window is always restored to full opacity.
+- **Dogtag STATUS reads "Promoted to Drifter".** It previously read "PromotedDrifter". WEAPON now reads "Service record".
+- **The NEW tag on tiles sits on the top-right border, straddling it** (MW style). Its dark face fades out towards the left, with a yellow wash, and it stays above the selection border.
+- **Hero pips are MW boxes.** The top-left and bottom-right corners are cut; reached pips are filled, the rest are outlines.
+- **The selection border's dot strip breathes.** The whole strip fades lower and higher on a 1.8 s cycle, and its frames step slowly, so it no longer flickers.
+- **The pick shine follows your key.** W / A (back) run it right to left; S / D and clicks run it left to right.
+
 ### 0.9.79
 - **The Dogtag rank-up opens your real dogtag**: on the emblem sound's peak, a fresh game dogtag of your faction (USEC / BEAR) with your nickname, level, the date and the new rank written into it opens in the game's own inspect window — the real tag, the real rows. The log lists which dogtag fields were filled. If the game won't make the item, the drawn window from 0.9.78 is shown instead.
 - **Selection border's bottom edge like MW's**: a dense strip of tiny 1–2 px dots and short dashes packed around the line, twinkling (frames cycled on the shared clock) — replacing 0.9.78's few big dots. One image per border.

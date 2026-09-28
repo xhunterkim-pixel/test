@@ -259,7 +259,11 @@ namespace LevelGate.Progression
             // the echo: the same outline, 3 px down-right, fainter
             var echo = Rect(root, "Echo", Vector2.zero, Vector2.one, new Vector2(3, -3), new Vector2(3, -3));
             Outline(echo, new Color(yellow.r, yellow.g, yellow.b, .35f));
-            Img(Fill(root, "Face"), new Color(.07f, .07f, .03f, .78f)).raycastTarget = false;
+            // MW's face: dark on the right, fading out towards the left (a faint base keeps the text readable), with a yellow
+            // wash rising the same way
+            Img(Fill(root, "Base"), new Color(.07f, .07f, .03f, .35f)).raycastTarget = false;
+            Img(Fill(root, "Face"), new Color(.05f, .05f, .02f, .92f), HorizontalFade()).raycastTarget = false;
+            Img(Fill(root, "Wash"), new Color(yellow.r, yellow.g, yellow.b, .16f), HorizontalFade()).raycastTarget = false;
             Outline(root, new Color(yellow.r, yellow.g, yellow.b, .95f));
             var t = Label(root, "Text", "NEW", textSize, yellow, TextAnchor.MiddleCenter, true, 1.5f);
             ((Graphic)t).raycastTarget = false;
@@ -704,6 +708,36 @@ namespace LevelGate.Progression
         {
             var ab = b - a; float t = Mathf.Clamp01(Vector2.Dot(p - a, ab) / ab.sqrMagnitude);
             return Vector2.Distance(p, a + ab * t);
+        }
+
+        private static readonly Sprite[] _pipBox = new Sprite[2];
+
+        /// <summary>
+        /// MW's rank pip: a small box with its top-left and bottom-right corners cut, solid (filled) or as a 1 px outline
+        /// (hollow) — 20 px, drawn at ~10 so it stays crisp; not sliced (the cut stays in proportion).
+        /// </summary>
+        public static Sprite PipBox(bool filled)
+        {
+            int k = filled ? 1 : 0;
+            if (_pipBox[k] != null) return _pipBox[k];
+            const int n = 20; const float c = 6, line = 2.2f;
+            var tex = new Texture2D(n, n, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Clamp, filterMode = FilterMode.Bilinear, name = "LevelGate pip" };
+            var px = new Color32[n * n];
+            for (int y = 0; y < n; y++)
+                for (int x = 0; x < n; x++)
+                {
+                    float fx = x + .5f, fy = y + .5f;
+                    // distance inside the shape: the four sides and the two cuts (top-left, bottom-right)
+                    float d = Mathf.Min(Mathf.Min(fx, n - fx), Mathf.Min(fy, n - fy));
+                    d = Mathf.Min(d, (fx + (n - fy) - c) * .7071f);
+                    d = Mathf.Min(d, ((n - fx) + fy - c) * .7071f);
+                    float a = Mathf.Clamp01(d + .5f);
+                    if (!filled) a *= Mathf.Clamp01(line - d + .5f);
+                    px[y * n + x] = new Color32(255, 255, 255, (byte)(255 * a));
+                }
+            tex.SetPixels32(px);
+            tex.Apply(false, true);
+            return _pipBox[k] = Sprite.Create(tex, new Rect(0, 0, n, n), new Vector2(.5f, .5f), 100, 0, SpriteMeshType.FullRect);
         }
 
         /// <summary>

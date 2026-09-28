@@ -959,7 +959,8 @@ namespace LevelGate.Progression
                 var values = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase)
                 {
                     ["Nickname"] = nickname, ["Side"] = bear ? "Bear" : "Usec", ["Level"] = level, ["Time"] = DateTime.Now,
-                    ["Status"] = "Promoted", ["KillerName"] = rank, ["WeaponName"] = rank,
+                    // the game shows STATUS as Status + KillerName ("Killed by " + name): "Promoted to Drifter"
+                    ["Status"] = "Promoted to ", ["KillerName"] = rank, ["WeaponName"] = "Service record",
                     ["ProfileId"] = ProgData.ProfileId() ?? "", ["AccountId"] = Refl.Get(profile, "AccountId")?.ToString() ?? "",
                 };
                 var set = new List<string>();
@@ -977,9 +978,30 @@ namespace LevelGate.Progression
                     catch (Exception e) { L.Debug($"dogtag: {m.Name} not set: {e.GetBaseException().Message}"); }
                 }
                 L.Info($"dogtag: {(bear ? "BEAR" : "USEC")} tag for {nickname}, level {level} ({rank}) — set {string.Join(", ", set.ToArray())}");
-                return InspectObject(item, tpl);
+                // the window the game opens for it: the inspect panel that wasn't open before (so the rank-up can fade it in)
+                var before = new HashSet<int>(OpenInspectPanels().Select(c => c.GetInstanceID()));
+                if (!InspectObject(item, tpl)) return false;
+                DogtagWindow = OpenInspectPanels().Where(c => !before.Contains(c.GetInstanceID())).Select(c => c.transform as RectTransform).LastOrDefault();
+                if (DogtagWindow != null) { var cg = DogtagWindow.GetComponent<CanvasGroup>() ?? DogtagWindow.gameObject.AddComponent<CanvasGroup>(); cg.alpha = 0; }
+                L.Info(DogtagWindow != null ? $"dogtag: fading in {DogtagWindow.name}" : "dogtag: the game's window wasn't found (no fade-in)");
+                return true;
             }
             catch (Exception e) { L.Info("dogtag: " + e.GetBaseException().Message); return false; }
+        }
+
+        /// <summary>The game's inspect window the rank-up opened (null once it's faded in).</summary>
+        public static RectTransform DogtagWindow;
+
+        private static Type _inspectPanel;
+        private static IEnumerable<Component> OpenInspectPanels()
+        {
+            try
+            {
+                _inspectPanel ??= AccessTools.TypeByName("EFT.UI.ItemSpecificationPanel");
+                if (_inspectPanel == null) return Enumerable.Empty<Component>();
+                return UnityEngine.Object.FindObjectsOfType(_inspectPanel).OfType<Component>().Where(c => c != null && c.gameObject.activeInHierarchy).ToList();
+            }
+            catch { return Enumerable.Empty<Component>(); }
         }
 
         private static bool InspectObject(object item, string tpl)

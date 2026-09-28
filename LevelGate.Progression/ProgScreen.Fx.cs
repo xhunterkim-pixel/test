@@ -91,8 +91,14 @@ namespace LevelGate.Progression
         }
 
         /// <summary>Picked: one soft shine sweeps across (Motion: Slow, OutCubic travel, pulse brightness).</summary>
+        // the shine runs the way you moved: W / A (back) right to left, S / D (on) and clicks left to right
+        private static int _shineDir = 1;
+        private static float _shineDirAt = -9;
+        private static void ShineWay(int dir) { _shineDir = dir < 0 ? -1 : 1; _shineDirAt = Time.unscaledTime; }
+
         private static void PlayShine(RectTransform host)
         {
+            bool back = _shineDir < 0 && Time.unscaledTime - _shineDirAt < .6f;
             float strength = (ProgressionPlugin.TestShine?.Value ?? 285) / 100f, width = (ProgressionPlugin.TestShineWidth?.Value ?? 157) / 100f;
             if (host == null || Motion.Still || Ui.DetailK <= 0 || strength <= 0) return;
             var f = FxOf(host); var sh = f.Shine;
@@ -102,7 +108,7 @@ namespace LevelGate.Progression
             Motion.To(sh, "shine", 0, 1, Motion.D(Motion.Slow), Motion.Ease.Linear, t =>
             {
                 var r = sh.rectTransform;
-                float x = Mathf.Lerp(-.2f, 1.2f, Motion.Eval(Motion.Ease.OutCubic, t));
+                float x = Mathf.Lerp(back ? 1.2f : -.2f, back ? -.2f : 1.2f, Motion.Eval(Motion.Ease.OutCubic, t));
                 r.anchorMin = new Vector2(x, 0); r.anchorMax = new Vector2(x, 1);
                 sh.color = new Color(1, 1, 1, Mathf.Clamp01(.22f * strength * Motion.Eval(Motion.Ease.Pulse, t)));
             }, 0, () => { if (sh != null) sh.enabled = false; });
@@ -209,15 +215,17 @@ namespace LevelGate.Progression
 
         private static void TickSelection()
         {
-            // the bottom edge's dot strip twinkles: its frames cycle on the shared clock (each dot pulses on its own phase)
+            // the bottom edge's dot strip breathes: the whole strip fades down and back up (1.8 s), and its frames step slowly
+            // (each dot on its own phase) so it never sits still — 0.9.79 flipped frames every 0.09 s, which read as static
             _selFrames.RemoveAll(f => f.Img == null);
-            int frame = Motion.Still ? 0 : Mathf.FloorToInt(Motion.Now / .09f) % DotStripFrames;
+            int frame = Motion.Still ? 0 : Mathf.FloorToInt(Motion.Now / .45f) % DotStripFrames;
+            float breath = Motion.Still ? 1 : .25f + .75f * (.5f + .5f * Motion.Wave(1.8f));
             foreach (var f in _selFrames)
             {
                 if (f.Bush == null || !f.Bush.gameObject.activeSelf) continue;
                 var sp = DotStrip(frame);
                 if (f.Strip.sprite != sp) f.Strip.sprite = sp;
-                var c = new Color(1, 1, 1, .95f * f.Shown);
+                var c = new Color(1, 1, 1, .95f * f.Shown * breath);
                 if (f.Strip.color != c) f.Strip.color = c;
             }
             // the section light: moves when the pick moves to another section (Motion: Slow in, Base out)

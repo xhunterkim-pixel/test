@@ -16,6 +16,11 @@ namespace LevelGate.Progression
     {
         private const float WinW = 560, WinH = 610, PicH = 330;
         private static RectTransform _dtWin, _dtTag, _dtEmblemBox;
+        // the promotion stage: the emblem's own moment (before the window), then lifted to the top above it
+        private static RectTransform _dtStage, _dtStageEmblem, _dtRule;
+        private static Component _dtCaption, _dtRankName, _dtSub;
+        private static Image _dtWinEmblem;
+        private static float _dtOpenAt = -1;
         private static Image _dtGlint;
         private static Component _dtTitle, _dtRankValue, _dtDesc;
         private static readonly List<Component> _dtEngrave = new List<Component>();
@@ -141,6 +146,8 @@ namespace LevelGate.Progression
             // the window
             var win = Ui.Box(root, "InspectWindow", new Vector2(.5f, .5f), Vector2.zero, new Vector2(WinW, WinH));
             _dtWin = win; v.Body = win;
+            win.gameObject.AddComponent<CanvasGroup>();
+            win.anchoredPosition = new Vector2(0, -40); // under the lifted stage
             Ui.Img(win, Ui.Hex("#0d1011", .98f));
             Ui.Outline(win, Ui.Hex("#3a4245"));
             var head = Ui.Rect(win, "Head", new Vector2(0, 1), Vector2.one, new Vector2(1, -30), new Vector2(-1, -1));
@@ -205,8 +212,7 @@ namespace LevelGate.Progression
             var eb = Ui.Rect(pic, "Emblem", new Vector2(1, 1), new Vector2(1, 1), new Vector2(-104, -104), new Vector2(-12, -12));
             _dtEmblemBox = eb;
             Ui.Brackets(eb, 0, 10, new Color(1, 1, 1, .5f));
-            v.Emblem = Ui.Img(Ui.Fill(eb, "Img", 6), Color.white); v.Emblem.preserveAspect = true;
-            v.Flash = Ui.Img(Ui.Box(eb, "Flash", new Vector2(.5f, .5f), Vector2.zero, new Vector2(140, 140)), new Color(1, 1, 1, 0), Ui.Radial());
+            _dtWinEmblem = Ui.Img(Ui.Fill(eb, "Img", 6), Color.white); _dtWinEmblem.preserveAspect = true;
             // the property grid, like the game's inspect rows (two per line)
             var grid = Ui.Rect(win, "Rows", new Vector2(0, 0), new Vector2(1, 0), new Vector2(10, 70), new Vector2(-10, 70 + 3 * 30));
             string date = System.DateTime.Now.ToString("dd.MM.yyyy HH:mm");
@@ -221,8 +227,74 @@ namespace LevelGate.Progression
                 if (rows[i].Item1 == "RANK") _dtRankValue = val;
                 if (rows[i].Item1 == "LEVEL") v.Line = val;
             }
+            BuildDogtagStage(v, root);
             _dtDesc = Ui.Label(Ui.Rect(win, "Desc", new Vector2(0, 0), new Vector2(1, 0), new Vector2(14, 12), new Vector2(-14, 64)), "Text", "", 12, Ui.Hex("#b9c0c3"), TextAnchor.UpperLeft, false, .3f);
             Refl.Set(_dtDesc, "enableWordWrapping", true);
+        }
+
+        /// <summary>
+        /// The promotion stage, in the middle of the screen: the rank emblem in brackets with its flash, a rule that draws
+        /// out under it, "RANK DATA · SYNCING" becoming the new rank's name (typed) and the level line. Once the moment has
+        /// landed it lifts to the top of the screen and the dogtag window opens under it.
+        /// </summary>
+        private static void BuildDogtagStage(RankView v, RectTransform root)
+        {
+            var st = Ui.Box(root, "Stage", new Vector2(.5f, .5f), Vector2.zero, new Vector2(560, 300));
+            _dtStage = st;
+            var eb = Ui.Box(st, "Emblem", new Vector2(.5f, 1), new Vector2(0, -80), new Vector2(150, 150));
+            _dtStageEmblem = eb;
+            Ui.Brackets(eb, 0, 14, new Color(1, 1, 1, .55f));
+            v.Flash = Ui.Img(Ui.Box(eb, "Flash", new Vector2(.5f, .5f), Vector2.zero, new Vector2(280, 280)), new Color(1, 1, 1, 0), Ui.Radial());
+            v.Emblem = Ui.Img(Ui.Fill(eb, "Img", 8), Color.white); v.Emblem.preserveAspect = true;
+            _dtRule = Ui.Rect(st, "Rule", new Vector2(.5f, 1), new Vector2(.5f, 1), new Vector2(0, -170), new Vector2(0, -169));
+            Ui.Img(_dtRule, new Color(1, 1, 1, .5f));
+            Ui.Img(Ui.Rect(_dtRule, "TickL", Vector2.zero, new Vector2(0, 1), new Vector2(0, -3), new Vector2(1, 4)), new Color(1, 1, 1, .8f));
+            Ui.Img(Ui.Rect(_dtRule, "TickR", new Vector2(1, 0), Vector2.one, new Vector2(-1, -3), new Vector2(0, 4)), new Color(1, 1, 1, .8f));
+            _dtCaption = Ui.Label(Ui.Rect(st, "Caption", new Vector2(0, 1), Vector2.one, new Vector2(0, -198), new Vector2(0, -176)), "Text", "", 12, Ui.Hex("#9aa3a6"), TextAnchor.MiddleCenter, true, 4);
+            _dtRankName = Ui.Label(Ui.Rect(st, "Rank", new Vector2(0, 1), Vector2.one, new Vector2(0, -240), new Vector2(0, -198)), "Text", "", 34, Ui.Hex("#e4e7e8"), TextAnchor.MiddleCenter, true, 6);
+            _dtSub = Ui.Label(Ui.Rect(st, "Sub", new Vector2(0, 1), Vector2.one, new Vector2(0, -266), new Vector2(0, -242)), "Text", "", 12, Ui.Hex("#7d8588"), TextAnchor.MiddleCenter, false, 2);
+        }
+
+        private static void DrawDogtagStage(RankView v, int level, float t, float after, bool still, string name, RectTransform root)
+        {
+            var light = Ui.Hex(TierOf(level).Light);
+            // in: the emblem settles from a little big, the rule draws out from the middle
+            float inE = still ? 1 : Motion.Eval(Motion.Ease.OutCubic, t / .5f);
+            float punch = still || after < 0 ? 0 : Mathf.Lerp(.22f, 0, Motion.Eval(Motion.Ease.OutCubic, after / .35f));
+            float es = Mathf.Lerp(1.25f, 1, inE) + punch;
+            _dtStageEmblem.localScale = new Vector3(es, es, 1);
+            v.Emblem.color = new Color(1, 1, 1, after < 0 && !still ? .55f * inE : 1);
+            float rw = (still ? 1 : Motion.Eval(Motion.Ease.OutExpo, Mathf.Clamp01((t - .15f) / .6f))) * 230;
+            _dtRule.offsetMin = new Vector2(-rw, _dtRule.offsetMin.y); _dtRule.offsetMax = new Vector2(rw, _dtRule.offsetMax.y);
+            bool landed = still || after >= 0;
+            Ui.SetText(_dtCaption, landed ? "RANK UP" : "RANK DATA  ·  SYNCING" + new string('.', Mathf.FloorToInt(Time.unscaledTime * 4) % 4));
+            Ui.SetColor(_dtCaption, landed ? new Color(light.r, light.g, light.b, 1) : Ui.Hex("#9aa3a6"));
+            Ui.SetText(_dtRankName, landed ? Typed(name, after, still) : "");
+            Ui.SetText(_dtSub, landed && (still || after > .3f) ? $"LEVEL {level}  ·  CLEARANCE GRANTED  ·  {System.DateTime.Now:dd.MM.yyyy}" : "");
+            // then it lifts to the top of the screen (smaller) and the window opens under it
+            float up = still ? 1 : Motion.Eval(Motion.Ease.InOutCubic, Mathf.Clamp01((after - DtOpen) / .45f));
+            float h = root.rect.height;
+            float sc = Mathf.Lerp(1, .62f, up);
+            _dtStage.localScale = new Vector3(sc, sc, 1);
+            _dtStage.anchoredPosition = new Vector2(0, Mathf.Lerp(0, h * .5f - 300 * sc * .5f - 8, up));
+        }
+
+        private const float DtOpen = .7f; // after the peak: the emblem's moment first, then the window
+
+        /// <summary>The game's window fades in and settles (it opens with no transition of its own); always ends at 1.</summary>
+        private static void FadeGameWindow(float k)
+        {
+            var w = GameItems.DogtagWindow;
+            if (w == null) return;
+            try
+            {
+                var cg = w.GetComponent<CanvasGroup>() ?? w.gameObject.AddComponent<CanvasGroup>();
+                k = Mathf.Clamp01(k);
+                cg.alpha = k;
+                w.localScale = Vector3.one * Mathf.Lerp(.95f, 1, Motion.Eval(Motion.Ease.OutCubic, k));
+                if (k >= 1) GameItems.DogtagWindow = null;
+            }
+            catch { GameItems.DogtagWindow = null; }
         }
 
         private static int _dtForLevel = -1;
@@ -231,22 +303,25 @@ namespace LevelGate.Progression
         private static void DrawDogtag(RankView v, int level, float t, float dur, float after, bool still, string name)
         {
             var (nick, side) = Me2();
-            // on the peak: your real dogtag in the game's own inspect window (the real tag, the real rows); the drawn
-            // window below is only the fallback if the game won't make the item
-            if (_dtForLevel != level) { _dtForLevel = level; _dtReal = false; if (!still) _dtWin.gameObject.SetActive(false); }
-            if ((after >= 0 || still) && !_dtReal && !_dtWin.gameObject.activeSelf)
+            var root = (RectTransform)v.Root;
+            if (_dtWinEmblem != null && v.Emblem != null) { _dtWinEmblem.sprite = v.Emblem.sprite; _dtWinEmblem.enabled = v.Emblem.enabled; }
+            // first the promotion stage (the emblem's moment), then, once it has lifted to the top, your real dogtag in
+            // the game's own inspect window (the real tag, the real rows), fading in; the drawn window below is only the
+            // fallback if the game won't make the item
+            if (_dtForLevel != level) { _dtForLevel = level; _dtReal = false; _dtOpenAt = -1; if (!still) _dtWin.gameObject.SetActive(false); }
+            v.Veil.color = new Color(0, 0, 0, .55f); // fades in with the view
+            DrawDogtagStage(v, level, t, after, still, name, root);
+            if ((after >= DtOpen || still) && _dtOpenAt < 0)
             {
+                _dtOpenAt = still ? 0 : after;
                 _dtReal = GameItems.InspectDogtag(side == "BEAR", nick, level, TierOf(level).Name);
                 if (!_dtReal) { _dtWin.gameObject.SetActive(true); L.Info("dogtag: showing the drawn window instead"); }
             }
-            if (_dtReal || !_dtWin.gameObject.activeSelf)
-            {
-                v.Veil.color = new Color(0, 0, 0, .4f); // behind the game's window
-                return;
-            }
-            v.Veil.color = new Color(0, 0, 0, .55f);
-            // the window opens like the game's: a quick fade and settle
-            float o = still ? 1 : Motion.Eval(Motion.Ease.OutCubic, t / .2f);
+            if (_dtReal) { FadeGameWindow(still ? 1 : (after - _dtOpenAt) / .35f); return; }
+            if (!_dtWin.gameObject.activeSelf) return;
+            // the drawn window opens the same way: a fade and settle
+            float o = still ? 1 : Motion.Eval(Motion.Ease.OutCubic, (after - _dtOpenAt) / .35f);
+            _dtWin.GetComponent<CanvasGroup>().alpha = o;
             _dtWin.localScale = Vector3.one * Mathf.Lerp(.97f, 1, o);
             Ui.SetText(v.Line, level.ToString());
             string rank = after >= 0 || still ? TierOf(level).Name : TierOf(Mathf.Max(1, level - 1)).Name;
@@ -257,7 +332,7 @@ namespace LevelGate.Progression
             float swing = still || after < 0 ? 0 : 3 * Mathf.Exp(-after * 3) * Mathf.Sin(after * 9);
             _dtTag.localEulerAngles = new Vector3(0, 0, (_dtBear ? -22 : -14) + swing);
             // the emblem appears on the peak
-            float es = still || after < 0 ? 0 : Motion.Eval(Motion.Ease.OutBack, after / .3f);
+            float es = still ? 1 : Motion.Eval(Motion.Ease.OutBack, (after - _dtOpenAt) / .3f);
             _dtEmblemBox.localScale = new Vector3(es, es, 1);
             // the glint crosses the tag once, just after
             float g = still ? -1 : (after - .1f) / .7f;

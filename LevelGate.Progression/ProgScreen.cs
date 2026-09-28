@@ -665,7 +665,8 @@ namespace LevelGate.Progression
             var row = Ui.Rect(face, "Pips", new Vector2(1, 1), new Vector2(1, 1), new Vector2(-122, -32), new Vector2(-22, -22));
             for (int i = 0; i < 5; i++)
             {
-                _heroPips[i] = Ui.Img(Ui.Rect(row, "Pip" + i, new Vector2(0, 0), new Vector2(0, 1), new Vector2(i * 14, 0), new Vector2(i * 14 + 10, 0)), Color.white);
+                // MW's pips: boxes with the top-left and bottom-right corners cut — filled when reached, an outline when not
+                _heroPips[i] = Ui.Img(Ui.Rect(row, "Pip" + i, new Vector2(0, 0), new Vector2(0, 1), new Vector2(i * 14, 0), new Vector2(i * 14 + 10, 0)), Color.white, Ui.PipBox(true));
                 _heroPips[i].raycastTarget = false;
             }
             Ui.Label(Ui.Rect(row, "Plus", new Vector2(0, 0), new Vector2(0, 1), new Vector2(70, -2), new Vector2(82, 2)), "Text", "+", 11, Dim, TextAnchor.MiddleCenter, false);
@@ -696,7 +697,9 @@ namespace LevelGate.Progression
                 // the pips in Tarkov's own loot colour for the item (red / violet / blue / green / orange / yellow, from its
                 // background in the stash); ordinary items keep the rank's colour
                 var pip = TierColor(it.Level); // Tarkov's loot order across the pages: grey → green → blue → purple → red
-                _heroPips[i].color = i < into ? pip : new Color(1, 1, 1, .12f);
+                bool lit = i < into;
+                _heroPips[i].sprite = Ui.PipBox(lit);
+                _heroPips[i].color = lit ? pip : new Color(1, 1, 1, .32f);
             }
             // the diamond: the next rank — lit (orange) on a rank's last level, where the next level up is a new rank
             _heroDiamond.enabled = _heroDiamondIn.enabled = true;
@@ -2151,12 +2154,12 @@ namespace LevelGate.Progression
             // newly reached since you last opened the screen: a small restrained tag (top-right)
             if (reached && NewTags.Item(it.Tpl))
             {
-                // CoD's NEW: inside the tile's top-right corner (0.9.76 and older overhung the edge and overlapped the tile
-                // above); the name moves down to make room
-                var tag = Ui.NewBadge(rt, new Vector2(1, 1), new Vector2(-21, -12));
+                // MW's NEW: sits on the tile's top-right border, straddling it (a little over half above the line — 0.9.76
+                // hung it fully outside, onto the tile above); the name moves down a touch to clear it
+                var tag = Ui.NewBadge(rt, new Vector2(1, 1), new Vector2(-22, 1), 32, 15, 10.5f);
                 v.NewTag = tag.gameObject;
                 var nr = ((Component)v.Name).transform.parent as RectTransform;
-                if (nr != null) nr.offsetMax = new Vector2(nr.offsetMax.x, nr.offsetMax.y - 18);
+                if (nr != null) nr.offsetMax = new Vector2(nr.offsetMax.x, nr.offsetMax.y - 8);
             }
             RequestIcon(_icons, it.Tpl, TileScaleOf(it.Tpl), v.Pic, placeholder);
             _hits.Add((rt, it));
@@ -2171,6 +2174,7 @@ namespace LevelGate.Progression
             _tileViews[it.Tpl] = v;
             _tileOrder.Add(v);
             ApplyTile(v, true);
+            if (v.NewTag != null) v.NewTag.transform.SetAsLastSibling();
             if (_fastTiles || Calm) group.alpha = 1; // browsing: no one-by-one fade (it flickered while scrolling)
             else _tiles.Add((group, inner, Mathf.Min(index, 40) * .012f));
         }
@@ -2183,6 +2187,7 @@ namespace LevelGate.Progression
             if (sel && !v.WasSel && !instant) PlayShine(v.Face.rectTransform); // picked: one soft shine across it
             v.WasSel = sel;
             if (sel && v.SelFx == null) v.SelFx = MakeSelFrame(v.Rt, 2); // on the outline itself (the sprite's line is 2 px in)
+            if (sel && v.NewTag != null && v.NewTag.transform.GetSiblingIndex() != v.NewTag.transform.parent.childCount - 1) v.NewTag.transform.SetAsLastSibling(); // the NEW tag stays on top of the border
             if (v.SelFx != null) v.SelFx.On = sel;
             // picked: the selection border takes over the outline (one border, not two); the outline itself steps back
             FadeTo(v.Frame, sel ? (Ui.DetailK > 0 ? Border : Select) : v.Hover ? HoverEdge : Border, instant);
@@ -2960,14 +2965,14 @@ namespace LevelGate.Progression
             {
                 bool typing = ProgressionPlugin.Typing();
                 if (typing) { }
-                else if (input.GetKeyDown(KeyCode.RightArrow) || input.GetKeyDown(KeyCode.D)) { ShowLevel(_level + 1); Sounds.Click(); }
-                else if (input.GetKeyDown(KeyCode.LeftArrow) || input.GetKeyDown(KeyCode.A)) { ShowLevel(_level - 1); Sounds.Click(); }
+                else if (input.GetKeyDown(KeyCode.RightArrow) || input.GetKeyDown(KeyCode.D)) { ShineWay(1); ShowLevel(_level + 1); Sounds.Click(); }
+                else if (input.GetKeyDown(KeyCode.LeftArrow) || input.GetKeyDown(KeyCode.A)) { ShineWay(-1); ShowLevel(_level - 1); Sounds.Click(); }
                 else if (input.GetKeyDown(KeyCode.E) || input.GetKeyDown(KeyCode.PageDown)) ShowPage(_page + 1, 1);
                 else if (input.GetKeyDown(KeyCode.Q) || input.GetKeyDown(KeyCode.PageUp)) ShowPage(_page - 1, -1);
                 else if (input.GetKeyDown(KeyCode.Home)) { int me = ProgData.PlayerLevel(); ShowLevel(me > 0 ? Mathf.Min(me, ProgData.MaxLevel) : 1); } // your level
                 else if (input.GetKeyDown(KeyCode.End)) ShowLevel(ProgData.MaxLevel);
-                else if (input.GetKeyDown(KeyCode.DownArrow) || input.GetKeyDown(KeyCode.S)) StepTile(1);
-                else if (input.GetKeyDown(KeyCode.UpArrow) || input.GetKeyDown(KeyCode.W)) StepTile(-1);
+                else if (input.GetKeyDown(KeyCode.DownArrow) || input.GetKeyDown(KeyCode.S)) { ShineWay(1); StepTile(1); }
+                else if (input.GetKeyDown(KeyCode.UpArrow) || input.GetKeyDown(KeyCode.W)) { ShineWay(-1); StepTile(-1); }
                 else if ((input.GetKeyDown(KeyCode.Return) || input.GetKeyDown(KeyCode.KeypadEnter) || input.GetKeyDown(KeyCode.R)) && _featTpl != null) InspectSoon(_featTpl);
                 // Esc closes us only when no game window (inspect…) is open — otherwise it's the window's Esc
                 else if (input.GetKeyDown(KeyCode.Escape)) { Close("Escape"); return; }
