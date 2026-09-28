@@ -91,7 +91,7 @@ namespace LevelGate.Progression
             _xpPop = _xpRankPop = _rollT = _barResetT = _luT = -1;
             if (_xpSquare != null) { _xpSquare.rectTransform.localScale = Vector3.one; _xpSquare.color = Ui.Hex(Orange); }
             var fill = _xpFill != null ? _xpFill.GetComponent<Image>() : null;
-            if (fill != null) fill.color = Ui.Hex(Orange);
+            if (fill != null) fill.color = XpFillColor;
             if (_headBadge != null) _headBadge.Root.localScale = Vector3.one;
             if (_xpRankGlow != null) _xpRankGlow.color = new Color(0, 0, 0, 0);
             if (_rankRing != null) _rankRing.color = new Color(0, 0, 0, 0);
@@ -578,12 +578,12 @@ namespace LevelGate.Progression
             if (_barResetT >= 0 && fill != null)
             {
                 _barResetT += dt;
-                var c = Color.Lerp(Color.white, Ui.Hex(Orange), Mathf.Clamp01(_barResetT / .08f));
+                var c = Color.Lerp(Color.white, XpFillColor, Mathf.Clamp01(_barResetT / .08f));
                 c.a = _barResetT < .08f ? 1 : Mathf.Clamp01(1 - (_barResetT - .08f) / .15f);
                 fill.color = c;
                 if (_barResetT >= .23f)
                 {
-                    _barResetT = -1; fill.color = Ui.Hex(Orange);
+                    _barResetT = -1; fill.color = XpFillColor;
                     if (_xpRunning && _xpStep < _xpSteps.Count && _xpSteps[_xpStep].Kind == StepKind.LevelUp) _xpFill.anchorMax = new Vector2(0, 1);
                 }
             }

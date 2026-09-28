@@ -40,6 +40,32 @@ Versions are **MAJOR.MINOR.PATCH**:
 
 ## LevelGate Progression (BepInEx plugin, separate DLL)
 
+### 0.9.54
+Tarkov's textures:
+- **Neutral grey everywhere**: the panels, borders and text lose their blue tint (only real colours stay: orange = you, red = warning, blue / green = bonus); the panels are near-black and see-through, so the background shows faintly, like the game's.
+- **Worn pale plate** (the game's selected sub-tab look, drawn in code): behind the VIEWING tag on the picked card and the current page's range on the page bar, with dark text.
+- **Dotted leaders** from label to value in the stat rows and the requirement box; the XP numbers in the game's fraction style (yours big, "/ needed" smaller and dimmer).
+- **Cut corners** (top-left / bottom-right) on the level cards and the reward tiles, like the prestige rewards.
+- **Panel title strip**: the reward list's head sits on a lighter strip with big, thinner capitals.
+- **Grey XP bar**: a dark track, thin 1 px outline, light grey fill (orange stays only for "you": the level square, your card's line, the rail's marker).
+- **Film grain** over the whole screen, very faint (follows Scratches).
+MW-style level progression:
+- **Timeline rail** under the cards: a tick per level, a light fill up to where you are (your XP inside your level included), a small orange diamond at "you".
+- **Card heads**: each card shows its level's rank emblem and the level number big, with a small role tag under it (VIEWING on the pale plate, CURRENT, NEXT).
+- **Card footers**: the main reward's name bold, and its kind + the rest in small spaced caps under it ("ASSAULT RIFLE · +29 ITEMS").
+- **Picked card**: a fine dot-matrix fill and a crisp light frame; **your level's card**: one thin orange line along its top.
+- **HUD head on the reward list**: a chip ("✓ LEVEL ACHIEVED", "YOUR LEVEL", "🔒 LOCKED · 3 LEVELS AWAY"), a big "LEVEL 36" and the rank name, with a thin bracket on the left; the item count on the right.
+- **Breadcrumb**: "CHARACTER / PROGRESSION /" over the page title, now "LEVEL UNLOCKS".
+Fixes from the 0.9.53 log / screenshots:
+- **Locked cards really are darker now**: the dimming from 0.9.52 was overwritten a few lines later with plain white.
+- **Level cards keep NEW while you scroll past**: a card's NEW now goes when you click that card (or once all its new rewards are clicked); scrolling one level per notch was clearing every card on the way.
+- **HOME hover**: the pale plate hugs the keycap and text (it ran 260 px wide), and the keycap turns over with it like INSPECT's RMB.
+- **EXP badge**: the game's bigger EXP icon (icon_experience_big; the small one looked squashed).
+- **Tile names get two lines** when needed ("ACHHC (Coyote Brown)" was cut to one); long ones a size smaller.
+- **Medkits** don't repeat HP RESOURCE under the big RESOURCE number.
+- **No background tint on reward tiles** (removed on request).
+- Mouse wheel over the cards a touch calmer (one level per 0.2 s), fewer slow frames from drawing pictures while flying past levels.
+
 ### 0.9.53
 - **Locked items show their real short names** ("AXMC", "AP SX" instead of "Accuracy International A…" / "4.6x30mm AP SX"): LevelGate blanks the short names of items still locked for you, so they're now read from the game data on disk (locales, read-only, background thread; LevelGate untouched).
 - **Reward tiles like the game's cells / prestige rewards**: the short name top-right over the picture, the picture using the whole tile (long rifles were tiny), the item's own background tint from its template (violet keys, yellow ammo, green meds…), NEW bottom-right, and locked items get a lock + "LV 45" badge bottom-left like the traders' loyalty-locked items.

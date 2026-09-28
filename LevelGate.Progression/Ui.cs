@@ -38,6 +38,10 @@ namespace LevelGate.Progression
         public static Color Hex(string hex, float alpha = 1f)
         {
             if (!ColorUtility.TryParseHtmlString(hex, out var c)) c = Color.gray;
+            // Tarkov's UI is neutral grey: the near-greys (panels, borders, text) lose their slight blue tint; real colours
+            // (orange, red, green, the blue of a bonus) stay as they are
+            float max = Mathf.Max(c.r, Mathf.Max(c.g, c.b)), min = Mathf.Min(c.r, Mathf.Min(c.g, c.b));
+            if (max - min < .12f) { float grey = c.r * .3f + c.g * .5f + c.b * .2f; c.r = c.g = c.b = grey; }
             c.a = alpha;
             return c;
         }
@@ -179,7 +183,7 @@ namespace LevelGate.Progression
                 var all = Resources.FindObjectsOfTypeAll<Sprite>();
                 var hits = all.Where(sp => sp != null && sp.name.IndexOf(what, StringComparison.OrdinalIgnoreCase) >= 0).ToList();
                 if (L.Verbose) L.Debug($"game sprites with '{what}': {string.Join(", ", hits.Select(h => $"{h.name} {h.rect.width:0}x{h.rect.height:0}").Distinct().Take(40).ToArray())}");
-                string[] wanted = what == "exp" ? new[] { "exp", "icon_exp", "exp_icon", "icon_experience", "experience", "experience_icon", "ExpIcon", "exp_big", "Exp" } : new[] { what };
+                string[] wanted = what == "exp" ? new[] { "icon_experience_big", "icon_experience", "icon_exp_small", "exp" } : new[] { what }; // the big one: the small 25x17 looked squashed
                 foreach (var w in wanted)
                 {
                     var sp = hits.FirstOrDefault(h => string.Equals(h.name, w, StringComparison.OrdinalIgnoreCase));
@@ -212,6 +216,96 @@ namespace LevelGate.Progression
         private static Sprite _hatch;
 
         /// <summary>Diagonal stripes like the game's empty slots (a 16 px tile, white; tint it faint and tile it).</summary>
+        private static Sprite _chamfer, _plate, _leader, _grain;
+
+        /// <summary>
+        /// A white shape with its top-left and bottom-right corners cut at 45° (Tarkov's prestige tiles, its tabs): 9-sliced,
+        /// so any size keeps the same cut. Two of them (frame + face 1 px in) make a cut-corner outline.
+        /// </summary>
+        public static Sprite Chamfer()
+        {
+            if (_chamfer != null) return _chamfer;
+            const int n = 32, c = 8;
+            var tex = new Texture2D(n, n, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Clamp, filterMode = FilterMode.Bilinear };
+            var px = new Color32[n * n];
+            for (int y = 0; y < n; y++)
+                for (int x = 0; x < n; x++)
+                {
+                    float tl = x + (n - 1 - y) - c + 1, br = (n - 1 - x) + y - c + 1; // distance past each cut line
+                    float a = Mathf.Clamp01(Mathf.Min(tl, br) / 1.2f);
+                    px[y * n + x] = new Color32(255, 255, 255, (byte)(255 * a));
+                }
+            tex.SetPixels32(px);
+            tex.Apply(false, true);
+            _chamfer = Sprite.Create(tex, new Rect(0, 0, n, n), new Vector2(.5f, .5f), 100, 0, SpriteMeshType.FullRect, new Vector4(c + 1, c + 1, c + 1, c + 1));
+            return _chamfer;
+        }
+
+        /// <summary>
+        /// The worn pale plate of Tarkov's selected sub-tabs (SKILLS, ACTIVE TASKS…): off-white paint with ragged, chipped
+        /// edges, dirt and faint scratches. Its own colours (tint it white); 9-sliced so it stretches to any label.
+        /// </summary>
+        public static Sprite WornPlate()
+        {
+            if (_plate != null) return _plate;
+            const int w = 192, h = 48;
+            var tex = new Texture2D(w, h, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Clamp, filterMode = FilterMode.Bilinear };
+            var px = new Color32[w * h];
+            var rnd = new System.Random(7);
+            for (int y = 0; y < h; y++)
+            {
+                float scratch = rnd.NextDouble() < .12 ? .9f : 1f; // a few faint horizontal scuffs
+                for (int x = 0; x < w; x++)
+                {
+                    float d = Mathf.Min(Mathf.Min(x, w - 1 - x), Mathf.Min(y, h - 1 - y));
+                    float erode = 1.2f + 4.2f * Mathf.PerlinNoise(x * .19f + 3.1f, y * .19f + 7.7f) * Mathf.PerlinNoise(x * .05f, y * .05f + 11f) * 1.6f;
+                    float a = Mathf.Clamp01((d - erode) / 1.4f);
+                    if (d < 7 && Mathf.PerlinNoise(x * .6f + 40, y * .6f) > .78f) a *= .25f; // chips near the edge
+                    float dirt = .8f + .2f * Mathf.PerlinNoise(x * .08f + 20, y * .08f + 5) - .06f * Mathf.PerlinNoise(x * .5f, y * .5f + 30);
+                    float v = dirt * scratch;
+                    px[y * w + x] = new Color32((byte)(232 * v), (byte)(229 * v), (byte)(219 * v), (byte)(255 * a));
+                }
+            }
+            tex.SetPixels32(px);
+            tex.Apply(false, true);
+            _plate = Sprite.Create(tex, new Rect(0, 0, w, h), new Vector2(.5f, .5f), 100, 0, SpriteMeshType.FullRect, new Vector4(16, 12, 16, 12));
+            return _plate;
+        }
+
+        /// <summary>A dotted leader line (1 px dots, 3 px apart), tiled: "Character level ........ 25/25".</summary>
+        public static Sprite Leader()
+        {
+            if (_leader != null) return _leader;
+            var tex = new Texture2D(4, 2, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Repeat, filterMode = FilterMode.Point };
+            var px = new Color32[8];
+            px[0] = new Color32(255, 255, 255, 255);
+            tex.SetPixels32(px);
+            tex.Apply(false, true);
+            _leader = Sprite.Create(tex, new Rect(0, 0, 4, 2), new Vector2(.5f, .5f), 100, 0, SpriteMeshType.FullRect);
+            return _leader;
+        }
+
+        /// <summary>Film grain: fine random specks, white with varying alpha, tiled over the whole screen at a very low strength.</summary>
+        public static Sprite Grain()
+        {
+            if (_grain != null) return _grain;
+            const int n = 128;
+            var tex = new Texture2D(n, n, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Repeat, filterMode = FilterMode.Point };
+            var px = new Color32[n * n];
+            var rnd = new System.Random(3);
+            for (int i = 0; i < px.Length; i++)
+            {
+                int r = rnd.Next(256);
+                bool light = rnd.Next(2) == 0;
+                byte c = light ? (byte)255 : (byte)0;
+                px[i] = new Color32(c, c, c, (byte)(r * r / 255));
+            }
+            tex.SetPixels32(px);
+            tex.Apply(false, true);
+            _grain = Sprite.Create(tex, new Rect(0, 0, n, n), new Vector2(.5f, .5f), 100, 0, SpriteMeshType.FullRect);
+            return _grain;
+        }
+
         public static Sprite Hatch()
         {
             if (_hatch != null) return _hatch;
