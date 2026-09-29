@@ -50,7 +50,7 @@ namespace LevelGate.Progression
             public static NewTagLook NewTag => ProgressionPlugin.TestNewTag?.Value ?? NewTagLook.MW4; // 0.9.96: your pick
             // 0.9.95 (read live): MW4's locked blueprint, the current card's XP fill, the sweep's +XP
             public static float BlueprintK => On ? Pct(ProgressionPlugin.TestLockedBlueprint, 0) : 0f;
-            public static float XpFillK => On ? Pct(ProgressionPlugin.TestCurrentXpFill, 146) : 0f;
+            public static float XpFillK => On && (ProgressionPlugin.CardXpLine?.Value ?? true) ? Pct(ProgressionPlugin.TestCurrentXpFill, 146) : 0f; // 0.9.99: F12 › XP Progress On Level Card
             public static bool XpFillGreen => (ProgressionPlugin.TestCurrentXpColour?.Value ?? XpFillColour.Orange) == XpFillColour.Green;
             public static float SweepXpBacking => On ? Pct(ProgressionPlugin.TestWallXpBacking, 100) : 0f;
             public static float SweepXpHeight => On ? (ProgressionPlugin.TestWallXpLift?.Value ?? 44) : 44f;

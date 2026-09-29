@@ -8,7 +8,7 @@ no PR open). Rules and the build / tuning method are in `CLAUDE.md`.
 | Thing | Version | Status |
 |---|---|---|
 | LevelGate plugin / server | 1.6.3 | Frozen: do not touch without the user's go-ahead |
-| LevelGate Progression | **0.9.98** | Sent (full package), untested in game. 0.9.95 tested: dials tuned from the log, inspect warm-up works (24 ms, background) |
+| LevelGate Progression | **0.9.99** | Sent (full package), untested in game. 0.9.95 tested: dials tuned from the log, inspect warm-up works (24 ms, background) |
 | Modern Editor (editor exe) | 2.0.6 | Sent and in use |
 | Modern Editor (server mod) | 2.0.7 | Sent: compact SPT console output |
 
@@ -70,6 +70,13 @@ Decor Noise 55, Micro Labels 60, Flourish 65, Border Fade 70, Ambient Light 140 
   edge line alpha .7 → .18). Don't bring either back.
 - F12 trimmed: `hiddenSetup` in Plugin.cs hides set-up / debug keys (values still apply). VerboseLog stays on, hidden.
 - The 0.9.97 Fade switches are still being tested (the user's F12 screenshot was still 0.9.96).
+
+## 0.9.99
+- F12 › CURRENTLY TESTING finished: the four fades are on (the user's log), `testingNow` is empty.
+- New normal option `CardXpProgress` (Look & Graphics, "XP Progress On Level Card", on).
+- Exit freeze reported: the 0.9.98 log shows no errors and ends at "game screen changed to None" (quit started). Nothing in our code
+  blocks at exit (background jobs are short one-offs). 0.9.99 adds `Application.quitting` → `quit: the game is closing` /
+  `quit: done (N ms)`, stops Update / LateUpdate, saves the config, closes Progression.log. Next log tells whether it's ours.
 
 ## In progress / open
 

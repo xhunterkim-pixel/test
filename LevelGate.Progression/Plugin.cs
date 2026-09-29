@@ -26,7 +26,7 @@ namespace LevelGate.Progression
         public const string Guid = "com.kkyangg.levelgate.progression";
         public const string Name = "LevelGate Progression";
         // MAJOR.MINOR.PATCH — see CHANGELOG.md
-        public const string Version = "0.9.98";
+        public const string Version = "0.9.99";
 
         internal static ProgressionPlugin Instance;
         internal static ConfigEntry<KeyboardShortcut> OpenKey;
@@ -74,7 +74,7 @@ namespace LevelGate.Progression
         internal static ConfigEntry<bool> MenuShortcut;
         internal static ConfigEntry<bool> RefreshIcons;
         internal static ConfigEntry<int> LastSeenLevel;
-        internal static ConfigEntry<bool> XpAnimation;
+        internal static ConfigEntry<bool> XpAnimation, CardXpLine;
         internal static ConfigEntry<float> SoundVolume;
         internal static ConfigEntry<bool> GameSounds;
         internal static ConfigEntry<float> Scratches, Vignette, RedGlow;
@@ -89,6 +89,7 @@ namespace LevelGate.Progression
         {
             Instance = this;
             L.Source = Logger;
+            Application.quitting += OnQuit; // 0.9.99: log the game's exit and stop our work first (the user saw a freeze on exit)
 
             // F12 (Configuration Manager): three sections, sorted by their number. Order = top to bottom within one.
             const string G = "1. General", A = "3. Advanced";
@@ -134,6 +135,9 @@ namespace LevelGate.Progression
             XpAnimation = Config.Bind(Gfx, "XpAnimation", true, Desc(
                 "After you gain experience (a raid, a quest…), the next time you open the screen the XP bar fills up from where you last saw it: " +
                 "level ups, the new level number, a new rank emblem. Click or Space skips it. Off: the screen just shows your current XP.", 95));
+            // 0.9.99: the XP fill on your level's card (0.9.95), as a normal option
+            CardXpLine = Config.Bind(Gfx, "CardXpProgress", true, Desc(
+                "Your level's card fills with light from the left up to your XP towards the next level, with a faint moving edge. Off: a plain card.", 94));
             Detailing = Config.Bind(Gfx, "UIDetailing", 100, Desc(
                 "How much surface detail the screen has, all in one: scratches, smudges and fingerprints, film grain, " +
                 "corner marks, edge lights, dither, scanlines, the reflection on the picked card, the coloured bloom and dotted lights on the picked card, the bloom around your card and behind the rank emblems, the XP bar's tracer. " +
@@ -425,7 +429,7 @@ namespace LevelGate.Progression
                 ["OpenScreenKey"] = "Open Screen Key", ["MenuBarButton"] = "Menu Bar Button", ["MainMenuShortcut"] = "Main Menu Shortcut",
                 ["HideMainMenu"] = "Hide Main Menu While Open", ["BlurBackground"] = "Blur Background", ["SoundVolume"] = "Sound Volume",
                 ["UseGameSounds"] = "Use Game Sounds", ["CharacterEmblem"] = "Rank Emblem On Character Screen", ["TextSize"] = "Text Size (%)", ["ReduceMotion"] = "Reduce Motion",
-                ["Quality"] = "Picture Quality", ["XpAnimation"] = "Level Up Animation", ["RefreshIcons"] = "Redraw All Item Pictures",
+                ["Quality"] = "Picture Quality", ["XpAnimation"] = "Level Up Animation", ["CardXpProgress"] = "XP Progress On Level Card", ["RefreshIcons"] = "Redraw All Item Pictures",
                 ["Pattern"] = "Background Pattern", ["PatternMotion"] = "Pattern Animation Speed", ["UIDetailing"] = "UI Detailing (%)", ["HoverGlitch"] = "Hover Glitch (%)", ["RevealTime"] = "Picture Load-In Time (s)",
                 ["RevealRandom"] = "Picture Load-In Randomness (%)", ["RevealStyle"] = "Picture Load-In Style", ["RankUpStyle"] = "Rank Up Style", ["GroupSimilarItems"] = "Group Similar Items", ["BloomOpacity"] = "Item Bloom Opacity (%)", ["BloomSize"] = "Item Bloom Size (%)", ["LightWall"] = "Light Wall Brightness (%)", ["MotionSpeed"] = "Motion Speed (%)", ["SelectShine"] = "Selection Shine (%)", ["SelectShineWidth"] = "Selection Shine Width (%)", ["Stagger"] = "Stagger (ms)",
                 ["MW01"] = "MW 1 · Additive Glow", ["MW02"] = "MW 2 · Card Flood", ["MW03"] = "MW 3 · Level Numbers Glow", ["MW04"] = "MW 4 · XP Counter On Light Wall",
@@ -453,7 +457,8 @@ namespace LevelGate.Progression
             // 0.9.91: the 0.9.9 dials are tuned (your values are the defaults: Ambient Motion 50, the line under the name off); being tried now:
             // 0.9.94: all tuned (your 0.9.93 values are the defaults)
             // 0.9.95 dials tuned in 0.9.96 (your log): NEW tag MW4, Locked Blueprint 0 (off), XP Fill 146, Orange, Sweep +XP Backing 100, Height 44, Big +XP During Sweep on
-            var testingNow = new HashSet<string> { "FadeCardLine", "FadeSectionHead", "FadeStatMeters", "FadeXpBar" }; // 0.9.97: from your close-ups
+            // 0.9.99: the 0.9.97 fades are tuned (all four on, from your log)
+            var testingNow = new HashSet<string>(); // nothing being tried right now
             // 0.9.98: taken out of F12 (the user: "stuff most users wouldn't use"); still in the .cfg file, their values still apply
             var hiddenSetup = new HashSet<string> { "ButtonLabel", "CopyButton", "TopMargin", "BottomMargin", "TileSize", "MaxTilesPerCategory",
                 "CameraTurnDegrees", "SortOrder", "InsideGameUi", "PerformanceReadout", "VerboseLog", "DumpKey", "UseGameSounds", "PatternMotion" };
@@ -574,11 +579,28 @@ namespace LevelGate.Progression
 
         private void LateUpdate()
         {
+            if (Quitting) return;
             try { MenuCamera.LateTick(); } catch (Exception e) { L.ErrorOnce("late update", e); }
+        }
+
+        internal static bool Quitting;
+
+        /// <summary>0.9.99: the game is closing. Stop our per-frame work, save the settings and close the log cleanly, and log
+        /// how long that took: if the game still hangs after "quit: done", the hang is not in this plugin.</summary>
+        private static void OnQuit()
+        {
+            if (Quitting) return;
+            Quitting = true;
+            var t0 = DateTime.Now;
+            L.Info("quit: the game is closing" + (ProgScreen.IsOpen ? " (the Progression screen was open)" : ""));
+            try { Instance?.Config?.Save(); } catch (Exception e) { L.Error("quit: saving settings", e); }
+            L.Info($"quit: done ({(DateTime.Now - t0).TotalMilliseconds:0} ms); Progression does nothing more from here");
+            L.Close();
         }
 
         private void Update()
         {
+            if (Quitting) return;
             try
             {
                 if (DumpKey.Value.IsDown()) Dump();
@@ -642,6 +664,13 @@ namespace LevelGate.Progression
         // Progression.log next to the plugin, written to disk line by line: BepInEx's own log is buffered, so
         // after a game crash its last lines are missing — this file still shows the last step that ran.
         private static System.IO.StreamWriter _file;
+        private static bool _closed;
+
+        /// <summary>0.9.99: closes Progression.log at quit (nothing more is written after this).</summary>
+        public static void Close()
+        {
+            lock (_fileLock) { try { _file?.Flush(); _file?.Dispose(); } catch { } _file = null; _closed = true; }
+        }
         private static bool _fileTried;
 
         /// <summary>A step marker that only goes to Progression.log (for finding where a crash happened).</summary>
@@ -652,6 +681,7 @@ namespace LevelGate.Progression
 
         private static void File(string kind, string s)
         {
+            if (_closed) return;
             lock (_fileLock)
             try
             {

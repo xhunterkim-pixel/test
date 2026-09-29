@@ -1,4 +1,4 @@
-# LevelGate Progression (0.9.98, test build)
+# LevelGate Progression (0.9.99, test build)
 
 A Call of Duty style **Progression** screen inside Tarkov's main menu. It adds a
 **PROGRESSION** button to the menu bar next to Character, Trading, Flea Market and the rest.
@@ -18,6 +18,11 @@ A Call of Duty style **Progression** screen inside Tarkov's main menu. It adds a
   - P or Esc closes the screen.
 - It works on its own and never changes LevelGate. It only **reads**
   `BepInEx\plugins\LevelGate\config\level_requirements.json`, and picks up changes to that file while the game runs.
+
+## 0.9.99
+- **New option: F12 › Look & Graphics › XP Progress On Level Card** (on): your level's card fills with light up to your XP. Turn it off for a plain card.
+- **Game exit:** the log now says `quit: the game is closing` and `quit: done (N ms)` when you quit. Progression stops all its work at that point, saves its settings and closes its log. Nothing in its code waits on anything at exit, so if the game still freezes after `quit: done`, the freeze is in the game or another mod.
+- The CURRENTLY TESTING section is finished: the four fades (current card line, category bars, stat meters, XP bar) are on by default, as in your log, and the section is empty again.
 
 ## 0.9.98
 - **Your level's XP fill is back to 0.9.95's look** (it fills the card from the left up to your XP), with the white line at its edge much fainter. 0.9.96's version lined up with the bottom line, but it didn't look right.
