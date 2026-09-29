@@ -56,6 +56,7 @@ namespace LevelGate.Progression
             public static bool FadeSectionHead => On && (ProgressionPlugin.TestFadeSectionHead?.Value ?? true);
             public static bool FadeMeters => On && (ProgressionPlugin.TestFadeMeters?.Value ?? true);
             public static bool FadeXpBar => On && (ProgressionPlugin.TestFadeXpBar?.Value ?? true);
+            public static float XpStartDelay => Mathf.Clamp(ProgressionPlugin.TestXpStartDelay?.Value ?? .6f, 0f, 2f); // 1.0.4
             public static bool BigXpDuringSweep => !On || (ProgressionPlugin.TestBigXpDuringSweep?.Value ?? true);
             public static float SubtitleAlpha => Pct(ProgressionPlugin.TestHeroSubtitleOpacity, 70);
             public static float AmbientLightK => On ? Pct(ProgressionPlugin.TestAmbientLight, 140) : 1f;

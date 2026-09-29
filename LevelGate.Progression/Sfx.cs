@@ -39,18 +39,42 @@ namespace LevelGate.Progression
         {
             if (_started) return;
             _started = true;
+            foreach (var name in new[] { "levelup", "emblemup" }) LoadOne(name);
+        }
+
+        private static void LoadOne(string name)
+        {
             var dir = Path.Combine(Path.GetDirectoryName(typeof(Sfx).Assembly.Location) ?? ".", "sounds");
+            var path = Path.Combine(dir, name + ".mp3");
+            if (!File.Exists(path)) { L.Warn($"sounds: {path} not found — the game's own sound is used instead"); return; }
+            try
+            {
+                var req = UnityWebRequestMultimedia.GetAudioClip(new Uri(path).AbsoluteUri, AudioType.MPEG);
+                ((DownloadHandlerAudioClip)req.downloadHandler).streamAudio = false; // decoded into memory: nothing is read from disk when it plays
+                req.SendWebRequest();
+                _loading.Add((name, req));
+            }
+            catch (Exception e) { L.Error("loading sound " + name, e); }
+        }
+
+        /// <summary>
+        /// 1.0.4: on every open — a clip the game let go of (a raid can unload audio data, or reset the audio device) is
+        /// loaded again, so it's ready before the XP animation needs it. (A real level up after a raid played no sound.)
+        /// </summary>
+        public static void Check()
+        {
+            if (!_started) return;
             foreach (var name in new[] { "levelup", "emblemup" })
             {
-                var path = Path.Combine(dir, name + ".mp3");
-                if (!File.Exists(path)) { L.Warn($"sounds: {path} not found — the game's own sound is used instead"); continue; }
-                try
-                {
-                    var req = UnityWebRequestMultimedia.GetAudioClip(new Uri(path).AbsoluteUri, AudioType.MPEG);
-                    req.SendWebRequest();
-                    _loading.Add((name, req));
-                }
-                catch (Exception e) { L.Error("loading sound " + name, e); }
+                if (_loading.Exists(l => l.Name == name)) continue;
+                _clips.TryGetValue(name, out var clip);
+                if (clip != null && clip.loadState == AudioDataLoadState.Loaded) continue;
+                if (clip != null && clip.loadState == AudioDataLoadState.Unloaded && clip.LoadAudioData()) { L.Info($"sounds: {name}.mp3 was unloaded by the game — loading its audio again"); continue; }
+                if (clip != null && clip.loadState == AudioDataLoadState.Loading) continue;
+                if (clip == null && !_clips.ContainsKey(name)) continue; // never loaded (missing file: already said at start)
+                L.Info($"sounds: {name}.mp3 is {(clip == null ? "gone" : clip.loadState.ToString())} — reading it from disk again");
+                _clips.Remove(name);
+                LoadOne(name);
             }
         }
 
@@ -103,11 +127,18 @@ namespace LevelGate.Progression
         /// <summary>Plays one of our sounds (pitch: higher and shorter); false if it isn't loaded (the caller can fall back).</summary>
         public static bool Play(string name, float pitch = 1)
         {
-            if (!_clips.TryGetValue(name, out var clip) || clip == null) return false;
+            if (!_clips.TryGetValue(name, out var clip) || clip == null) { L.Info($"sfx: {name} not ready (not loaded) — the game's sound instead"); Check(); return false; }
             try
             {
-                if (_pool[0] == null)
+                if (clip.loadState != AudioDataLoadState.Loaded)
                 {
+                    L.Info($"sfx: {name} not ready ({clip.loadState}) — the game's sound instead");
+                    Check();
+                    return false;
+                }
+                if (_pool[0] == null || !_pool[0].isActiveAndEnabled)
+                {
+                    if (_pool[0] != null) { L.Info("sfx: our sound player was switched off — made again"); UnityEngine.Object.Destroy(_pool[0].gameObject); }
                     var go = new GameObject("LevelGateProgressionSfx");
                     UnityEngine.Object.DontDestroyOnLoad(go);
                     for (int i = 0; i < _pool.Length; i++)
@@ -122,7 +153,14 @@ namespace LevelGate.Progression
                 src.Stop();
                 src.clip = clip; src.pitch = pitch; src.volume = Mathf.Clamp01(ProgressionPlugin.SoundVolume.Value);
                 src.Play();
-                return true;
+                // what the player hears: nothing when there's no listener, it's muted or the volume is 0 (all logged, so a silent
+                // level up can be told apart from one that played)
+                var listener = UnityEngine.Object.FindObjectOfType<AudioListener>();
+                string odd = !src.isPlaying ? "didn't start" : listener == null ? "no audio listener in the scene" : AudioListener.volume < .05f ? $"game master volume {AudioListener.volume:0.00}"
+                           : src.volume < .05f ? "Sound Volume is 0" : null;
+                string line = $"sfx: {name} (pitch {pitch:0.00}, volume {src.volume:0.00}, listener {(listener != null ? listener.name : "none")} at {AudioListener.volume:0.00}{(AudioListener.pause ? ", paused" : "")})";
+                if (odd != null) L.Info(line + " — " + odd); else L.Trace(line);
+                return src.isPlaying;
             }
             catch (Exception e) { L.ErrorOnce("playing " + name, e); return false; }
         }

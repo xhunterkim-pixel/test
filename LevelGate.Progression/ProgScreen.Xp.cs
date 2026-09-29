@@ -62,6 +62,7 @@ namespace LevelGate.Progression
         {
             _xpPending = _xpRunning = false;
             _xpCardLevel = 0; _xpSim = false; _simLevel = 0;
+            _xpWaitFrom = -1;
             ResetXpVisuals();
             int now = ProgData.TotalExp(), shown = SeenState.Xp;
             if (now < 0 || shown < 0 || !ProgData.HasExpTable) return; // not known yet: next time (the baseline stays)
@@ -200,8 +201,8 @@ namespace LevelGate.Progression
             TickFocus(dt);
             if (_xpPending)
             {
-                if (Time.unscaledTime - _openedAt < .45f) return true; // the screen fades in first
-                if (_xpSim && ProgressionPlugin.ConfigWindowOpen()) return true; // a preview from F12: waits until F12 is closed
+                if (_xpSim && ProgressionPlugin.ConfigWindowOpen()) { _xpWaitFrom = -1; return true; } // a preview from F12: waits until F12 is closed
+                if (!ScreenSettled()) return true; // 1.0.4: the loading screen, the pictures and the stutter of opening first
                 _xpPending = false; _xpRunning = true; _xpStep = 0; _xpT = 0; _xpEntered = -1; _spaceDown = -1;
                 _xpStartedAt = Time.unscaledTime;
                 ShowGain(true);
@@ -227,6 +228,31 @@ namespace LevelGate.Progression
             _xpT += dt;
             StepFrame(st, enter, false);
             if (_xpT >= st.Dur) { _xpStep++; _xpT = 0; }
+            return true;
+        }
+
+        private static float _xpWaitFrom = -1, _settledSince = -1, _worstWait;
+
+        /// <summary>
+        /// 1.0.4: the XP animation starts only once the screen is really there: faded in, the loading screen gone, every
+        /// category drawn, the big picture's load-in over, and a run of smooth frames — then F12's XP Start Delay. (It used to
+        /// start the moment the pictures were in, while the loading screen was still fading and the page was still building:
+        /// the bar moved before you had "loaded in".) Gives up waiting after 5 s (a slow PC still gets its animation).
+        /// </summary>
+        private static bool ScreenSettled()
+        {
+            float now = Time.unscaledTime, dt = Time.unscaledDeltaTime;
+            if (_xpWaitFrom < 0) { _xpWaitFrom = now; _settledSince = -1; _worstWait = 0; }
+            string busy = now - _openedAt < .45f ? "fade-in" : _loading || _loadHideAt > 0 ? "loading screen" : _buildQueue.Count > 0 ? "categories"
+                        : _revealAt >= 0 ? "picture load-in" : dt > .06f ? "stutter" : null;
+            if (busy != null) { _settledSince = -1; if (dt > _worstWait) _worstWait = dt; }
+            else if (_settledSince < 0) _settledSince = now;
+            bool ready = _settledSince >= 0 && now - _settledSince >= Mathf.Max(.15f, Polish.XpStartDelay);
+            bool gaveUp = !ready && now - _xpWaitFrom > 5f;
+            if (!ready && !gaveUp) return false;
+            L.Info($"xp: screen settled after {now - _xpWaitFrom:0.00} s (start delay {Polish.XpStartDelay:0.0} s, worst frame while waiting {_worstWait * 1000:0} ms)" +
+                   (gaveUp ? $" — stopped waiting (still busy: {busy ?? "settling"})" : ""));
+            _xpWaitFrom = -1;
             return true;
         }
 
@@ -933,7 +959,7 @@ namespace LevelGate.Progression
                 UpdateSelection();
                 ShowXpAt(from, la);
                 UpdateHeader(la, la);
-                _xpPending = true;
+                _xpPending = true; _xpWaitFrom = -1;
                 _openedAt = Mathf.Min(_openedAt, Time.unscaledTime - 1); // no fade-in wait
                 L.Info($"preview: {kind} — level {la} → {lb} ({from} → {to} XP, made up; nothing is saved); {_xpSteps.Count} step(s), ~{TotalDur():0.0} s");
                 NewTags.Preview(la, lb); // the previewed levels' rewards and cards show NEW, like a real level-up (not saved)

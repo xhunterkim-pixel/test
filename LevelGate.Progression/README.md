@@ -1,4 +1,4 @@
-# LevelGate Progression (1.0.3)
+# LevelGate Progression (1.0.4)
 
 A Call of Duty style **Progression** screen inside Tarkov's main menu. It adds a
 **PROGRESSION** button to the menu bar next to Character, Trading, Flea Market and the rest.
@@ -18,6 +18,16 @@ A Call of Duty style **Progression** screen inside Tarkov's main menu. It adds a
   - P or Esc closes the screen.
 - It works on its own and never changes LevelGate. It only **reads**
   `BepInEx\plugins\LevelGate\config\level_requirements.json`, and picks up changes to that file while the game runs.
+
+## 1.0.4
+
+- **The XP animation waits until you've loaded in.** It used to start the moment the pictures were drawn, while the loading
+  screen was still fading and the page was still building. Now it waits for the loading screen to be gone, every category
+  drawn, the big picture's load-in done and a few smooth frames, then a short pause. (Gives up waiting after 5 s.)
+  - Being tuned: **F12 › 5. CURRENTLY TESTING › XP Animation Start Delay (s)** (default 0.6). Try it on your next level up.
+- **Level-up sound after a raid.** If the game let go of the sound (after a raid), it's loaded again when the screen opens;
+  if it still can't play, the game's own sound plays instead of silence. The log now says every time the level-up sound
+  plays, and why if it can't be heard (no listener, muted, volume 0).
 
 ## 1.0.3
 - **Locked reward tiles**: the scanlines now cover the whole tile, down to the foot with the lock, and follow its cut corners (they stopped above the foot and ran square past the corners). Locked level cards use the same cut shape.

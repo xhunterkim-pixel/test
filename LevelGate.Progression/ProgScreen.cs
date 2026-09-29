@@ -157,6 +157,7 @@ namespace LevelGate.Progression
                 HideMenu(true);
                 MenuCamera.Turn(true);
                 Sounds.Open();
+                Sfx.Check(); // 1.0.4: a sound the game unloaded (after a raid) is loaded again before the XP animation needs it
                 _frames = 0; _frameTime = 0; _frameLogAt = Time.unscaledTime + 5;
                 PrepareXpAnim(); // may move the screen to your old level first (the animation walks it up)
                 StartLoading(); // first open of this menu visit: pictures drawn behind a short loading screen
