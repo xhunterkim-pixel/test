@@ -67,6 +67,10 @@ public sealed class ItemDatabase
     /// </summary>
     public Dictionary<string, (bool Barter, bool Money, SortedSet<string> Traders)> GameOffers { get; } = new();
 
+    /// <summary>One offer of a game trader: who, loyalty level, and every way to pay (each a list of (item, count)).</summary>
+    public record GameOffer(string Trader, int Loyalty, List<List<(string Tpl, double Count)>> Prices);
+    public Dictionary<string, List<GameOffer>> GameOfferList { get; } = new();
+
     /// <summary>Whole default preset of a weapon (the gun with all its parts): handbook / flea value in roubles.</summary>
     public Dictionary<string, (double Handbook, double Flea)> Presets { get; } = new();
 
@@ -326,6 +330,7 @@ public sealed class ItemDatabase
     private void LoadGameOffers(string databaseFolder)
     {
         GameOffers.Clear();
+        GameOfferList.Clear();
         try
         {
             var traders = Path.Combine(databaseFolder, "traders");
@@ -347,6 +352,7 @@ public sealed class ItemDatabase
                     var root = doc.RootElement;
                     if (!root.TryGetProperty("items", out var items) || items.ValueKind != JsonValueKind.Array) continue;
                     root.TryGetProperty("barter_scheme", out var schemes);
+                    root.TryGetProperty("loyal_level_items", out var loyal);
                     foreach (var it in items.EnumerateArray())
                     {
                         // only the offers themselves (their parts / attachments hang under them)
@@ -354,15 +360,24 @@ public sealed class ItemDatabase
                         string tpl = it.TryGetProperty("_tpl", out var t) ? t.GetString() ?? "" : "", offerId = it.TryGetProperty("_id", out var oid) ? oid.GetString() ?? "" : "";
                         if (tpl.Length == 0) continue;
                         bool barter = false, money = false;
+                        var prices = new List<List<(string, double)>>();
                         if (schemes.ValueKind == JsonValueKind.Object && schemes.TryGetProperty(offerId, out var scheme) && scheme.ValueKind == JsonValueKind.Array)
                             foreach (var option in scheme.EnumerateArray())
                             {
                                 if (option.ValueKind != JsonValueKind.Array) continue;
                                 bool anyItem = false;
+                                var price = new List<(string, double)>();
                                 foreach (var c in option.EnumerateArray())
-                                    if (c.TryGetProperty("_tpl", out var ct) && !Money.Contains(ct.GetString() ?? "")) anyItem = true;
+                                {
+                                    string ctpl = c.TryGetProperty("_tpl", out var ct) ? ct.GetString() ?? "" : "";
+                                    if (!Money.Contains(ctpl)) anyItem = true;
+                                    price.Add((ctpl, c.TryGetProperty("count", out var cn) && cn.ValueKind == JsonValueKind.Number ? cn.GetDouble() : 1));
+                                }
+                                prices.Add(price);
                                 if (anyItem) barter = true; else money = true;
                             }
+                        int ll = loyal.ValueKind == JsonValueKind.Object && loyal.TryGetProperty(offerId, out var lv) && lv.ValueKind == JsonValueKind.Number ? lv.GetInt32() : 1;
+                        (GameOfferList.TryGetValue(tpl, out var ol) ? ol : GameOfferList[tpl] = new()).Add(new GameOffer(trader, ll, prices));
                         if (!barter && !money) money = true; // no price listed: still sold
                         var have = GameOffers.TryGetValue(tpl, out var h) ? h : (Barter: false, Money: false, Traders: new SortedSet<string>());
                         have.Traders.Add(trader);

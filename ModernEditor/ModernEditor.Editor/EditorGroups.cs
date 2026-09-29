@@ -19,6 +19,11 @@ public static class EditorGroups
         ("Headwear", "Headwear", new[] { "5a341c4086f77401f2541505" }),
         ("Rigs", "Rigs", new[] { "5448e5284bdc2dcb718b4567" }),
         ("Backpacks", "Backpacks", new[] { "5448e53e4bdc2d60728b4567" }),
+        // 2.0.8: the equipment slots that used to all land in Other Gear (the trader pages still say Other Gear for them)
+        ("Headsets", "Headsets", new[] { "5645bcb74bdc2ded0b8b4578" }),
+        ("FaceCovers", "Face Covers", new[] { "5a341c4686f77469e155819e" }),
+        ("Eyewear", "Eyewear", new[] { "5448e5724bdc2ddf718b4568" }),
+        ("Armbands", "Armbands", new[] { "5b3f15d486f77432d0509248" }),
         ("Gear", "Other Gear", new[] { "543be5f84bdc2dd4348b456a", "57bef4c42459772e8d35a53b" }),
         ("Medical", "Medical", new[] { "543be5664bdc2dd4348b4569" }),
         ("Food", "Food & Drink", new[] { "5448e8d04bdc2ddf718b4569", "5448e8d64bdc2dce718b4568" }),

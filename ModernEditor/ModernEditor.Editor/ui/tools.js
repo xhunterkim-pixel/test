@@ -152,9 +152,49 @@ function obtainInfo(id, src = 'both') {
 /** 2.0.8: the Progression tiles' small obtainable / UNOBTAINABLE tag. */
 function obtainBadge(id, src) {
   const o = obtainInfo(id, src);
-  if (!o.kind) return `<span class="pt-ob no" title="${esc(o.tip)}">UNOBTAINABLE</span>`;
-  const [ico, label] = { barter: ['⇄', 'Barter'], buy: ['₽', 'Buy'], reward: ['★', 'Reward'] }[o.kind];
-  return `<span class="pt-ob ok ${o.kind}" title="${esc(o.tip)}">${ico}</span>`;
+  if (!o.kind) return `<span class="pt-ob no" data-act="obtainPop" data-arg="${id}" title="Click: how to get it">UNOBTAINABLE</span>`;
+  const ico = { barter: '⇄', buy: '₽', reward: '★' }[o.kind];
+  return `<span class="pt-ob ok ${o.kind}" data-act="obtainPop" data-arg="${id}" title="${esc(o.tip)}\n\nClick: every way to get it">${ico}</span>`;
+}
+
+/** 2.0.8: the pop-up behind the obtainable / UNOBTAINABLE tag: every way to get the item (game traders, your traders'
+ *  offers and quest rewards), what each costs, and a jump to your offer / quest. Also for unobtainable items. */
+let obtainUses = [];
+function priceHtml(way) {
+  return way.map(([tpl, n]) => {
+    const pic = itemPic(tpl);
+    return `<span class="ob-cost">${pic ? `<img src="${pic}" alt="" ${picFail}>` : ''}${MONEY_NAME[tpl] ? `${fmt(n)} ${esc(MONEY_NAME[tpl].split(' ')[0])}` : `${fmt(n)}× ${esc(shortName(tpl))}`}</span>`;
+  }).join('<span class="ob-plus">+</span>');
+}
+function obtainPopup(id, src = 'both') {
+  const it = item(id), o = obtainInfo(id, src), vanilla = src !== 'modded', modded = src !== 'vanilla';
+  const uses = (usedIndex().get(id) || []).filter(u => u.t.file.enabled && (u.kind === 'sold' || u.kind === 'reward'));
+  const off = (usedIndex().get(id) || []).filter(u => !u.t.file.enabled && (u.kind === 'sold' || u.kind === 'reward')).length;
+  obtainUses = uses;
+  const game = (it?.os || []).slice().sort((a, b) => a.t.localeCompare(b.t) || a.ll - b.ll);
+  const gameHtml = !vanilla ? '<div class="muted small">Not checked (Unobtainable Check is set to Read Modded).</div>'
+    : game.length ? game.map(g => {
+      const barter = g.p.some(w => w.some(([t]) => !MONEY_NAME[t]));
+      return `<div class="ob-row"><span class="ob-kind ${barter ? 'barter' : 'buy'}">${barter ? '⇄ BARTER' : '₽ BUY'}</span><b class="ob-who">${esc(g.t)}</b><span class="ob-ll">LL${g.ll}</span>
+        <div class="ob-price">${g.p.length ? g.p.map(priceHtml).join('<span class="ob-or">or</span>') : '<span class="muted">no price listed</span>'}</div></div>`;
+    }).join('') : '<div class="muted small">None of the game\'s traders sell it.</div>';
+  const modHtml = !modded ? '<div class="muted small">Not checked (Unobtainable Check is set to Read Vanilla).</div>'
+    : uses.length ? uses.map((u, i) => {
+      const barter = u.o && isBarter(u.o);
+      const kind = u.o ? (barter ? ['barter', '⇄ BARTER'] : ['buy', '₽ BUY']) : ['reward', '★ REWARD'];
+      const what = u.o ? priceHtml(u.o.cost.map(c => [c.itemTpl, c.count])) : `<span class="ob-cost">${esc(u.q.name)} · quest level ${u.q.minLevel}</span>`;
+      return `<div class="ob-row"><span class="ob-kind ${kind[0]}">${kind[1]}</span><b class="ob-who">${esc(u.t.file.name)}</b>${u.o ? `<span class="ob-ll">LL${u.o.loyaltyLevel}</span>` : ''}
+        <div class="ob-price">${what}</div><button class="outline small" data-act="obtainGo" data-arg="${i}">Go to ${u.o ? 'Offer' : 'Quest'} ›</button></div>`;
+    }).join('') : `<div class="muted small">None of your switched-on traders sell it or give it as a quest reward.${off ? ` (${off} on switched-off traders.)` : ''}</div>`;
+  const pic = itemPic(id);
+  return openModal(`<div class="dialog ob-dlg">
+    <div class="ob-head">${pic ? `<img src="${pic}" alt="" ${picFail}>` : ''}<div><h2>${esc(itemName(id))}</h2>
+      <div class="ob-state ${o.kind ? 'ok' : 'no'}">${o.kind ? '✓ Obtainable' : '✖ Unobtainable'}<span class="muted small"> · checked: ${{ vanilla: 'game traders', modded: 'your traders', both: 'game traders + your traders' }[src]}</span></div>
+      <div class="muted small mono">${id}</div></div></div>
+    <h3 class="ob-sec">Game Traders <em>${vanilla ? game.length : ''}</em></h3>${gameHtml}
+    <h3 class="ob-sec">Your Traders <em>${modded ? uses.length : ''}</em></h3>${modHtml}
+    ${o.kind ? '' : '<div class="hint">Players can only find it in raid (or not at all). Sell it or put it in a quest reward on one of your traders to make it obtainable.</div>'}
+    <div class="buttons"><button class="primary" data-m>Close</button></div></div>`, m => { m.querySelector('[data-m]').onclick = () => closeModal(null); });
 }
 
 /** Level Limits details: every place the item is used, click one to go there. */
@@ -681,6 +721,8 @@ Object.assign(ACT, {
 
 // the item pages' own actions that open shell things
 LG.addActs({
+  obtainPop: id => obtainPopup(id, LG.progObtain?.() || 'both'),
+  obtainGo: i => { closeModal(null); usedShown = obtainUses; goToUse(i); },
   progQuest: i => goProgQuest(i),
   goLevel: id => goItemLevels(id),
 });

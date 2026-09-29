@@ -51,7 +51,8 @@ const host = { call: (method, args = {}) => shellHost.call(LG_METHODS.has(method
 const GROUPS = [
   ['Weapons', 'Weapons', '#f15e6c'], ['Melee', 'Melee', '#ff8a65'], ['Grenades', 'Grenades', '#ffa42b'], ['Ammo', 'Ammo', '#f5cd46'], ['AmmoPacks', 'Ammo Packs', '#d9b44a'],
   ['WeaponParts', 'Weapon Parts', '#c7a36b'], ['Armor', 'Armor', '#509bf5'], ['Headwear', 'Headwear', '#6fb3ff'], ['Rigs', 'Rigs', '#7d9cf0'],
-  ['Backpacks', 'Backpacks', '#a082ff'], ['Gear', 'Other Gear', '#b39ddb'], ['Medical', 'Medical', '#1ed760'], ['Food', 'Food & Drink', '#8bd66b'],
+  ['Backpacks', 'Backpacks', '#a082ff'], ['Headsets', 'Headsets', '#80cbc4'], ['FaceCovers', 'Face Covers', '#9fa8da'], ['Eyewear', 'Eyewear', '#81d4fa'],
+  ['Armbands', 'Armbands', '#ce93d8'], ['Gear', 'Other Gear', '#b39ddb'], ['Medical', 'Medical', '#1ed760'], ['Food', 'Food & Drink', '#8bd66b'],
   ['Electronics', 'Electronics', '#4dd0e1'], ['Barter', 'Barter Items', '#bdbdbd'], ['Keys', 'Keys', '#e0c068'], ['Containers', 'Containers', '#90a4ae'],
   ['Special', 'Special', '#ff7ab6'], ['Other', 'Other', '#8a8a8a'],
 ];
@@ -2019,5 +2020,6 @@ function progRestore() {
     levelOf: id => S.levels.get(id), levels: () => S.levels, savedLevels: () => S.saved, items: () => S.items,
     tab: () => S.tab, SHORTCUTS, state: S, api: { setLevels, itemOf, groupOf, GROUP, GROUPS, tierOf, icon },
     addActs: acts => Object.assign(ACT, acts),
+    progObtain: () => S.ui.progObtain || 'both', // 2.0.8
   };
 })();

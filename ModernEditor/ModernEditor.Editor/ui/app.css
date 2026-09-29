@@ -761,3 +761,20 @@ body.no-help .hint { display: none; }
 .list[data-list=quests] .row .boxes { margin-top: 3px; gap: 3px 5px; }
 .list[data-list=quests] .row .text > .boxes:last-child { flex-wrap: nowrap; overflow: hidden; }
 .list[data-list=quests] .row .text > .boxes:last-child .box { flex: none; max-width: 60%; }
+
+/* 2.0.8: how to get an item (Progression › click the obtainable / UNOBTAINABLE tag) */
+.ob-dlg { width: min(760px, 94vw); max-height: 86vh; overflow: auto; }
+.ob-head { display: flex; gap: 14px; align-items: center; margin-bottom: 8px; }
+.ob-head img { width: 84px; height: 84px; object-fit: contain; background: #151515; border-radius: 8px; padding: 6px; }
+.ob-head h2 { margin: 0 0 4px; }
+.ob-state { font-weight: 800; }
+.ob-state.ok { color: #1ed760; } .ob-state.no { color: #ff7b7f; }
+.ob-sec { margin: 16px 0 6px; font-size: 15px; font-weight: 900; } .ob-sec em { font-style: normal; color: var(--muted); margin-left: 6px; }
+.ob-row { display: grid; grid-template-columns: 92px 120px 40px 1fr auto; align-items: center; gap: 10px; padding: 7px 10px; border-radius: 8px; background: #1b1b1b; margin-bottom: 5px; }
+.ob-kind { font-size: 11px; font-weight: 900; } .ob-kind.barter { color: #ff79c6; } .ob-kind.buy { color: #5ab4e6; } .ob-kind.reward { color: #f5cd46; }
+.ob-who { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .ob-ll { color: var(--muted); font-size: 12px; font-weight: 800; }
+.ob-price { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; font-size: 13px; font-weight: 700; }
+.ob-cost { display: inline-flex; align-items: center; gap: 5px; background: rgba(0,0,0,.35); padding: 2px 8px 2px 4px; border-radius: 6px; }
+.ob-cost img { width: 22px; height: 22px; object-fit: contain; }
+.ob-plus, .ob-or { color: var(--muted); font-size: 12px; } .ob-or { margin: 0 4px; font-style: italic; }
+body.lg .pt-ob { cursor: pointer; }

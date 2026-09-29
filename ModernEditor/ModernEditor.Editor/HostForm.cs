@@ -749,6 +749,12 @@ public sealed class HostForm : Form
                     // 2.0.8: sold by the game's own traders: ob = 2 barter (maybe money too), 1 money only; ot = who
                     ["ob"] = _db.GameOffers.TryGetValue(item.Id, out var go) ? (go.Barter ? 2 : 1) : null,
                     ["ot"] = _db.GameOffers.TryGetValue(item.Id, out var go2) ? string.Join(", ", go2.Traders) : null,
+                    // each game offer: trader, loyalty level, ways to pay [[tpl, count]…]
+                    ["os"] = _db.GameOfferList.TryGetValue(item.Id, out var gl) ? new JsonArray(gl.Select(o => (JsonNode?)new JsonObject
+                    {
+                        ["t"] = o.Trader, ["ll"] = o.Loyalty,
+                        ["p"] = new JsonArray(o.Prices.Select(pr => (JsonNode?)new JsonArray(pr.Select(c => (JsonNode?)new JsonArray(c.Tpl, c.Count)).ToArray())).ToArray()),
+                    }).ToArray()) : null,
                 });
             }
             int modded = AddModItems(items, result);
@@ -777,7 +783,12 @@ public sealed class HostForm : Form
     }
 
     /// <summary>The trader pages' categories (what the server knows): ammo packs are Ammo there.</summary>
-    private static string TraderGroup(string group) => group == "AmmoPacks" ? "Ammo" : group;
+    private static string TraderGroup(string group) => group switch
+    {
+        "AmmoPacks" => "Ammo",
+        "Headsets" or "FaceCovers" or "Eyewear" or "Armbands" => "Gear", // 2.0.8: split only on the item pages
+        _ => group,
+    };
 
     private readonly Dictionary<string, List<ModItem>> _modScan = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, string> _modErrors = new(StringComparer.OrdinalIgnoreCase);
