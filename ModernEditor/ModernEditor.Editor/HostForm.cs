@@ -161,6 +161,7 @@ public sealed class HostForm : Form
         "reload" => Snapshot(_modFolder),
         "saveTrader" => SaveTrader(Str(a, "folder"), Str(a, "text")),
         "newTrader" => NewTrader(Str(a, "name")),
+        "importTrader" => ImportTrader(),
         "deleteTrader" => DeleteTrader(Str(a, "folder")),
         "duplicateTrader" => DuplicateTrader(Str(a, "folder"), Str(a, "name"), Str(a, "text")),
         "listDeleted" => ListDeleted(),
@@ -429,6 +430,41 @@ public sealed class HostForm : Form
         SavePlaceholderAvatar(Path.Combine(dir, "avatar.png"), name);
         file.Save(Path.Combine(dir, "trader.json"));
         return TraderPayload(dir, JsonNode.Parse(File.ReadAllText(Path.Combine(dir, "trader.json")))!);
+    }
+
+    /// <summary>2.0.8: another trader (a game trader or another mod's) as one of yours: pick its base.json (assort.json next
+    /// to it); base info, offers and picture come over (TraderImport), quests don't.</summary>
+    private JsonNode? ImportTrader()
+    {
+        if (_modFolder == null) throw new InvalidOperationException("Pick the SPT folder first (Browse...).");
+        using var dialog = new OpenFileDialog
+        {
+            Title = "Import a trader — pick its base.json (assort.json must be next to it)",
+            Filter = "Trader base.json|base.json|JSON files|*.json|All files|*.*",
+        };
+        if (DatabaseFolder() is { } dbf && Directory.Exists(Path.Combine(dbf, "traders"))) dialog.InitialDirectory = Path.Combine(dbf, "traders");
+        if (dialog.ShowDialog(this) != DialogResult.OK) return null;
+        var r = TraderImport.Load(dialog.FileName,
+            tpl => _db.Items.TryGetValue(tpl, out var it) && it.Category == ItemCategory.Weapon,
+            tpl => _db.Items.ContainsKey(tpl) || Currencies.IsCurrency(tpl) || tpl is Currencies.GpCoin or Currencies.LegaMedal);
+        string name = r.File.Nickname.Length > 0 ? r.File.Nickname : "Imported Trader";
+        string safe = string.Concat(name.Where(ch => char.IsLetterOrDigit(ch) || ch is '_' or '-' or ' ')).Trim();
+        if (safe.Length == 0) safe = "Trader";
+        string dir = Path.Combine(_modFolder, "traders", safe);
+        for (int n = 2; Directory.Exists(dir); n++) dir = Path.Combine(_modFolder, "traders", $"{safe} {n}");
+        Directory.CreateDirectory(dir);
+        bool pic = false;
+        if (r.AvatarPath != null && TryLoadBitmap(File.ReadAllBytes(r.AvatarPath)) is { } bmp)
+            using (bmp) { SaveSquareImage(bmp, Path.Combine(dir, "avatar.png"), 256); pic = true; }
+        if (!pic)
+        {
+            SavePlaceholderAvatar(Path.Combine(dir, "avatar.png"), name);
+            if (r.AvatarPath != null) r.Notes.Add($"Its picture ({Path.GetFileName(r.AvatarPath)}) couldn't be read: use Choose Icon From PC… on the Trader page.");
+        }
+        r.File.Save(Path.Combine(dir, "trader.json"));
+        EditorLog.Info("import", $"{dialog.FileName} → {dir}: " + string.Join(" | ", r.Notes));
+        var payload = TraderPayload(dir, JsonNode.Parse(File.ReadAllText(Path.Combine(dir, "trader.json")))!);
+        return new JsonObject { ["trader"] = payload, ["notes"] = new JsonArray(r.Notes.Select(x => (JsonNode?)x).ToArray()) };
     }
 
     /// <summary>Copies a trader folder (icons, quest images) and writes the copy's trader.json (with new ids, made by the page).</summary>

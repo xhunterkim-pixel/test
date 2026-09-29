@@ -433,7 +433,8 @@ function renderHome() {
   $('#homeTools').innerHTML = homeTools();
   $('#homeNotes').innerHTML = homeNotes();
   $('#homeGrid').innerHTML = (list.length ? card(list[0], true) : '') + list.slice(1).map(t => card(t, false)).join('') +
-    `<button class="hcard hadd" data-act="homeNew" title="New trader (Ctrl+N)"><span class="plus">＋</span><span class="hsub">New Trader</span></button>`;
+    `<button class="hcard hadd" data-act="homeNew" title="New trader (Ctrl+N)"><span class="plus">＋</span><span class="hsub">New Trader</span></button>`
+    + `<button class="hcard hadd" data-act="homeImport" title="Import a trader from the game or another mod: its base info, what it sells and its picture (not quests)"><span class="plus">⇩</span><span class="hsub">Import Trader…</span></button>`;
 }
 
 // =====================================================================
@@ -3452,6 +3453,25 @@ const ACT = {
       log('ok', name, `Created trader ${name}.`, t);
     } catch (err) { errorBox(err); }
   },
+  /** 2.0.8: another trader (game or mod) as one of yours: base info, offers and picture (no quests). */
+  async importTrader() {
+    S.tradersOpen = false;
+    try {
+      const r = await host.call('importTrader');
+      if (!r) return;
+      const t = normalize({ ...r.trader, dirty: false });
+      t.savedJson = JSON.stringify(t.file);
+      S.traders.push(t);
+      resetHistory();
+      S.page = 'offers';
+      selectTrader(t);
+      runChecks(); renderAll(true);
+      log('ok', t.file.name, `Imported trader ${t.file.name} (${t.file.offers.length} offers).`, t);
+      await openModal(`<div class="dialog small"><h2>Trader Imported</h2>${(r.notes || []).map(n => `<div class="hint no-tuck" style="color:#ddd">• ${esc(n)}</div>`).join('')}
+        <div class="buttons"><button class="primary" data-m>OK</button></div></div>`, m => { m.querySelector('[data-m]').onclick = () => closeModal(null); });
+    } catch (err) { errorBox(err); }
+  },
+  async homeImport() { const before = S.traders.length; await ACT.importTrader(); if (S.traders.length > before) hideHome(); },
   async deleteTrader(arg) {
     const t = arg !== undefined && arg !== '' ? S.traders[Number(arg)] : S.t; if (!t) return;
     if (!await confirmBox('Remove Trader', `Remove "${t.file.name}"?\n\nIts folder is moved to "deleted_traders" (nothing is erased), so you can put it back later.`, 'Remove')) return;
