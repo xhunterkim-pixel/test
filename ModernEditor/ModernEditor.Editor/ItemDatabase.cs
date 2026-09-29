@@ -300,12 +300,20 @@ public sealed class ItemDatabase
             // What players can hold is what the handbook lists (plus quest items); the rest are templates and dev items.
             bool hidden = name.Contains("DO_NOT_USE", StringComparison.OrdinalIgnoreCase) || name.Contains("DO NOT USE", StringComparison.OrdinalIgnoreCase) ||
                           (Handbook.Count > 0 && !quest && !Handbook.ContainsKey(id));
+            // 2.0.8: developer / test items ("Balaclava_test", "DO NOT USE", debug and dummy items, untranslated hidden
+            // templates) get a category of their own instead of sitting among the real items
+            bool untranslated = !names.ContainsKey($"{id} Name");
+            bool dev = DevName.IsMatch(name) || DevName.IsMatch(internalName) || (hidden && untranslated && !quest);
             Items[id] = new GameItem(id, name, shortName, parent, category, caliber)
             {
-                Hidden = hidden, Group = GroupOf(id, quest), WeaponClass = category == ItemCategory.Weapon ? WeaponClassOf(id) : "",
+                Hidden = hidden, Group = dev ? "Developer" : GroupOf(id, quest), WeaponClass = category == ItemCategory.Weapon ? WeaponClassOf(id) : "",
             };
         }
     }
+
+    private static readonly System.Text.RegularExpressions.Regex DevName = new(
+        @"(^|[\s_\-\(\[])(test|tests|testing|debug|dummy|placeholder|dev)($|[\s_\-\)\]\d])|do[\s_]?not[\s_]?use",
+        System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Compiled);
 
     private void LoadPrices(string databaseFolder)
     {

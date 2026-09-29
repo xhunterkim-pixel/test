@@ -33,6 +33,7 @@ public static class EditorGroups
         ("Keys", "Keys", new[] { "543be5e94bdc2df1348b4568" }),
         ("Containers", "Containers", new[] { "5795f317245977243854e041", "5671435f4bdc2d96058b4569", "5448bf274bdc2dfc2f8b456a" }), // 2.0.8: + secure containers (were Other Gear)
         ("Special", "Special", new[] { "5447e0e74bdc2d3c308b4567", "567849dd4bdc2d150f8b456e" }),
+        ("Developer", "Developer Items", Array.Empty<string>()), // 2.0.8: set by name (test / debug / DO NOT USE…), not by class
     };
 
     /// <summary>Weapon classes: key = the class name the game uses.</summary>

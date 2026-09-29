@@ -54,7 +54,7 @@ const GROUPS = [
   ['Backpacks', 'Backpacks', '#a082ff'], ['Headsets', 'Headsets', '#80cbc4'], ['FaceCovers', 'Face Covers', '#9fa8da'], ['Eyewear', 'Eyewear', '#81d4fa'],
   ['Armbands', 'Armbands', '#ce93d8'], ['Gear', 'Other Gear', '#b39ddb'], ['Medical', 'Medical', '#1ed760'], ['Food', 'Food & Drink', '#8bd66b'],
   ['Electronics', 'Electronics', '#4dd0e1'], ['Barter', 'Barter Items', '#bdbdbd'], ['Keys', 'Keys', '#e0c068'], ['Containers', 'Containers', '#90a4ae'],
-  ['Special', 'Special', '#ff7ab6'], ['Other', 'Other', '#8a8a8a'],
+  ['Special', 'Special', '#ff7ab6'], ['Developer', 'Developer Items', '#6d6d6d'], ['Other', 'Other', '#8a8a8a'],
 ];
 const GROUP = Object.fromEntries(GROUPS.map(([k, n, c]) => [k, { key: k, name: n, color: c }]));
 const SORTS = [['custom', 'Custom Order'], ['name', 'Name'], ['level', 'Level'], ['cat', 'Category'], ['price', 'Price'], ['changed', 'Changed First']];
