@@ -8,7 +8,7 @@ no PR open). Rules and the build / tuning method are in `CLAUDE.md`.
 | Thing | Version | Status |
 |---|---|---|
 | LevelGate plugin / server | 1.6.3 | Frozen: do not touch without the user's go-ahead |
-| LevelGate Progression | **0.9.94** | Sent to the user (full package). 0.9.93 was tested in game ("looks good"); 0.9.94 not yet |
+| LevelGate Progression | **0.9.95** | Sent to the user (full package), untested in game. 0.9.94 tested: character emblem fix confirmed in their log |
 | Modern Editor (editor exe) | 2.0.6 | Sent and in use |
 | Modern Editor (server mod) | 2.0.7 | Sent: compact SPT console output |
 
@@ -41,6 +41,16 @@ Decor Noise 55, Micro Labels 60, Flourish 65, Border Fade 70, Ambient Light 140 
 - Logs go to `Logs\ModernEditor_<date>.log` next to the exe (30 kept). Clean Up sends old mods, editors and settings to the Recycle Bin.
 - Pictures: any image type is converted automatically. A quest without a picture uses its first reward or barter item's icon.
 - The server log is one line at startup, and the details go to `user\mods\ModernEditor\logs\server_*.log`.
+
+## 0.9.95 (this session: branch `claude/busy-clarke-5vn996`)
+- Fixes: 848 ms freeze on the first right-click (inspect ctor lookup now on a worker thread at screen open, `GameItems.WarmInspect`);
+  rank-up Dogtag window faded in while the stage was still in the middle (now waits .35 s).
+- In F12 › CURRENTLY TESTING (`testingNow`): NewTagStyle (Mw4Dark default; new key), LockedBlueprint, CurrentXpFill, CurrentXpColour
+  (user's colour answer was unclear → Orange default), SweepXpBacking, SweepXpHeight, BigXpDuringSweep.
+- User said NO to MW4's XP ring around the level badge (the bar + emblem cover it).
+- Asked the user for MW4 crops still missing: sweep leading edge, a card unlocking (flash / LEVEL_ACTIVE / check), the LEVEL UP slab,
+  locked blueprint at 1:1, MW4's rank-up screen, the full-screen dot grid.
+- Cloud build: `tools/cloud-build/setup.sh` (see CLAUDE.md).
 
 ## In progress / open
 

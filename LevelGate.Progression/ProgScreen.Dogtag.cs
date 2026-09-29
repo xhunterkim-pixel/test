@@ -317,10 +317,11 @@ namespace LevelGate.Progression
                 if (!_dtReal) { _dtWin.gameObject.SetActive(true); L.Info("dogtag: showing the drawn window instead"); }
             }
             // the game's window fades in once it opens, and out with the rest at the end (then it's closed: HideRankViews)
-            if (_dtReal) { FadeGameWindow(still ? 1 : Mathf.Min((after - _dtOpenAt) / .35f, (dur - t) / .35f)); GameItems.HideDogtagRows(); return; }
+            // 0.9.95: the window fades in only once the stage has lifted clear (they overlapped: the rank name showed through it)
+            if (_dtReal) { FadeGameWindow(still ? 1 : Mathf.Min((after - _dtOpenAt - .35f) / .3f, (dur - t) / .35f)); GameItems.HideDogtagRows(); return; }
             if (!_dtWin.gameObject.activeSelf) return;
             // the drawn window opens the same way: a fade and settle
-            float o = still ? 1 : Motion.Eval(Motion.Ease.OutCubic, (after - _dtOpenAt) / .35f);
+            float o = still ? 1 : Motion.Eval(Motion.Ease.OutCubic, Mathf.Clamp01((after - _dtOpenAt - .35f) / .3f));
             _dtWin.GetComponent<CanvasGroup>().alpha = o;
             _dtWin.localScale = Vector3.one * Mathf.Lerp(.97f, 1, o);
             Ui.SetText(v.Line, level.ToString());

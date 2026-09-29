@@ -843,7 +843,7 @@ namespace LevelGate.Progression
                 _xpBig = Ui.Label(Ui.Rect(_focusStage, "BigGain", new Vector2(0, 0), new Vector2(1, 0), new Vector2(0, 34), new Vector2(0, 96)), "Text", "", 52, Ui.Hex("#eceeef"), TextAnchor.MiddleCenter, true, 2);
                 _xpBig.gameObject.AddComponent<CanvasGroup>().blocksRaycasts = false;
             }
-            if (_xpBig != null) { _xpBig.gameObject.SetActive(on); if (on) Ui.SetText(_xpBig, "+0 <size=60%><color=#e0562f>EXP</color></size>"); }
+            if (_xpBig != null) { _xpBig.gameObject.SetActive(on && (Polish.BigXpDuringSweep || !Mw(4))); if (on) Ui.SetText(_xpBig, "+0 <size=60%><color=#e0562f>EXP</color></size>"); }
             _xpGain.gameObject.SetActive(on);
             if (!on) return;
             Ui.SetText(_xpGain, $"+{Thousands(_xpTo - _xpFrom)}");

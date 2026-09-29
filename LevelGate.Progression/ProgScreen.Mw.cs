@@ -81,6 +81,7 @@ namespace LevelGate.Progression
 
         private static Component _wallXp;
         private static RectTransform _wallXpRt;
+        private static Image _wallXpBack; // 0.9.95: a soft dark backing, so it reads over card names
         private const int Bars = 56;
         private static readonly RectTransform[] _bar = new RectTransform[Bars];
         private static readonly Image[] _barImg = new Image[Bars];
@@ -100,6 +101,8 @@ namespace LevelGate.Progression
             // 4: the running +XP, riding just right of the wall above the rail, with a crosshair tick
             _wallXpRt = Ui.Rect(layer, "Xp", Vector2.zero, Vector2.zero, Vector2.zero, new Vector2(240, 30));
             _wallXpRt.pivot = new Vector2(0, .5f);
+            _wallXpBack = Ui.Img(Ui.Box(_wallXpRt, "Back", new Vector2(0, .5f), new Vector2(92, 0), new Vector2(240, 64)), new Color(0, 0, 0, 0), Ui.Radial());
+            _wallXpBack.raycastTarget = false;
             Ui.Img(Ui.Rect(_wallXpRt, "TickH", new Vector2(0, .5f), new Vector2(0, .5f), new Vector2(-14, 0), new Vector2(-2, 1)), new Color(1, 1, 1, .9f)).raycastTarget = false;
             Ui.Img(Ui.Rect(_wallXpRt, "TickV", new Vector2(0, .5f), new Vector2(0, .5f), new Vector2(-8.5f, -6), new Vector2(-7.5f, 6)), new Color(1, 1, 1, .9f)).raycastTarget = false;
             _wallXp = Ui.Label(Ui.Fill(_wallXpRt, "Text"), "Text", "", 24, Color.white, TextAnchor.MiddleLeft, true, 1);
@@ -136,7 +139,8 @@ namespace LevelGate.Progression
                 cg.alpha = xa;
                 if (xa > .001f)
                 {
-                    _wallXpRt.anchoredPosition = new Vector2(Mathf.Min(wx + 18, w - 240), railY + 44);
+                    _wallXpRt.anchoredPosition = new Vector2(Mathf.Min(wx + 18, w - 240), railY + Polish.SweepXpHeight); // 0.9.94: 44
+                    if (_wallXpBack != null) _wallXpBack.color = new Color(0, 0, 0, .75f * Polish.SweepXpBacking);
                     Ui.SetText(_wallXp, _gainShown);
                 }
             }

@@ -1,4 +1,4 @@
-# LevelGate Progression (0.9.94, test build)
+# LevelGate Progression (0.9.95, test build)
 
 A Call of Duty style **Progression** screen inside Tarkov's main menu. It adds a
 **PROGRESSION** button to the menu bar next to Character, Trading, Flea Market and the rest.
@@ -18,6 +18,16 @@ A Call of Duty style **Progression** screen inside Tarkov's main menu. It adds a
   - P or Esc closes the screen.
 - It works on its own and never changes LevelGate. It only **reads**
   `BepInEx\plugins\LevelGate\config\level_requirements.json`, and picks up changes to that file while the game runs.
+
+## 0.9.95 (new looks in F12 › CURRENTLY TESTING, from your MW4 crops)
+- **Fix: no freeze on the first right-click / Inspect** (848 ms in your log). The game's inspect classes are now looked up in the background when the screen opens.
+- **Fix: the rank-up's name showed through the Dogtag window.** The window now fades in only once the rank emblem and name have lifted to the top.
+- **NEW Tag Look → Mw4Dark** (new default, as in your MW4 crop): a dark see-through box, bright yellow NEW, a thin gold outline lit along the top, a soft glow. MW4 (0.9.92's gold box) and Old are still there.
+- **Locked Card Blueprint (%)**: locked cards show their items like MW4's: the picture dark, only its outline lit in a cold blueprint colour, with a faint sideways streak. 0 = 0.9.94's dimmed picture.
+- **Current Card XP Fill (%)** and **Colour** (Orange / Green): your level's card fills with light from the left up to your XP towards the next level, with a lit edge and a small equalizer at its foot. Hidden while the level-up sweep plays.
+- **Sweep +XP Backing (%)** and **Sweep +XP Height (px)**: the +XP riding the level-up sweep gets a soft dark backing (it ran into the card names), and you can move it up.
+- **Big +XP During Sweep** (off): the big "+84 975 EXP" over the item picture is hidden while the sweep plays, since MW4 shows only the one on the sweep. Tick it to get 0.9.94's back.
+- The project file now lists all the Unity modules it uses (Audio, Web Request, Animation), so `dotnet build` works straight from a clean checkout.
 
 ## 0.9.94
 - **Fix: the rank emblem on the Character › Overall screen was missing at levels 1–9.** The game writes the level as "01"; the plugin looked for "1" and gave up.

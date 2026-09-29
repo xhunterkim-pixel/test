@@ -47,7 +47,14 @@ namespace LevelGate.Progression
             public static float NameGlowK => On ? Pct(ProgressionPlugin.TestNameShadow, 29) : 0f;
             public static float NameGlowSoft => Pct(ProgressionPlugin.TestNameShadowSoftness, 26);
             public static float NameGlowDrop => Pct(ProgressionPlugin.TestNameShadowDistance, 47);
-            public static bool Mw4NewTag => (ProgressionPlugin.TestNewTag?.Value ?? NewTagLook.MW4) == NewTagLook.MW4;
+            public static NewTagLook NewTag => ProgressionPlugin.TestNewTag?.Value ?? NewTagLook.Mw4Dark;
+            // 0.9.95 (read live): MW4's locked blueprint, the current card's XP fill, the sweep's +XP
+            public static float BlueprintK => On ? Pct(ProgressionPlugin.TestLockedBlueprint, 100) : 0f;
+            public static float XpFillK => On ? Pct(ProgressionPlugin.TestCurrentXpFill, 100) : 0f;
+            public static bool XpFillGreen => (ProgressionPlugin.TestCurrentXpColour?.Value ?? XpFillColour.Orange) == XpFillColour.Green;
+            public static float SweepXpBacking => On ? Pct(ProgressionPlugin.TestWallXpBacking, 80) : 0f;
+            public static float SweepXpHeight => On ? (ProgressionPlugin.TestWallXpLift?.Value ?? 44) : 44f;
+            public static bool BigXpDuringSweep => !On || (ProgressionPlugin.TestBigXpDuringSweep?.Value ?? false);
             public static float SubtitleAlpha => Pct(ProgressionPlugin.TestHeroSubtitleOpacity, 70);
             public static float AmbientLightK => On ? Pct(ProgressionPlugin.TestAmbientLight, 140) : 1f;
             public static bool MixedLight => On && (ProgressionPlugin.TestLightHue?.Value ?? LightHue.Mixed) == LightHue.Mixed;
@@ -64,7 +71,8 @@ namespace LevelGate.Progression
 
         public enum HeroLine { Description, FullName, Off }
         public enum LightHue { Mixed, Rank }
-        public enum NewTagLook { MW4, Old }
+        public enum NewTagLook { Mw4Dark, MW4, Old }
+        public enum XpFillColour { Orange, Green }
 
         // ---------------------------------------------------------------- MW4 frames: strong in the middle, fading at the ends
 

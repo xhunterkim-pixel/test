@@ -26,7 +26,7 @@ namespace LevelGate.Progression
         public const string Guid = "com.kkyangg.levelgate.progression";
         public const string Name = "LevelGate Progression";
         // MAJOR.MINOR.PATCH — see CHANGELOG.md
-        public const string Version = "0.9.94";
+        public const string Version = "0.9.95";
 
         internal static ProgressionPlugin Instance;
         internal static ConfigEntry<KeyboardShortcut> OpenKey;
@@ -44,6 +44,10 @@ namespace LevelGate.Progression
         internal static ConfigEntry<ProgScreen.HeroLine> TestHeroSubtitle;
         internal static ConfigEntry<ProgScreen.LightHue> TestLightHue;
         internal static ConfigEntry<ProgScreen.NewTagLook> TestNewTag;
+        // 0.9.95 (F12 > CURRENTLY TESTING): from the user's MW4 crops
+        internal static ConfigEntry<int> TestLockedBlueprint, TestCurrentXpFill, TestWallXpBacking, TestWallXpLift;
+        internal static ConfigEntry<ProgScreen.XpFillColour> TestCurrentXpColour;
+        internal static ConfigEntry<bool> TestBigXpDuringSweep;
         internal static bool Mw(int n) => TestMw[n]?.Value ?? true;
         internal static ConfigEntry<float> TestRevealTime;
         internal static ConfigEntry<ProgScreen.LoadInStyle> TestRevealStyle;
@@ -291,11 +295,25 @@ namespace LevelGate.Progression
                 "Level cards that aren't picked / current, in % (0.9.81 = 100; 0.9.9–0.9.91 had 90).", 203, new AcceptableValueRange<int>(50, 100)));
             TestCardLockedOpacity = Config.Bind(T, "CardLockedOpacity", 100, Desc(
                 "Locked level cards, in % (0.9.81 = 85; 0.9.9–0.9.91 had 72).", 202, new AcceptableValueRange<int>(40, 100)));
-            TestNewTag = Config.Bind(T, "NewTagLook", ProgScreen.NewTagLook.MW4, Desc(
-                "The NEW tag: MW4 (gold box fading out to the left, a second box behind it) or Old (0.9.91's outlined dark box).", 205));
+            // 0.9.95: a new key (NewTagLook's saved MW4 would stick): MW4 Dark is the user's MW4 crop — dark see-through box, yellow text
+            TestNewTag = Config.Bind(T, "NewTagStyle", ProgScreen.NewTagLook.Mw4Dark, Desc(
+                "The NEW tag: Mw4Dark (MW4's crop: a dark see-through box, bright yellow NEW, thin gold outline, soft glow), MW4 (0.9.92's gold box fading to the left) or Old (0.9.91's outlined box).", 205));
+            TestLockedBlueprint = Config.Bind(T, "LockedBlueprint", 100, Desc(
+                "Locked cards, like MW4: the item as a faint cold blueprint with its picture streaked sideways, in % (0 = 0.9.94's dimmed picture).", 199, new AcceptableValueRange<int>(0, 200)));
+            TestCurrentXpFill = Config.Bind(T, "CurrentXpFill", 100, Desc(
+                "Your current level's card fills with light from the left up to your XP towards the next level, with a moving edge, like MW4, in % (0 = off).", 198, new AcceptableValueRange<int>(0, 200)));
+            TestCurrentXpColour = Config.Bind(T, "CurrentXpColour", ProgScreen.XpFillColour.Orange, Desc(
+                "That fill's colour: Orange (the screen's colour for your level) or Green (MW4's).", 197));
+            TestWallXpBacking = Config.Bind(T, "SweepXpBacking", 80, Desc(
+                "The +XP riding the light sweep gets a soft dark backing so it stays readable over card names, in % (0 = none, like 0.9.94).", 196, new AcceptableValueRange<int>(0, 100)));
+            TestWallXpLift = Config.Bind(T, "SweepXpHeight", 44, Desc(
+                "How high the sweep's +XP sits above the line, in px (0.9.94 = 44; the card names are at about that height).", 195, new AcceptableValueRange<int>(10, 160)));
+            TestBigXpDuringSweep = Config.Bind(T, "BigXpDuringSweep", false, Desc(
+                "Also show the big +XP over the item picture while the sweep plays (0.9.94 = on). MW4 shows only the one on the sweep.", 194));
             var polishDials = new HashSet<ConfigEntryBase> { TestNameShadow, TestNameShadowSoftness, TestNameShadowDistance, TestNewTag, TestPanelLight, TestCardOpacity, TestCardLockedOpacity, TestNameGlow, TestNameGlowSoftness, TestPolish, TestDecorNoise, TestMicroLabels, TestBorderFade, TestAmbient, TestQuietFx, TestFlourish, TestAmbientLight, TestLightHue,
-                TestCardRest, TestCardLocked, TestSmallText, TestNeutralPips, TestHeroSubtitle, TestHeroSubtitleOpacity, TestTipDelay };
-            var liveDials = new HashSet<ConfigEntryBase> { TestTipDelay, TestAmbient, TestQuietFx, TestFlourish };
+                TestCardRest, TestCardLocked, TestSmallText, TestNeutralPips, TestHeroSubtitle, TestHeroSubtitleOpacity, TestTipDelay,
+                TestLockedBlueprint, TestCurrentXpFill, TestCurrentXpColour, TestWallXpBacking, TestWallXpLift, TestBigXpDuringSweep };
+            var liveDials = new HashSet<ConfigEntryBase> { TestTipDelay, TestAmbient, TestQuietFx, TestFlourish, TestCurrentXpFill, TestCurrentXpColour, TestWallXpBacking, TestWallXpLift, TestBigXpDuringSweep };
             Config.SettingChanged += (_, a) =>
             {
                 var entry = a?.ChangedSetting;
@@ -412,7 +430,7 @@ namespace LevelGate.Progression
                 ["AmbientMotion"] = "Ambient Motion (%)", ["QuietDuringEffects"] = "Quiet During Effects", ["Flourish"] = "Flourish (%)", ["AmbientLight"] = "Ambient Light (%)",
                 ["LightColours"] = "Ambient Light Colours", ["CardRest"] = "Card Rest Opacity (%)", ["CardLocked"] = "Card Locked Opacity (%)", ["SmallText"] = "Small Text Minimum (px)",
                 ["NeutralPips"] = "Neutral Rank Pips", ["HeroSubtitle"] = "Line Under Name", ["HeroSubtitleOpacity"] = "Line Under Name Opacity (%)", ["TooltipDelay"] = "Tooltip Delay (s)", ["NameGlow"] = "Name Glow (%)", ["NameGlowSoftness"] = "Name Glow Softness (%)",
-                ["NameReflection"] = "Name Reflection (%)", ["NameReflectionSoftness"] = "Name Reflection Softness (%)", ["NameReflectionDistance"] = "Name Reflection Distance (%)", ["NewTagLook"] = "NEW Tag Look", ["PanelLight"] = "Panel Light (%)", ["CardOpacity"] = "Card Opacity (%)", ["CardLockedOpacity"] = "Locked Card Opacity (%)",
+                ["NameReflection"] = "Name Reflection (%)", ["NameReflectionSoftness"] = "Name Reflection Softness (%)", ["NameReflectionDistance"] = "Name Reflection Distance (%)", ["NewTagLook"] = "NEW Tag Look", ["NewTagStyle"] = "NEW Tag Look", ["LockedBlueprint"] = "Locked Card Blueprint (%)", ["CurrentXpFill"] = "Current Card XP Fill (%)", ["CurrentXpColour"] = "Current Card XP Fill Colour", ["SweepXpBacking"] = "Sweep +XP Backing (%)", ["SweepXpHeight"] = "Sweep +XP Height (px)", ["BigXpDuringSweep"] = "Big +XP During Sweep", ["PanelLight"] = "Panel Light (%)", ["CardOpacity"] = "Card Opacity (%)", ["CardLockedOpacity"] = "Locked Card Opacity (%)",
             };
             var titles = new Dictionary<string, string>
             {
@@ -422,7 +440,8 @@ namespace LevelGate.Progression
             // what most players never touch: under F12's "Advanced settings" (the Preview tools too); the tuning section is hidden
             // 0.9.92: the 0.9.91 glow is replaced by the reflection below; being tried now: the reflection and the MW4 NEW tag
             // 0.9.91: the 0.9.9 dials are tuned (your values are the defaults: Ambient Motion 50, the line under the name off); being tried now:
-            var testingNow = new HashSet<string>(); // 0.9.94: all tuned (your 0.9.93 values are the defaults); nothing being tried right now
+            // 0.9.94: all tuned (your 0.9.93 values are the defaults)
+            var testingNow = new HashSet<string> { "NewTagStyle", "LockedBlueprint", "CurrentXpFill", "CurrentXpColour", "SweepXpBacking", "SweepXpHeight", "BigXpDuringSweep" }; // 0.9.95: from your MW4 crops
             var advanced = new HashSet<string> { "RefreshIcons", "UseGameSounds", "Vignette", "RedGlow", "BlurBackground", "HideMainMenu", "PatternMotion" };
             foreach (var kv in Config)
             {

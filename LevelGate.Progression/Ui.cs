@@ -257,8 +257,33 @@ namespace LevelGate.Progression
         /// </summary>
         public static RectTransform NewBadge(RectTransform parent, Vector2 anchor, Vector2 pos, float w = 34, float h = 17, float textSize = 11.5f)
         {
-            if (ProgScreen.Polish.Mw4NewTag) return NewBadgeMw4(parent, anchor, pos, w, h, textSize);
-            return NewBadgeOld(parent, anchor, pos, w, h, textSize);
+            switch (ProgScreen.Polish.NewTag)
+            {
+                case ProgScreen.NewTagLook.MW4: return NewBadgeMw4(parent, anchor, pos, w, h, textSize);
+                case ProgScreen.NewTagLook.Old: return NewBadgeOld(parent, anchor, pos, w, h, textSize);
+                default: return NewBadgeMw4Dark(parent, anchor, pos, w, h, textSize);
+            }
+        }
+
+        /// <summary>
+        /// MW4's NEW, from the user's crop (0.9.95): a dark olive see-through box, bright yellow bold NEW, a thin gold outline
+        /// (brightest along the top, where the card's own top edge runs into it), a faint gold wash rising from the bottom and a
+        /// soft yellow glow around it. The text is the brightest thing; the box only frames it.
+        /// </summary>
+        private static RectTransform NewBadgeMw4Dark(RectTransform parent, Vector2 anchor, Vector2 pos, float w, float h, float textSize)
+        {
+            var yellow = Hex("#f2e04a");
+            var gold = Hex("#b39a2e");
+            var root = Box(parent, "New", anchor, pos, new Vector2(w, h));
+            Img(Box(root, "Glow", new Vector2(.5f, .5f), Vector2.zero, new Vector2(w * 2f, h * 2.6f)), new Color(yellow.r, yellow.g, yellow.b, .10f), Radial()).raycastTarget = false;
+            Img(Fill(root, "Base"), new Color(.10f, .10f, .04f, .78f)).raycastTarget = false;
+            var wash = Img(Fill(root, "Wash"), new Color(gold.r, gold.g, gold.b, .16f), VerticalFade()); wash.raycastTarget = false;
+            wash.rectTransform.localScale = new Vector3(1, -1, 1); // brightest at the bottom
+            Outline(root, new Color(gold.r, gold.g, gold.b, .8f));
+            Img(Rect(root, "Top", new Vector2(0, 1), Vector2.one, new Vector2(0, -1), Vector2.zero), new Color(yellow.r, yellow.g, yellow.b, .95f)).raycastTarget = false;
+            var t = Label(root, "Text", "NEW", textSize, yellow, TextAnchor.MiddleCenter, true, 1.5f);
+            ((Graphic)t).raycastTarget = false;
+            return root;
         }
 
         /// <summary>
