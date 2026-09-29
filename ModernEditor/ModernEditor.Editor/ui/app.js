@@ -889,7 +889,7 @@ function pageTrader() {
 }
 
 const COLUMNS = {
-  offers: [['title', 'Title'], ['unlock', 'Unlock', 190], ['ll', 'LL', 56], ['stock', 'Stock', 110], ['mod', 'Modded', 100], ['notes', 'Notes', 150]],
+  offers: [['title', 'Title'], ['unlock', 'Unlock', 190], ['ll', 'LL', 56], ['stock', 'Stock', 100], ['mod', 'Modded', 100], ['notes', 'Notes', 150]],
   quests: [['title', 'Title'], ['level', 'Level', 80], ['ways', 'Ways', 70], ['mod', 'Modded', 100], ['notes', 'Notes', 150]],
   mods: [['title', 'Mod'], ['items', 'Items', 90], ['used', 'Used By', 170]],
   lgitems: [['title', 'Item'], ['cat', 'Category', 130], ['used', 'Sold By Your Traders', 170], ['lvl', 'Level', 90]],
@@ -901,6 +901,7 @@ function colShown(list, key) {
   if (key === 'title') return true;
   const v = view()[`${list}.${key}`];
   if (v !== undefined) return !v;
+  if (key === 'mod' && S.hasMods && list in S.hasMods) return S.hasMods[list]; // 2.0.8: only when something in the list uses a mod
   return key !== 'notes' || !!S.hasNotes?.[list];
 }
 const shownColumns = list => COLUMNS[list].filter(c => colShown(list, c[0]));
@@ -952,7 +953,7 @@ function sortedOrder(list, arr) {
 function boxes(list) {
   return `<div class="boxes">${list.map(b => {
     const pics = (b.icons || []).map(itemPic).filter(Boolean).slice(0, 3).map(u => `<img class="bi" src="${u}" alt="" loading="lazy" ${picFail}>`).join('');
-    return `<span class="box" style="--c:${b.color || 'var(--muted)'}">${b.label ? `<b>${esc(b.label)}</b>` : ''}${pics}${esc(b.text)}</span>`;
+    return `<span class="box" style="--c:${b.color || 'var(--muted)'}" title="${esc((b.label ? b.label + ' ' : '') + b.text)}">${b.label ? `<b>${esc(b.label)}</b>` : ''}${pics}${esc(b.text)}</span>`;
   }).join('')}</div>`;
 }
 
@@ -1032,6 +1033,7 @@ function pageOffers() {
   const t = S.t;
   const shown = [];
   (S.hasNotes ||= {}).offers = t.file.offers.some(o => o.notes);
+  (S.hasMods ||= {}).offers = t.file.offers.some(o => objMods(t, o).names.length);
   const tags = tagBar('offers', t.file.offers);
   const rows = sortedOrder('offers', t.file.offers).map(i => {
     const o = t.file.offers[i];
@@ -1055,10 +1057,10 @@ function pageOffers() {
       thumb: { text: initials(item(o.itemTpl)?.s || itemName(o.itemTpl)), color: u.kind !== 'start' ? 'var(--orange)' : '#3a3a3a', dark: u.kind !== 'start', item: o.itemTpl, wide: true },
       title: itemName(o.itemTpl), badges,
       line2: compact('offers') ? null : inGamePrice(t, o),
-      cols: { unlock: u.text, ll: `LL${o.loyaltyLevel}`, stock: (o.unlimited ? 'Unlimited' : `${o.stock} / Restock`) + (o.buyLimit > 0 ? ` · Max ${o.buyLimit}` : ''), notes: o.notes, mod: modCell(mods) },
+      cols: { unlock: u.text, ll: `LL${o.loyaltyLevel}`, stock: (o.unlimited ? '∞' : String(o.stock)) + (o.buyLimit > 0 ? ` · max ${o.buyLimit}` : ''), notes: o.notes, mod: modCell(mods) },
       colColors: { unlock: u.kind !== 'start' ? 'var(--orange)' : 'var(--green)', mod: modColor(mods) },
       lvl: lgOn() ? (lvl || 0) : undefined,
-      colTitles: { mod: mods.names.join(', ') },
+      colTitles: { mod: mods.names.join(', '), unlock: u.text, stock: (o.unlimited ? 'Unlimited stock' : `${o.stock} per restock (shared by everyone)`) + (o.buyLimit > 0 ? ` · each player can buy ${o.buyLimit} per restock` : '') },
     });
   }).join('');
   S.shownRows = shown;
@@ -1081,6 +1083,7 @@ function pageQuests() {
   const tagsHtml = tagBar('quests', t.file.quests);
   const shown = [];
   (S.hasNotes ||= {}).quests = t.file.quests.some(q => q.notes);
+  (S.hasMods ||= {}).quests = t.file.quests.some(q => objMods(t, q).names.length);
   const rows = sortedOrder('quests', t.file.quests).map(i => {
     const q = t.file.quests[i];
     if (S.tagFilters.quests && !q.tags.includes(S.tagFilters.quests)) return '';
@@ -1091,7 +1094,6 @@ function pageQuests() {
     if (!v.hideWaysTag) badges.push([`${w.length} WAY${w.length > 1 ? 'S' : ''}`, 'var(--violet)']);
     if (!q.enabled) badges.unshift(['OFF', '#8a8a8a', 'keep']);
     if (q.failOnDeath) badges.push(['HARDCORE', 'var(--red)']);
-    if (validId(q.levelFromItem)) badges.push([`⟲ LVL FOLLOWS ${shortName(q.levelFromItem).toUpperCase()}`, 'var(--violet)']);
     if (q.prerequisiteQuestIds.length) badges.push([`AFTER ${q.prerequisiteQuestIds.length} QUEST${q.prerequisiteQuestIds.length > 1 ? 'S' : ''}`, 'var(--blue)']);
     if (!v.hideTags) for (const tag of q.tags) badges.push([tag.toUpperCase(), tagColor(tag)]);
     if (S.checks.some(c => c.target === q && c.level === 'error')) badges.push(['✖ PROBLEM', 'var(--red)', 'keep']);
@@ -1109,9 +1111,9 @@ function pageQuests() {
         })
         : [{ text: 'No Objectives Yet' }],
       boxes3: v.hideRewards || compact('quests') ? null : q.rewards.length ? rewardBoxes(t, q) : [{ text: 'No Rewards Yet' }],
-      cols: { level: `Lvl ${q.minLevel}`, ways: String(w.length), notes: q.notes, mod: modCell(mods) },
-      colColors: { mod: modColor(mods) },
-      colTitles: { mod: mods.names.join(', ') },
+      cols: { level: `Lvl ${q.minLevel}${validId(q.levelFromItem) ? ' ⟲' : ''}`, ways: String(w.length), notes: q.notes, mod: modCell(mods) },
+      colColors: { mod: modColor(mods), level: validId(q.levelFromItem) ? 'var(--violet)' : '' },
+      colTitles: { mod: mods.names.join(', '), level: validId(q.levelFromItem) ? `⟲ Follows ${itemName(q.levelFromItem)}'s level (Level Gate)${Number(q.levelOffset) ? ` ${q.levelOffset > 0 ? '+' : ''}${q.levelOffset}` : ''}` : '' },
     });
   }).join('');
   S.shownRows = shown;

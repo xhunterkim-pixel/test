@@ -1,5 +1,14 @@
 # Modern Editor changelog
 
+## 2.0.8 (editor)
+- **Progression: can players get it?** Each item tile has a small green icon when a trader sells it (⇄ barter, ₽ buy) or a quest gives it (★), or a red **UNOBTAINABLE** tag. Hover it to see who sells it and for what. The level header counts the unobtainable ones. A new **Unobtainable Check** setting above the levels picks where to look: **Read Vanilla** (the game's own traders), **Read Modded** (your traders made here, switched on) or **Read Both**.
+- **Ctrl+C copies an ID**: hover any entry (item, offer, quest, trader, objective, reward, Progression tile or quest) and press Ctrl+C. No click needed; normal copy still works in text boxes.
+- The trader box at the bottom left only shows on the trader pages (Trader, Offers & Barters, Quests).
+- The header shows the editor's version only (the Level Gate version is in its tooltip).
+- **Trader page regrouped**: Profile (name, nickname, surname and location two to a row), In the Game (on / unlocked / flea / position / restock), Prices & Selling, Loyalty Levels.
+- **Long help texts moved behind a small ⓘ circle**: hover it to read. Short hints stay where they are. This applies on every page.
+- **Long lists**: quest rows are about a third shorter (one line per objective and for the rewards; full text on hover). The Stock column is short ("2 · max 1", details on hover). Cut-off cells show their full text on hover. The Modded column only shows when something in the list uses a mod. "Level follows an item" is a ⟲ next to the quest's level instead of a long tag.
+
 ## 2.0.7 (server mod only)
 - Quieter SPT server console. One line when the traders load, one when the item stats apply, plus any real warnings:
   `[ModernEditor] 2.0.7 ready — 5 traders · 41 offers · 21 quests (17 follow Level Gate levels) · details: user\mods\ModernEditor\logs\server_….log`

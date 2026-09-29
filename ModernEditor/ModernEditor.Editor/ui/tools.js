@@ -765,3 +765,15 @@ function showTip(dot) {
 document.addEventListener('mouseover', e => { const d = e.target.closest?.('.hint-i'); if (d) showTip(d); else if (tipBox && !tipBox.hidden) tipBox.hidden = true; });
 document.addEventListener('focusin', e => { if (e.target.matches?.('.hint-i')) showTip(e.target); });
 document.addEventListener('focusout', e => { if (e.target.matches?.('.hint-i') && tipBox) tipBox.hidden = true; });
+
+// 2.0.8: the sticky column headers sit right under the (sticky) toolbar + tag bar, whatever their height
+function measureToolbar() {
+  const page = document.getElementById('page'), tb = page?.querySelector(':scope > .toolbar.sticky');
+  if (!page || !tb) return;
+  let h = tb.offsetHeight;
+  const tags = tb.nextElementSibling;
+  if (tags && !tags.matches('.list') && getComputedStyle(tags).position === 'sticky') h += tags.offsetHeight;
+  page.style.setProperty('--tb-h', h + 'px');
+}
+new MutationObserver(() => requestAnimationFrame(measureToolbar)).observe(document.documentElement, { childList: true, subtree: true });
+addEventListener('resize', measureToolbar);

@@ -9,7 +9,7 @@ no PR open). Rules and the build / tuning method are in `CLAUDE.md`.
 |---|---|---|
 | LevelGate plugin / server | 1.6.3 | Frozen: do not touch without the user's go-ahead |
 | LevelGate Progression | **1.0.0** | Sent (full package), untested in game. 0.9.95 tested: dials tuned from the log, inspect warm-up works (24 ms, background) |
-| Modern Editor (editor exe) | 2.0.6 | Sent and in use |
+| Modern Editor (editor exe) | 2.0.8 | Sent, untested on Windows (UI checked in the browser mock) |
 | Modern Editor (server mod) | 2.0.7 | Sent: compact SPT console output |
 
 ## Done recently
@@ -84,6 +84,15 @@ Decor Noise 55, Micro Labels 60, Flourish 65, Border Fade 70, Ambient Light 140 
 - `GameItems.Facts` / `GameAttributes` cached per tpl (copies returned). `Feature` logs `pick <tpl>: N ms (item data, stat rows, rest)`
   when ≥ 25 ms: use that to decide whether pooling the stat rows (Destroy + rebuild every pick) is still worth doing.
 - Exit: 0.9.99 log shows `quit: done (1 ms)`: the exit freeze is not ours.
+
+## Modern Editor 2.0.8
+- Obtainable / UNOBTAINABLE on Progression tiles: vanilla from database/traders/*/assort.json (`ItemDatabase.GameOffers`,
+  sent as `ob` / `ot` per item), modded from `usedIndex()` (switched-on traders: offers + quest rewards). Setting
+  `S.ui.progObtain` (vanilla / modded / both). NB items.js has its own `S` (not app.js's): pass settings in explicitly.
+- Ctrl+C over any entry copies its ID (tools.js `hoveredId`). Trader box (#me) only on trader pages (`navOn`).
+- Long `.hint`s (> 70 chars) are auto-tucked behind an ⓘ (tools.js `tuckHints`, MutationObserver) on every page.
+- Cloud build of the editor works: `dotnet publish … -r win-x64 -p:SelfContained=false -p:PublishSingleFile=true -p:EnableWindowsTargeting=true`
+  (without SelfContained=false it bundles the runtime: 118 MB).
 
 ## In progress / open
 

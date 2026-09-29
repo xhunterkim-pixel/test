@@ -364,7 +364,7 @@ public sealed class ItemDatabase
                                 if (anyItem) barter = true; else money = true;
                             }
                         if (!barter && !money) money = true; // no price listed: still sold
-                        var have = GameOffers.TryGetValue(tpl, out var h) ? h : (false, false, new SortedSet<string>());
+                        var have = GameOffers.TryGetValue(tpl, out var h) ? h : (Barter: false, Money: false, Traders: new SortedSet<string>());
                         have.Traders.Add(trader);
                         GameOffers[tpl] = (have.Barter || barter, have.Money || money, have.Traders);
                     }

@@ -751,3 +751,13 @@ body.no-help .hint { display: none; }
 .fgrid .field input[type=number] { max-width: 160px; }
 @media (max-width: 1350px) { .fgrid { grid-template-columns: 1fr; } }
 .trader-page .restock-row .range-line input { max-width: 110px; }
+
+/* 2.0.8: long lists: the column headers stay under the toolbar while scrolling */
+#page .list > .list-head { position: sticky; top: var(--tb-h, 52px); z-index: 1; background: rgba(18, 18, 18, var(--panel-alpha)); }
+
+/* 2.0.8: long quest lists: each objective / reward on one line (full text on hover), rewards in one row that cuts off,
+   so a quest is ~3 lines tall instead of 8 */
+.list[data-list=quests] .boxes .box { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.list[data-list=quests] .row .boxes { margin-top: 3px; gap: 3px 5px; }
+.list[data-list=quests] .row .text > .boxes:last-child { flex-wrap: nowrap; overflow: hidden; }
+.list[data-list=quests] .row .text > .boxes:last-child .box { flex: none; max-width: 60%; }
