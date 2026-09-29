@@ -54,6 +54,11 @@ namespace LevelGate.Progression
             public static bool XpFillGreen => (ProgressionPlugin.TestCurrentXpColour?.Value ?? XpFillColour.Orange) == XpFillColour.Green;
             public static float SweepXpBacking => On ? Pct(ProgressionPlugin.TestWallXpBacking, 100) : 0f;
             public static float SweepXpHeight => On ? (ProgressionPlugin.TestWallXpLift?.Value ?? 44) : 44f;
+            // 0.9.97: left / right fades (built with the screen)
+            public static bool FadeCardLine => On && (ProgressionPlugin.TestFadeCardLine?.Value ?? true);
+            public static bool FadeSectionHead => On && (ProgressionPlugin.TestFadeSectionHead?.Value ?? true);
+            public static bool FadeMeters => On && (ProgressionPlugin.TestFadeMeters?.Value ?? true);
+            public static bool FadeXpBar => On && (ProgressionPlugin.TestFadeXpBar?.Value ?? true);
             public static bool BigXpDuringSweep => !On || (ProgressionPlugin.TestBigXpDuringSweep?.Value ?? true);
             public static float SubtitleAlpha => Pct(ProgressionPlugin.TestHeroSubtitleOpacity, 70);
             public static float AmbientLightK => On ? Pct(ProgressionPlugin.TestAmbientLight, 140) : 1f;

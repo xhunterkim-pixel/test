@@ -1248,6 +1248,25 @@ namespace LevelGate.Progression
             return _hgrad = Sprite.Create(tex, new Rect(0, 0, w, 2), new Vector2(.5f, .5f));
         }
 
+        private static readonly Sprite[] _ramp = new Sprite[2];
+        /// <summary>0.9.97: a gentle ramp (30% at one end, full at the other), for fills and lines that should fade without
+        /// disappearing. Default: full on the right; fadeRight: full on the left, fading out to the right. (Not flipped
+        /// with a negative scale: that would mirror the image's children too.)</summary>
+        public static Sprite RampFade(bool fadeRight = false)
+        {
+            int i = fadeRight ? 1 : 0;
+            if (_ramp[i] != null) return _ramp[i];
+            const int w = 128;
+            var tex = new Texture2D(w, 2, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Clamp };
+            for (int x = 0; x < w; x++)
+            {
+                float u = x / (w - 1f); if (fadeRight) u = 1 - u;
+                var c = new Color(1, 1, 1, Mathf.Lerp(.3f, 1f, Mathf.SmoothStep(0, 1, u))); tex.SetPixel(x, 0, c); tex.SetPixel(x, 1, c);
+            }
+            tex.Apply();
+            return _ramp[i] = Sprite.Create(tex, new Rect(0, 0, w, 2), new Vector2(.5f, .5f));
+        }
+
         /// <summary>A soft round glow (white in the middle, see-through at the edge) — tint it for corner bloom.</summary>
         public static Sprite Radial()
         {

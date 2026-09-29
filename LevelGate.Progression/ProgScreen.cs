@@ -495,11 +495,11 @@ namespace LevelGate.Progression
             _focusXp = xp;
             // Tarkov's bars: a dark track, a thin 1 px outline, a light grey fill (orange stays for "you": the level square)
             var bar = Ui.Rect(right, "Bar", new Vector2(0, 1), new Vector2(1, 1), new Vector2(0, -58), new Vector2(0, -46));
-            Ui.Img(bar, Ui.Hex("#55595b"));
+            Ui.Img(bar, Ui.Hex("#55595b"), Polish.FadeXpBar ? Ui.RampFade(true) : null); // 0.9.97: the outline fades out to the right
             var barIn = Ui.Fill(bar, "In", 1);
             Ui.Img(barIn, Ui.Hex("#101112", .9f));
             _xpFill = Ui.Rect(barIn, "Fill", Vector2.zero, new Vector2(0, 1), new Vector2(2, 2), new Vector2(0, -2));
-            Ui.Img(_xpFill, XpFillColor);
+            Ui.Img(_xpFill, XpFillColor, Polish.FadeXpBar ? Ui.RampFade() : null); // 0.9.97: brightest at the fill's end
             _xpBarIn = barIn;
             BuildXpEdge();
             _xpText = Ui.Label(Ui.Rect(right, "Exp", new Vector2(0, 1), new Vector2(1, 1), new Vector2(0, -44), new Vector2(0, -18)), "Text", "", THero, Ui.Hex("#b9c0c3"), TextAnchor.MiddleLeft, true);
@@ -1181,10 +1181,10 @@ namespace LevelGate.Progression
                 var m = Ui.Rect(cell, "Meter", Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
                 var mle = m.gameObject.AddComponent<LayoutElement>();
                 mle.minHeight = mle.preferredHeight = 3;
-                Ui.Img(m, Ui.Hex("#1f272a"));
+                Ui.Img(m, Ui.Hex("#1f272a"), Polish.FadeMeters ? Ui.RampFade(true) : null); // 0.9.97: the track fades out to the right
                 frac = Mathf.Clamp(frac, .03f, 1f);
                 var fill = Ui.Rect(m, "Fill", Vector2.zero, new Vector2(frac, 1), Vector2.zero, Vector2.zero);
-                Ui.Img(fill, Ui.Hex("#9aa3a6"));
+                Ui.Img(fill, Polish.FadeMeters ? Ui.Hex("#c4cacc") : Ui.Hex("#9aa3a6"), Polish.FadeMeters ? Ui.RampFade() : null); // brightest at its end
                 float was = _lastMeter.TryGetValue(label, out var lm) ? lm : 0;
                 _lastMeter[label] = frac;
                 if (!Motion.Still)
@@ -2074,6 +2074,11 @@ namespace LevelGate.Progression
             Color face = Ui.Hex("#232a2d", .97f), faceHover = Ui.Hex("#c4c9cb"), ink = Ui.Hex("#d0d5d7"), inkHover = Ui.Hex("#15191b");
             Color dim = Ui.Hex("#7d8588"), dimHover = Ui.Hex("#3a4245"), chevInk = Ui.Hex("#aab2b5");
             var tabFace = Ui.Img(head, face, null, true);
+            if (Polish.FadeSectionHead)
+            {
+                // 0.9.97: the bar fades out towards the right (a see-through base keeps it a bar); the face is the hover target
+                tabFace.sprite = Ui.RampFade(true);
+            }
             var stripes = Ui.Img(Ui.Fill(head, "Stripes"), new Color(1, 1, 1, .05f), Ui.VStripes()); // like CoD's BONUS bar
             stripes.type = Image.Type.Tiled; stripes.raycastTarget = false; Ui.Detail(stripes, .05f);
             var top = Ui.Img(Ui.Rect(head, "Top", new Vector2(0, 1), Vector2.one, new Vector2(0, -1), Vector2.zero), Ui.Hex("#3f494d"));
@@ -3917,7 +3922,7 @@ namespace LevelGate.Progression
                 _gloss.raycastTarget = false; _gloss.enabled = false; Ui.Detail(_gloss, .2f * Polish.PanelLight, false);
                 _curScan = Ui.Img(Ui.Fill(inner, "Scan"), Ui.Hex(Orange, .045f), Ui.Scanlines());
                 _curScan.type = Image.Type.Tiled; _curScan.raycastTarget = false; _curScan.enabled = false; Ui.Detail(_curScan, .045f);
-                _cur = Ui.Img(Ui.Rect(inner, "Current", new Vector2(0, 1), Vector2.one, new Vector2(10, -3), Vector2.zero), Ui.Hex(Orange));
+                _cur = Ui.Img(Ui.Rect(inner, "Current", new Vector2(0, 1), Vector2.one, new Vector2(10, -3), Vector2.zero), Ui.Hex(Orange), Polish.FadeCardLine ? Ui.RampFade() : null); // 0.9.97: fades out to the left
                 // your level: MW's "LEVEL_ACTIVE" system tag top-right, and a crosshair tick on the card's left edge
                 _activeTag = Ui.Label(Ui.Rect(inner, "Active", new Vector2(.45f, 1), Vector2.one, new Vector2(0, -12), new Vector2(-12, -3)), "Text", "", 8.5f, Ui.Hex(Orange, .85f * Polish.MicroK), TextAnchor.MiddleRight, false, 1.5f);
                 ((Graphic)_activeTag).raycastTarget = false;

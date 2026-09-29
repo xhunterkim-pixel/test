@@ -26,7 +26,7 @@ namespace LevelGate.Progression
         public const string Guid = "com.kkyangg.levelgate.progression";
         public const string Name = "LevelGate Progression";
         // MAJOR.MINOR.PATCH — see CHANGELOG.md
-        public const string Version = "0.9.96";
+        public const string Version = "0.9.97";
 
         internal static ProgressionPlugin Instance;
         internal static ConfigEntry<KeyboardShortcut> OpenKey;
@@ -48,6 +48,7 @@ namespace LevelGate.Progression
         internal static ConfigEntry<int> TestLockedBlueprint, TestCurrentXpFill, TestWallXpBacking, TestWallXpLift;
         internal static ConfigEntry<ProgScreen.XpFillColour> TestCurrentXpColour;
         internal static ConfigEntry<bool> TestBigXpDuringSweep;
+        internal static ConfigEntry<bool> TestFadeCardLine, TestFadeSectionHead, TestFadeMeters, TestFadeXpBar; // 0.9.97
         internal static bool Mw(int n) => TestMw[n]?.Value ?? true;
         internal static ConfigEntry<float> TestRevealTime;
         internal static ConfigEntry<ProgScreen.LoadInStyle> TestRevealStyle;
@@ -315,9 +316,19 @@ namespace LevelGate.Progression
                 "How high the sweep's +XP sits above the line, in px (0.9.94 = 44; the card names are at about that height).", 195, new AcceptableValueRange<int>(10, 160)));
             TestBigXpDuringSweep = Config.Bind(T, "BigXpDuringSweep", true, Desc(
                 "Also show the big +XP over the item picture while the sweep plays (0.9.94 = on). MW4 shows only the one on the sweep.", 194));
+            // 0.9.97: MW4-style left / right fades on flat elements (from the user's close-ups)
+            TestFadeCardLine = Config.Bind(T, "FadeCardLine", true, Desc(
+                "The current card's top line fades out towards the left (full on the right), like MW4's card headers. Off = a flat line (0.9.96).", 193));
+            TestFadeSectionHead = Config.Bind(T, "FadeSectionHead", true, Desc(
+                "The reward list's category bars (WEAPONS, ARMOR…) fade out towards the right. Off = flat bars (0.9.96).", 192));
+            TestFadeMeters = Config.Bind(T, "FadeStatMeters", true, Desc(
+                "The meters under FIRE RATE / ERGONOMICS / RECOIL: the fill brightens towards its end, the track fades out to the right. Off = flat (0.9.96).", 191));
+            TestFadeXpBar = Config.Bind(T, "FadeXpBar", true, Desc(
+                "The XP bar at the top: the fill brightens towards its end, the outline fades out to the right. Off = flat (0.9.96).", 190));
             var polishDials = new HashSet<ConfigEntryBase> { TestNameShadow, TestNameShadowSoftness, TestNameShadowDistance, TestNewTag, TestPanelLight, TestCardOpacity, TestCardLockedOpacity, TestNameGlow, TestNameGlowSoftness, TestPolish, TestDecorNoise, TestMicroLabels, TestBorderFade, TestAmbient, TestQuietFx, TestFlourish, TestAmbientLight, TestLightHue,
                 TestCardRest, TestCardLocked, TestSmallText, TestNeutralPips, TestHeroSubtitle, TestHeroSubtitleOpacity, TestTipDelay,
-                TestLockedBlueprint, TestCurrentXpFill, TestCurrentXpColour, TestWallXpBacking, TestWallXpLift, TestBigXpDuringSweep };
+                TestLockedBlueprint, TestCurrentXpFill, TestCurrentXpColour, TestWallXpBacking, TestWallXpLift, TestBigXpDuringSweep,
+                TestFadeCardLine, TestFadeSectionHead, TestFadeMeters, TestFadeXpBar };
             var liveDials = new HashSet<ConfigEntryBase> { TestTipDelay, TestAmbient, TestQuietFx, TestFlourish, TestCurrentXpFill, TestCurrentXpColour, TestWallXpBacking, TestWallXpLift, TestBigXpDuringSweep };
             Config.SettingChanged += (_, a) =>
             {
@@ -435,7 +446,7 @@ namespace LevelGate.Progression
                 ["AmbientMotion"] = "Ambient Motion (%)", ["QuietDuringEffects"] = "Quiet During Effects", ["Flourish"] = "Flourish (%)", ["AmbientLight"] = "Ambient Light (%)",
                 ["LightColours"] = "Ambient Light Colours", ["CardRest"] = "Card Rest Opacity (%)", ["CardLocked"] = "Card Locked Opacity (%)", ["SmallText"] = "Small Text Minimum (px)",
                 ["NeutralPips"] = "Neutral Rank Pips", ["HeroSubtitle"] = "Line Under Name", ["HeroSubtitleOpacity"] = "Line Under Name Opacity (%)", ["TooltipDelay"] = "Tooltip Delay (s)", ["NameGlow"] = "Name Glow (%)", ["NameGlowSoftness"] = "Name Glow Softness (%)",
-                ["NameReflection"] = "Name Reflection (%)", ["NameReflectionSoftness"] = "Name Reflection Softness (%)", ["NameReflectionDistance"] = "Name Reflection Distance (%)", ["NewTagLook"] = "NEW Tag Look", ["NewTagStyle"] = "NEW Tag Look", ["LockedBlueprint"] = "Locked Card Blueprint (%)", ["CurrentXpFill"] = "Current Card XP Fill (%)", ["CurrentXpColour"] = "Current Card XP Fill Colour", ["SweepXpBacking"] = "Sweep +XP Backing (%)", ["SweepXpHeight"] = "Sweep +XP Height (px)", ["BigXpDuringSweep"] = "Big +XP During Sweep", ["PanelLight"] = "Panel Light (%)", ["CardOpacity"] = "Card Opacity (%)", ["CardLockedOpacity"] = "Locked Card Opacity (%)",
+                ["NameReflection"] = "Name Reflection (%)", ["NameReflectionSoftness"] = "Name Reflection Softness (%)", ["NameReflectionDistance"] = "Name Reflection Distance (%)", ["NewTagLook"] = "NEW Tag Look", ["NewTagStyle"] = "NEW Tag Look", ["LockedBlueprint"] = "Locked Card Blueprint (%)", ["CurrentXpFill"] = "Current Card XP Fill (%)", ["CurrentXpColour"] = "Current Card XP Fill Colour", ["SweepXpBacking"] = "Sweep +XP Backing (%)", ["SweepXpHeight"] = "Sweep +XP Height (px)", ["BigXpDuringSweep"] = "Big +XP During Sweep", ["FadeCardLine"] = "Fade: Current Card Top Line", ["FadeSectionHead"] = "Fade: Category Bars", ["FadeStatMeters"] = "Fade: Stat Meters", ["FadeXpBar"] = "Fade: XP Bar", ["PanelLight"] = "Panel Light (%)", ["CardOpacity"] = "Card Opacity (%)", ["CardLockedOpacity"] = "Locked Card Opacity (%)",
             };
             var titles = new Dictionary<string, string>
             {
@@ -447,7 +458,7 @@ namespace LevelGate.Progression
             // 0.9.91: the 0.9.9 dials are tuned (your values are the defaults: Ambient Motion 50, the line under the name off); being tried now:
             // 0.9.94: all tuned (your 0.9.93 values are the defaults)
             // 0.9.95 dials tuned in 0.9.96 (your log): NEW tag MW4, Locked Blueprint 0 (off), XP Fill 146, Orange, Sweep +XP Backing 100, Height 44, Big +XP During Sweep on
-            var testingNow = new HashSet<string>();
+            var testingNow = new HashSet<string> { "FadeCardLine", "FadeSectionHead", "FadeStatMeters", "FadeXpBar" }; // 0.9.97: from your close-ups
             var advanced = new HashSet<string> { "RefreshIcons", "UseGameSounds", "Vignette", "RedGlow", "BlurBackground", "HideMainMenu", "PatternMotion" };
             foreach (var kv in Config)
             {

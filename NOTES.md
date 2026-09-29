@@ -8,7 +8,7 @@ no PR open). Rules and the build / tuning method are in `CLAUDE.md`.
 | Thing | Version | Status |
 |---|---|---|
 | LevelGate plugin / server | 1.6.3 | Frozen: do not touch without the user's go-ahead |
-| LevelGate Progression | **0.9.96** | Sent (full package), untested in game. 0.9.95 tested: dials tuned from the log, inspect warm-up works (24 ms, background) |
+| LevelGate Progression | **0.9.97** | Sent (full package), untested in game. 0.9.95 tested: dials tuned from the log, inspect warm-up works (24 ms, background) |
 | Modern Editor (editor exe) | 2.0.6 | Sent and in use |
 | Modern Editor (server mod) | 2.0.7 | Sent: compact SPT console output |
 
@@ -59,6 +59,11 @@ Decor Noise 55, Micro Labels 60, Flourish 65, Border Fade 70, Ambient Light 140 
   no hard edge line (user: MW4 has none), a soft 60 px fade instead.
 - Rule from the user: a dial they set to 0 / off = they don't like the change.
 - Known: 545 ms hitch when the game's own Dogtag inspect window opens during the rank-up (game's 3D preview, not our code).
+
+## 0.9.97
+- Testing now (all default on): FadeCardLine, FadeSectionHead, FadeStatMeters, FadeXpBar (`Ui.RampFade(fadeRight)`: 30%→100% ramp;
+  never flip a parent with children using a negative scale, it mirrors their text / fills).
+- Still wanted from the user: MW4 close-ups of the same elements (they sent ours only).
 
 ## In progress / open
 
