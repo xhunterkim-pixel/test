@@ -1,4 +1,4 @@
-# LevelGate Progression (0.9.99, test build)
+# LevelGate Progression (1.0.0)
 
 A Call of Duty style **Progression** screen inside Tarkov's main menu. It adds a
 **PROGRESSION** button to the menu bar next to Character, Trading, Flea Market and the rest.
@@ -19,8 +19,13 @@ A Call of Duty style **Progression** screen inside Tarkov's main menu. It adds a
 - It works on its own and never changes LevelGate. It only **reads**
   `BepInEx\plugins\LevelGate\config\level_requirements.json`, and picks up changes to that file while the game runs.
 
+## 1.0.0
+- **The XP line on the level card is gone** (0.9.95–0.9.99), and so is its option. The locked-card blueprint you turned off in 0.9.95 is gone from the code too: each card builds about 30 fewer hidden pictures.
+- **Smoother item picks:** an item's stats and game attributes are worked out once and kept (they were read again, by reflection, on every click — the "slow frame … after: Feature" hitches in every log). If a pick still takes 25 ms or more, the log now says which part (`pick …: N ms (item data …, stat rows …, the rest …)`).
+- Your exit is clean: the 0.9.99 log ends with `quit: done (1 ms)`. Progression is finished 1 ms after the game starts closing, so a freeze after that is in the game or another mod.
+
 ## 0.9.99
-- **New option: F12 › Look & Graphics › XP Progress On Level Card** (on): your level's card fills with light up to your XP. Turn it off for a plain card.
+- (An "XP Progress On Level Card" option was added here and removed again in 1.0.0.)
 - **Game exit:** the log now says `quit: the game is closing` and `quit: done (N ms)` when you quit. Progression stops all its work at that point, saves its settings and closes its log. Nothing in its code waits on anything at exit, so if the game still freezes after `quit: done`, the freeze is in the game or another mod.
 - The CURRENTLY TESTING section is finished: the four fades (current card line, category bars, stat meters, XP bar) are on by default, as in your log, and the section is empty again.
 

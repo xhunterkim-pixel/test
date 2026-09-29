@@ -669,7 +669,26 @@ namespace LevelGate.Progression
 
         /// <summary>Opens the game's item inspect window. Tries every ItemUiContext.Inspect* that can take just the item.</summary>
         /// <summary>A few facts from the item's template (size, weight, damage…) for the details panel.</summary>
+        // 1.0.0: an item's facts / attributes never change: worked out once per item (they were redone, by reflection, on every
+        // pick — the "slow frame … after: Feature" hitches). Callers get a copy (they edit their list).
+        private static readonly Dictionary<string, List<(string Label, string Value)>> _factsCache = new Dictionary<string, List<(string, string)>>();
+        private static readonly Dictionary<string, List<(string Name, string Value, object Id)>> _attrCache = new Dictionary<string, List<(string, string, object)>>();
+
         public static List<(string Label, string Value)> Facts(string tpl)
+        {
+            if (tpl == null) return new List<(string, string)>();
+            if (!_factsCache.TryGetValue(tpl, out var have)) _factsCache[tpl] = have = FactsOf(tpl);
+            return new List<(string, string)>(have);
+        }
+
+        public static List<(string Name, string Value, object Id)> GameAttributes(string tpl)
+        {
+            if (tpl == null) return new List<(string, string, object)>();
+            if (!_attrCache.TryGetValue(tpl, out var have)) _attrCache[tpl] = have = GameAttributesOf(tpl);
+            return new List<(string, string, object)>(have);
+        }
+
+        private static List<(string Label, string Value)> FactsOf(string tpl)
         {
             var list = new List<(string, string)>();
             try
@@ -771,7 +790,7 @@ namespace LevelGate.Progression
         /// meds / stims: USE TIME, SKILL "ATTENTION"  Dur. 240sec (+30), HANDS TREMOR…): name, value and the attribute id (for
         /// its icon). Read from item.Attributes; the first item of each category is dumped to the log (verbose).
         /// </summary>
-        public static List<(string Name, string Value, object Id)> GameAttributes(string tpl)
+        private static List<(string Name, string Value, object Id)> GameAttributesOf(string tpl)
         {
             var list = new List<(string, string, object)>();
             try

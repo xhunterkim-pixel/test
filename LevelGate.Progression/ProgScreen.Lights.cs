@@ -34,7 +34,7 @@ namespace LevelGate.Progression
             TickReveal();
             TickBloom();
             TickSelection();
-            if (_cards != null) foreach (var c in _cards) { c?.TickFlood(); c?.TickMw4(); } // MW 2; 0.9.95 blueprint / XP fill
+            if (_cards != null) foreach (var c in _cards) c?.TickFlood(); // MW 2
             if (k <= 0) return;
             _lightPhase += Mathf.Min(Time.unscaledDeltaTime, .1f);
             float t = _lightPhase;

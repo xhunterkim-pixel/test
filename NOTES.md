@@ -8,7 +8,7 @@ no PR open). Rules and the build / tuning method are in `CLAUDE.md`.
 | Thing | Version | Status |
 |---|---|---|
 | LevelGate plugin / server | 1.6.3 | Frozen: do not touch without the user's go-ahead |
-| LevelGate Progression | **0.9.99** | Sent (full package), untested in game. 0.9.95 tested: dials tuned from the log, inspect warm-up works (24 ms, background) |
+| LevelGate Progression | **1.0.0** | Sent (full package), untested in game. 0.9.95 tested: dials tuned from the log, inspect warm-up works (24 ms, background) |
 | Modern Editor (editor exe) | 2.0.6 | Sent and in use |
 | Modern Editor (server mod) | 2.0.7 | Sent: compact SPT console output |
 
@@ -77,6 +77,13 @@ Decor Noise 55, Micro Labels 60, Flourish 65, Border Fade 70, Ambient Light 140 
 - Exit freeze reported: the 0.9.98 log shows no errors and ends at "game screen changed to None" (quit started). Nothing in our code
   blocks at exit (background jobs are short one-offs). 0.9.99 adds `Application.quitting` → `quit: the game is closing` /
   `quit: done (N ms)`, stops Update / LateUpdate, saves the config, closes Progression.log. Next log tells whether it's ours.
+
+## 1.0.0
+- Removed for good (user: "not good", no option): the current card's XP line / fill (0.9.95–0.9.99) and the locked blueprint (0.9.95, never used).
+  Don't bring them back.
+- `GameItems.Facts` / `GameAttributes` cached per tpl (copies returned). `Feature` logs `pick <tpl>: N ms (item data, stat rows, rest)`
+  when ≥ 25 ms: use that to decide whether pooling the stat rows (Destroy + rebuild every pick) is still worth doing.
+- Exit: 0.9.99 log shows `quit: done (1 ms)`: the exit freeze is not ours.
 
 ## In progress / open
 

@@ -8,7 +8,7 @@ SPT (Single Player Tarkov 4.1.6) mods and tools. Read `NOTES.md` for where thing
 |---|---|---|
 | `LevelGate/` | BepInEx client plugin: locks items by player level (v1.6.3) | net472, `SptDir` |
 | `LevelGate.Server/` | SPT server mod that goes with LevelGate | net10.0 |
-| `LevelGate.Progression/` | BepInEx client plugin: the CoD / MW4-style **Progression** screen in the main menu (v0.9.94) | net472, `SptDir` (default `C:\SPT`) |
+| `LevelGate.Progression/` | BepInEx client plugin: the CoD / MW4-style **Progression** screen in the main menu (v1.0.0) | net472, `SptDir` (default `C:\SPT`) |
 | `ModernEditor/ModernEditor.Editor/` | Windows editor app (WinForms + WebView2): traders, quests, Level Limits, Progression, Item Stats. UI in `ui/` (html/js/css), embedded as resources | net10.0-windows, `Build-Editor.bat` |
 | `ModernEditor/ModernEditor.Server/` | SPT server mod `ModernEditor.dll` (custom traders, item stats, quest levels following Level Gate) | net10.0, `Build-Server.bat`, `SptServerDir` |
 | `ModernEditor/Shared/` | `TraderModels.cs`, shared by editor and server | — |

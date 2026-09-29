@@ -48,10 +48,7 @@ namespace LevelGate.Progression
             public static float NameGlowSoft => Pct(ProgressionPlugin.TestNameShadowSoftness, 26);
             public static float NameGlowDrop => Pct(ProgressionPlugin.TestNameShadowDistance, 47);
             public static NewTagLook NewTag => ProgressionPlugin.TestNewTag?.Value ?? NewTagLook.MW4; // 0.9.96: your pick
-            // 0.9.95 (read live): MW4's locked blueprint, the current card's XP fill, the sweep's +XP
-            public static float BlueprintK => On ? Pct(ProgressionPlugin.TestLockedBlueprint, 0) : 0f;
-            public static float XpFillK => On && (ProgressionPlugin.CardXpLine?.Value ?? true) ? Pct(ProgressionPlugin.TestCurrentXpFill, 146) : 0f; // 0.9.99: F12 › XP Progress On Level Card
-            public static bool XpFillGreen => (ProgressionPlugin.TestCurrentXpColour?.Value ?? XpFillColour.Orange) == XpFillColour.Green;
+            // 0.9.95 (read live): the sweep's +XP
             public static float SweepXpBacking => On ? Pct(ProgressionPlugin.TestWallXpBacking, 100) : 0f;
             public static float SweepXpHeight => On ? (ProgressionPlugin.TestWallXpLift?.Value ?? 44) : 44f;
             // 0.9.97: left / right fades (built with the screen)
@@ -77,7 +74,6 @@ namespace LevelGate.Progression
         public enum HeroLine { Description, FullName, Off }
         public enum LightHue { Mixed, Rank }
         public enum NewTagLook { Mw4Dark, MW4, Old }
-        public enum XpFillColour { Orange, Green }
 
         // ---------------------------------------------------------------- MW4 frames: strong in the middle, fading at the ends
 

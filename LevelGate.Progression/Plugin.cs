@@ -26,7 +26,7 @@ namespace LevelGate.Progression
         public const string Guid = "com.kkyangg.levelgate.progression";
         public const string Name = "LevelGate Progression";
         // MAJOR.MINOR.PATCH — see CHANGELOG.md
-        public const string Version = "0.9.99";
+        public const string Version = "1.0.0";
 
         internal static ProgressionPlugin Instance;
         internal static ConfigEntry<KeyboardShortcut> OpenKey;
@@ -45,8 +45,7 @@ namespace LevelGate.Progression
         internal static ConfigEntry<ProgScreen.LightHue> TestLightHue;
         internal static ConfigEntry<ProgScreen.NewTagLook> TestNewTag;
         // 0.9.95 (F12 > CURRENTLY TESTING): from the user's MW4 crops
-        internal static ConfigEntry<int> TestLockedBlueprint, TestCurrentXpFill, TestWallXpBacking, TestWallXpLift;
-        internal static ConfigEntry<ProgScreen.XpFillColour> TestCurrentXpColour;
+        internal static ConfigEntry<int> TestWallXpBacking, TestWallXpLift;
         internal static ConfigEntry<bool> TestBigXpDuringSweep;
         internal static ConfigEntry<bool> TestFadeCardLine, TestFadeSectionHead, TestFadeMeters, TestFadeXpBar; // 0.9.97
         internal static bool Mw(int n) => TestMw[n]?.Value ?? true;
@@ -74,7 +73,7 @@ namespace LevelGate.Progression
         internal static ConfigEntry<bool> MenuShortcut;
         internal static ConfigEntry<bool> RefreshIcons;
         internal static ConfigEntry<int> LastSeenLevel;
-        internal static ConfigEntry<bool> XpAnimation, CardXpLine;
+        internal static ConfigEntry<bool> XpAnimation;
         internal static ConfigEntry<float> SoundVolume;
         internal static ConfigEntry<bool> GameSounds;
         internal static ConfigEntry<float> Scratches, Vignette, RedGlow;
@@ -135,9 +134,6 @@ namespace LevelGate.Progression
             XpAnimation = Config.Bind(Gfx, "XpAnimation", true, Desc(
                 "After you gain experience (a raid, a quest…), the next time you open the screen the XP bar fills up from where you last saw it: " +
                 "level ups, the new level number, a new rank emblem. Click or Space skips it. Off: the screen just shows your current XP.", 95));
-            // 0.9.99: the XP fill on your level's card (0.9.95), as a normal option
-            CardXpLine = Config.Bind(Gfx, "CardXpProgress", true, Desc(
-                "Your level's card fills with light from the left up to your XP towards the next level, with a faint moving edge. Off: a plain card.", 94));
             Detailing = Config.Bind(Gfx, "UIDetailing", 100, Desc(
                 "How much surface detail the screen has, all in one: scratches, smudges and fingerprints, film grain, " +
                 "corner marks, edge lights, dither, scanlines, the reflection on the picked card, the coloured bloom and dotted lights on the picked card, the bloom around your card and behind the rank emblems, the XP bar's tracer. " +
@@ -303,12 +299,6 @@ namespace LevelGate.Progression
             // 0.9.95: a new key (NewTagLook's saved MW4 would stick): MW4 Dark is the user's MW4 crop — dark see-through box, yellow text
             TestNewTag = Config.Bind(T, "NewTagStyle", ProgScreen.NewTagLook.MW4, Desc(
                 "The NEW tag: Mw4Dark (MW4's crop: a dark see-through box, bright yellow NEW, thin gold outline, soft glow), MW4 (0.9.92's gold box fading to the left) or Old (0.9.91's outlined box).", 205));
-            TestLockedBlueprint = Config.Bind(T, "LockedBlueprint", 0, Desc(
-                "Locked cards, like MW4: the item as a faint cold blueprint with its picture streaked sideways, in % (0 = 0.9.94's dimmed picture).", 199, new AcceptableValueRange<int>(0, 200)));
-            TestCurrentXpFill = Config.Bind(T, "CurrentXpFill", 146, Desc(
-                "Your current level's card fills with light from the left up to your XP towards the next level, with a moving edge, like MW4, in % (0 = off).", 198, new AcceptableValueRange<int>(0, 200)));
-            TestCurrentXpColour = Config.Bind(T, "CurrentXpColour", ProgScreen.XpFillColour.Orange, Desc(
-                "That fill's colour: Orange (the screen's colour for your level) or Green (MW4's).", 197));
             TestWallXpBacking = Config.Bind(T, "SweepXpBacking", 100, Desc(
                 "The +XP riding the light sweep gets a soft dark backing so it stays readable over card names, in % (0 = none, like 0.9.94).", 196, new AcceptableValueRange<int>(0, 100)));
             TestWallXpLift = Config.Bind(T, "SweepXpHeight", 44, Desc(
@@ -326,9 +316,9 @@ namespace LevelGate.Progression
                 "The XP bar at the top: the fill brightens towards its end, the outline fades out to the right. Off = flat (0.9.96).", 190));
             var polishDials = new HashSet<ConfigEntryBase> { TestNameShadow, TestNameShadowSoftness, TestNameShadowDistance, TestNewTag, TestPanelLight, TestCardOpacity, TestCardLockedOpacity, TestNameGlow, TestNameGlowSoftness, TestPolish, TestDecorNoise, TestMicroLabels, TestBorderFade, TestAmbient, TestQuietFx, TestFlourish, TestAmbientLight, TestLightHue,
                 TestCardRest, TestCardLocked, TestSmallText, TestNeutralPips, TestHeroSubtitle, TestHeroSubtitleOpacity, TestTipDelay,
-                TestLockedBlueprint, TestCurrentXpFill, TestCurrentXpColour, TestWallXpBacking, TestWallXpLift, TestBigXpDuringSweep,
+                TestWallXpBacking, TestWallXpLift, TestBigXpDuringSweep,
                 TestFadeCardLine, TestFadeSectionHead, TestFadeMeters, TestFadeXpBar };
-            var liveDials = new HashSet<ConfigEntryBase> { TestTipDelay, TestAmbient, TestQuietFx, TestFlourish, TestCurrentXpFill, TestCurrentXpColour, TestWallXpBacking, TestWallXpLift, TestBigXpDuringSweep };
+            var liveDials = new HashSet<ConfigEntryBase> { TestTipDelay, TestAmbient, TestQuietFx, TestFlourish, TestWallXpBacking, TestWallXpLift, TestBigXpDuringSweep };
             Config.SettingChanged += (_, a) =>
             {
                 var entry = a?.ChangedSetting;
@@ -429,7 +419,7 @@ namespace LevelGate.Progression
                 ["OpenScreenKey"] = "Open Screen Key", ["MenuBarButton"] = "Menu Bar Button", ["MainMenuShortcut"] = "Main Menu Shortcut",
                 ["HideMainMenu"] = "Hide Main Menu While Open", ["BlurBackground"] = "Blur Background", ["SoundVolume"] = "Sound Volume",
                 ["UseGameSounds"] = "Use Game Sounds", ["CharacterEmblem"] = "Rank Emblem On Character Screen", ["TextSize"] = "Text Size (%)", ["ReduceMotion"] = "Reduce Motion",
-                ["Quality"] = "Picture Quality", ["XpAnimation"] = "Level Up Animation", ["CardXpProgress"] = "XP Progress On Level Card", ["RefreshIcons"] = "Redraw All Item Pictures",
+                ["Quality"] = "Picture Quality", ["XpAnimation"] = "Level Up Animation", ["RefreshIcons"] = "Redraw All Item Pictures",
                 ["Pattern"] = "Background Pattern", ["PatternMotion"] = "Pattern Animation Speed", ["UIDetailing"] = "UI Detailing (%)", ["HoverGlitch"] = "Hover Glitch (%)", ["RevealTime"] = "Picture Load-In Time (s)",
                 ["RevealRandom"] = "Picture Load-In Randomness (%)", ["RevealStyle"] = "Picture Load-In Style", ["RankUpStyle"] = "Rank Up Style", ["GroupSimilarItems"] = "Group Similar Items", ["BloomOpacity"] = "Item Bloom Opacity (%)", ["BloomSize"] = "Item Bloom Size (%)", ["LightWall"] = "Light Wall Brightness (%)", ["MotionSpeed"] = "Motion Speed (%)", ["SelectShine"] = "Selection Shine (%)", ["SelectShineWidth"] = "Selection Shine Width (%)", ["Stagger"] = "Stagger (ms)",
                 ["MW01"] = "MW 1 · Additive Glow", ["MW02"] = "MW 2 · Card Flood", ["MW03"] = "MW 3 · Level Numbers Glow", ["MW04"] = "MW 4 · XP Counter On Light Wall",
@@ -445,7 +435,7 @@ namespace LevelGate.Progression
                 ["AmbientMotion"] = "Ambient Motion (%)", ["QuietDuringEffects"] = "Quiet During Effects", ["Flourish"] = "Flourish (%)", ["AmbientLight"] = "Ambient Light (%)",
                 ["LightColours"] = "Ambient Light Colours", ["CardRest"] = "Card Rest Opacity (%)", ["CardLocked"] = "Card Locked Opacity (%)", ["SmallText"] = "Small Text Minimum (px)",
                 ["NeutralPips"] = "Neutral Rank Pips", ["HeroSubtitle"] = "Line Under Name", ["HeroSubtitleOpacity"] = "Line Under Name Opacity (%)", ["TooltipDelay"] = "Tooltip Delay (s)", ["NameGlow"] = "Name Glow (%)", ["NameGlowSoftness"] = "Name Glow Softness (%)",
-                ["NameReflection"] = "Name Reflection (%)", ["NameReflectionSoftness"] = "Name Reflection Softness (%)", ["NameReflectionDistance"] = "Name Reflection Distance (%)", ["NewTagLook"] = "NEW Tag Look", ["NewTagStyle"] = "NEW Tag Look", ["LockedBlueprint"] = "Locked Card Blueprint (%)", ["CurrentXpFill"] = "Current Card XP Fill (%)", ["CurrentXpColour"] = "Current Card XP Fill Colour", ["SweepXpBacking"] = "Sweep +XP Backing (%)", ["SweepXpHeight"] = "Sweep +XP Height (px)", ["BigXpDuringSweep"] = "Big +XP During Sweep", ["FadeCardLine"] = "Fade: Current Card Top Line", ["FadeSectionHead"] = "Fade: Category Bars", ["FadeStatMeters"] = "Fade: Stat Meters", ["FadeXpBar"] = "Fade: XP Bar", ["PanelLight"] = "Panel Light (%)", ["CardOpacity"] = "Card Opacity (%)", ["CardLockedOpacity"] = "Locked Card Opacity (%)",
+                ["NameReflection"] = "Name Reflection (%)", ["NameReflectionSoftness"] = "Name Reflection Softness (%)", ["NameReflectionDistance"] = "Name Reflection Distance (%)", ["NewTagLook"] = "NEW Tag Look", ["NewTagStyle"] = "NEW Tag Look", ["SweepXpBacking"] = "Sweep +XP Backing (%)", ["SweepXpHeight"] = "Sweep +XP Height (px)", ["BigXpDuringSweep"] = "Big +XP During Sweep", ["FadeCardLine"] = "Fade: Current Card Top Line", ["FadeSectionHead"] = "Fade: Category Bars", ["FadeStatMeters"] = "Fade: Stat Meters", ["FadeXpBar"] = "Fade: XP Bar", ["PanelLight"] = "Panel Light (%)", ["CardOpacity"] = "Card Opacity (%)", ["CardLockedOpacity"] = "Locked Card Opacity (%)",
             };
             var titles = new Dictionary<string, string>
             {

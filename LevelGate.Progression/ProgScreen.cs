@@ -620,10 +620,7 @@ namespace LevelGate.Progression
             else if (level >= ProgData.MaxLevel && level > 0) { _xpTag.gameObject.SetActive(false); Ui.SetText(_xpText, $"<color={Orange}>MAX LEVEL</color>"); }
             else SetXpText("<color=#6f777a>— / —</color>"); // the game's XP table wasn't found: dashes, but the EXP tag stays
             _xpFill.anchorMax = new Vector2(frac, 1);
-            _xpFrac = frac; _xpFracLevel = level; // 0.9.95: the current card's fill
         }
-        private static float _xpFrac;
-        private static int _xpFracLevel = -1;
 
         private static float _xpTextWidth;
 
@@ -2906,6 +2903,8 @@ namespace LevelGate.Progression
                 MarkSelectedTile();
                 return;
             }
+            var sw = System.Diagnostics.Stopwatch.StartNew(); // 1.0.0: which part of a pick costs what (logged when it's slow)
+            long tData = 0, tRows = 0;
             var g = ProgData.Groups.FirstOrDefault(x => x.Key == it.Group);
             int player = Me;
             bool met = player <= 0 || it.Level <= player;
@@ -2919,7 +2918,9 @@ namespace LevelGate.Progression
             if (_microStage != null) Ui.SetText(_microStage, $"ID - {it.Tpl.Substring(Mathf.Max(0, it.Tpl.Length - 6)).ToUpperInvariant()}  //  LV {it.Level:00}");
             Ui.SetSize(_featName, it.Name.Length > 34 ? TTitle - 2 : it.Name.Length > 26 ? TTitle : THero); // long names: smaller, not a lone word on line 2
             // stats: damage / penetration / armor class / resource big; weight / size / caliber small (nothing invented, nothing dropped)
+            long t0 = sw.ElapsedTicks;
             var facts = GameItems.Facts(it.Tpl);
+            tData += sw.ElapsedTicks - t0;
             var majorKeys = new[] { "Container size", "Damage", "Penetration", "Armor class", "Resource", "Energy", "Hydration", "Fire rate", "Ergonomics", "Recoil" };
             // armor: durability sits next to the class as a big stat (the class alone looked lost)
             if (facts.Any(f => f.Label == "Armor class")) majorKeys = majorKeys.Concat(new[] { "Durability" }).ToArray();
@@ -2936,11 +2937,14 @@ namespace LevelGate.Progression
             // one grid of equal columns for every row (3, or more only if there are more big stats): the big stats never get
             // squeezed ("600 rpm" ran into ERGONOMICS at 4 columns)
             int cols = Mathf.Max(3, majors.Count);
+            t0 = sw.ElapsedTicks;
             foreach (var f in majors) Stat(_majorRow, f.Label, f.Value, true);
             for (int c = majors.Count; c < cols && majors.Count > 0; c++) Stat(_majorRow, "", "", true);
             // the small stats: the game's inspect strips, two to a line; a long one (or the odd one out) gets the whole line
             var strips = minors.Select(f => (f.Label, f.Value, (Sprite)null, false)).ToList();
             // grenades, meds and stims: the game's own inspect rows too (explosion delay, fragments; use time, effects, side effects)
+            tRows += sw.ElapsedTicks - t0;
+            t0 = sw.ElapsedTicks;
             if (it.Group == "Grenades" || it.Group == "Medical")
             {
                 var have = new HashSet<string>(facts.Select(f => f.Label.ToUpperInvariant()));
@@ -2956,6 +2960,8 @@ namespace LevelGate.Progression
             if (it.Group == "Weapons")
                 foreach (var (name, value, id) in GameItems.GameAttributes(it.Tpl))
                     if (WeaponExtras.Contains(id?.ToString() ?? "")) strips.Add((name, value, StatIcons.OfId(id), true));
+            tData += sw.ElapsedTicks - t0;
+            t0 = sw.ElapsedTicks;
             for (int i = 0; i < strips.Count;)
             {
                 var line = Row(_minorRow, "Line", S1);
@@ -2965,6 +2971,7 @@ namespace LevelGate.Progression
                 if (pair) StatStrip(line, strips[i + 1].Item1, strips[i + 1].Item2, strips[i + 1].Item3, strips[i + 1].Item4);
                 i += pair ? 2 : 1;
             }
+            tRows += sw.ElapsedTicks - t0;
             _minorRow.gameObject.SetActive(strips.Count > 0);
             _majorRow.gameObject.SetActive(majors.Count > 0);
             Ui.SetText(_featDesc, ProgData.DescriptionOf(it.Tpl));
@@ -3011,6 +3018,9 @@ namespace LevelGate.Progression
             if (kept != null) { _featIcon = null; _featPic.sprite = kept; _featPic.enabled = true; _featShort.gameObject.SetActive(false); FitFeat(kept); LogSharpness(kept, "kept"); PictureShown(); }
             else if (!_loading) { _featWantTpl = it.Tpl; _featWantScale = featScale; _featWantAt = Time.unscaledTime + (Browsing ? .3f : .12f); } // drawn a moment later (it cost up to 136 ms right in the click)
             MarkSelectedTile();
+            double ms(long ticks) => ticks * 1000.0 / System.Diagnostics.Stopwatch.Frequency;
+            if (sw.ElapsedMilliseconds >= 25)
+                L.Debug($"pick {it.Tpl}: {sw.ElapsedMilliseconds} ms (item data {ms(tData):0}, stat rows {ms(tRows):0}, the rest {sw.ElapsedMilliseconds - ms(tData) - ms(tRows):0}; the frame's layout / drawing comes after)");
         }
 
         /// <summary>
@@ -3501,65 +3511,6 @@ namespace LevelGate.Progression
             private readonly RectTransform _chev;
             private readonly Image[] _chevBars = new Image[2];
             private readonly GameObject _holo;
-            // 0.9.95: MW4's locked blueprint (per picture: a sideways streak and a 1 px rim made of four offset copies, the
-            // picture itself darkened on top so only its outline reads) and your level's XP fill with a moving edge
-            private readonly Image[] _bpStreak = new Image[3];
-            private readonly Image[][] _bpRim = new Image[3][];
-            private readonly Image _xpFillImg, _xpEdge, _xpEdgeGlow;
-            private readonly RectTransform _xpBars;
-            private readonly Image[] _xpBar = new Image[9];
-            private bool _locked;
-
-            /// <summary>0.9.95, every frame: the locked blueprint copies follow their pictures; the current card's XP fill.</summary>
-            public void TickMw4()
-            {
-                if (!_body.gameObject.activeSelf) return;
-                float t = Motion.Now;
-                // locked blueprint
-                float k = Polish.BlueprintK;
-                var cold = new Color(.62f, .82f, .92f);
-                for (int i = 0; i < 3; i++)
-                {
-                    var p = _pics[i];
-                    bool show = k > .001f && _locked && p != null && p.enabled && p.sprite != null;
-                    var st = _bpStreak[i];
-                    if (st == null) continue;
-                    if (st.enabled != show) { st.enabled = show; foreach (var r in _bpRim[i]) r.enabled = show; }
-                    if (!show) continue;
-                    if (st.sprite != p.sprite) { st.sprite = p.sprite; foreach (var r in _bpRim[i]) r.sprite = p.sprite; }
-                    float flick = 1 + .18f * Mathf.Sin(t * .9f + i * 2.1f + _lightSeed);
-                    st.color = new Color(cold.r, cold.g, cold.b, Mathf.Clamp01(.13f * k * flick));
-                    var rc = new Color(cold.r, cold.g, cold.b, Mathf.Clamp01(.5f * k));
-                    foreach (var r in _bpRim[i]) r.color = rc;
-                }
-                // your level: the card fills from the left up to your XP towards the next level (0.9.95's look: across the whole
-                // card); its edge a faint lit line with a little equalizer at the bottom (hidden while the level-up sweep plays)
-                float xk = Polish.XpFillK;
-                bool fill = _isCurrent && xk > .001f && !XpAnimating && _xpFracLevel == _level && _xpFillImg != null;
-                if (_xpFillImg == null) return;
-                if (_xpFillImg.enabled != fill) { _xpFillImg.enabled = _xpEdge.enabled = _xpEdgeGlow.enabled = fill; _xpBars.gameObject.SetActive(fill); }
-                if (!fill) return;
-                var c = Polish.XpFillGreen ? Ui.Hex("#8fd460") : Ui.Hex(Orange);
-                float f = Mathf.Clamp(_xpFrac, .015f, 1f);
-                var fr = _xpFillImg.rectTransform; if (fr.anchorMax.x != f) fr.anchorMax = new Vector2(f, 1);
-                _xpFillImg.color = new Color(c.r, c.g, c.b, Mathf.Clamp01(.16f * xk));
-                float pulse = .75f + .25f * Mathf.Sin(t * 2.2f);
-                var er = _xpEdge.rectTransform; er.anchorMin = new Vector2(f, 0); er.anchorMax = new Vector2(f, 1);
-                // 0.9.98: the white line much fainter (0.9.95: .7; the user: "opacity down a lot")
-                _xpEdge.color = new Color(Mathf.Lerp(c.r, 1, .6f), Mathf.Lerp(c.g, 1, .6f), Mathf.Lerp(c.b, 1, .6f), Mathf.Clamp01(.18f * xk * pulse));
-                var gr = _xpEdgeGlow.rectTransform; gr.anchorMin = gr.anchorMax = new Vector2(f, .5f);
-                _xpEdgeGlow.color = new Color(c.r, c.g, c.b, Mathf.Clamp01(.18f * xk * pulse));
-                _xpBars.anchorMin = _xpBars.anchorMax = new Vector2(f, 0);
-                for (int i = 0; i < _xpBar.Length; i++)
-                {
-                    float dx = i - (_xpBar.Length - 1) / 2f;
-                    float n = Mathf.Abs(Mathf.Sin(t * 7.3f + i * 1.9f) * Mathf.Sin(t * 3.1f + i * .7f));
-                    float h = 2 + 16 * n * Mathf.Exp(-dx * dx / 8f);
-                    _xpBar[i].rectTransform.sizeDelta = new Vector2(1, h);
-                    _xpBar[i].color = new Color(1, .95f, .85f, Mathf.Clamp01(.55f * xk * Mathf.Exp(-dx * dx / 12f)));
-                }
-            }
-
             /// <summary>MW 2: every frame — fills when its level was unlocked in this visit's level up, stays lit.</summary>
             public void TickFlood()
             {
@@ -3856,24 +3807,6 @@ namespace LevelGate.Progression
                 _floodDots = Ui.Img(Ui.Fill(dotsMask, "FloodDots"), new Color(1, 1, 1, 0), Ui.DotGrid());
                 _floodDots.type = Image.Type.Tiled;
                 _flood.raycastTarget = _floodDots.raycastTarget = false; _flood.enabled = _floodDots.enabled = false;
-                // 0.9.95: your level's XP fill (MW4): light from the left up to your XP, a lit edge, a little equalizer at its foot
-                {
-                    var xr = Ui.Rect(dotsMask, "XpFill", Vector2.zero, new Vector2(.5f, 1), Vector2.zero, Vector2.zero);
-                    _xpFillImg = Ui.Img(xr, Color.clear, Ui.HorizontalFade()); _xpFillImg.raycastTarget = false; _xpFillImg.enabled = false;
-                    _xpEdge = Ui.Img(Ui.Rect(dotsMask, "XpEdge", new Vector2(.5f, 0), new Vector2(.5f, 1), new Vector2(-1, 0), new Vector2(1, 0)), Color.clear);
-                    _xpEdge.raycastTarget = false; _xpEdge.enabled = false;
-                    _xpEdgeGlow = Ui.Img(Ui.Box(dotsMask, "XpGlow", new Vector2(.5f, .5f), Vector2.zero, new Vector2(70, 220)), Color.clear, Ui.Radial());
-                    _xpEdgeGlow.raycastTarget = false; _xpEdgeGlow.enabled = false;
-                    _xpBars = Ui.Box(dotsMask, "XpBars", new Vector2(.5f, 0), new Vector2(0, 2), new Vector2(60, 20));
-                    _xpBars.pivot = new Vector2(.5f, 0);
-                    for (int b = 0; b < _xpBar.Length; b++)
-                    {
-                        var br = Ui.Rect(_xpBars, "Bar", new Vector2(.5f, 0), new Vector2(.5f, 0), Vector2.zero, Vector2.zero);
-                        br.pivot = new Vector2(.5f, 0); br.anchoredPosition = new Vector2((b - (_xpBar.Length - 1) / 2f) * 4, 0);
-                        _xpBar[b] = Ui.Img(br, Color.clear); _xpBar[b].raycastTarget = false;
-                    }
-                    _xpBars.gameObject.SetActive(false);
-                }
                 // MW 9: locked — a cold, scanlined hologram over the pictures
                 _holo = Ui.Fill(inner, "Holo").gameObject; // brought to the top when shown (over the pictures)
                 var hs = Ui.Img(Ui.Fill(_holo.transform, "Scan"), new Color(.7f, .86f, .95f, .2f), Ui.Scanlines()); hs.type = Image.Type.Tiled; hs.raycastTarget = false;
@@ -3939,23 +3872,6 @@ namespace LevelGate.Progression
                     Ui.Img(Ui.Fill(face, "Light"), new Color(1, 1, 1, .05f), Ui.Radial());
                     _picNames[i] = Ui.Label(face, "Name", "", TCaps, Grey, TextAnchor.MiddleCenter, false, 0, true);
                     AddLoader(_picNames[i], 0, i == 0 ? 4 : 3);
-                    // 0.9.95: MW4's locked blueprint, behind the picture (clipped to the slot)
-                    {
-                        float pad = i == 0 ? 8 : 4;
-                        var bp = Ui.Fill(face, "Blueprint");
-                        bp.gameObject.AddComponent<RectMask2D>();
-                        var sr = Ui.Fill(bp, "Streak", pad);
-                        sr.localScale = new Vector3(1.55f, .92f, 1);
-                        _bpStreak[i] = Ui.Img(sr, Color.clear); _bpStreak[i].preserveAspect = true; _bpStreak[i].raycastTarget = false; _bpStreak[i].enabled = false;
-                        _bpRim[i] = new Image[4];
-                        var offs = new[] { new Vector2(1, 0), new Vector2(-1, 0), new Vector2(0, 1), new Vector2(0, -1) };
-                        for (int r = 0; r < 4; r++)
-                        {
-                            var rr = Ui.Fill(bp, "Rim", pad);
-                            rr.anchoredPosition = offs[r];
-                            _bpRim[i][r] = Ui.Img(rr, Color.clear); _bpRim[i][r].preserveAspect = true; _bpRim[i][r].raycastTarget = false; _bpRim[i][r].enabled = false;
-                        }
-                    }
                     _pics[i] = Ui.Img(Ui.Fill(face, "Img", i == 0 ? 8 : 4), Color.white);
                     _pics[i].preserveAspect = true;
                     _pics[i].enabled = false;
@@ -4154,9 +4070,6 @@ namespace LevelGate.Progression
                 // locked levels clearly darker: the pictures dimmed (a little less while hovered / picked) — this used to be
                 // overwritten right here with plain white, so locked cards never looked darker
                 float lum = !locked ? 1f : sel || _hover ? .7f : .48f;
-                _locked = locked;
-                // 0.9.95: under MW4's blueprint the picture goes dark, so only its lit outline and the streak read
-                if (locked && Polish.BlueprintK > .001f) lum = Mathf.Lerp(lum, sel || _hover ? .3f : .08f, Mathf.Clamp01(Polish.BlueprintK));
                 foreach (var pic in _pics) FadeTo(pic, new Color(lum, lum, lum, pa));
                 _group.alpha = _baseAlpha;
             }
