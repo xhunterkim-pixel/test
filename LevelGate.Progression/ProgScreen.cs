@@ -719,20 +719,6 @@ namespace LevelGate.Progression
             }
         }
 
-        private static Color? LootColor(string tpl)
-        {
-            switch ((GameItems.BackgroundOf(tpl) ?? "").ToLowerInvariant())
-            {
-                case "red": case "tracerred": return Ui.Hex("#d04a44");
-                case "violet": case "purple": return Ui.Hex("#9a6ae0");
-                case "blue": return Ui.Hex("#5a9ad8");
-                case "green": case "tracergreen": return Ui.Hex("#6fae54");
-                case "orange": return Ui.Hex("#e08a3c");
-                case "yellow": case "traceryellow": return Ui.Hex("#e0c24a");
-                default: return null;
-            }
-        }
-
         private static void BuildHeroDetail(RectTransform face)
         {
             // viewfinder corners and faint scanlines over the lit face (the light has a texture)
@@ -1329,7 +1315,6 @@ namespace LevelGate.Progression
             }
             BuildLightWall(bottom);
 
-
             PerfToggle(bottom);
             HomeButton(bottom);
 
@@ -1493,7 +1478,6 @@ namespace LevelGate.Progression
             FadeTo(_homeText as Graphic, !_homeAway ? Ui.Hex("#6a7376", .45f) : on ? Ui.Hex("#15191b") : Grey, true);
             FadeTo(_homeEdge, on ? Ui.Hex("#3a4245") : Ui.Hex("#5a6468", _homeAway ? 1f : .45f), true);
         }
-
 
         private static void LevelKey(RectTransform arrow, string key, Action click)
         {
@@ -1883,9 +1867,7 @@ namespace LevelGate.Progression
             int mine = player > 0 ? (Mathf.Min(player, ProgData.MaxLevel) - 1) / PerPage : -1;
             RefreshHome();
 
-
         }
-
 
         private static int _shownLevel; // the level whose rewards the list shows right now (0 = none)
 
@@ -2245,23 +2227,6 @@ namespace LevelGate.Progression
             return k;
         }
 
-        /// <summary>The item's own background colour in the game's cells (its template's BackgroundColor), dark and see-through.</summary>
-        private static Color TintOf(string tpl)
-        {
-            switch ((GameItems.BackgroundOf(tpl) ?? "").ToLowerInvariant())
-            {
-                case "blue": return Ui.Hex("#1f3b57", .45f);
-                case "green": case "tracergreen": return Ui.Hex("#24421f", .45f);
-                case "orange": return Ui.Hex("#5a3413", .45f);
-                case "red": case "tracerred": return Ui.Hex("#5a1a18", .45f);
-                case "violet": return Ui.Hex("#3f2757", .45f);
-                case "yellow": case "traceryellow": return Ui.Hex("#56501a", .42f);
-                case "black": return Ui.Hex("#050606", .5f);
-                case "grey": return Ui.Hex("#3a3e40", .4f);
-                default: return new Color(0, 0, 0, 0);
-            }
-        }
-
         /// <summary>One reward tile's parts, so hover / selection / locked can be restyled without rebuilding it.</summary>
         private sealed class TileView
         {
@@ -2501,6 +2466,7 @@ namespace LevelGate.Progression
                 _tip.anchoredPosition = ap;
             }
             _tip.SetAsLastSibling();
+            L.Trace("tooltip: " + name);
             _tip.gameObject.SetActive(true);
         }
 

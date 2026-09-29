@@ -216,7 +216,7 @@ namespace LevelGate.Progression
 
         // ---------------------------------------------------------------- generated pictures
 
-        private static Sprite _white, _vgrad, _hgrad, _radial, _dots, _cut, _lock, _vignette;
+        private static Sprite _white, _vgrad, _hgrad, _radial, _cut, _lock, _vignette;
         private static Sprite[] _grime;
         private static Sprite _dotGrid, _cutTR, _tabIcon, _tick, _cornerGlow;
 
@@ -414,7 +414,7 @@ namespace LevelGate.Progression
             return box;
         }
 
-        private static Sprite _glowFrame, _scan, _vstripes, _grid;
+        private static Sprite _glowFrame, _scan, _vstripes;
 
         /// <summary>Fine vertical stripes (1 px on, 2 off), tiled: CoD's "BONUS" bar / barcode texture.</summary>
         public static Sprite VStripes()
@@ -426,24 +426,6 @@ namespace LevelGate.Progression
             tex.SetPixels32(px);
             tex.Apply(false, true);
             return _vstripes = Sprite.Create(tex, new Rect(0, 0, 3, 2), new Vector2(.5f, .5f), 100, 0, SpriteMeshType.FullRect);
-        }
-
-        /// <summary>A blueprint grid: 1 px lines every 32 px with a fainter line every 8, tiled.</summary>
-        public static Sprite BlueprintGrid()
-        {
-            if (_grid != null) return _grid;
-            const int n = 32;
-            var tex = new Texture2D(n, n, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Repeat, filterMode = FilterMode.Point };
-            var px = new Color32[n * n];
-            for (int y = 0; y < n; y++)
-                for (int x = 0; x < n; x++)
-                {
-                    byte a = x == 0 || y == 0 ? (byte)255 : (x % 8 == 0 && y % 2 == 0) || (y % 8 == 0 && x % 2 == 0) ? (byte)90 : (byte)0;
-                    px[y * n + x] = new Color32(255, 255, 255, a);
-                }
-            tex.SetPixels32(px);
-            tex.Apply(false, true);
-            return _grid = Sprite.Create(tex, new Rect(0, 0, n, n), new Vector2(.5f, .5f), 100, 0, SpriteMeshType.FullRect);
         }
 
         /// <summary>A soft glow around a frame (bloom): see-through in the middle, bright at the frame's line, fading outward.
@@ -1284,21 +1266,6 @@ namespace LevelGate.Progression
             return _radial = Sprite.Create(tex, new Rect(0, 0, n, n), new Vector2(.5f, .5f));
         }
 
-        /// <summary>A dotted line that fades out toward its right end (flip it with a -1 x scale for the left side).</summary>
-        public static Sprite FadingDots()
-        {
-            if (_dots != null) return _dots;
-            const int w = 240, h = 2;
-            var tex = new Texture2D(w, h, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Clamp, filterMode = FilterMode.Point };
-            for (int x = 0; x < w; x++)
-            {
-                float a = (x % 6) < 3 ? Mathf.Pow(1 - x / (float)w, 1.4f) : 0;
-                for (int y = 0; y < h; y++) tex.SetPixel(x, y, new Color(1, 1, 1, a));
-            }
-            tex.Apply();
-            return _dots = Sprite.Create(tex, new Rect(0, 0, w, h), new Vector2(.5f, .5f));
-        }
-
         public static Sprite White()
         {
             if (_white != null) return _white;
@@ -1320,19 +1287,6 @@ namespace LevelGate.Progression
             return _vgrad;
         }
 
-        /// <summary>A picture file next to the plugin (e.g. the Tarkov logo), or null.</summary>
-        public static Sprite LoadPng(string path)
-        {
-            try
-            {
-                if (!System.IO.File.Exists(path)) { L.Debug("no picture at " + path); return null; }
-                var tex = new Texture2D(2, 2, TextureFormat.RGBA32, false);
-                if (!ImageConversion.LoadImage(tex, System.IO.File.ReadAllBytes(path))) { L.Warn("couldn't read picture " + path); return null; }
-                L.Debug($"picture {System.IO.Path.GetFileName(path)}: {tex.width}x{tex.height}");
-                return Sprite.Create(tex, new Rect(0, 0, tex.width, tex.height), new Vector2(.5f, .5f));
-            }
-            catch (Exception e) { L.Error("loading " + path, e); return null; }
-        }
     }
 
     /// <summary>An Arena-style dotted line: short dashes, bright by the label and fading out toward a small tick

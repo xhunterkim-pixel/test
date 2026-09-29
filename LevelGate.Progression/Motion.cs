@@ -15,7 +15,6 @@ namespace LevelGate.Progression
     ///   from wherever that one had got to, so hover on → off → on never jumps. They end themselves when their owner (a
     ///   Unity object) is destroyed.
     /// - STAGGER (<see cref="Stagger"/>): lists come in one after another at one shared step, capped so long lists don't drag.
-    /// - SEQUENCES (<see cref="Seq"/>): then / wait / call / together, for choreographed beats.
     /// - One CLOCK (<see cref="Wave"/>, <see cref="Flicker"/>): every pulse, breath and flicker reads the same time, so
     ///   they stay in phase with each other.
     /// Ticked once per frame from ProgScreen.Tick (unscaled time: works while the game is paused or slowed).
@@ -126,71 +125,14 @@ namespace LevelGate.Progression
         /// <summary>Forgets where a channel was, so the next To starts from its own `from` (a flash that jumps to its peak).</summary>
         public static void Reset(object owner, string channel) { _last.Remove((owner, channel)); }
 
-        public static bool Running(object owner, string channel) => _byKey.ContainsKey((owner, channel));
-
-        /// <summary>Stops a channel where it is (or every channel of the owner).</summary>
-        public static void Kill(object owner, string channel = null)
-        {
-            foreach (var t in _tweens) if (ReferenceEquals(t.Owner, owner) && (channel == null || t.Channel == channel)) t.Dead = true;
-        }
-
         private static bool Gone(object owner) => owner is UnityEngine.Object uo ? uo == null : owner == null;
-
-        // ---------------------------------------------------------------- sequences
-
-        /// <summary>A choreographed sequence: steps run one after another; Together runs its steps at the same time.</summary>
-        public sealed class Sequence
-        {
-            internal readonly List<(float At, Action Start)> Steps = new List<(float, Action)>();
-            internal float Cursor;
-            private readonly object _owner;
-            internal Sequence(object owner) { _owner = owner; }
-
-            /// <summary>Then: a tween that starts when the previous step ends.</summary>
-            public Sequence Then(string channel, float from, float to, float dur, Ease ease, Action<float> apply)
-            {
-                float at = Cursor; var o = _owner;
-                Steps.Add((at, () => To(o, channel, from, to, dur, ease, apply)));
-                Cursor += dur;
-                return this;
-            }
-
-            /// <summary>With: a tween that starts together with the previous step (doesn't move the cursor further).</summary>
-            public Sequence With(string channel, float from, float to, float dur, Ease ease, Action<float> apply, float offset = 0)
-            {
-                float at = Mathf.Max(0, Cursor - dur) + offset; var o = _owner;
-                Steps.Add((at, () => To(o, channel, from, to, dur, ease, apply)));
-                return this;
-            }
-
-            public Sequence Wait(float t) { Cursor += t; return this; }
-            public Sequence Call(Action a) { Steps.Add((Cursor, a)); return this; }
-
-            /// <summary>Starts it (steps are fired by Motion.Tick at their times).</summary>
-            public void Play() { float t0 = Now; foreach (var s in Steps) _pending.Add((t0 + s.At, _owner, s.Start)); }
-        }
-
-        private static readonly List<(float At, object Owner, Action Start)> _pending = new List<(float, object, Action)>();
-
-        public static Sequence Seq(object owner) => new Sequence(owner);
 
         // ---------------------------------------------------------------- the frame
 
-        /// <summary>Once per frame (ProgScreen.Tick): fires due sequence steps, advances every tween.</summary>
+        /// <summary>Once per frame (ProgScreen.Tick): advances every tween.</summary>
         public static void Tick()
         {
             float now = Now;
-            if (_pending.Count > 0)
-            {
-                for (int i = 0; i < _pending.Count; i++)
-                {
-                    var p = _pending[i];
-                    if (now < p.At) continue;
-                    _pending.RemoveAt(i--);
-                    if (Gone(p.Owner)) continue;
-                    try { p.Start?.Invoke(); } catch (Exception e) { L.ErrorOnce("motion sequence", e); }
-                }
-            }
             for (int i = 0; i < _tweens.Count; i++)
             {
                 var t = _tweens[i];
@@ -226,8 +168,7 @@ namespace LevelGate.Progression
         }
 
         /// <summary>The screen was thrown away / closed for a raid: nothing left running.</summary>
-        public static void Clear() { _tweens.Clear(); _byKey.Clear(); _last.Clear(); _pending.Clear(); }
+        public static void Clear() { _tweens.Clear(); _byKey.Clear(); _last.Clear(); }
 
-        public static int ActiveCount => _tweens.Count;
     }
 }

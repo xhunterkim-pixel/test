@@ -143,8 +143,6 @@ namespace LevelGate.Progression
             g.color = c;
         }
 
-        private static void ForgetEdges() { if (_edges.Count > 0) { var dead = new List<Graphic>(); foreach (var kv in _edges) if (kv.Key == null) dead.Add(kv.Key); foreach (var d in dead) _edges.Remove(d); } }
-
         // ---------------------------------------------------------------- MW4's soft glow behind the hero's name (0.9.91)
 
         /// <summary>

@@ -151,7 +151,6 @@ namespace LevelGate.Progression
             }
         }
         private static readonly List<SelFrame> _selFrames = new List<SelFrame>();
-        private static readonly System.Random _selRng = new System.Random(3);
 
         private const int DotStripFrames = 5;
         private static readonly Sprite[] _dotStrip = new Sprite[DotStripFrames];
@@ -210,7 +209,6 @@ namespace LevelGate.Progression
 
         // the section holding the picked item lights up from the left in the theme colour (the viewed rank's)
         private static readonly Dictionary<string, (Image Head, Image Box)> _sectionLit = new Dictionary<string, (Image, Image)>();
-        private static readonly Dictionary<string, float> _sectionA = new Dictionary<string, float>();
         private static string _litSection;
 
         private static void TickSelection()

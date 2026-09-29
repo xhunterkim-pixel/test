@@ -26,7 +26,7 @@ namespace LevelGate.Progression
         public const string Guid = "com.kkyangg.levelgate.progression";
         public const string Name = "LevelGate Progression";
         // MAJOR.MINOR.PATCH — see CHANGELOG.md
-        public const string Version = "1.0.1";
+        public const string Version = "1.0.2";
 
         internal static ProgressionPlugin Instance;
         internal static ConfigEntry<KeyboardShortcut> OpenKey;
@@ -88,6 +88,7 @@ namespace LevelGate.Progression
         {
             Instance = this;
             L.Source = Logger;
+            Diag.Start(); // 1.0.2: system info, other plugins, the game's errors
             Application.quitting += OnQuit; // 0.9.99: log the game's exit and stop our work first (the user saw a freeze on exit)
 
             // F12 (Configuration Manager): three sections, sorted by their number. Order = top to bottom within one.
@@ -319,6 +320,8 @@ namespace LevelGate.Progression
                 TestWallXpBacking, TestWallXpLift, TestBigXpDuringSweep,
                 TestFadeCardLine, TestFadeSectionHead, TestFadeMeters, TestFadeXpBar };
             var liveDials = new HashSet<ConfigEntryBase> { TestTipDelay, TestAmbient, TestQuietFx, TestFlourish, TestWallXpBacking, TestWallXpLift, TestBigXpDuringSweep };
+            // 1.0.2: every setting change, not only the testing dials
+            Config.SettingChanged += (_, a) => { var e = a?.ChangedSetting; if (e != null) L.Trace($"setting: {e.Definition.Section} › {e.Definition.Key} = {(e.BoxedValue is float f ? f.ToString("0.###") : e.BoxedValue)}"); };
             Config.SettingChanged += (_, a) =>
             {
                 var entry = a?.ChangedSetting;
@@ -600,6 +603,7 @@ namespace LevelGate.Progression
                     else if (!MenuHook.BarVisible && !ProgScreen.IsOpen) L.Debug($"open key {OpenKey.Value} ignored: not in the main menu");
                     else { L.Info($"open key {OpenKey.Value} pressed"); ProgScreen.Toggle("hotkey"); }
                 }
+                Diag.Tick();
                 ProgData.Tick();
                 MenuHook.Tick();
                 ProgScreen.Tick();
@@ -636,13 +640,17 @@ namespace LevelGate.Progression
         private static readonly System.Collections.Generic.HashSet<string> _once = new System.Collections.Generic.HashSet<string>();
 
         public static bool Verbose => ProgressionPlugin.VerboseLog?.Value ?? true;
+        // 1.0.2: Info / Warn / Error also go to BepInEx's log; Debug, Step and Trace only to Progression.log (BepInEx's
+        // console + file per line was the expensive part). Everything is queued and written by a background thread.
         public static void Info(string s) { long t = Now; Source?.LogInfo("[Progression] " + s); File("info ", s); Cost(t); }
-        public static void Debug(string s) { if (!Verbose) return; long t = Now; Source?.LogInfo("[Progression] (debug) " + s); File("debug", s); Cost(t); }
+        public static void Debug(string s) { if (!Verbose) return; long t = Now; File("debug", s); Cost(t); }
+        /// <summary>1.0.2: the testing-phase detail (clicks, keys, timings, game errors, frame stats…): Progression.log only.</summary>
+        public static void Trace(string s) { if (!Verbose) return; long t = Now; File("trace", s); Cost(t); }
         public static void Warn(string s) { long t = Now; Source?.LogWarning("[Progression] " + s); File("WARN ", s); Cost(t); }
-        public static void Error(string where, Exception e) { Source?.LogError($"[Progression] error in {where}: {e}"); File("ERROR", where + ": " + e); }
+        public static void Error(string where, Exception e) { Source?.LogError($"[Progression] error in {where}: {e}"); File("ERROR", where + ": " + e); FlushNow(); }
 
-        // What logging itself costs: time spent inside these calls (BepInEx log + Progression.log), so a session
-        // line can say "logging took X ms of Y s" instead of guessing.
+        // What logging itself costs: time spent inside these calls on the game's thread, so a line can say
+        // "logging took X ms of Y s" instead of guessing.
         private static long Now => System.Diagnostics.Stopwatch.GetTimestamp();
         private static long _costTicks;
         private static int _costLines;
@@ -651,14 +659,19 @@ namespace LevelGate.Progression
         public static double CostMs => _costTicks * 1000.0 / System.Diagnostics.Stopwatch.Frequency;
         public static int CostLines => _costLines;
 
-        // Progression.log next to the plugin, written to disk line by line: BepInEx's own log is buffered, so
-        // after a game crash its last lines are missing — this file still shows the last step that ran.
+        // Progression.log next to the plugin. Lines are queued and a background thread writes them every 200 ms (and at
+        // once for an error and at quit), so a crash loses at most the last 0.2 s.
         private static System.IO.StreamWriter _file;
         private static bool _closed;
+        private static readonly System.Collections.Concurrent.ConcurrentQueue<string> _queue = new System.Collections.Concurrent.ConcurrentQueue<string>();
+        private static System.Threading.Thread _writer;
+        private static readonly DateTime _t0 = DateTime.Now;
+        private static readonly System.Diagnostics.Stopwatch _clock = System.Diagnostics.Stopwatch.StartNew();
 
         /// <summary>0.9.99: closes Progression.log at quit (nothing more is written after this).</summary>
         public static void Close()
         {
+            FlushNow();
             lock (_fileLock) { try { _file?.Flush(); _file?.Dispose(); } catch { } _file = null; _closed = true; }
         }
         private static bool _fileTried;
@@ -672,21 +685,42 @@ namespace LevelGate.Progression
         private static void File(string kind, string s)
         {
             if (_closed) return;
+            var when = _t0 + _clock.Elapsed; // cheaper than DateTime.Now (no time zone lookup per line)
+            _queue.Enqueue($"{when:HH:mm:ss.fff} {kind} {s}");
+            if (_writer == null)
+            {
+                lock (_fileLock)
+                {
+                    if (_writer == null)
+                    {
+                        _writer = new System.Threading.Thread(() => { while (!_closed) { System.Threading.Thread.Sleep(200); FlushNow(); } })
+                        { IsBackground = true, Name = "Progression log writer", Priority = System.Threading.ThreadPriority.BelowNormal };
+                        _writer.Start();
+                    }
+                }
+            }
+        }
+
+        /// <summary>Writes every queued line to disk now.</summary>
+        public static void FlushNow()
+        {
             lock (_fileLock)
             try
             {
+                if (_queue.IsEmpty || _closed) return;
                 if (_file == null)
                 {
-                    if (_fileTried) return;
+                    if (_fileTried) { while (_queue.TryDequeue(out _)) { } return; }
                     _fileTried = true;
                     var dir = System.IO.Path.GetDirectoryName(typeof(L).Assembly.Location) ?? ".";
                     var path = System.IO.Path.Combine(dir, "Progression.log");
                     // the previous game session's log is kept as Progression.prev.log (a restart doesn't wipe it)
                     try { if (System.IO.File.Exists(path)) System.IO.File.Copy(path, System.IO.Path.Combine(dir, "Progression.prev.log"), true); } catch { }
-                    _file = new System.IO.StreamWriter(path, false) { AutoFlush = true };
+                    _file = new System.IO.StreamWriter(path, false, new System.Text.UTF8Encoding(false), 1 << 16);
                     _file.WriteLine($"LevelGate Progression {ProgressionPlugin.Version} — {DateTime.Now:yyyy-MM-dd HH:mm:ss}");
                 }
-                _file.WriteLine($"{DateTime.Now:HH:mm:ss.fff} {kind} {s}");
+                while (_queue.TryDequeue(out var line)) _file.WriteLine(line);
+                _file.Flush();
             }
             catch { }
         }

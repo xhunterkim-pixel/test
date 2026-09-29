@@ -8,7 +8,7 @@ no PR open). Rules and the build / tuning method are in `CLAUDE.md`.
 | Thing | Version | Status |
 |---|---|---|
 | LevelGate plugin / server | 1.6.3 | Frozen: do not touch without the user's go-ahead |
-| LevelGate Progression | **1.0.1** | Sent (full package), untested in game. 0.9.95 tested: dials tuned from the log, inspect warm-up works (24 ms, background) |
+| LevelGate Progression | **1.0.2** | Sent (full package), untested in game. 0.9.95 tested: dials tuned from the log, inspect warm-up works (24 ms, background) |
 | Modern Editor (editor exe) | 2.0.8 | Sent, untested on Windows (UI checked in the browser mock) |
 | Modern Editor (server mod) | 2.0.7 | Sent: compact SPT console output |
 
@@ -100,6 +100,12 @@ Decor Noise 55, Micro Labels 60, Flourish 65, Border Fade 70, Ambient Light 140 
 - NEW cleared for a whole closed group (`_closedGroups`, `_groupMembers`). Hero picture capped by stash cells (`FeatCap`).
 - Containers group (with MobContainer / secure containers) second in `ProgData.Groups` and `CardOrder`.
 - Not found yet: one reward tile (Gamma "Loui Peeton", the picked one) showing its picture smaller — ask for a close-up / log.
+
+## Progression 1.0.2 (testing phase)
+- Logger: queue + background writer thread (200 ms; FlushNow on error / quit). Debug / Step / Trace = file only; Info / Warn /
+  Error also BepInEx. New `L.Trace`. `Diag.cs`: system + plugin list, Unity error capture, keys / clicks with UI target,
+  hitches outside our screen, screen durations, 10 s stats, 60 s "logging cost" line (user's budget: under 0.1%).
+- Dead code removed (Motion sequences, BlueprintGrid, FadingDots, LoadPng, LootColor, TintOf, BackgroundOf…).
 
 ## In progress / open
 

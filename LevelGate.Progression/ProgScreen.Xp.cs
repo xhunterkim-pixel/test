@@ -696,7 +696,6 @@ namespace LevelGate.Progression
         private enum Focus { None, Xp, Header, Cards }
         private static Focus _focusTarget = Focus.None;
         private static float _headFocus = 1, _rankFade = 1;
-        private static readonly Dictionary<RectTransform, float> _focusAlpha = new Dictionary<RectTransform, float>();
 
         private static RectTransform FocusRect(Focus f) =>
             f == Focus.Xp ? (_xpSquare != null ? _xpSquare.rectTransform : null)

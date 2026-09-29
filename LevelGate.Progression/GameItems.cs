@@ -788,18 +788,6 @@ namespace LevelGate.Progression
             catch { return null; }
         }
 
-        private static readonly Dictionary<string, string> _bg = new Dictionary<string, string>();
-
-        /// <summary>The template's BackgroundColor ("violet", "yellow"…), the tint the game's cells give it; null if unknown.</summary>
-        public static string BackgroundOf(string tpl)
-        {
-            if (tpl == null) return null;
-            if (_bg.TryGetValue(tpl, out var c)) return c;
-            try { c = Refl.Get(Refl.Get(ItemOf(tpl), "Template"), "BackgroundColor")?.ToString(); } catch { c = null; }
-            _bg[tpl] = c;
-            return c;
-        }
-
         private static readonly HashSet<string> _attrDumped = new HashSet<string>();
 
         /// <summary>

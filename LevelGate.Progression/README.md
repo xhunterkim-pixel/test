@@ -1,4 +1,4 @@
-# LevelGate Progression (1.0.1)
+# LevelGate Progression (1.0.2)
 
 A Call of Duty style **Progression** screen inside Tarkov's main menu. It adds a
 **PROGRESSION** button to the menu bar next to Character, Trading, Flea Market and the rest.
@@ -18,6 +18,19 @@ A Call of Duty style **Progression** screen inside Tarkov's main menu. It adds a
   - P or Esc closes the screen.
 - It works on its own and never changes LevelGate. It only **reads**
   `BepInEx\plugins\LevelGate\config\level_requirements.json`, and picks up changes to that file while the game runs.
+
+## 1.0.2 (testing phase: a much bigger log)
+- **Progression.log records far more** (as long as Advanced › Detailed Log is on, which it is):
+  - at start: your PC (CPU, GPU, RAM, screen, OS), Unity / game version, and every other BepInEx plugin loaded
+  - **the game's own errors and exceptions** (not only ours), each distinct one at most every 30 s, up to 400 a session
+  - every key the plugin reacts to and every mouse click, with the object under the mouse and the game screen
+  - hitches (frames over 100 ms) anywhere in the menus: which screen, how long after it opened, icon redraws queued
+  - how long each game screen stayed open; every 10 s: frame rate (average / worst), garbage collections, memory
+  - every setting change, every sound played, every tooltip shown
+  - every 60 s: **what logging itself costs**, as a % of play time (target: under 0.1%)
+- Logging is cheaper than before: lines are queued and written by a background thread (every 0.2 s, at once for an error and
+  at quit); the detailed lines no longer go through BepInEx's own log too (only Info / warnings / errors do).
+- Code clean-up: 18 unused pieces removed (an unused animation sequencer, three pictures of removed features, old helpers).
 
 ## 1.0.1
 - **Fix: the stash and traders re-loading their icons after you leave Progression.** On every close the plugin made the game redraw every item it had ever shown big (300+ by the end of your session, growing each time) plus ~160 weapons. Now it checks each one and only redraws the icons that are still the big version (most aren't: they're put back as soon as their big picture arrives), and the blanket weapon redraw is gone. This most likely also caused the trader screen that never finished loading (it was opened while hundreds of icons were being redrawn).

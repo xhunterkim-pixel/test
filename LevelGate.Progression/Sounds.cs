@@ -50,6 +50,7 @@ namespace LevelGate.Progression
                     ?? names.Select(n => all.FirstOrDefault(a => a.IndexOf(n, StringComparison.OrdinalIgnoreCase) >= 0)).FirstOrDefault(n => n != null);
                 if (pick == null) { L.ErrorOnce("sounds", new Exception("none of " + string.Join("/", names) + " exist")); return; }
                 _play.Invoke(_gui, new[] { Enum.Parse(_enum, pick) });
+                L.Trace("sound: " + pick);
             }
             catch (Exception e) { L.ErrorOnce("playing a sound", e); }
         }
