@@ -586,23 +586,59 @@ namespace LevelGate.Progression
         private static List<MethodInfo> _inspect;
         private static List<ConstructorInfo> _ctxCtors;
 
-        /// <summary>An ItemContext for a loose item: any concrete class of that kind with a constructor taking the item
-        /// (other arguments: first enum value, false, null). What was tried is logged.</summary>
-        private static object ContextFor(Type want, object item)
+        private static readonly object _ctxLock = new object();
+
+        /// <summary>Every constructor of a concrete ItemContext-like class that takes the item. Searching the game's
+        /// assembly takes ~0.8 s, so <see cref="WarmInspect"/> does it on a worker thread when the screen opens
+        /// (0.9.94 log: an 848 ms hitch on the first right-click).</summary>
+        private static List<ConstructorInfo> CtxCtors(Type want)
         {
-            if (_ctxCtors == null)
+            lock (_ctxLock)
             {
-                _ctxCtors = new List<ConstructorInfo>();
+                if (_ctxCtors != null) return _ctxCtors;
+                var t0 = DateTime.UtcNow;
+                var list = new List<ConstructorInfo>();
                 foreach (var t in AccessTools.GetTypesFromAssembly(want.Assembly))
                 {
                     if (t.IsAbstract || t.ContainsGenericParameters || !want.IsAssignableFrom(t)) continue;
                     foreach (var c in t.GetConstructors(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic))
-                        if (c.GetParameters().Any(p => p.ParameterType.IsAssignableFrom(_itemType))) _ctxCtors.Add(c);
+                        if (c.GetParameters().Any(p => p.ParameterType.IsAssignableFrom(_itemType))) list.Add(c);
                 }
-                _ctxCtors = _ctxCtors.OrderBy(c => c.GetParameters().Length).ToList();
-                L.Info($"inspect: {_ctxCtors.Count} way(s) to make a {want.Name}: " + string.Join(" | ", _ctxCtors.Take(10).Select(c => $"{c.DeclaringType.Name}({string.Join(", ", c.GetParameters().Select(p => p.ParameterType.Name + " " + p.Name).ToArray())})").ToArray()));
+                _ctxCtors = list.OrderBy(c => c.GetParameters().Length).ToList();
+                L.Info($"inspect: {_ctxCtors.Count} way(s) to make a {want.Name} (looked up in {(DateTime.UtcNow - t0).TotalMilliseconds:0} ms): " + string.Join(" | ", _ctxCtors.Take(10).Select(c => $"{c.DeclaringType.Name}({string.Join(", ", c.GetParameters().Select(p => p.ParameterType.Name + " " + p.Name).ToArray())})").ToArray()));
+                return _ctxCtors;
             }
-            foreach (var c in _ctxCtors)
+        }
+
+        private static bool _warmStarted;
+        /// <summary>Finds the inspect method and the ItemContext constructors on a worker thread, so the first
+        /// right-click / Inspect doesn't freeze the game. Safe to call every time the screen opens.</summary>
+        public static void WarmInspect()
+        {
+            if (_warmStarted) return;
+            _warmStarted = true;
+            try
+            {
+                Init();
+                if (_itemType == null) return;
+                var uiType = AccessTools.TypeByName("EFT.UI.ItemUiContext");
+                var want = uiType?.GetMethods(Refl.All).Where(m => m.Name == "Inspect" && !m.ContainsGenericParameters && m.GetParameters().Length >= 1)
+                    .Select(m => m.GetParameters()[0].ParameterType).FirstOrDefault(pt => !pt.IsInstanceOfType(null) && !pt.IsAssignableFrom(_itemType));
+                if (want == null) return;
+                System.Threading.ThreadPool.QueueUserWorkItem(_ =>
+                {
+                    try { CtxCtors(want); } catch (Exception e) { L.Debug($"inspect: warm-up failed ({e.GetBaseException().Message}); will look up on first inspect"); }
+                });
+            }
+            catch (Exception e) { L.Debug($"inspect: warm-up skipped ({e.GetBaseException().Message})"); }
+        }
+
+        /// <summary>An ItemContext for a loose item: any concrete class of that kind with a constructor taking the item
+        /// (other arguments: first enum value, false, null). What was tried is logged.</summary>
+        private static object ContextFor(Type want, object item)
+        {
+            var ctors = CtxCtors(want);
+            foreach (var c in ctors)
             {
                 var ps = c.GetParameters();
                 var args = new object[ps.Length];

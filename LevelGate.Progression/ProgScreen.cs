@@ -134,6 +134,7 @@ namespace LevelGate.Progression
             if (!IsOpen && MenuHook.GoToMainMenuThen(why)) return;
             try
             {
+                GameItems.WarmInspect(); // 0.9.95: find the inspect window's classes in the background (was an 848 ms freeze on the first right-click)
                 if (!_built || _canvas == null) { _built = false; Build(); }
                 PickRandomPattern();
                 ProgData.Invalidate(); // names / categories again (the game may have finished loading them since)
