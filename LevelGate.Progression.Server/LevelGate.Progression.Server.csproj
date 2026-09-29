@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    LevelGateProgression.dll: the small SPT 4.1.x server mod that goes with the LevelGate Progression client plugin.
+    Adds the Rank Tags (one item per rank / emblem, worn in the Dogtag slot) and mails each one when its rank is reached.
+    Build: dotnet build -c Release -p:SptServerDir=C:\SPT\SPT_Runtime (copies the DLL to user\mods\LevelGateProgression\).
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AssemblyName>LevelGateProgression</AssemblyName>
+    <RootNamespace>LevelGate.Progression.Server</RootNamespace>
+    <SptServerDir>C:\SPT\SPT_Runtime</SptServerDir>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Supplied by the running server; compile-only. -->
+    <PackageReference Include="SPTushonka.Common" Version="4.1.6" ExcludeAssets="runtime" />
+    <PackageReference Include="SPTushonka.DI" Version="4.1.6" ExcludeAssets="runtime" />
+    <PackageReference Include="SPTushonka.Server.Core" Version="4.1.6" ExcludeAssets="runtime" />
+  </ItemGroup>
+
+  <Target Name="CopyToServerMods" AfterTargets="Build">
+    <MakeDir Directories="$(SptServerDir)\user\mods\LevelGateProgression" />
+    <Copy SourceFiles="$(TargetPath)" DestinationFolder="$(SptServerDir)\user\mods\LevelGateProgression\" />
+  </Target>
+
+</Project>

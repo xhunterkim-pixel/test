@@ -26,7 +26,7 @@ namespace LevelGate.Progression
         public const string Guid = "com.kkyangg.levelgate.progression";
         public const string Name = "LevelGate Progression";
         // MAJOR.MINOR.PATCH — see CHANGELOG.md
-        public const string Version = "1.0.5";
+        public const string Version = "1.0.6";
 
         internal static ProgressionPlugin Instance;
         internal static ConfigEntry<KeyboardShortcut> OpenKey;
@@ -404,6 +404,7 @@ namespace LevelGate.Progression
                 GameText.Load();      // short names / handbook categories from the game data (background thread, read-only)
                 var harmony = new Harmony(Guid);
                 MenuHook.Apply(harmony);
+                RankTags.Apply(harmony); // 1.0.6: the Rank Tag items get their animated emblem
             }
             catch (Exception e) { L.Error("startup", e); }
             L.Info($"{Name} started. Open key: {OpenKey.Value}, dump key: {DumpKey.Value}, menu button: {(InjectButton.Value ? "on" : "off")}.");
@@ -617,6 +618,7 @@ namespace LevelGate.Progression
                 GameItems.RepairTick();
                 Toast.Tick();
                 Sfx.Tick();
+                RankTags.Tick();
             }
             catch (Exception e) { L.ErrorOnce("update", e); }
         }

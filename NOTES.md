@@ -8,7 +8,7 @@ no PR open). Rules and the build / tuning method are in `CLAUDE.md`.
 | Thing | Version | Status |
 |---|---|---|
 | LevelGate plugin / server | 1.6.3 | Frozen: do not touch without the user's go-ahead |
-| LevelGate Progression | **1.0.3** | Sent (full package), untested in game. 0.9.95 tested: dials tuned from the log, inspect warm-up works (24 ms, background) |
+| LevelGate Progression | **1.0.6** | Sent (full package + new server mod), untested in game. 1.0.4: XP anim waits for load-in (XpStartDelay dial), level-up sound reload. 1.0.5: main-menu warm-up. 1.0.6: Rank Tags |
 | Modern Editor (editor exe) | 2.0.8 | Sent, untested on Windows (UI checked in the browser mock) |
 | Modern Editor (server mod) | 2.0.7 | Sent: compact SPT console output |
 
@@ -93,6 +93,17 @@ Decor Noise 55, Micro Labels 60, Flourish 65, Border Fade 70, Ambient Light 140 
 - Long `.hint`s (> 70 chars) are auto-tucked behind an ⓘ (tools.js `tuckHints`, MutationObserver) on every page.
 - Cloud build of the editor works: `dotnet publish … -r win-x64 -p:SelfContained=false -p:PublishSingleFile=true -p:EnableWindowsTargeting=true`
   (without SelfContained=false it bundles the runtime: 118 MB).
+
+## Progression 1.0.6: Rank Tags (untested in game)
+
+- Server mod `LevelGate.Progression.Server` → `user\mods\LevelGateProgression\LevelGateProgression.dll`: 16 items cloned from the
+  USEC dogtag (parent / Dogtag component kept) with the Physical Bitcoin's Prefab, ids `6c67706d72616e6b000000` + rank hex,
+  added to the default inventory's Dogtag slot filter; IOnUpdate every 20 s mails each rank's tag once (sent.json next to the DLL).
+- Plugin `RankTags.cs`: Harmony postfix on `EFT.ObjectsFactory.CreateItemAsync` (found in the user's Assembly-CSharp; loot,
+  inspect and the icon renderer all go through it). Hides the coin's renderers, adds a procedural coin (same bounds) with a clone
+  of the coin's material, texture = the emblem sheet composited on steel, animated by UV offset; starts on the last frame (icon).
+  Pooled coins reused for a real bitcoin are undone. The rank-up window inspects the rank's tag (fallback: the faction dogtag).
+- Unknowns to check from the first log / screenshots: which way up the emblem is, the shader's texture names, the icon.
 
 ## Progression 1.0.1
 - Icon restore on close only redraws icons still big (`GameItems.StillBig`, items dropped from `_scaled` once fine); the blanket

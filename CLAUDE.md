@@ -9,6 +9,7 @@ SPT (Single Player Tarkov 4.1.6) mods and tools. Read `NOTES.md` for where thing
 | `LevelGate/` | BepInEx client plugin: locks items by player level (v1.6.3) | net472, `SptDir` |
 | `LevelGate.Server/` | SPT server mod that goes with LevelGate | net10.0 |
 | `LevelGate.Progression/` | BepInEx client plugin: the CoD / MW4-style **Progression** screen in the main menu (v1.0.0) | net472, `SptDir` (default `C:\SPT`) |
+| `LevelGate.Progression.Server/` | SPT server mod `LevelGateProgression.dll` for Progression: the 16 Rank Tag items (dogtags on the Physical Bitcoin model, ids `6c67706d72616e6b000000` + rank hex) mailed on reaching each rank; the plugin re-skins them with the animated emblem (`RankTags.cs`) | net10.0, `SptServerDir` |
 | `ModernEditor/ModernEditor.Editor/` | Windows editor app (WinForms + WebView2): traders, quests, Level Limits, Progression, Item Stats. UI in `ui/` (html/js/css), embedded as resources | net10.0-windows, `Build-Editor.bat` |
 | `ModernEditor/ModernEditor.Server/` | SPT server mod `ModernEditor.dll` (custom traders, item stats, quest levels following Level Gate) | net10.0, `Build-Server.bat`, `SptServerDir` |
 | `ModernEditor/Shared/` | `TraderModels.cs`, shared by editor and server | — |
@@ -20,7 +21,7 @@ The user's install: SPT at `C:\SPT`, server at `C:\SPT\SPT_Runtime`, Progression
 ## Hard rules (from the user)
 
 - **Do NOT touch `LevelGate/` (plugin) or `LevelGate.Server/`** unless the user explicitly says so. Progression and Modern Editor are fair game.
-- **Progression releases are ALWAYS the full package**: DLL + `emblems/` + `sounds/` (the user's own custom sounds / emblems). A DLL-only zip once wiped their emblems and sounds when they replaced the folder. Zip layout: `Install/SPT/BepInEx/plugins/LevelGateProgression/{LevelGate.Progression.dll, emblems/, sounds/}` + `README.md` + `Source/`. Tell them: "copy Install\SPT into C:\SPT, overwrite".
+- **Progression releases are ALWAYS the full package**: DLL + `emblems/` + `sounds/` (the user's own custom sounds / emblems). A DLL-only zip once wiped their emblems and sounds when they replaced the folder. Zip layout: `Install/SPT/BepInEx/plugins/LevelGateProgression/{LevelGate.Progression.dll, emblems/, sounds/}` + (since 1.0.6) `Install/SPT/SPT_Runtime/user/mods/LevelGateProgression/LevelGateProgression.dll` + `README.md` + `Source/`. Tell them: "copy Install\SPT into C:\SPT, overwrite".
 - **Send every changed build as a zip** to the user (SendUserFile, or put it where they can grab it) — they install and test in game, then send back a log.
 - **New Progression visuals go into F12 › "5. CURRENTLY TESTING"** as sliders / on-off switches first. The user tunes them in game, sends the log, and their final values become the defaults (then the dial is hidden). See "F12 tuning workflow" below.
 - **Polish, don't redesign** Progression: no new panels, no extra colours, no extra decorative effects, keep the hierarchy. Colour meaning: current = orange, selected/viewing = light neutral, locked = grey, unmet = red, unlocked = subdued green, NEW = yellow/gold.

@@ -1,4 +1,4 @@
-# LevelGate Progression (1.0.5)
+# LevelGate Progression (1.0.6)
 
 A Call of Duty style **Progression** screen inside Tarkov's main menu. It adds a
 **PROGRESSION** button to the menu bar next to Character, Trading, Flea Market and the rest.
@@ -18,6 +18,20 @@ A Call of Duty style **Progression** screen inside Tarkov's main menu. It adds a
   - P or Esc closes the screen.
 - It works on its own and never changes LevelGate. It only **reads**
   `BepInEx\plugins\LevelGate\config\level_requirements.json`, and picks up changes to that file while the game runs.
+
+## 1.0.6: Rank Tags
+
+- **New: Rank Tags.** Each of the 16 ranks now has its own item (its own item ID): a steel coin, the thickness of a
+  coin, struck with that rank's emblem, which plays its animation (the emblem's frames) on the 3D item. The stash
+  icon shows the finished emblem.
+  - **Getting them:** when you reach a rank, its tag arrives by **in-game mail** (within about 20 s). Ranks you've
+    already passed are mailed once when the server first sees your profile.
+  - **Wearing one:** click your **Dogtag** slot. Your Rank Tags are in its "Available" list. Your faction dogtag stays in
+    your stash, so you can switch back.
+  - **The rank-up moment** in the Progression screen now inspects the new Rank Tag instead of the faction dogtag.
+- **Needs the new server mod** `LevelGateProgression.dll` (in `SPT_Runtime\user\mods\LevelGateProgression\`, included in
+  this zip). Without it there are no Rank Tag items, and the rank-up shows the faction dogtag as before.
+- **Uses the game's Physical Bitcoin model**, re-skinned in game by the plugin, so no new asset bundle is needed.
 
 ## 1.0.5
 

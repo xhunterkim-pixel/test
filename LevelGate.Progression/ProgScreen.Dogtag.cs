@@ -313,7 +313,8 @@ namespace LevelGate.Progression
             if ((after >= DtOpen || still) && _dtOpenAt < 0)
             {
                 _dtOpenAt = still ? 0 : after;
-                _dtReal = GameItems.InspectDogtag(side == "BEAR", nick, level, TierOf(level).Name);
+                int rankIndex = System.Array.FindLastIndex(Tiers, x => level >= x.From);
+                _dtReal = GameItems.InspectDogtag(side == "BEAR", nick, level, TierOf(level).Name, rankIndex >= 0 ? RankTags.TplOf(rankIndex) : null);
                 if (!_dtReal) { _dtWin.gameObject.SetActive(true); L.Info("dogtag: showing the drawn window instead"); }
             }
             // the game's window fades in once it opens, and out with the rest at the end (then it's closed: HideRankViews)

@@ -103,6 +103,17 @@ namespace LevelGate.Progression
             catch (Exception e) { s.Failed = true; L.Error("loading emblem " + s.File, e); return null; }
         }
 
+        /// <summary>1.0.6: the k-th emblem's sheet file and layout (Rank Tags: rank k wears emblem k).</summary>
+        public static bool FileOf(int index, out string path, out int frames, out int columns, out int size, out int ms)
+        {
+            var sheets = Sheets();
+            path = null; frames = columns = size = ms = 0;
+            if (index < 0 || index >= sheets.Count) return false;
+            var s = sheets[index];
+            path = Path.Combine(Folder, s.File); frames = s.Frames; columns = s.Columns; size = s.Size; ms = s.Ms;
+            return File.Exists(path);
+        }
+
         /// <summary>Loads a level's emblem sheet now (the loading screen does this, so no emblem pops in afterwards).</summary>
         public static void Preload(int level) { if (Available) Load(IndexOf(level)); }
 

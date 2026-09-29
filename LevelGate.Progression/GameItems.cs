@@ -998,7 +998,7 @@ namespace LevelGate.Progression
         /// 59f32bb586f774757e1e8442) with your nickname, level, the date and the new rank written into its dogtag data, opened
         /// in the game's own inspect window (the real tag, the real rows). False: it couldn't be made (the caller falls back).
         /// </summary>
-        public static bool InspectDogtag(bool bear, string nickname, int level, string rank)
+        public static bool InspectDogtag(bool bear, string nickname, int level, string rank, string rankTagTpl = null)
         {
             try
             {
@@ -1007,11 +1007,23 @@ namespace LevelGate.Progression
                 if (_factory == null || _create == null) { L.Info("dogtag: no item factory"); return false; }
                 string tpl = bear ? "59f32bb586f774757e1e8442" : "59f32c3b86f77472a31742f0";
                 var ps = _create.GetParameters();
-                var args = new object[ps.Length];
-                args[0] = Id(ps[0].ParameterType, NewHex());
-                args[1] = Id(ps[1].ParameterType, tpl);
-                for (int i = 2; i < ps.Length; i++) args[i] = ps[i].HasDefaultValue ? ps[i].DefaultValue : null;
-                var item = _create.Invoke(_factory, args);
+                object Make(string t)
+                {
+                    var a = new object[ps.Length];
+                    a[0] = Id(ps[0].ParameterType, NewHex());
+                    a[1] = Id(ps[1].ParameterType, t);
+                    for (int i = 2; i < ps.Length; i++) a[i] = ps[i].HasDefaultValue ? ps[i].DefaultValue : null;
+                    return _create.Invoke(_factory, a);
+                }
+                object item = null;
+                // 1.0.6: the rank's own Rank Tag (the server mod's item: a coin with the emblem) when the game knows it
+                if (rankTagTpl != null)
+                {
+                    try { item = Make(rankTagTpl); } catch (Exception e) { L.Debug("dogtag: rank tag " + rankTagTpl + ": " + e.GetBaseException().Message); }
+                    if (item != null) tpl = rankTagTpl;
+                    else L.Info("dogtag: the Rank Tag item isn't in the game (server mod LevelGateProgression not installed?) — the faction dogtag instead");
+                }
+                if (item == null) item = Make(tpl);
                 if (item == null) { L.Info("dogtag: the game made no item"); return false; }
                 // its dogtag data: the item's Dogtag, or the component in its Components that is one
                 object tag = Refl.Get(item, "Dogtag");
@@ -1040,7 +1052,7 @@ namespace LevelGate.Progression
                     }
                     catch (Exception e) { L.Debug($"dogtag: {m.Name} not set: {e.GetBaseException().Message}"); }
                 }
-                L.Info($"dogtag: {(bear ? "BEAR" : "USEC")} tag for {nickname}, level {level} ({rank}) — set {string.Join(", ", set.ToArray())}");
+                L.Info($"dogtag: {(tpl == rankTagTpl ? "Rank Tag " + tpl : bear ? "BEAR" : "USEC")} tag for {nickname}, level {level} ({rank}) — set {string.Join(", ", set.ToArray())}");
                 // the window the game opens for it: the inspect panel that wasn't open before (so the rank-up can fade it in)
                 var before = new HashSet<int>(OpenInspectPanels().Select(c => c.GetInstanceID()));
                 if (!InspectObject(item, tpl)) return false;
