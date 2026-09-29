@@ -706,7 +706,8 @@ public sealed class HostForm : Form
     /// <summary>
     /// One item list for every page. Each item: i id, n name, s short, c kind, g trader category (Shared.ItemGroups),
     /// lg item-page category when it differs (Ammo Packs), k caliber, wc weapon class, h handbook, p what traders pay,
-    /// f flea, ph / pf whole preset, x hidden, m mod, st stats, mk med kind.
+    /// f flea, ph / pf whole preset, x hidden, m mod, st stats, mk med kind, ob / ot sold by the game's traders (2 barter,
+    /// 1 money only / their names).
     /// </summary>
     private void LoadItems(JsonObject result)
     {
@@ -745,6 +746,9 @@ public sealed class HostForm : Form
                     ["x"] = item.Hidden ? 1 : null,
                     ["st"] = _stats.Show.TryGetValue(item.Id, out var st) ? st.DeepClone() : null,
                     ["mk"] = _stats.Meds.TryGetValue(item.Id, out var med) ? (string?)med["kind"] : null,
+                    // 2.0.8: sold by the game's own traders: ob = 2 barter (maybe money too), 1 money only; ot = who
+                    ["ob"] = _db.GameOffers.TryGetValue(item.Id, out var go) ? (go.Barter ? 2 : 1) : null,
+                    ["ot"] = _db.GameOffers.TryGetValue(item.Id, out var go2) ? string.Join(", ", go2.Traders) : null,
                 });
             }
             int modded = AddModItems(items, result);

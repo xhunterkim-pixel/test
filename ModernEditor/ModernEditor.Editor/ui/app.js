@@ -393,7 +393,8 @@ function applySnapshot(snap) {
 
 function showVersion() {
   const lgv = typeof LG !== 'undefined' && LG.levelGateVersion();
-  $('#appVersion').textContent = 'v' + (S.version || '2.0.0') + (lgv ? ` · Level Gate ${lgv}` : '');
+  $('#appVersion').textContent = 'v' + (S.version || '2.0.0'); // 2.0.8: only the editor's own (two versions side by side read as one)
+  $('#appVersion').title = lgv ? `Modern Editor ${S.version || ''} · Level Gate plugin found: ${lgv}` : `Modern Editor ${S.version || ''}`;
   $('#appVersion').title = `Modern Editor v${S.version || '2.0.0'}${lgv ? ` · Level Gate plugin v${lgv}` : ''}\nVersions go MAJOR.MINOR.PATCH: MAJOR = files / settings change, MINOR = new features, PATCH = fixes.`;
 }
 
@@ -681,7 +682,15 @@ function renderTraders() {
     $('#navLevels').className = LG.loaded() ? '' : 'bad';
     $('#navStats').textContent = Object.keys(st.statEdits || {}).length ? `✎ ${Object.keys(st.statEdits).length}` : '';
   }
+  navOn();
+}
+
+/** The side menu's current page; the trader box only on the trader pages (2.0.8: it isn't about Level Limits, Items or Mods). */
+function navOn() {
   document.querySelectorAll('#nav .nav').forEach(n => n.classList.toggle('on', n.dataset.arg === S.page));
+  const traderPage = ['trader', 'offers', 'quests'].includes(S.page);
+  $('#me').hidden = !traderPage;
+  if (!traderPage) $('#traderMenu').hidden = true;
 }
 
 function traderModBadge(t) {
@@ -716,7 +725,7 @@ function renderHeader() {
     $('#lgConfigBar').title = stats ? (readFrom && readFrom !== statsFile ? `Read from the old file ${readFrom}; saved to ${statsFile}` : 'Item stat edits (meds, stims, food) — applied by ModernEditor.dll') : 'Level Gate\'s level limits file';
     $('#lgConfigBar').classList.toggle('warn', stats ? !statsFile : !cfg || !!(S.lgStarted && LG.state.notInGame));
     $('#search').placeholder = S.page === 'stats' ? 'Search meds, stims & food (Ctrl+F)' : 'Search names, short names, ids, mods (Ctrl+F)';
-    document.querySelectorAll('#nav .nav').forEach(n => n.classList.toggle('on', n.dataset.arg === S.page));
+    navOn();
     if (S.lgStarted) LG.renderHeader();
     $('#chips').hidden = S.page === 'prog';
     return;
@@ -734,7 +743,7 @@ function renderHeader() {
   $('#headerSub').textContent = !f ? 'Click the trader box at the bottom left to add one.' :
     `${f.offers.length} Offer${f.offers.length === 1 ? '' : 's'} · ${f.quests.length} Quest${f.quests.length === 1 ? '' : 's'} · Restocks Every ${f.refreshMinutesMin}–${f.refreshMinutesMax} Min · ${f.unlockedByDefault ? 'Unlocked From the Start' : 'Locked at Start'}${needs.length ? ` · Needs Mods: ${needs.join(', ')}` : ''}`;
   $('#header').style.setProperty('--hc', headerColor(t?.avatarColor));
-  document.querySelectorAll('#nav .nav').forEach(n => n.classList.toggle('on', n.dataset.arg === S.page));
+  navOn();
   const box = $('#searchBox'), input = $('#search');
   $('#chips').hidden = S.page === 'trader' || !S.t;
   $('#viewLabel').textContent = SORTS[S.page] ? sortLabel(S.page) : 'View';
@@ -840,27 +849,35 @@ function pageTrader() {
       <span class="name ${f.unlockQuestId ? '' : 'missing'}">${esc(f.unlockQuestId ? questLabel(f.unlockQuestId) : 'Nothing Yet — Pick the Quest That Unlocks This Trader')}</span>
       <button class="outline" data-act="pickTraderUnlock">Pick Quest…</button></div></div>
       ${ui.hint("The game unlocks traders with a quest reward: completing that quest (one of yours or one of the game's) unlocks this trader. For a level requirement, use a quest that unlocks at that level.")}`;
-  return `<div class="big-fields">${card('t-main', 'Trader Profile', `
-    ${ui.toggle('Trader Is ON (Off = the Server Skips It; Nothing Is Deleted)', () => f.enabled, set('enabled'), { label: 'In the Game', refresh: 'light' })}
-    ${ui.text('Name', () => f.name, set('name'))}
-    ${ui.text('Nickname', () => f.nickname, set('nickname'))}
-    ${ui.text('Surname', () => f.surname, set('surname'))}
-    ${ui.text('Location', () => f.location, set('location'))}
-    ${ui.area('Description', () => f.description, set('description'))}
-    <div class="field"><label>Currency</label>${ui.chips('', [['RUB', '₽ Roubles'], ['USD', '$ Dollars'], ['EUR', '€ Euros']], () => f.currency, set('currency'), { refresh: 'page' })}</div>
-    ${ui.toggle('Available From the Start', () => f.unlockedByDefault, set('unlockedByDefault'), { label: 'Unlocked', refresh: 'page' })}
-    ${unlock}
-    ${ui.toggle("List This Trader's Offers on the Flea Market", () => f.listOnFlea, set('listOnFlea'), { label: 'Flea Market', refresh: 'light' })}
-    ${restockField(f)}`)}
-  ${card('t-trade', 'Trading', `
-    ${ui.num('Position in Trader List', () => f.priority, set('priority'), { min: 0, max: 50, refresh: 'page' })}
-    ${ui.hint(f.priority > 0 ? `Shown as trader #${f.priority} in the game (Prapor is #1). The game's own traders move down one.` : '0 = default: after the game\'s traders. Type 1 to show it first, 3 for third…')}
+  // 2.0.8: grouped so the common edits are at the top and side by side; the long explanations sit behind the ⓘ circles
+  const pos = f.priority > 0 ? `Shown as trader #${f.priority} in the game (Prapor is #1). The game's own traders move down one.` : "0 = default: after the game's traders. Type 1 to show it first, 3 for third…";
+  return `<div class="big-fields trader-page">${card('t-main', 'Profile', `
+    <div class="fgrid">
+      ${ui.text('Name', () => f.name, set('name'))}
+      ${ui.text('Nickname', () => f.nickname, set('nickname'))}
+      ${ui.text('Surname', () => f.surname, set('surname'))}
+      ${ui.text('Location', () => f.location, set('location'))}
+    </div>
+    ${ui.area('Description', () => f.description, set('description'))}`)}
+  ${card('t-game', 'In the Game', `
+    <div class="fgrid">
+      ${ui.toggle('On', () => f.enabled, set('enabled'), { label: 'In the Game', refresh: 'light' })}
+      ${ui.toggle('From the Start', () => f.unlockedByDefault, set('unlockedByDefault'), { label: 'Unlocked', refresh: 'page' })}
+      ${ui.toggle('Listed', () => f.listOnFlea, set('listOnFlea'), { label: 'Flea Market', refresh: 'light' })}
+      ${ui.num('Position in List', () => f.priority, set('priority'), { min: 0, max: 50, refresh: 'page' })}
+    </div>
+    ${ui.hint('<b>In the Game</b>: off = the server skips this trader; nothing is deleted. <b>Flea Market</b>: this trader\'s offers are also listed on the flea market. <b>Position in List</b>: ' + pos)}
     ${samePosition(S.t).length ? `<div class="warn-line">⚠ ${esc(samePosition(S.t).map(x => x.file.name).join(', '))} ${samePosition(S.t).length === 1 ? 'is' : 'are'} also at position #${f.priority}. Give each trader its own number so they don't clash.</div>` : ''}
-    ${ui.num('Price Multiplier', () => f.priceMultiplier, set('priceMultiplier'), { min: 0.05, max: 100, step: 0.05 })}
-    ${ui.hint(`Every money price of this trader's offers × ${fmt(f.priceMultiplier)} in game (1 = as set on the offers; 1.5 = a 1,000 ₽ offer costs 1,500 ₽). Barter items aren't changed.`)}
-    ${ui.num('Buy Multiplier', () => f.buyMultiplier, set('buyMultiplier'), { min: 0, max: 10, step: 0.05 })}
-    ${ui.hint(`× what the trader pays players (each loyalty level's Pays %). 1 = as set below, 0 = buys nothing at all.`)}
-    ${ui.chips('What Players Can Sell to This Trader', [['Default', 'Default (Guns, Parts, Gear, Ammo)'], ['Everything', 'Everything (Like Fence)'], ['Categories', 'Pick Categories'], ['Nothing', 'Nothing']], () => f.buys, set('buys'), { refresh: 'page' })}
+    ${unlock}
+    ${restockField(f)}`)}
+  ${card('t-trade', 'Prices & Selling', `
+    <div class="field"><label>Currency</label>${ui.chips('', [['RUB', '₽ Roubles'], ['USD', '$ Dollars'], ['EUR', '€ Euros']], () => f.currency, set('currency'), { refresh: 'page' })}</div>
+    <div class="fgrid">
+      ${ui.num('Price Multiplier', () => f.priceMultiplier, set('priceMultiplier'), { min: 0.05, max: 100, step: 0.05 })}
+      ${ui.num('Buy Multiplier', () => f.buyMultiplier, set('buyMultiplier'), { min: 0, max: 10, step: 0.05 })}
+    </div>
+    ${ui.hint(`<b>Price Multiplier</b>: every money price of this trader's offers × ${fmt(f.priceMultiplier)} in game (1 = as set on the offers; 1.5 = a 1,000 ₽ offer costs 1,500 ₽). Barter items aren't changed. <b>Buy Multiplier</b>: × what the trader pays players (each loyalty level's Pays %). 1 = as set below, 0 = buys nothing at all.`)}
+    ${ui.chips('Players Can Sell', [['Default', 'Default (Guns, Parts, Gear, Ammo)'], ['Everything', 'Everything (Like Fence)'], ['Categories', 'Pick Categories'], ['Nothing', 'Nothing']], () => f.buys, set('buys'), { refresh: 'page' })}
     ${f.buys === 'Categories' ? ui.multichips('', ITEM_GROUPS.filter(g => g[0] !== 'QuestItems'), f.buyCategories, { color: 'var(--accent)' }) : ''}`)}
   ${card('t-loyalty', 'Loyalty Levels', `
     ${ui.hint(`What a player needs for each loyalty level (LL1 – LL4). Offers can require a loyalty level. "Spent" is counted in the trader's currency (${{ USD: 'dollars', EUR: 'euros' }[f.currency] || 'roubles'}) — the currency only decides this and what the trader pays when players sell to them; each offer's price is set on the offer. "Pays %" = how much of an item's value the trader pays players (the best game trader pays ${S.traderRate}%).`)}
@@ -2190,7 +2207,7 @@ function checkQuest(t, q, add, known) {
 // =====================================================================
 
 const SHORTCUTS = [
-  ['General', [['Ctrl+S', 'Save all (traders, level limits, item stats)'], ['Ctrl+Z', 'Undo'], ['Ctrl+Shift+Z / Ctrl+Y', 'Redo'], ['Ctrl+M', 'Start menu (all traders)'], ['F1 or ?', 'This guide'], ['Esc', 'Close / unselect']]],
+  ['General', [['Ctrl+S', 'Save all (traders, level limits, item stats)'], ['Ctrl+Z', 'Undo'], ['Ctrl+Shift+Z / Ctrl+Y', 'Redo'], ['Ctrl+M', 'Start menu (all traders)'], ['F1 or ?', 'This guide'], ['Esc', 'Close / unselect'], ['Ctrl+C (mouse over an entry)', 'Copy its ID: item, offer, quest, trader, condition, reward']]],
   ['Pages', [['Ctrl+1', 'Trader'], ['Ctrl+2', 'Offers & Barters'], ['Ctrl+3', 'Quests'], ['Ctrl+4', 'Level Limits'], ['Ctrl+5', 'Progression'],
     ['Ctrl+6', 'Item Stats'], ['Ctrl+7', 'Mods'], ['Ctrl+8', 'Checks & Log'], ['Ctrl+K', 'Go to anything (traders, quests, offers, items, pages)']]],
   ['Offers & Quests', [['Ctrl+N', 'New offer / quest (on the Trader page: new trader)'], ['Ctrl+D', 'Duplicate the selected'], ['Del', 'Remove the selected'],

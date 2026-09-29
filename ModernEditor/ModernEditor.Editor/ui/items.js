@@ -1841,7 +1841,9 @@ function progPage() {
   return `<div class="prog plain">
     <div class="plv-bar">
       <div class="plv-head"><b>Levels</b><span class="muted small">click a level · ← → next / previous · Q / E five levels</span><span class="grow"></span>
-        <label class="switch small" title="Items without a limit can be used from level 1"><input type="checkbox" data-prog-free ${S.ui.progFree !== false ? 'checked' : ''}><span class="track"></span><span>Count Items Without a Limit as Level 1</span></label></div>
+        <label class="switch small" title="Items without a limit can be used from level 1"><input type="checkbox" data-prog-free ${S.ui.progFree !== false ? 'checked' : ''}><span class="track"></span><span>Count Items Without a Limit as Level 1</span></label>
+        <label class="pob-src small" title="Where to look for a way to get each item. Vanilla: the game's own traders (Prapor, Therapist…). Modded: your traders made in Modern Editor (switched on), their offers and quest rewards. Both: either one.">Unobtainable Check
+          <select data-prog-obtain>${[['vanilla', 'Read Vanilla'], ['modded', 'Read Modded'], ['both', 'Read Both']].map(([v, t]) => `<option value="${v}" ${(S.ui.progObtain || 'both') === v ? 'selected' : ''}>${t}</option>`).join('')}</select></label></div>
       <div class="plv-grid">${levels}</div>
     </div>
     <div class="prog-top" id="progTop">${progTop(by)}</div>
@@ -1855,6 +1857,7 @@ function progTop(by) {
   const order = GROUPS.map(g => g[0]).filter(k => groups.has(k));
   const free = S.ui.progFree !== false;
   const limitedHere = list.filter(it => levelOf(it.i) === P.level).length;
+  const unobtainable = list.filter(it => !obtainInfo(it.i, S.ui.progObtain || 'both').kind).length; // 2.0.8
   const sections = order.map(k => {
     const g = GROUP[k], items = groups.get(k).sort((a, b) => (a.n || '').localeCompare(b.n || ''));
     const open = P.open.has(k) || items.length <= 60;
@@ -1864,7 +1867,7 @@ function progTop(by) {
       <div class="ptiles">${shown.map(it => {
         const own = levelOf(it.i) === P.level;
         return `<button class="ptile ${own ? '' : 'free'}" data-act="progItem" data-arg="${it.i}" title="${esc(it.n)}${own ? '' : ' · no limit'} — click: open in Level Limits · right-click: change its level">
-          <div class="pt-pic">${tileIcon(it)}</div>
+          <div class="pt-pic">${tileIcon(it)}</div>${obtainBadge(it.i, S.ui.progObtain || 'both')}
           <div class="pt-name">${esc(it.n || it.s)}</div>${own ? '' : '<div class="pt-free">no limit</div>'}</button>`;
       }).join('')}</div>
       ${items.length > shown.length ? `<button class="pmore" data-act="progOpen" data-arg="${k}">Show All ${fmt(items.length)}</button>` : ''}
@@ -1872,7 +1875,7 @@ function progTop(by) {
   }).join('');
   return `<div class="ptop-head">
       <h2 class="ph-level">Level ${P.level}</h2>
-      <div class="ph-tier">${fmt(list.length)} unlock${list.length === 1 ? '' : 's'}${P.level === 1 && free ? ` <span class="muted">(${fmt(limitedHere)} set to 1 · ${fmt(list.length - limitedHere)} without a limit)</span>` : ''} · right-click an item to change its level</div>
+      <div class="ph-tier">${fmt(list.length)} unlock${list.length === 1 ? '' : 's'}${P.level === 1 && free ? ` <span class="muted">(${fmt(limitedHere)} set to 1 · ${fmt(list.length - limitedHere)} without a limit)</span>` : ''}${unobtainable ? ` · <span class="ph-unob" title="No trader sells or barters them and no quest gives them">${fmt(unobtainable)} unobtainable</span>` : ''} · right-click an item to change its level</div>
       <div class="ph-chips">${order.map(k => `<button class="pchip" style="--c:${GROUP[k].color}" data-act="progJump" data-arg="${k}">${esc(GROUP[k].name)} <b>${fmt(groups.get(k).length)}</b></button>`).join('')}</div>
     </div>
     <div class="pcats">${questsAtLevelHtml(P.level)}${sections || `<div class="pempty"><div>Nothing unlocks at level ${P.level}.</div><div class="muted small">Set items to this level in Level Limits, or right-click an item on another level.</div></div>`}</div>`;
@@ -1917,6 +1920,7 @@ Object.assign(ACT, {
 });
 
 document.addEventListener('change', e => {
+  if (e.target.matches?.('[data-prog-obtain]')) { S.ui.progObtain = e.target.value; saveUi(); renderPage(); return; } // 2.0.8
   if (!e.target.matches?.('[data-prog-free]')) return;
   S.ui.progFree = e.target.checked; saveUi(); renderPage();
 });

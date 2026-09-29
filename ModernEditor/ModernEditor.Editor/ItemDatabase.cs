@@ -61,6 +61,12 @@ public sealed class ItemDatabase
     /// <summary>Flea market reference price in roubles (templates/prices.json).</summary>
     public Dictionary<string, double> Flea { get; } = new();
 
+    /// <summary>
+    /// What the game's own traders sell (database/traders/*/assort.json): per item, whether any trader barters it (items as
+    /// the price), sells it for money, and which traders. Custom traders are added in the editor (they're the user's files).
+    /// </summary>
+    public Dictionary<string, (bool Barter, bool Money, SortedSet<string> Traders)> GameOffers { get; } = new();
+
     /// <summary>Whole default preset of a weapon (the gun with all its parts): handbook / flea value in roubles.</summary>
     public Dictionary<string, (double Handbook, double Flea)> Presets { get; } = new();
 
@@ -230,6 +236,7 @@ public sealed class ItemDatabase
         }
 
         LoadPrices(databaseFolder);
+        LoadGameOffers(databaseFolder);
         foreach (var (id, parent, internalName, caliber, quest) in raw)
         {
             string name = names.TryGetValue($"{id} Name", out var nm) && !string.IsNullOrWhiteSpace(nm) ? nm : internalName;
@@ -310,6 +317,64 @@ public sealed class ItemDatabase
         catch
         {
             // Prices are only a convenience for the editor.
+        }
+    }
+
+    // roubles, dollars, euros, GP coins: a price in these is money, anything else makes it a barter
+    private static readonly HashSet<string> Money = new() { "5449016a4bdc2d6f028b456f", "5696686a4bdc2da3298b456a", "569668774bdc2da2298b4568", "5d235b4d86f7742e017bc88a" };
+
+    private void LoadGameOffers(string databaseFolder)
+    {
+        GameOffers.Clear();
+        try
+        {
+            var traders = Path.Combine(databaseFolder, "traders");
+            if (!Directory.Exists(traders)) return;
+            foreach (var dir in Directory.GetDirectories(traders))
+            {
+                var assortFile = Path.Combine(dir, "assort.json");
+                if (!File.Exists(assortFile) || Path.GetFileName(dir).Equals("ragfair", StringComparison.OrdinalIgnoreCase)) continue;
+                string trader = Path.GetFileName(dir);
+                try
+                {
+                    var baseFile = Path.Combine(dir, "base.json");
+                    if (File.Exists(baseFile))
+                    {
+                        using var b = JsonDocument.Parse(File.ReadAllBytes(baseFile));
+                        if (b.RootElement.TryGetProperty("nickname", out var nick) && nick.ValueKind == JsonValueKind.String && !string.IsNullOrWhiteSpace(nick.GetString())) trader = nick.GetString()!;
+                    }
+                    using var doc = JsonDocument.Parse(File.ReadAllBytes(assortFile));
+                    var root = doc.RootElement;
+                    if (!root.TryGetProperty("items", out var items) || items.ValueKind != JsonValueKind.Array) continue;
+                    root.TryGetProperty("barter_scheme", out var schemes);
+                    foreach (var it in items.EnumerateArray())
+                    {
+                        // only the offers themselves (their parts / attachments hang under them)
+                        if (!it.TryGetProperty("parentId", out var pid) || pid.GetString() != "hideout") continue;
+                        string tpl = it.TryGetProperty("_tpl", out var t) ? t.GetString() ?? "" : "", offerId = it.TryGetProperty("_id", out var oid) ? oid.GetString() ?? "" : "";
+                        if (tpl.Length == 0) continue;
+                        bool barter = false, money = false;
+                        if (schemes.ValueKind == JsonValueKind.Object && schemes.TryGetProperty(offerId, out var scheme) && scheme.ValueKind == JsonValueKind.Array)
+                            foreach (var option in scheme.EnumerateArray())
+                            {
+                                if (option.ValueKind != JsonValueKind.Array) continue;
+                                bool anyItem = false;
+                                foreach (var c in option.EnumerateArray())
+                                    if (c.TryGetProperty("_tpl", out var ct) && !Money.Contains(ct.GetString() ?? "")) anyItem = true;
+                                if (anyItem) barter = true; else money = true;
+                            }
+                        if (!barter && !money) money = true; // no price listed: still sold
+                        var have = GameOffers.TryGetValue(tpl, out var h) ? h : (false, false, new SortedSet<string>());
+                        have.Traders.Add(trader);
+                        GameOffers[tpl] = (have.Barter || barter, have.Money || money, have.Traders);
+                    }
+                }
+                catch { /* one broken trader file: skip it */ }
+            }
+        }
+        catch
+        {
+            // Obtainability is only a hint in the editor.
         }
     }
 

@@ -132,6 +132,31 @@ function usedBadge(id) {
   return `<span class="badge used" style="--c:var(--blue)" title="${esc(tip)}">${sold ? `SOLD${sold > 1 ? ' ×' + sold : ''}` : ''}${sold && quests ? ' · ' : ''}${quests ? `${quests} QUEST${quests > 1 ? 'S' : ''}` : ''}${!sold && !quests ? 'USED' : ''}</span>`;
 }
 
+/** 2.0.8: can a player get this item at all? Progression › Unobtainable Check picks where to look: vanilla (the game's own
+ *  traders, from the database's assorts: ob / ot on the item), modded (your switched-on traders' offers and quest rewards)
+ *  or both. kind: 'barter' | 'buy' | 'reward' | null (unobtainable). */
+function obtainInfo(id, src = 'both') {
+  const vanilla = src !== 'modded', modded = src !== 'vanilla';
+  const found = item(id), it = vanilla ? found : null;
+  const uses = modded ? (usedIndex().get(id) || []).filter(u => u.t.file.enabled) : [];
+  const sold = uses.filter(u => u.kind === 'sold'), rewards = uses.filter(u => u.kind === 'reward');
+  const lines = [];
+  if (it?.ob) lines.push(`${it.ob === 2 ? 'Barter' : 'Buy'} · game traders: ${it.ot}`);
+  for (const u of sold.slice(0, 6)) lines.push(`${isBarter(u.o) ? 'Barter' : 'Buy'} · ${u.t.file.name}: ${costText(u.o)}`);
+  for (const u of rewards.slice(0, 4)) lines.push(`Reward · ${u.t.file.name}: ${u.q.name} (${u.q.minLevel ? 'quest level ' + u.q.minLevel : 'quest'})`);
+  const kind = it?.ob === 2 || sold.some(u => isBarter(u.o)) ? 'barter' : it?.ob || sold.length ? 'buy' : rewards.length ? 'reward' : null;
+  const where = { vanilla: "the game's own traders", modded: 'your switched-on traders', both: "the game's traders and your switched-on traders" }[src];
+  return { kind, tip: kind ? 'Obtainable\n' + lines.join('\n') : `Unobtainable: no trader sells or barters it and no quest gives it (checked: ${where}). Players can only find it in raid.` };
+}
+
+/** 2.0.8: the Progression tiles' small obtainable / UNOBTAINABLE tag. */
+function obtainBadge(id, src) {
+  const o = obtainInfo(id, src);
+  if (!o.kind) return `<span class="pt-ob no" title="${esc(o.tip)}">UNOBTAINABLE</span>`;
+  const [ico, label] = { barter: ['⇄', 'Barter'], buy: ['₽', 'Buy'], reward: ['★', 'Reward'] }[o.kind];
+  return `<span class="pt-ob ok ${o.kind}" title="${esc(o.tip)}">${ico}</span>`;
+}
+
 /** Level Limits details: every place the item is used, click one to go there. */
 let usedShown = [];
 function usedByCard(id) {
@@ -659,3 +684,84 @@ LG.addActs({
   progQuest: i => goProgQuest(i),
   goLevel: id => goItemLevels(id),
 });
+
+// =====================================================================
+// 2.0.8: Ctrl+C over any entry copies its ID (just hover it; no click needed). Items, offers, quests, traders, conditions,
+// rewards, Progression tiles and quests. Normal copy still works in text boxes and when text is selected.
+// =====================================================================
+
+let hoverEl = null;
+document.addEventListener('mouseover', e => { hoverEl = e.target; }, true);
+document.addEventListener('mouseleave', () => { hoverEl = null; });
+
+/** The ID of the entry under the mouse, and what it is. */
+function hoveredId(el) {
+  for (let n = el; n && n !== document.body; n = n.parentElement) {
+    const d = n.dataset || {};
+    const act = d.act, arg = d.arg;
+    if (act === 'selOffer') { const o = S.t?.file.offers[Number(arg)]; if (o) return [o.id, 'offer ID']; }
+    if (act === 'selQuest') { const q = S.t?.file.quests[Number(arg)]; if (q) return [q.id, 'quest ID']; }
+    if (act === 'selTrader') { const t = S.traders[Number(arg)]; if (t) return [t.file.id, 'trader ID']; }
+    if (act === 'selCond') { const c = S.quest?.conditions[Number(arg)]; if (c?.id) return [c.id, 'condition ID']; }
+    if (act === 'selReward') { const r = S.quest?.rewards[Number(arg)]; if (r?.id) return [r.id, 'reward ID']; }
+    if (act === 'progQuest') { const x = progQuests[Number(arg)]; if (x) return [x.q.id, 'quest ID']; }
+    if (act === 'openTrader') { const t = S.traders[Number(arg)]; if (t) return [t.file.id, 'trader ID']; }
+    for (const v of [d.row, arg, d.id, d.item, d.tpl]) if (validId(v)) return [v, act === 'goOffer' ? 'offer ID' : act === 'goQuest' || act === 'dropPrereq' ? 'quest ID' : 'item ID'];
+  }
+  return null;
+}
+
+document.addEventListener('keydown', e => {
+  if (!(e.ctrlKey || e.metaKey) || e.altKey || e.shiftKey || e.key.toLowerCase() !== 'c') return;
+  const a = document.activeElement;
+  if (a && (a.matches('input, textarea, select') || a.isContentEditable)) return; // typing: the normal copy
+  if (String(window.getSelection?.() || '').length) return;                     // selected text: the normal copy
+  const hit = hoverEl && hoveredId(hoverEl);
+  if (!hit) return;
+  e.preventDefault(); e.stopPropagation();
+  copyText(hit[0], `${hit[1]} ${hit[0]}`);
+}, true);
+
+// =====================================================================
+// 2.0.8: long help texts live behind a small ⓘ (hover it) next to the field they explain, instead of paragraphs under
+// every field. Short hints (one short line) stay as they are. Works on every page and dialog (runs after each render).
+// =====================================================================
+
+const HINT_LONG = 70;
+function tuckHints(root = document) {
+  for (const h of root.querySelectorAll('.hint:not([data-tucked])')) {
+    h.dataset.tucked = '1';
+    const plain = h.textContent.replace(/\s+/g, ' ').trim();
+    if (plain.length <= HINT_LONG || h.closest('.no-tuck')) continue;
+    const dot = document.createElement('span');
+    dot.className = 'hint-i'; dot.textContent = 'i'; dot.tabIndex = 0;
+    dot.dataset.tip = h.innerHTML;
+    // next to the field it explains (the field just before it), else in the card's title, else where the text was
+    const prev = h.previousElementSibling;
+    let target = prev?.matches('.field') ? prev.querySelector(':scope > label') || prev : null;
+    const title = !target ? h.closest('.card')?.querySelector(':scope > h3 .card-title') : null; // a card's own title: right after its text
+    if (title) { title.after(dot); h.hidden = true; }
+    else if (!target) { const card = h.closest('.card'); target = card?.querySelector(':scope > h3') || null; }
+    if (title) { /* placed */ }
+    else if (target) { target.appendChild(dot); h.hidden = true; }
+    else { h.replaceChildren(dot); h.classList.add('hint-tucked'); }
+  }
+}
+let tuckQueued = false;
+new MutationObserver(() => { if (tuckQueued) return; tuckQueued = true; requestAnimationFrame(() => { tuckQueued = false; tuckHints(); }); })
+  .observe(document.documentElement, { childList: true, subtree: true });
+
+// the tooltip: one floating box on top of everything (scroll areas can't clip it)
+let tipBox = null;
+function showTip(dot) {
+  tipBox ||= Object.assign(document.body.appendChild(document.createElement('div')), { className: 'hint-tip' });
+  tipBox.innerHTML = dot.dataset.tip;
+  tipBox.hidden = false;
+  const r = dot.getBoundingClientRect(), w = tipBox.offsetWidth, h = tipBox.offsetHeight;
+  let x = Math.min(Math.max(8, r.left + r.width / 2 - w / 2), innerWidth - w - 8), y = r.bottom + 8;
+  if (y + h > innerHeight - 8) y = r.top - h - 8;
+  tipBox.style.left = x + 'px'; tipBox.style.top = y + 'px';
+}
+document.addEventListener('mouseover', e => { const d = e.target.closest?.('.hint-i'); if (d) showTip(d); else if (tipBox && !tipBox.hidden) tipBox.hidden = true; });
+document.addEventListener('focusin', e => { if (e.target.matches?.('.hint-i')) showTip(e.target); });
+document.addEventListener('focusout', e => { if (e.target.matches?.('.hint-i') && tipBox) tipBox.hidden = true; });

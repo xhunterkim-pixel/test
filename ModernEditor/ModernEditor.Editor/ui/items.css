@@ -192,13 +192,21 @@ body.lg .pcat h3 { display: flex; align-items: center; gap: 10px; font-size: 17p
 body.lg .pcat h3 i { width: 4px; height: 18px; border-radius: 2px; background: var(--c); }
 body.lg .pcat h3 em { font-style: normal; color: var(--c); }
 body.lg .ptiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
-body.lg .ptile { text-align: left; padding: 8px; border-radius: 8px; background: #1f1f1f; border: 1px solid #2c2c2c; border-bottom: 3px solid var(--c); color: #fff; }
+body.lg .ptile { position: relative; text-align: left; padding: 8px; border-radius: 8px; background: #1f1f1f; border: 1px solid #2c2c2c; border-bottom: 3px solid var(--c); color: #fff; }
 body.lg .ptile:hover { background: #292929; border-color: #444; border-bottom-color: var(--c); }
 body.lg .pt-pic { height: 96px; display: grid; place-items: center; }
 body.lg .pt-pic img { max-width: 100%; max-height: 92px; object-fit: contain; }
 body.lg .pt-name { font-size: 13.5px; font-weight: 700; margin-top: 6px; line-height: 1.25; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 body.lg .pt-free { font-size: 12px; color: var(--muted); margin-top: 2px; }
 body.lg .ptile.free { border-bottom-style: dashed; }
+/* 2.0.8: can players get it? a small icon (barter / buy / quest reward) or an UNOBTAINABLE tag, top-right of the tile */
+body.lg .pt-ob { position: absolute; top: 6px; right: 6px; font-size: 11px; font-weight: 800; line-height: 1; border-radius: 4px; cursor: help; }
+body.lg .pt-ob.ok { width: 20px; height: 20px; display: grid; place-items: center; font-size: 12.5px; background: rgba(30, 215, 96, .14); color: #1ed760; border: 1px solid rgba(30, 215, 96, .45); }
+body.lg .pt-ob.ok.reward { background: rgba(245, 205, 70, .14); color: #f5cd46; border-color: rgba(245, 205, 70, .45); }
+body.lg .pt-ob.no { padding: 3px 5px; letter-spacing: .04em; font-size: 9.5px; background: rgba(229, 72, 77, .14); color: #ff7b7f; border: 1px solid rgba(229, 72, 77, .5); }
+body.lg .pob-src { white-space: nowrap; display: inline-flex; align-items: center; gap: 6px; margin-left: 14px; font-size: 13px; color: #bbb; }
+body.lg .pob-src select { font-size: 13px; padding: 3px 6px; }
+body.lg .ph-unob { color: #ff7b7f; font-weight: 700; }
 body.lg .pmore { margin-top: 10px; padding: 7px 16px; font-weight: 700; font-size: 13px; }
 body.lg .pempty { display: grid; justify-items: center; gap: 8px; padding: 50px 0; color: #cfcfcf; font-weight: 700; font-size: 15px; }
 body.lg .switch.small { font-size: 13px; color: #bbb; }

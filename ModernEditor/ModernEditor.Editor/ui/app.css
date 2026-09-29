@@ -132,6 +132,7 @@ body.has-bg .panel { backdrop-filter: blur(18px); }
 .nav.on { color: #fff; background: var(--sel); }
 .nav.on svg { color: var(--accent); }
 
+#me[hidden] { display: none !important; }
 #me {
   display: grid; grid-template-columns: 44px 1fr 24px; gap: 10px; align-items: center;
   padding: 8px; border-radius: 8px; cursor: pointer; background: #1a1a1a; transition: background .12s;
@@ -734,3 +735,19 @@ body.no-help .hint { display: none; }
 #details .card { margin-bottom: 14px; }
 #details .card-head { font-size: 17px; }
 #details .card-body > .field { margin-bottom: 4px; }
+
+/* 2.0.8: long help behind a small circle (hover it) */
+.hint-i { display: inline-grid; place-items: center; width: 16px; height: 16px; margin-left: 6px; border-radius: 50%; border: 1.5px solid var(--muted); color: var(--muted);
+  font: 800 10.5px/1 Georgia, serif; font-style: italic; cursor: help; vertical-align: 1px; flex: none; user-select: none; }
+.hint-i:hover, .hint-i:focus { border-color: #fff; color: #fff; outline: none; }
+.hint.hint-tucked { margin: 2px 0 6px; }
+.hint-tip { position: fixed; z-index: 99999; max-width: 340px; padding: 9px 11px; border-radius: 8px; background: #111; border: 1px solid #3a3a3a; color: #ddd;
+  font-size: 13px; line-height: 1.45; font-weight: 600; box-shadow: 0 8px 28px rgba(0, 0, 0, .55); pointer-events: none; }
+.hint-tip b { color: #fff; }
+
+/* 2.0.8: the Trader page: fields two to a row (1080p and up), one column on narrow windows */
+.fgrid { display: grid; grid-template-columns: 1fr 1fr; column-gap: 28px; }
+.big-fields .fgrid .field { grid-template-columns: 130px 1fr; }
+.fgrid .field input[type=number] { max-width: 160px; }
+@media (max-width: 1350px) { .fgrid { grid-template-columns: 1fr; } }
+.trader-page .restock-row .range-line input { max-width: 110px; }
