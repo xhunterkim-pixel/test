@@ -446,6 +446,10 @@ public sealed class HostForm : Form
         };
         if (DatabaseFolder() is { } dbf && Directory.Exists(Path.Combine(dbf, "traders"))) dialog.InitialDirectory = Path.Combine(dbf, "traders");
         if (dialog.ShowDialog(this) != DialogResult.OK) return null;
+        var picked = Path.GetDirectoryName(dialog.FileName)!;
+        if (DatabaseFolder() is { } db && picked.StartsWith(Path.Combine(db, "traders"), StringComparison.OrdinalIgnoreCase) && !Ids.IsValid(Path.GetFileName(picked)))
+            MessageBox.Show(this, $"{picked}\n\nThis folder is inside SPT's own database, and isn't one of SPT's traders. SPT stops the server at start when anything was added there (\"File validation failed\").\n\nThe trader is imported now; afterwards move that folder out of SPT_Data (e.g. to your Desktop).",
+                "Move this folder out of SPT_Data", MessageBoxButtons.OK, MessageBoxIcon.Warning);
         var r = TraderImport.Load(dialog.FileName,
             tpl => _db.Items.TryGetValue(tpl, out var it) && it.Category == ItemCategory.Weapon,
             tpl => _db.Items.ContainsKey(tpl) || Currencies.IsCurrency(tpl) || tpl is Currencies.GpCoin or Currencies.LegaMedal);
@@ -862,6 +866,7 @@ public sealed class HostForm : Form
             int modded = AddModItems(items, result);
             result["items"] = items;
             result["itemsStatus"] = $"{_db.Items.Count:N0} items" + (modded > 0 ? $" + {modded:N0} modded" : "");
+            result["strayDb"] = new JsonArray(_db.StrayTraderFolders.Select(x => (JsonNode?)x).ToArray());
             var meds = new JsonObject();
             foreach (var (id, m) in _stats.Meds) meds[id] = m.DeepClone();
             result["meds"] = meds;

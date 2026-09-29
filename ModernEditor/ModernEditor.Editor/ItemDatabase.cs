@@ -1,4 +1,5 @@
 using System.Text.Json;
+using ModernEditor.Shared;
 
 namespace ModernEditor.Editor;
 
@@ -70,6 +71,10 @@ public sealed class ItemDatabase
     /// <summary>One offer of a game trader: who, loyalty level, and every way to pay (each a list of (item, count)).</summary>
     public record GameOffer(string Trader, int Loyalty, List<List<(string Tpl, double Count)>> Prices);
     public Dictionary<string, List<GameOffer>> GameOfferList { get; } = new();
+
+    /// <summary>2.0.8: folders in database\traders that aren't SPT's own (not a 24-hex trader id, not ragfair). SPT checks its
+    /// database files at start and stops the server ("File validation failed") when something was added there.</summary>
+    public List<string> StrayTraderFolders { get; } = new();
 
     /// <summary>Whole default preset of a weapon (the gun with all its parts): handbook / flea value in roubles.</summary>
     public Dictionary<string, (double Handbook, double Flea)> Presets { get; } = new();
@@ -400,12 +405,15 @@ public sealed class ItemDatabase
     {
         GameOffers.Clear();
         GameOfferList.Clear();
+        StrayTraderFolders.Clear();
         try
         {
             var traders = Path.Combine(databaseFolder, "traders");
             if (!Directory.Exists(traders)) return;
             foreach (var dir in Directory.GetDirectories(traders))
             {
+                var fname = Path.GetFileName(dir);
+                if (!fname.Equals("ragfair", StringComparison.OrdinalIgnoreCase) && !Ids.IsValid(fname)) StrayTraderFolders.Add(dir);
                 var assortFile = Path.Combine(dir, "assort.json");
                 if (!File.Exists(assortFile) || Path.GetFileName(dir).Equals("ragfair", StringComparison.OrdinalIgnoreCase)) continue;
                 string trader = Path.GetFileName(dir);

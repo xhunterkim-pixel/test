@@ -351,6 +351,7 @@ function applyItems(snap) {
   S.items = new Map((snap.items || []).map(i => [i.i, i]));
   if (snap.gameQuests) S.gameQuests = new Map(snap.gameQuests.map(q => [q.i, q]));
   S.itemsStatus = snap.itemsStatus || '';
+  S.strayDb = snap.strayDb || [];
   S.traderRate = snap.traderRate || S.traderRate || 60;
   if (snap.gameQuestImages) S.gameQuestImages = snap.gameQuestImages;
   if (snap.gameTraders) S.gameTraders = new Map(snap.gameTraders.map(g => [g.i, g]));
@@ -2055,6 +2056,8 @@ function runChecks() {
   const hasItems = S.items.size > 0;
   const known = id => validId(id) && (!hasItems || S.items.has(id) || !!modOf(id));
 
+  // 2.0.8: something added to SPT's own trader database stops the server at start
+  for (const dir of S.strayDb || []) add('error', 'SPT Database', `${dir} isn't one of SPT's own traders. SPT refuses to start with added files in SPT_Data\\database ("File validation failed"). Move that folder out of SPT_Data (to import a trader, its files can be anywhere else).`);
   const byTraderId = new Map();
   for (const t of S.traders) byTraderId.set(t.file.id, [...(byTraderId.get(t.file.id) || []), t]);
   for (const [id, list] of byTraderId) if (list.length > 1)
