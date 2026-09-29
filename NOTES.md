@@ -107,6 +107,12 @@ Decor Noise 55, Micro Labels 60, Flourish 65, Border Fade 70, Ambient Light 140 
   hitches outside our screen, screen durations, 10 s stats, 60 s "logging cost" line (user's budget: under 0.1%).
 - Dead code removed (Motion sequences, BlueprintGrid, FadingDots, LoadPng, LootColor, TintOf, BackgroundOf…).
 
+## Solved outside our code (for next time)
+- "The given key 'bossrook' was not present" when starting a raid: a leftover Army of Two pre-patcher
+  (`BepInEx\patchers\ArmyOfTwo\ArmyOfTwo.Prepatch.dll`) adding a bot type whose server mod was removed. Found with the
+  1.0.2 log's "game exception" lines + a byte search (ASCII + UTF-16) of BepInEx / user for the name.
+- Server "File validation failed … database\traders\test\base.json": a folder the user added to SPT_Data (editor now flags it).
+
 ## In progress / open
 
 Nothing is half-done in code. Waiting on the user's in-game test of 0.9.94: the emblem should now appear on
