@@ -56,7 +56,7 @@ namespace LevelGate.Progression
 
             var box = Ui.Box(_root.transform, "Box", new Vector2(.5f, 1), new Vector2(0, -52), new Vector2(560, 40));
             Ui.Img(box, Ui.Hex("#0f1416", .94f));
-            Ui.Img(Ui.Rect(box, "Edge", Vector2.zero, new Vector2(0, 1), Vector2.zero, new Vector2(3, 0)), Ui.Hex(ProgScreen.AccentHex));
+            Ui.Img(Ui.Rect(box, "Edge", Vector2.zero, new Vector2(0, 1), Vector2.zero, new Vector2(3, 0)), Ui.Hex("#e0562f"));
             _text = Ui.Label(Ui.Rect(box, "Text", Vector2.zero, Vector2.one, new Vector2(16, 0), new Vector2(-12, 0)), "Text", "", 14, Ui.Hex("#d9dfdc"), TextAnchor.MiddleLeft);
             _root.SetActive(false);
         }

@@ -8,7 +8,7 @@ no PR open). Rules and the build / tuning method are in `CLAUDE.md`.
 | Thing | Version | Status |
 |---|---|---|
 | LevelGate plugin / server | 1.6.3 | Frozen: do not touch without the user's go-ahead |
-| LevelGate Progression | **0.9.97** | Sent (full package), untested in game. 0.9.95 tested: dials tuned from the log, inspect warm-up works (24 ms, background) |
+| LevelGate Progression | **0.9.98** | Sent (full package), untested in game. 0.9.95 tested: dials tuned from the log, inspect warm-up works (24 ms, background) |
 | Modern Editor (editor exe) | 2.0.6 | Sent and in use |
 | Modern Editor (server mod) | 2.0.7 | Sent: compact SPT console output |
 
@@ -64,6 +64,12 @@ Decor Noise 55, Micro Labels 60, Flourish 65, Border Fade 70, Ambient Light 140 
 - Testing now (all default on): FadeCardLine, FadeSectionHead, FadeStatMeters, FadeXpBar (`Ui.RampFade(fadeRight)`: 30%→100% ramp;
   never flip a parent with children using a negative scale, it mirrors their text / fills).
 - Still wanted from the user: MW4 close-ups of the same elements (they sent ours only).
+
+## 0.9.98
+- User rejected: the Colour Theme (removed completely) and 0.9.96's rail-aligned XP fill (back to 0.9.95's fill across the card,
+  edge line alpha .7 → .18). Don't bring either back.
+- F12 trimmed: `hiddenSetup` in Plugin.cs hides set-up / debug keys (values still apply). VerboseLog stays on, hidden.
+- The 0.9.97 Fade switches are still being tested (the user's F12 screenshot was still 0.9.96).
 
 ## In progress / open
 

@@ -13,7 +13,7 @@ namespace LevelGate.Progression
     /// </summary>
     internal static class MenuWidget
     {
-        private static string Red => ProgScreen.AccentDeepHex; // 0.9.96: the Colour Theme
+        private const string Red = "#d8412f";
         private static GameObject _root;
         private static Image _glow, _emblem;
         private static Component _title, _sub;

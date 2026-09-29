@@ -79,36 +79,6 @@ namespace LevelGate.Progression
         public enum NewTagLook { Mw4Dark, MW4, Old }
         public enum XpFillColour { Orange, Green }
 
-        // ---------------------------------------------------------------- 0.9.96 colour theme (F12 > Graphics > Colour Theme)
-        public enum AccentTheme { Red, Amber, Green, Teal, Blue, Purple, Pink, White }
-        /// <summary>The accent colour ("orange" in the code: yours / current). Red = the original #e0562f.</summary>
-        public static string AccentHex
-        {
-            get
-            {
-                switch (ProgressionPlugin.Theme?.Value ?? AccentTheme.Red)
-                {
-                    case AccentTheme.Amber: return "#e8922c";
-                    case AccentTheme.Green: return "#5fbf5a";
-                    case AccentTheme.Teal: return "#2db3a3";
-                    case AccentTheme.Blue: return "#3d8ee6";
-                    case AccentTheme.Purple: return "#9a6ce6";
-                    case AccentTheme.Pink: return "#e0508f";
-                    case AccentTheme.White: return "#d9dde0";
-                    default: return "#e0562f";
-                }
-            }
-        }
-        /// <summary>The main menu button's (a touch deeper) accent.</summary>
-        public static string AccentDeepHex => (ProgressionPlugin.Theme?.Value ?? AccentTheme.Red) == AccentTheme.Red ? "#d8412f" : AccentHex;
-
-        internal static void ThemeChanged()
-        {
-            L.Info($"settings: colour theme = {ProgressionPlugin.Theme.Value} ({AccentHex})");
-            _mood = -1; // the corner glow is repainted
-            PolishChanged("colour theme");
-        }
-
         // ---------------------------------------------------------------- MW4 frames: strong in the middle, fading at the ends
 
         /// <summary>Frames drawn as four fading edges: the frame graphic itself stays (hover hits it) but is invisible.</summary>

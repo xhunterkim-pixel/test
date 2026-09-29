@@ -1,4 +1,4 @@
-# LevelGate Progression (0.9.97, test build)
+# LevelGate Progression (0.9.98, test build)
 
 A Call of Duty style **Progression** screen inside Tarkov's main menu. It adds a
 **PROGRESSION** button to the menu bar next to Character, Trading, Flea Market and the rest.
@@ -18,6 +18,12 @@ A Call of Duty style **Progression** screen inside Tarkov's main menu. It adds a
   - P or Esc closes the screen.
 - It works on its own and never changes LevelGate. It only **reads**
   `BepInEx\plugins\LevelGate\config\level_requirements.json`, and picks up changes to that file while the game runs.
+
+## 0.9.98
+- **Your level's XP fill is back to 0.9.95's look** (it fills the card from the left up to your XP), with the white line at its edge much fainter. 0.9.96's version lined up with the bottom line, but it didn't look right.
+- **Colour Theme removed.** Red is the only look again (the old "Red Glow" name is back too).
+- **F12 is shorter**: set-up and debug options most players never touch are no longer shown: Menu Button Text, Copy Look Of Button, Top / Bottom Margin, Tile Size, Max Items Per Category, Camera Turn, Drawing Order, Inside Game UI, Performance Readout, Detailed Log, Debug Dump Key, Use Game Sounds, Pattern Animation Speed. Their values still apply (they stay in the .cfg file).
+- The four **Fade** switches from 0.9.97 are still in F12 › CURRENTLY TESTING.
 
 ## 0.9.97 (F12 › CURRENTLY TESTING: four on / off switches, all on)
 - **Fade: Current Card Top Line**: your level card's top line fades out towards the left (full on the right), like MW4's card headers.
