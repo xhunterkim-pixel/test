@@ -1484,9 +1484,12 @@ function detailsMulti() {
       ${ui.num('Buy Limit per Player', () => common(list, 'buyLimit'), v => { list.forEach(o => { o.buyLimit = v; }); }, { min: 0, max: 100000, refresh: 'page' })}
       <div class="field top"><label>Prices</label><div class="toolbar" style="padding:0">
         <button class="outline" data-act="bulkPrice" data-arg="mult">× Multiply…</button>
-        <button class="outline" data-act="bulkPrice" data-arg="value" title="What the best game trader pays for each item">= Traders Pay Value</button>
+        <button class="outline" data-act="bulkPrice" data-arg="p" title="What the best game trader pays for each item">= Traders Pay</button>
+        <button class="outline" data-act="bulkPrice" data-arg="h" title="Each item's handbook value">= Handbook</button>
+        <button class="outline" data-act="bulkPrice" data-arg="f" title="Each item's flea market price">= Flea</button>
         <button class="outline" data-act="bulkPrice" data-arg="random">Random ±20%</button>
         <button class="ghost" data-act="bulkPrice" data-arg="fixed">Fixed Prices</button></div></div>
+      ${ui.hint('<b>= Traders Pay / Handbook / Flea</b> set each offer\'s money price to that value of its own item (whole gun or custom build included), in its currency. Random prices move with it (80–120%). Pure barters (items only, no money) are left alone.')}
       <div class="field"><label>Unlock</label><div class="toolbar" style="padding:0"><button class="outline" data-act="bulkAutomatic">Make All Automatic</button></div></div>
       <div class="field"><label>In the Game</label><div class="toolbar" style="padding:0">
         <button class="outline" data-act="bulkOnOff" data-arg="1">Switch All On</button><button class="danger" data-act="bulkOnOff" data-arg="0">Switch All Off</button></div></div>
@@ -1503,6 +1506,14 @@ function detailsMulti() {
       <div class="field"><label>In the Game</label><div class="toolbar" style="padding:0">
         <button class="outline" data-act="bulkOnOff" data-arg="1">Switch All On</button><button class="danger" data-act="bulkOnOff" data-arg="0">Switch All Off</button></div></div>
       ${multiTagField(list)}`);
+  }
+  // 2.0.8: every picked offer's price next to its three values, so they can be compared before setting them
+  if (offers) {
+    const cur = traderMoney();
+    const cell = (o, k) => { const v = offerValue(o, k); return v ? money(toCurrency(v, cur), cur) : '—'; };
+    const rows = list.slice(0, 200).map(o => `<tr><td title="${esc(itemName(o.itemTpl))}">${esc(item(o.itemTpl)?.s || itemName(o.itemTpl))}</td><td>${esc(inGamePrice(S.t, o))}</td><td>${cell(o, 'p')}</td><td>${cell(o, 'h')}</td><td>${cell(o, 'f')}</td></tr>`).join('');
+    edit += card('m-values', 'Prices Compared', `<div class="pcmp-wrap"><table class="pcmp"><tr><th>Item</th><th>Now</th><th>Traders Pay</th><th>Handbook</th><th>Flea</th></tr>${rows}</table></div>
+      ${list.length > 200 ? `<div class="muted small">First 200 of ${list.length} shown.</div>` : ''}`);
   }
   return [`${list.length} ${offers ? 'Offers' : 'Quests'} Selected`, `
     <div class="status" style="--c:var(--accent)"><h3>${list.length} Picked</h3><div class="req">${esc(shownNames)}</div></div>
@@ -3152,10 +3163,18 @@ const ACT = {
       if (!(f > 0)) return;
       list.forEach(o => moneyLines(o).forEach(c => { c.count = Math.max(1, Math.round(c.count * f)); }));
       list.forEach(o => { if (o.priceMax > 0) { o.priceMin = Math.max(1, Math.round(o.priceMin * f)); o.priceMax = Math.max(o.priceMin, Math.round(o.priceMax * f)); } });
-    } else if (how === 'value') {
-      let n = 0;
-      list.forEach(o => { const v = offerValue(o, 'p'); if (!v) return; const cur = moneyLines(o)[0]?.itemTpl || traderMoney(); const line = o.cost.find(c => c.itemTpl === cur); const count = toCurrency(v, cur); if (line) line.count = count; else o.cost.unshift({ itemTpl: cur, count }); n++; });
-      toast(`${n} of ${list.length} priced at what traders pay`);
+    } else if (how === 'value' || how === 'p' || how === 'h' || how === 'f') {
+      const kind = how === 'value' ? 'p' : how;
+      let n = 0, skipped = 0;
+      list.forEach(o => {
+        const v = offerValue(o, kind); if (!v) return;
+        if (!moneyLines(o).length && o.cost.length) { skipped++; return; } // a pure barter keeps its items (no money added to it)
+        const cur = moneyLines(o)[0]?.itemTpl || traderMoney(); const line = o.cost.find(c => c.itemTpl === cur); const count = toCurrency(v, cur);
+        if (line) line.count = count; else o.cost.unshift({ itemTpl: cur, count });
+        if (o.priceMax > 0) { o.priceMin = Math.max(1, Math.round(count * 0.8)); o.priceMax = Math.max(o.priceMin, Math.round(count * 1.2)); }
+        n++;
+      });
+      toast(`${n} of ${list.length} priced at their ${{ p: 'traders pay value', h: 'handbook value', f: 'flea price' }[kind]}${skipped ? ` · ${skipped} pure barter${skipped === 1 ? '' : 's'} left as ${skipped === 1 ? 'it is' : 'they are'}` : ''}${n + skipped < list.length ? ` · ${list.length - n - skipped} have no value` : ''}`);
     } else if (how === 'random') {
       list.forEach(o => { const c = moneyLines(o)[0]; if (c) { o.priceMin = Math.max(1, Math.round(c.count * 0.8)); o.priceMax = Math.max(o.priceMin, Math.round(c.count * 1.2)); } });
     } else list.forEach(o => { o.priceMin = 0; o.priceMax = 0; });

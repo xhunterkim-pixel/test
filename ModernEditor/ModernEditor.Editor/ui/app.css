@@ -809,3 +809,10 @@ body.lg .pt-ob { cursor: pointer; }
 .bitem img { width: 30px; height: 30px; object-fit: contain; flex: none; }
 .bitem span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .bitem small { color: var(--muted); }
 .bfoot { display: flex; gap: 14px; align-items: center; margin-top: 8px; font-size: 13px; }
+
+/* 2.0.8: bulk edit › Prices Compared */
+.pcmp-wrap { max-height: 320px; overflow: auto; }
+.pcmp { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.pcmp th { text-align: left; color: var(--muted); font-weight: 800; position: sticky; top: 0; background: var(--card); padding: 4px 6px; }
+.pcmp td { padding: 3px 6px; border-top: 1px solid #262626; white-space: nowrap; }
+.pcmp td:first-child { max-width: 140px; overflow: hidden; text-overflow: ellipsis; font-weight: 700; }
