@@ -1562,6 +1562,49 @@ namespace LevelGate.Progression
         /// Safety net while the screen is closed (once a second): the game's main menu must never stay hidden or unclickable
         /// because of us. If it's found that way, it's shown again (and logged).
         /// </summary>
+        private static int _warmStep;
+        private static float _warmNextAt;
+
+        /// <summary>
+        /// 1.0.5: the first open of a game session used to freeze ~1.3 s before the loading screen showed (the game's item
+        /// templates and names read, the item classes looked up, the screen built — once each). Now done here instead, one
+        /// piece at a time, while you sit on the main menu (3 s after it shows, not while a mouse button is down): the first
+        /// click opens like every later one. The screen is built and hidden in the same frame (never drawn, never clickable).
+        /// </summary>
+        private static void WarmUp()
+        {
+            if (_warmStep >= 5 || Time.unscaledTime < _warmNextAt) return;
+            if (MenuHook.CurrentScreen != "MainMenu" || Time.realtimeSinceStartup - MenuHook.ScreenChangedAt < 3f) return;
+            if (MenuScreen() == null) { _warmNextAt = Time.unscaledTime + 2f; return; } // not logged in yet (the screen goes inside the menu's UI)
+            var input = UnityInput.Current;
+            if (input.GetMouseButton(0) || input.GetMouseButton(1)) { _warmNextAt = Time.unscaledTime + 1f; return; }
+            float t0 = Time.realtimeSinceStartup;
+            string what;
+            try
+            {
+                switch (_warmStep)
+                {
+                    case 0:
+                        if (ProgData.Templates() == null) { _warmNextAt = Time.unscaledTime + 5f; return; } // the game hasn't loaded them yet
+                        what = "item templates"; break;
+                    case 1: ProgData.ItemsAt(1); what = "per-level lists (names, categories)"; break;
+                    case 2: GameItems.Warm(); what = "item class lookup"; break;
+                    case 3: GameItems.WarmInspect(); what = "inspect classes (background)"; break;
+                    default:
+                        what = "screen";
+                        if (_built && _canvas != null) break;
+                        _built = false;
+                        Build();
+                        if (_canvas != null) _canvas.SetActive(false); // same frame: never drawn
+                        break;
+                }
+            }
+            catch (Exception e) { L.ErrorOnce("warm-up", e); _warmStep = 5; return; }
+            L.Info($"warm-up {_warmStep + 1}/5: {what} ready in {(Time.realtimeSinceStartup - t0) * 1000:0} ms (main menu, ahead of the first open)");
+            _warmStep++;
+            _warmNextAt = Time.unscaledTime + .75f; // one piece at a time
+        }
+
         private static void CheckMenuShown()
         {
             if (Time.unscaledTime < _menuCheckAt) return;
@@ -3207,7 +3250,7 @@ namespace LevelGate.Progression
         public static void Tick()
         {
             if (_restoreAgainAt > 0 && Time.unscaledTime > _restoreAgainAt && !IsOpen && MenuHook.QuietMenu()) { _restoreAgainAt = -1; GameItems.RestoreIcons(); }
-            if (!IsOpen) { CheckMenuShown(); return; }
+            if (!IsOpen) { CheckMenuShown(); WarmUp(); return; }
             BgPattern.Tick(); // the background pattern's slow motion: only ever while open
             Motion.Tick();    // the shared motion system: every tween and sequence advances here, once
             RunBuildQueue();  // categories below the list's window, built a few ms a frame

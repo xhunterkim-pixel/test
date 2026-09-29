@@ -25,6 +25,9 @@ namespace LevelGate.Progression
         private static int _made, _failed;
         private static readonly Dictionary<Texture2D, Sprite> _texSprites = new Dictionary<Texture2D, Sprite>();
 
+        /// <summary>1.0.5: the item class lookup ahead of the first open (main-menu warm-up).</summary>
+        public static void Warm() => Init();
+
         private static void Init()
         {
             if (_init) return;
