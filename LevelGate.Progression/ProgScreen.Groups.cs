@@ -104,6 +104,8 @@ namespace LevelGate.Progression
                 // closed: one tile stands for the group — the picked item if it's in it, else the first
                 var rep = p.Items.FirstOrDefault(i => i.Tpl == _featTpl) ?? p.Items[0];
                 addTile(grid, rep);
+                _closedGroups[rep.Tpl] = p.Items; // 1.0.1: clicking it clears NEW on the whole group
+                _groupMembers[gk] = p.Items;
                 if (!_tileViews.TryGetValue(rep.Tpl, out var v)) continue;
                 if (look == GroupLook.Stack) StackEdges(v.Rt);
                 else FolderPictures(v, p.Items.Where(i => i != rep).Take(3).ToList());
@@ -144,6 +146,8 @@ namespace LevelGate.Progression
         }
 
         /// <summary>The +N (or −) box bottom-right: opens / closes the group (keeping the pick and the scroll).</summary>
+        private static readonly Dictionary<string, List<ProgItem>> _groupMembers = new Dictionary<string, List<ProgItem>>();
+
         private static void CountBox(RectTransform rt, string text, string groupKey, string tip)
         {
             var box = Ui.Rect(rt, "Count", new Vector2(1, 0), new Vector2(1, 0), new Vector2(-38, 5), new Vector2(-5, 21));
@@ -156,6 +160,8 @@ namespace LevelGate.Progression
             {
                 Sounds.Click();
                 if (!_openGroups.Remove(groupKey)) _openGroups.Add(groupKey);
+                // 1.0.1: opening a group counts as seeing it: NEW goes from all of its items
+                if (_groupMembers.TryGetValue(groupKey, out var members)) foreach (var m in members) NewTags.ClearItem(m.Tpl, m.Level);
                 // just this category's tiles are rebuilt (the pick and the scroll stay as they are)
                 string cat = groupKey.Substring(0, Math.Max(0, groupKey.IndexOf('/')));
                 if (_regroup.TryGetValue(cat, out var rebuild))

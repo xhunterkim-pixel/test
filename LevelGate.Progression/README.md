@@ -1,4 +1,4 @@
-# LevelGate Progression (1.0.0)
+# LevelGate Progression (1.0.1)
 
 A Call of Duty style **Progression** screen inside Tarkov's main menu. It adds a
 **PROGRESSION** button to the menu bar next to Character, Trading, Flea Market and the rest.
@@ -18,6 +18,12 @@ A Call of Duty style **Progression** screen inside Tarkov's main menu. It adds a
   - P or Esc closes the screen.
 - It works on its own and never changes LevelGate. It only **reads**
   `BepInEx\plugins\LevelGate\config\level_requirements.json`, and picks up changes to that file while the game runs.
+
+## 1.0.1
+- **Fix: the stash and traders re-loading their icons after you leave Progression.** On every close the plugin made the game redraw every item it had ever shown big (300+ by the end of your session, growing each time) plus ~160 weapons. Now it checks each one and only redraws the icons that are still the big version (most aren't: they're put back as soon as their big picture arrives), and the blanket weapon redraw is gone. This most likely also caused the trader screen that never finished loading (it was opened while hundreds of icons were being redrawn).
+- **NEW on grouped items**: clicking a stacked group's tile, or opening the group, clears NEW on every item in it.
+- **Small items stay small in the big picture**: the centre picture follows the item's size in the stash (1 cell 42% of the stage, 2 cells 58%, 3 72%, 4 85%, bigger: all of it), so a can of saury or a bandage no longer fills the stage like a rifle.
+- **Containers is its own category, second after Weapons** (list and level cards), with the secure containers (Alpha… Kappa, Theta) that were under Other.
 
 ## 1.0.0
 - **The XP line on the level card is gone** (0.9.95–0.9.99), and so is its option. The locked-card blueprint you turned off in 0.9.95 is gone from the code too: each card builds about 30 fewer hidden pictures.

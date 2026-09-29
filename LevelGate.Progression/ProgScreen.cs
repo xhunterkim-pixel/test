@@ -78,8 +78,6 @@ namespace LevelGate.Progression
         private static string _featTpl;
         private static object _featIcon;
         private static int _featScale;
-        private static bool _sharpWeaponShown;
-        private static float _lastWeaponRepair = -1000f;
         // bottom
         private static readonly Card[] _cards = new Card[PerPage];
         private static readonly List<Image> _segments = new List<Image>();
@@ -224,16 +222,9 @@ namespace LevelGate.Progression
             // the big renders' stash icons back to stash size: right away if we stay on the main menu; if the game is switching
             // to another screen (stash, traders…) not in the middle of that — at the next quiet moment on the main menu
             if (!why.StartsWith("game screen") && !why.StartsWith("blocked") && !why.StartsWith("another menu button")) GameItems.RestoreIcons();
-            // at most every 10 minutes: each pass asks the game to redraw ~160 weapons, which it does in the background
-            if (_sharpWeaponShown && GameItems.RepairLeft == 0 && Time.unscaledTime - _lastWeaponRepair > 600f)
-            {
-                _lastWeaponRepair = Time.unscaledTime;
-                // sharp weapon pictures can leak onto other stash weapons: redraw every level-list weapon at stash size
-                var weapons = ProgData.Levels.Keys.Where(t => ProgData.GroupOf(t) == "Weapons").ToList();
-                L.Info($"sharp weapon previews were shown: redrawing {weapons.Count} weapon icon(s) at stash size");
-                GameItems.RepairAll(weapons);
-            }
-            _sharpWeaponShown = false;
+            // 1.0.1: no more blanket redraw of every level-list weapon (~160) after sharp previews: it made the stash and the
+            // traders reload their icons. RestoreIcons puts back only the icons still big; F12 › Redraw All Item Pictures
+            // is there if a stash icon ever looks wrong.
             _restoreAgainAt = Time.unscaledTime + 2f; // and once more, for big renders that were still being drawn
             bool gameSwitching = why.StartsWith("game screen");
             MenuCamera.Turn(false, instant: gameSwitching); // the game moves the camera itself when it switches screens
@@ -367,7 +358,7 @@ namespace LevelGate.Progression
         private const string Orange = "#e0562f";
 
         /// <summary>Category order for the three card pictures.</summary>
-        private static readonly string[] CardOrder = { "Weapons", "Backpacks", "Rigs", "Armor", "Headwear", "Medical", "Food", "Gear",
+        private static readonly string[] CardOrder = { "Weapons", "Containers", "Backpacks", "Rigs", "Armor", "Headwear", "Medical", "Food", "Gear",
             "Melee", "Grenades", "Electronics", "Containers", "Keys", "Special", "WeaponParts", "Barter", "AmmoPacks", "Ammo", "Other" };
 
         /// <summary>The card's three pictures: one item from each of the level's top categories (weapons first, ammo last);
@@ -1954,7 +1945,7 @@ namespace LevelGate.Progression
             _buildQueue.Clear(); _regroup.Clear();
             _scrollTopFrames = _keepScrollY >= 0 ? 0 : 2;
             _tiles.Clear();
-            _tileViews.Clear();
+            _tileViews.Clear(); _closedGroups.Clear(); _groupMembers.Clear();
             _tileOrder.Clear();
             ShowTip(null);
             Adopt(_icons); DropRequests(_icons);
@@ -2286,9 +2277,16 @@ namespace LevelGate.Progression
         // NEW tags: an item's goes away once you click it, a level card's once you've looked at that level; all of them when
         // the screen closes (the last seen level is already yours by then)
 
+        /// <summary>1.0.1: a closed group's shown tile → every item of the group (its NEW tags go together).</summary>
+        private static readonly Dictionary<string, List<ProgItem>> _closedGroups = new Dictionary<string, List<ProgItem>>();
+
         private static void ClickedNew(ProgItem it)
         {
-            if (it == null || !NewTags.ClearItem(it.Tpl, it.Level)) return;
+            if (it == null) return;
+            bool any = false;
+            if (_closedGroups.TryGetValue(it.Tpl, out var group))
+                foreach (var m in group) if (m.Tpl != it.Tpl && NewTags.ClearItem(m.Tpl, m.Level)) any = true;
+            if (!NewTags.ClearItem(it.Tpl, it.Level) && !any) return;
             if (_tileViews.TryGetValue(it.Tpl, out var v) && v.NewTag != null) { UnityEngine.Object.Destroy(v.NewTag); v.NewTag = null; }
             L.Debug($"NEW: {it.Name} seen");
             UpdateSelection(); // its level's card loses NEW once none of its rewards are new
@@ -2571,7 +2569,6 @@ namespace LevelGate.Progression
             var c = _content != null ? _content.GetComponentInParent<Canvas>() : null;
             float px = _tileCell * .8f * (c != null && c.scaleFactor > 0 ? c.scaleFactor : 1f);
             int scale = Mathf.Min(2, GameItems.CardScale(tpl, px));
-            if (scale > 1 && ProgData.GroupOf(tpl) == "Weapons") _sharpWeaponShown = true;
             return scale;
         }
 
@@ -2591,7 +2588,6 @@ namespace LevelGate.Progression
             bool weapon = ProgData.GroupOf(tpl) == "Weapons";
             if (Perf || (weapon && !ProgressionPlugin.High)) return 1;
             int scale = GameItems.CardScale(tpl, CardPx());
-            if (weapon && scale > 1) _sharpWeaponShown = true; // weapons get repaired on close
             return scale;
         }
 
@@ -3011,7 +3007,6 @@ namespace LevelGate.Progression
             _featLock.enabled = false; // the band says it now
             _featPic.color = player > 0 && it.Level > player ? new Color(.82f, .82f, .82f, 1) : Color.white; // locked: a shade darker
             int featScale = FeatScaleOf(it);
-            if (it.Group == "Weapons" && featScale > 1) _sharpWeaponShown = true; // weapons get repaired on close
             _featScale = featScale;
             var kept = GameItems.CopyOf(it.Tpl, featScale);
             FitFeat(null);
@@ -3056,8 +3051,11 @@ namespace LevelGate.Progression
             float sf = _featPic.canvas != null && _featPic.canvas.scaleFactor > 0 ? _featPic.canvas.scaleFactor : 1f;
             var box = parent.rect.size - new Vector2(80, 80);
             float fit = Mathf.Min(box.x * sf / sp.rect.width, box.y * sf / sp.rect.height);
-            if (fit > 1.6f) return;
-            float scale = Mathf.Min(fit, 1f);
+            // 1.0.1: small items stay small: a can of saury (1×1) filled the whole stage like a rifle. The share of the stage an
+            // item may take follows its size in the stash (1 cell 42%, 2 cells 58%, 3 72%, 4 85%, 5+ all of it)
+            float cap = FeatCap(_featTpl);
+            if (fit > 1.6f && cap >= .999f) return;
+            float scale = fit > 1.6f ? fit * cap : Mathf.Min(Mathf.Min(fit, 1f), fit * cap);
             rt.anchorMin = rt.anchorMax = new Vector2(.5f, .5f);
             rt.sizeDelta = new Vector2(Mathf.Round(sp.rect.width * scale), Mathf.Round(sp.rect.height * scale)) / sf;
             rt.anchoredPosition = Vector2.zero;
@@ -3065,6 +3063,19 @@ namespace LevelGate.Progression
         }
 
         private static int _featSnap;
+
+        private static float FeatCap(string tpl)
+        {
+            try
+            {
+                var item = tpl == null ? null : GameItems.ItemOf(tpl);
+                if (item == null) return 1f;
+                var (w, h) = GameItems.CellsOf(item);
+                int n = Mathf.Max(w, h);
+                return n <= 1 ? .42f : n == 2 ? .58f : n == 3 ? .72f : n == 4 ? .85f : 1f;
+            }
+            catch { return 1f; }
+        }
 
         /// <summary>Moves the centre picture so its corner sits exactly on a screen pixel.</summary>
         private static void SnapFeat()

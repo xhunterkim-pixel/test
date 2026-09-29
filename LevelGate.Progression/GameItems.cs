@@ -243,16 +243,33 @@ namespace LevelGate.Progression
         {
             if (_loadIcon == null || _scaled.Count == 0) return;
             var items = _scaled.ToList();
-            int n = 0;
+            int n = 0, fine = 0;
             var t0 = DateTime.Now;
             foreach (var item in items)
             {
+                // 1.0.1: only the ones whose stash icon is still the big render. Redrawing every item ever shown big (300+, on
+                // every close, growing all session) made the stash and traders reload their icons (the user's 1.0.0 log)
+                if (_pending.Values.Any(p => ReferenceEquals(p.Item, item))) continue; // still arriving: handled when it lands
+                if (!StillBig(item)) { _scaled.Remove(item); fine++; continue; }
                 L.Step($"icon: back to 1x {Refl.Get(item, "TemplateId") ?? item.GetType().Name}");
-                try { CallIcon(_loadIcon, item, 1, true); n++; }
+                try { CallIcon(_loadIcon, item, 1, true); n++; _scaled.Remove(item); }
                 catch (Exception e) { L.ErrorOnce("restoring an icon to stash size", e); }
             }
-            // kept (not cleared): every item ever drawn bigger is put back on each close and on the second pass after it
-            L.Info($"items: {n} icon(s) drawn again at stash size ({(DateTime.Now - t0).TotalMilliseconds:0} ms)");
+            L.Info($"items: {n} icon(s) drawn again at stash size, {fine} already fine ({(DateTime.Now - t0).TotalMilliseconds:0} ms)");
+        }
+
+        /// <summary>Is the game's cached (stash) icon of this item still a big render? Reads what is cached, draws nothing new.</summary>
+        private static bool StillBig(object item)
+        {
+            try
+            {
+                var sp = SpriteOf(CallIcon(_loadIcon, item, 1, false));
+                if (sp == null) return false;
+                var (w, h) = CellsOf(item);
+                float expect = PxPerCell * Mathf.Max(w, h);
+                return Mathf.Max(sp.rect.width, sp.rect.height) > expect * 1.3f;
+            }
+            catch { return true; }
         }
 
         // A bigger render goes into the game's one shared icon cache (the stash uses it too). So as soon as it arrives it is

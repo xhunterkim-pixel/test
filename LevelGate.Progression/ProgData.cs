@@ -33,6 +33,8 @@ namespace LevelGate.Progression
         public static readonly (string Key, string Name, string Color, string[] Classes)[] Groups =
         {
             ("Weapons", "Weapons", "#f15e6c", new[] { "5422acb9af1c889c16000029" }),
+            // 1.0.1: second, and with the secure containers (Alpha… Kappa were under Other)
+            ("Containers", "Containers", "#90a4ae", new[] { "5795f317245977243854e041", "5671435f4bdc2d96058b4569", "5448bf274bdc2dfc2f8b456a" }),
             ("Melee", "Melee", "#ff8a65", new[] { "5447e1d04bdc2dff2f8b4567" }),
             ("Grenades", "Grenades", "#ffa42b", new[] { "543be6564bdc2df4348b4568" }),
             ("Ammo", "Ammo", "#f5cd46", new[] { "5485a8684bdc2da71d8b4567" }),
@@ -48,7 +50,6 @@ namespace LevelGate.Progression
             ("Electronics", "Electronics", "#4dd0e1", new[] { "57864a66245977548f04a81f" }),
             ("Barter", "Barter Items", "#bdbdbd", new[] { "5448eb774bdc2d0a728b4567", "5448ecbe4bdc2d60728b4568", "616eb7aea207f41933308f46" }),
             ("Keys", "Keys", "#e0c068", new[] { "543be5e94bdc2df1348b4568" }),
-            ("Containers", "Containers", "#90a4ae", new[] { "5795f317245977243854e041", "5671435f4bdc2d96058b4569" }),
             ("Special", "Special", "#ff7ab6", new[] { "5447e0e74bdc2d3c308b4567", "567849dd4bdc2d150f8b456e" }),
             ("Other", "Other", "#8a8a8a", new string[0]),
         };
