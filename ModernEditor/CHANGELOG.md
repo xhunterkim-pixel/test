@@ -3,6 +3,7 @@
 ## 2.0.8 (editor)
 - **Progression: can players get it?** Each item tile has a small green icon when a trader sells it (⇄ barter, ₽ buy) or a quest gives it (★), or a red **UNOBTAINABLE** tag. Hover it to see who sells it and for what. The level header counts the unobtainable ones. A new **Unobtainable Check** setting above the levels picks where to look: **Read Vanilla** (the game's own traders), **Read Modded** (your traders made here, switched on) or **Read Both**.
 - **Click the obtainable / UNOBTAINABLE tag** for a pop-up of every way to get the item: each game trader (loyalty level and price, every barter option), each of your traders' offers and quest rewards with a **Go to Offer / Quest** button. Unobtainable items open it too.
+- **Notes per level** (Progression): a notes box next to the level's title. Click it and type; it saves by itself. Levels with notes get a small gold underline in the level grid.
 - **Other Gear split** on the item pages (Level Limits, Progression, Item Stats): **Headsets**, **Face Covers**, **Eyewear** and **Armbands** are categories of their own. The trader pages still group them as Other Gear (what the server knows).
 - **Ctrl+C copies an ID**: hover any entry (item, offer, quest, trader, objective, reward, Progression tile or quest) and press Ctrl+C. No click needed; normal copy still works in text boxes.
 - The trader box at the bottom left only shows on the trader pages (Trader, Offers & Barters, Quests).

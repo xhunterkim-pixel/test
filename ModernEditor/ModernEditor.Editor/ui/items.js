@@ -1837,7 +1837,7 @@ function progPage() {
   // every level at once: number + how many unlock there (click to open it)
   const levels = Array.from({ length: MAX_LEVEL }, (_, i) => i + 1).map(l => {
     const n = (by.get(l) || []).length;
-    return `<button class="plv ${l === P.level ? 'on' : ''} ${n ? '' : 'empty'}" data-act="progLevel" data-arg="${l}" title="Level ${l}: ${fmt(n)} unlock${n === 1 ? '' : 's'}"><b>${l}</b><span>${n ? fmt(n) : '–'}</span></button>`;
+    return `<button class="plv ${l === P.level ? 'on' : ''} ${n ? '' : 'empty'} ${(S.ui.levelNotes || {})[l] ? 'noted' : ''}" data-act="progLevel" data-arg="${l}" title="Level ${l}: ${fmt(n)} unlock${n === 1 ? '' : 's'}"><b>${l}</b><span>${n ? fmt(n) : '–'}</span></button>`;
   }).join('');
   return `<div class="prog plain">
     <div class="plv-bar">
@@ -1874,10 +1874,14 @@ function progTop(by) {
       ${items.length > shown.length ? `<button class="pmore" data-act="progOpen" data-arg="${k}">Show All ${fmt(items.length)}</button>` : ''}
     </section>`;
   }).join('');
-  return `<div class="ptop-head">
+  const note = (S.ui.levelNotes || {})[P.level] || '';
+  return `<div class="ptop-head"><div class="ph-main">
       <h2 class="ph-level">Level ${P.level}</h2>
       <div class="ph-tier">${fmt(list.length)} unlock${list.length === 1 ? '' : 's'}${P.level === 1 && free ? ` <span class="muted">(${fmt(limitedHere)} set to 1 · ${fmt(list.length - limitedHere)} without a limit)</span>` : ''}${unobtainable ? ` · <span class="ph-unob" title="No trader sells or barters them and no quest gives them">${fmt(unobtainable)} unobtainable</span>` : ''} · right-click an item to change its level</div>
       <div class="ph-chips">${order.map(k => `<button class="pchip" style="--c:${GROUP[k].color}" data-act="progJump" data-arg="${k}">${esc(GROUP[k].name)} <b>${fmt(groups.get(k).length)}</b></button>`).join('')}</div>
+    </div>
+    <label class="ph-notes ${note ? 'has' : ''}"><span>Notes · Level ${P.level}</span>
+      <textarea data-level-note="${P.level}" spellcheck="false" placeholder="Click and type: plans for this level, what's missing, ideas… (only you see these; saved automatically)">${esc(note)}</textarea></label>
     </div>
     <div class="pcats">${questsAtLevelHtml(P.level)}${sections || `<div class="pempty"><div>Nothing unlocks at level ${P.level}.</div><div class="muted small">Set items to this level in Level Limits, or right-click an item on another level.</div></div>`}</div>`;
 }
@@ -1918,6 +1922,18 @@ Object.assign(ACT, {
     saveUi(); goTab('levels', true);
     requestAnimationFrame(() => document.querySelector(`#page .row[data-row="${id}"]`)?.scrollIntoView({ block: 'center' }));
   },
+});
+
+// 2.0.8: notes per level (Progression): typed straight into the box, saved with the editor's settings
+document.addEventListener('input', e => {
+  const lv = e.target.dataset?.levelNote;
+  if (!lv) return;
+  const notes = (S.ui.levelNotes ||= {});
+  const v = e.target.value;
+  if (v.trim()) notes[lv] = v; else delete notes[lv];
+  e.target.closest('.ph-notes')?.classList.toggle('has', !!v.trim());
+  saveUi();
+  const b = document.querySelector(`.plv[data-arg="${lv}"]`); if (b) b.classList.toggle('noted', !!v.trim());
 });
 
 document.addEventListener('change', e => {
