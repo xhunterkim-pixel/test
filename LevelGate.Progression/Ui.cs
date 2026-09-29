@@ -715,6 +715,31 @@ namespace LevelGate.Progression
             return _scan = Sprite.Create(tex, new Rect(0, 0, 2, 3), new Vector2(.5f, .5f), 100, 0, SpriteMeshType.FullRect);
         }
 
+        private static Sprite _chamferScan;
+        /// <summary>
+        /// 1.0.3: Scanlines in the shape of <see cref="Chamfer"/> (the tiles' and cards' cut corners), as one 9-sliced sprite:
+        /// used Tiled, the lines repeat across the middle and the cut corners stay cut, so a locked tile's hologram covers the
+        /// whole tile without spilling past its corners (no Mask needed). 33 px: a 15 px middle keeps the 3 px line rhythm.
+        /// </summary>
+        public static Sprite ChamferScanlines()
+        {
+            if (_chamferScan != null) return _chamferScan;
+            const int n = 33, c = 8, b = 9;
+            var tex = new Texture2D(n, n, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Clamp, filterMode = FilterMode.Point };
+            var px = new Color32[n * n];
+            for (int y = 0; y < n; y++)
+                for (int x = 0; x < n; x++)
+                {
+                    float tl = x + (n - 1 - y) - c + 1, br = (n - 1 - x) + y - c + 1;
+                    float shape = Mathf.Clamp01(Mathf.Min(tl, br) / 1.2f);
+                    bool line = y % 3 == 2;
+                    px[y * n + x] = new Color32(255, 255, 255, (byte)(line ? 255 * shape : 0));
+                }
+            tex.SetPixels32(px);
+            tex.Apply(false, true);
+            return _chamferScan = Sprite.Create(tex, new Rect(0, 0, n, n), new Vector2(.5f, .5f), 100, 0, SpriteMeshType.FullRect, new Vector4(b, b, b, b));
+        }
+
         /// <summary>Registration marks: a small "+" just outside each corner of a panel (CoD's HUD framing).</summary>
         public static void CornerMarks(RectTransform frame, Color color, float arm = 5, float gap = 6)
         {

@@ -8,7 +8,7 @@ no PR open). Rules and the build / tuning method are in `CLAUDE.md`.
 | Thing | Version | Status |
 |---|---|---|
 | LevelGate plugin / server | 1.6.3 | Frozen: do not touch without the user's go-ahead |
-| LevelGate Progression | **1.0.2** | Sent (full package), untested in game. 0.9.95 tested: dials tuned from the log, inspect warm-up works (24 ms, background) |
+| LevelGate Progression | **1.0.3** | Sent (full package), untested in game. 0.9.95 tested: dials tuned from the log, inspect warm-up works (24 ms, background) |
 | Modern Editor (editor exe) | 2.0.8 | Sent, untested on Windows (UI checked in the browser mock) |
 | Modern Editor (server mod) | 2.0.7 | Sent: compact SPT console output |
 

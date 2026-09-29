@@ -1,4 +1,4 @@
-# LevelGate Progression (1.0.2)
+# LevelGate Progression (1.0.3)
 
 A Call of Duty style **Progression** screen inside Tarkov's main menu. It adds a
 **PROGRESSION** button to the menu bar next to Character, Trading, Flea Market and the rest.
@@ -18,6 +18,10 @@ A Call of Duty style **Progression** screen inside Tarkov's main menu. It adds a
   - P or Esc closes the screen.
 - It works on its own and never changes LevelGate. It only **reads**
   `BepInEx\plugins\LevelGate\config\level_requirements.json`, and picks up changes to that file while the game runs.
+
+## 1.0.3
+- **Locked reward tiles**: the scanlines now cover the whole tile, down to the foot with the lock, and follow its cut corners (they stopped above the foot and ran square past the corners). Locked level cards use the same cut shape.
+- Your 1.0.2 logs: the icon fix works (on close "0 drawn again, 62 already fine"), and logging costs 0.005–0.010% of play time.
 
 ## 1.0.2 (testing phase: a much bigger log)
 - **Progression.log records far more** (as long as Advanced › Detailed Log is on, which it is):

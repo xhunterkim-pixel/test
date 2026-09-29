@@ -2330,8 +2330,9 @@ namespace LevelGate.Progression
             if (Mw(9) && !reached)
             {
                 // MW 9: locked — a cold, scanlined hologram over the picture (after it: on top)
-                var hs = Ui.Img(Ui.Fill(thumb, "HoloScan"), new Color(.7f, .86f, .95f, .22f), Ui.Scanlines()); hs.type = Image.Type.Tiled; hs.raycastTarget = false;
-                Ui.Img(Ui.Fill(thumb, "HoloNoise"), new Color(.7f, .86f, .95f, .14f), Ui.HStreaks()).raycastTarget = false;
+                // 1.0.3: over the whole tile, in its cut shape (it stopped above the foot and ran square past the cut corners)
+                var hs = Ui.Img(Ui.Fill(inner, "HoloScan"), new Color(.7f, .86f, .95f, .22f), Ui.ChamferScanlines()); hs.type = Image.Type.Tiled; hs.raycastTarget = false;
+                Ui.Img(Ui.Rect(inner, "HoloNoise", Vector2.zero, Vector2.one, new Vector2(3, 3), new Vector2(-3, -TileTop)), new Color(.7f, .86f, .95f, .14f), Ui.HStreaks()).raycastTarget = false;
             }
             // selection: a 2 px light bar along the top (so selected isn't told by colour alone)
             v.Top = Ui.Img(Ui.Rect(inner, "Top", new Vector2(0, 1), Vector2.one, new Vector2(9, -2), Vector2.zero), Select); // clear of the cut corner
@@ -3786,7 +3787,7 @@ namespace LevelGate.Progression
                 _flood.raycastTarget = _floodDots.raycastTarget = false; _flood.enabled = _floodDots.enabled = false;
                 // MW 9: locked — a cold, scanlined hologram over the pictures
                 _holo = Ui.Fill(inner, "Holo").gameObject; // brought to the top when shown (over the pictures)
-                var hs = Ui.Img(Ui.Fill(_holo.transform, "Scan"), new Color(.7f, .86f, .95f, .2f), Ui.Scanlines()); hs.type = Image.Type.Tiled; hs.raycastTarget = false;
+                var hs = Ui.Img(Ui.Fill(_holo.transform, "Scan"), new Color(.7f, .86f, .95f, .2f), Ui.ChamferScanlines()); hs.type = Image.Type.Tiled; hs.raycastTarget = false; // 1.0.3: in the card's cut shape
                 Ui.Img(Ui.Fill(_holo.transform, "Noise"), new Color(.7f, .86f, .95f, .12f), Ui.HStreaks()).raycastTarget = false;
                 _holo.SetActive(false);
                 // picked: a bloom in the rank's colour and a light made of dots under the pictures, both drifting a little
