@@ -162,6 +162,8 @@ public sealed class HostForm : Form
         "saveTrader" => SaveTrader(Str(a, "folder"), Str(a, "text")),
         "newTrader" => NewTrader(Str(a, "name")),
         "importTrader" => ImportTrader(),
+        "itemSlots" => ItemSlots(Str(a, "tpl")),
+        "buildSources" => BuildSources(Str(a, "tpl")),
         "deleteTrader" => DeleteTrader(Str(a, "folder")),
         "duplicateTrader" => DuplicateTrader(Str(a, "folder"), Str(a, "name"), Str(a, "text")),
         "listDeleted" => ListDeleted(),
@@ -465,6 +467,70 @@ public sealed class HostForm : Form
         EditorLog.Info("import", $"{dialog.FileName} → {dir}: " + string.Join(" | ", r.Notes));
         var payload = TraderPayload(dir, JsonNode.Parse(File.ReadAllText(Path.Combine(dir, "trader.json")))!);
         return new JsonObject { ["trader"] = payload, ["notes"] = new JsonArray(r.Notes.Select(x => (JsonNode?)x).ToArray()) };
+    }
+
+    // ------------------------------------------------------------------ 2.0.8: custom builds (guns with picked parts, armor with plates…)
+
+    /// <summary>An item's slots and, for each, the items that fit (only items the editor knows).</summary>
+    private JsonNode ItemSlots(string tpl)
+    {
+        var arr = new JsonArray();
+        if (_db.Slots.TryGetValue(tpl, out var slots))
+            foreach (var s in slots)
+            {
+                var fits = _db.Fits(s);
+                arr.Add(new JsonObject
+                {
+                    ["name"] = s.Name, ["required"] = s.Required,
+                    ["fits"] = new JsonArray(fits.Select(f => (JsonNode?)f).ToArray()),
+                    // parts that have slots of their own (the page asks for those when they're picked)
+                    ["nested"] = new JsonArray(fits.Where(f => _db.Slots.ContainsKey(f)).Select(f => (JsonNode?)f).ToArray()),
+                });
+            }
+        return new JsonObject { ["tpl"] = tpl, ["slots"] = arr };
+    }
+
+    /// <summary>Where a build can start from: the game's presets of that item and your own weapon builds saved in game
+    /// (user\profiles\*.json, userbuilds). Each: name, source, parts (id, tpl, parentId — "root" for the item — slotId).</summary>
+    private JsonNode BuildSources(string tpl)
+    {
+        var list = new JsonArray();
+        JsonArray Parts(IEnumerable<(string Id, string Tpl, string Parent, string Slot)> items, string rootId) =>
+            new(items.Where(x => x.Id != rootId).Select(x => (JsonNode?)new JsonObject { ["id"] = x.Id, ["tpl"] = x.Tpl, ["parentId"] = x.Parent == rootId ? "root" : x.Parent, ["slotId"] = x.Slot }).ToArray());
+        foreach (var p in _db.GamePresets.Where(p => p.RootTpl == tpl))
+        {
+            var ids = p.Items.Select(x => x.Id).ToHashSet();
+            var root = p.Items.First(x => !ids.Contains(x.Parent));
+            list.Add(new JsonObject { ["name"] = p.Name, ["from"] = "Game preset", ["parts"] = Parts(p.Items, root.Id) });
+        }
+        try
+        {
+            var profiles = _modFolder == null ? null : Path.GetFullPath(Path.Combine(_modFolder, "..", "..", "profiles"));
+            if (profiles != null && Directory.Exists(profiles))
+                foreach (var file in Directory.GetFiles(profiles, "*.json"))
+                {
+                    using var doc = JsonDocument.Parse(File.ReadAllBytes(file));
+                    string who = doc.RootElement.TryGetProperty("characters", out var ch) && ch.TryGetProperty("pmc", out var pmc) && pmc.TryGetProperty("Info", out var info)
+                        && info.TryGetProperty("Nickname", out var nn) ? nn.GetString() ?? "" : Path.GetFileNameWithoutExtension(file);
+                    if (!doc.RootElement.TryGetProperty("userbuilds", out var ub)) continue;
+                    foreach (var kind in new[] { "weaponBuilds", "equipmentBuilds" })
+                    {
+                        if (!ub.TryGetProperty(kind, out var builds) || builds.ValueKind != JsonValueKind.Array) continue;
+                        foreach (var b in builds.EnumerateArray())
+                        {
+                            if (!b.TryGetProperty("Items", out var its) || its.ValueKind != JsonValueKind.Array) continue;
+                            string rootId = b.TryGetProperty("Root", out var r) ? r.GetString() ?? "" : "";
+                            var items = its.EnumerateArray().Select(x => (Id: x.TryGetProperty("_id", out var a) ? a.GetString() ?? "" : "", Tpl: x.TryGetProperty("_tpl", out var t) ? t.GetString() ?? "" : "",
+                                Parent: x.TryGetProperty("parentId", out var pa) ? pa.GetString() ?? "" : "", Slot: x.TryGetProperty("slotId", out var sl) ? sl.GetString() ?? "" : "")).ToList();
+                            var rootItem = items.FirstOrDefault(x => x.Id == rootId);
+                            if (rootItem.Tpl != tpl) continue;
+                            list.Add(new JsonObject { ["name"] = b.TryGetProperty("Name", out var bn) ? bn.GetString() ?? "" : "", ["from"] = $"Your build ({who})", ["parts"] = Parts(items, rootId) });
+                        }
+                    }
+                }
+        }
+        catch (Exception e) { EditorLog.Info("builds", "reading saved builds: " + e.Message); }
+        return list;
     }
 
     /// <summary>Copies a trader folder (icons, quest images) and writes the copy's trader.json (with new ids, made by the page).</summary>

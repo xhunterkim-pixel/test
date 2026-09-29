@@ -85,7 +85,24 @@ public static class TraderImport
                     if (S(it, "parentId") != "hideout") continue; // parts of an assembled gun hang under their offer
                     string id = S(it, "_id"), tpl = S(it, "_tpl");
                     if (tpl.Length == 0) continue;
-                    var offer = new OfferDef { Id = Ids.New(), ItemTpl = tpl, UseDefaultPreset = isWeapon(tpl) && hasChildren.Contains(id) };
+                    var offer = new OfferDef { Id = Ids.New(), ItemTpl = tpl, UseDefaultPreset = false };
+                    // 2.0.8: sold assembled (a gun with parts, armor with plates): keep that exact build
+                    if (hasChildren.Contains(id))
+                    {
+                        var all = items.EnumerateArray().ToList();
+                        var queue = new Queue<string>(); queue.Enqueue(id);
+                        while (queue.Count > 0)
+                        {
+                            var pid = queue.Dequeue();
+                            foreach (var ch in all.Where(x => S(x, "parentId") == pid))
+                            {
+                                string cid = S(ch, "_id");
+                                offer.Parts.Add(new PresetPart { Id = cid, Tpl = S(ch, "_tpl"), ParentId = pid == id ? "root" : pid, SlotId = S(ch, "slotId") });
+                                queue.Enqueue(cid);
+                            }
+                        }
+                        if (offer.Parts.Count > 0) offer.BuildName = "Imported";
+                    }
                     if (!known(tpl)) unknown++;
                     if (loyal.ValueKind == JsonValueKind.Object && loyal.TryGetProperty(id, out var ll) && ll.ValueKind == JsonValueKind.Number)
                         offer.LoyaltyLevel = Math.Clamp(ll.GetInt32(), 1, 4);

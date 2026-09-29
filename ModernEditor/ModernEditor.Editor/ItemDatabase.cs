@@ -91,6 +91,38 @@ public sealed class ItemDatabase
 
     private readonly Dictionary<string, string> _parents = new();
 
+    /// <summary>2.0.8: an item's slots (items.json _props.Slots): name, required, and the filter (item ids or base classes).</summary>
+    public sealed record SlotDef(string Name, bool Required, string[] Filter, string[] Exclude);
+    public Dictionary<string, List<SlotDef>> Slots { get; } = new();
+
+    /// <summary>Items that fit a slot: listed ids, and every item under a listed base class, minus the excluded ones.</summary>
+    public List<string> Fits(SlotDef slot)
+    {
+        var ids = new HashSet<string>(slot.Filter);
+        var ex = new HashSet<string>(slot.Exclude);
+        var result = new List<string>();
+        foreach (var id in Items.Keys)
+        {
+            if (ex.Contains(id) || IsUnder(id, ex)) continue;
+            if (ids.Contains(id) || IsUnder(id, ids)) result.Add(id);
+        }
+        return result;
+    }
+
+    private bool IsUnder(string id, HashSet<string> classes)
+    {
+        if (classes.Count == 0) return false;
+        for (int i = 0; i < 20 && _parents.TryGetValue(id, out var parent) && !string.IsNullOrEmpty(parent); i++)
+        {
+            if (classes.Contains(parent)) return true;
+            id = parent;
+        }
+        return false;
+    }
+
+    /// <summary>The game's named presets (globals.json ItemPresets): name and every item of it (root first).</summary>
+    public List<(string Name, string RootTpl, List<(string Id, string Tpl, string Parent, string Slot)> Items)> GamePresets { get; } = new();
+
     /// <summary>True when <paramref name="cls"/> is the item's parent, grandparent...</summary>
     public bool HasAncestor(string id, string cls)
     {
@@ -219,6 +251,7 @@ public sealed class ItemDatabase
         using var doc = JsonDocument.Parse(File.ReadAllBytes(Path.Combine(databaseFolder, "templates", "items.json")));
         var parents = _parents;
         parents.Clear();
+        Slots.Clear();
         var raw = new List<(string Id, string Parent, string Name, string Caliber, bool Quest)>();
         foreach (var p in doc.RootElement.EnumerateObject())
         {
@@ -235,6 +268,24 @@ public sealed class ItemDatabase
                 quest = props.TryGetProperty("QuestItem", out var q) && q.ValueKind == JsonValueKind.True;
                 foreach (var key in new[] { "Caliber", "ammoCaliber" })
                     if (props.TryGetProperty(key, out var cal) && cal.ValueKind == JsonValueKind.String) { caliber = cal.GetString() ?? ""; break; }
+                if (props.TryGetProperty("Slots", out var slots) && slots.ValueKind == JsonValueKind.Array && slots.GetArrayLength() > 0)
+                {
+                    var list = new List<SlotDef>();
+                    foreach (var s in slots.EnumerateArray())
+                    {
+                        string sname = s.TryGetProperty("_name", out var sn) ? sn.GetString() ?? "" : "";
+                        bool req = s.TryGetProperty("_required", out var r) && r.ValueKind == JsonValueKind.True;
+                        var filter = new List<string>(); var exclude = new List<string>();
+                        if (s.TryGetProperty("_props", out var sp) && sp.TryGetProperty("filters", out var fs) && fs.ValueKind == JsonValueKind.Array)
+                            foreach (var f in fs.EnumerateArray())
+                            {
+                                if (f.TryGetProperty("Filter", out var fl) && fl.ValueKind == JsonValueKind.Array) filter.AddRange(fl.EnumerateArray().Select(x => x.GetString() ?? ""));
+                                if (f.TryGetProperty("ExcludedFilter", out var el) && el.ValueKind == JsonValueKind.Array) exclude.AddRange(el.EnumerateArray().Select(x => x.GetString() ?? ""));
+                            }
+                        if (sname.Length > 0) list.Add(new SlotDef(sname, req, filter.ToArray(), exclude.ToArray()));
+                    }
+                    if (list.Count > 0) Slots[p.Name] = list;
+                }
             }
             raw.Add((p.Name, parent, internalName, caliber, quest));
         }
@@ -298,14 +349,24 @@ public sealed class ItemDatabase
 
             // default presets (what an offer with "sell the assembled gun" really sells)
             var globals = Path.Combine(databaseFolder, "globals.json");
+            GamePresets.Clear();
             if (File.Exists(globals) && Handbook.Count > 0)
             {
                 using var doc = JsonDocument.Parse(File.ReadAllBytes(globals));
                 if (doc.RootElement.TryGetProperty("ItemPresets", out var presets) && presets.ValueKind == JsonValueKind.Object)
                     foreach (var p in presets.EnumerateObject())
                     {
-                        if (!p.Value.TryGetProperty("_encyclopedia", out var enc) || enc.ValueKind != JsonValueKind.String) continue;
                         if (!p.Value.TryGetProperty("_items", out var parts) || parts.ValueKind != JsonValueKind.Array) continue;
+                        {
+                            // every named preset, for the build editor's "start from"
+                            var its = parts.EnumerateArray().Select(x => (Id: x.TryGetProperty("_id", out var a) ? a.GetString() ?? "" : "", Tpl: x.TryGetProperty("_tpl", out var b) ? b.GetString() ?? "" : "",
+                                Parent: x.TryGetProperty("parentId", out var c) ? c.GetString() ?? "" : "", Slot: x.TryGetProperty("slotId", out var d) ? d.GetString() ?? "" : "")).ToList();
+                            string pname = p.Value.TryGetProperty("_name", out var pn) ? pn.GetString() ?? "" : "";
+                            var idset = its.Select(x => x.Id).ToHashSet();
+                            var root = its.FirstOrDefault(x => !idset.Contains(x.Parent));
+                            if (its.Count > 1 && root.Tpl != null) GamePresets.Add((pname, root.Tpl, its));
+                        }
+                        if (!p.Value.TryGetProperty("_encyclopedia", out var enc) || enc.ValueKind != JsonValueKind.String) continue;
                         double hb = 0, flea = 0;
                         foreach (var part in parts.EnumerateArray())
                         {

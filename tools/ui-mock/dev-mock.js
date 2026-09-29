@@ -73,6 +73,18 @@ window.devHost = (() => {
       let result = true;
       switch (msg.method) {
         case 'init': case 'reload': result = JSON.parse(JSON.stringify(MERGED)); break;
+        // 2.0.8 builds: fake slots (any weapon has 4; a part in mod_scope has one of its own) and one saved build
+        case 'itemSlots': {
+          const ids = MERGED.items.map(x => x.i), pick = (n, k) => ids.slice(n * 37 % ids.length, n * 37 % ids.length + k);
+          const it = MERGED.items.find(x => x.i === a.tpl), gun = it && it.c === 'Weapon';
+          const slots = gun ? [['mod_pistol_grip', true, pick(1, 12)], ['mod_stock', false, pick(2, 20)], ['mod_scope', false, pick(3, 30)], ['mod_magazine', true, pick(4, 8)]]
+            : a.tpl === ids[3 * 37 % ids.length] ? [['mod_scope_000', false, pick(5, 10)]] : [];
+          result = { tpl: a.tpl, slots: slots.map(([name, required, fits]) => ({ name, required, fits, nested: name === 'mod_scope' ? [fits[0]] : [] })) }; break;
+        }
+        case 'buildSources': {
+          const ids = MERGED.items.map(x => x.i);
+          result = [{ name: 'Test build', from: 'Your build (Kim)', parts: [{ id: 'p1', tpl: ids[1 * 37 % ids.length], parentId: 'root', slotId: 'mod_pistol_grip' }, { id: 'p2', tpl: ids[3 * 37 % ids.length], parentId: 'root', slotId: 'mod_scope' }] }]; break;
+        }
         case 'migrate': { const s = JSON.parse(JSON.stringify(MERGED)); delete s.migration; s.migrated = ['traders\\Bastion → ModernEditor\\traders', 'user\\mods\\CustomTraders moved to user\\ModernEditor_old_mods (kept as a backup)']; MERGED.migration = undefined; result = s; break; }
         case 'lg.init': case 'lg.reload': result = { ...JSON.parse(JSON.stringify(LGSNAP)), levels: JSON.parse(JSON.stringify(disk)), disabled: JSON.parse(JSON.stringify(disabled)) }; break;
         case 'lg.save': for (const id of a.remove || []) delete disk[id]; Object.assign(disk, a.set || {}); window.__saves = (window.__saves || 0) + 1; result = { levels: JSON.parse(JSON.stringify(disk)) }; break;

@@ -136,6 +136,15 @@ public class OfferDef
     /// <summary>Weapons: sell the game's default fully-assembled preset instead of a bare receiver.</summary>
     public bool UseDefaultPreset { get; set; } = true;
 
+    /// <summary>
+    /// 2.0.8: a custom build (a gun with the parts you picked, armor with its plates…). When not empty it replaces
+    /// UseDefaultPreset: the item is sold assembled like this. Each part hangs in a slot of the item ("root") or of another part.
+    /// </summary>
+    public List<PresetPart> Parts { get; set; } = new();
+
+    /// <summary>Your name for the build (editor only), e.g. "M4A1 Recon".</summary>
+    public string BuildName { get; set; } = "";
+
     /// <summary>Trader loyalty level needed to see the offer (1-4).</summary>
     public int LoyaltyLevel { get; set; } = 1;
 
@@ -151,6 +160,15 @@ public class OfferDef
 
     /// <summary>Offer only appears after completing this quest (set by a quest's UnlockOffer reward).</summary>
     public string? UnlockedByQuestId { get; set; }
+}
+
+/// <summary>One part of a custom build: which item, in which slot of which parent ("root" = the offer's item).</summary>
+public class PresetPart
+{
+    public string Id { get; set; } = "";
+    public string Tpl { get; set; } = "";
+    public string ParentId { get; set; } = "root";
+    public string SlotId { get; set; } = "";
 }
 
 public class CostDef

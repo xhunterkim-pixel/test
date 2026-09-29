@@ -317,7 +317,7 @@ function fillQuest(q) {
 function fillOffer(o) {
   def(o, 'id', newId()); def(o, 'itemTpl', ''); def(o, 'useDefaultPreset', true); def(o, 'loyaltyLevel', 1);
   def(o, 'unlimited', true); def(o, 'stock', 1); def(o, 'buyLimit', 0); def(o, 'cost', []); def(o, 'notes', ''); def(o, 'tags', []);
-  def(o, 'priceMin', 0); def(o, 'priceMax', 0); def(o, 'enabled', true);
+  def(o, 'priceMin', 0); def(o, 'priceMax', 0); def(o, 'enabled', true); def(o, 'parts', []); def(o, 'buildName', '');
   return o;
 }
 
@@ -1050,6 +1050,7 @@ function pageOffers() {
     if (u.badge) badges.push(u.badge);
     if (price) badges.push(price);
     if (o.loyaltyLevel > 1) badges.push([`LL${o.loyaltyLevel}`, 'var(--violet)']);
+    if (o.parts?.length) badges.push([`🔧 ${(o.buildName || 'BUILD').toUpperCase()}`, 'var(--accent)']);
     if (!view().hideTags) for (const tag of o.tags) badges.push([tag.toUpperCase(), tagColor(tag)]);
     const mods = objMods(t, o);
     if (mods.bad.length) badges.push(['✖ MOD MISSING', 'var(--red)', 'keep']);
@@ -1322,7 +1323,7 @@ function detailsOffer() {
   const barterValue = costValue(o.cost), worth = offerValue(o, 'p');
   const compare = isBarter(o) && barterValue && worth
     ? ui.hint(`The price is worth about <b>${money(barterValue, cur)}</b> to a trader — ${barterValue >= worth * 1.1 ? 'more than' : barterValue <= worth * .9 ? '<b>less</b> than' : 'about the same as'} the item itself (${money(worth, cur)}).`) : '';
-  const values = S.items.size && (worth || offerValue(o, 'h')) ? `<div class="value-grid">${cells}</div>${o.useDefaultPreset && item(o.itemTpl)?.ph ? ui.hint('Values are for the whole assembled gun (default preset).') : ''}${compare}` : '';
+  const values = S.items.size && (worth || offerValue(o, 'h')) ? `<div class="value-grid">${cells}</div>${o.parts?.length ? ui.hint('Values are for the whole build (the item and its parts).') : o.useDefaultPreset && item(o.itemTpl)?.ph ? ui.hint('Values are for the whole assembled gun (default preset).') : ''}${compare}` : '';
 
   const it = item(o.itemTpl);
   const big = itemPic(o.itemTpl, '512');
@@ -1353,6 +1354,7 @@ function detailsOffer() {
         <button class="chip" data-act="addCost" data-arg="${CUR.EUR}">+ € Euros</button>
         <button class="outline" data-act="addCost" data-arg="">+ Barter Item…</button>
       </div>`)}
+    ${typeof buildCard === 'function' ? buildCard(o) : ''}
     ${card('o-notes', 'Tags & Notes', `
       ${tagField(o, S.t.file.offers, 'Group offers your way (e.g. "ARs", "Snipers", "Pistols", "Ammo") — filter by them above the list. Right-click a tag to rename, recolor or remove it.')}
       ${ui.area('Notes', () => o.notes, v => { o.notes = v; }, { rows: 3, placeholder: 'Only you see these (shown in the Notes column).' })}`)}`];
@@ -1435,6 +1437,7 @@ function inGamePrice(t, o) {
 function offerValue(o, kind) {
   const it = item(o.itemTpl);
   if (!it) return 0;
+  if (o.parts?.length && typeof buildValue === 'function') return buildValue(o, kind); // 2.0.8: a custom build: the item + its parts
   if (o.useDefaultPreset && it.ph) return kind === 'p' ? Math.round(it.ph * S.traderRate / 100) : kind === 'h' ? it.ph : (it.pf || 0);
   return itemValue(o.itemTpl, kind);
 }

@@ -1,6 +1,8 @@
 # Modern Editor changelog
 
-## 2.0.8 (editor)
+## 2.0.8 (editor + server mod — update both)
+- **Custom builds** (offer › **Build**): sell a gun with the parts you pick, or armor with its plates, a helmet with its visor. 🔧 **Make a Custom Build…** lists the item's slots (scope, stock, pistol grip, magazine, plates…); click a slot for a searchable list of every part that fits it (from the game's own slot rules), parts with slots of their own open underneath. **Start From** one of the game's presets for that item or **one of your own builds saved in game** (the weapon modding screen's Save Build, read from your SPT profiles). Name it, see its handbook value, and **Price = Build's Handbook Value** sets the price. Empty required slots are flagged. The offer list shows a 🔧 tag. The server mod sells it fully assembled.
+- **Import Trader** keeps imported guns' exact builds (they became the default preset before).
 - **Progression: can players get it?** Each item tile has a small green icon when a trader sells it (⇄ barter, ₽ buy) or a quest gives it (★), or a red **UNOBTAINABLE** tag. Hover it to see who sells it and for what. The level header counts the unobtainable ones. A new **Unobtainable Check** setting above the levels picks where to look: **Read Vanilla** (the game's own traders), **Read Modded** (your traders made here, switched on) or **Read Both**.
 - **Click the obtainable / UNOBTAINABLE tag** for a pop-up of every way to get the item: each game trader (loyalty level and price, every barter option), each of your traders' offers and quest rewards with a **Go to Offer / Quest** button. Unobtainable items open it too.
 - **An on / off switch per category** in Level Limits' side list: switches every limit in that category off at once (out of Level Gate's file, the levels are kept) or back on. Gold = some on, some off.

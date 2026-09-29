@@ -411,8 +411,10 @@ public class CustomTradersMod(
                     upd["BuyRestrictionCurrent"] = 0;
                 }
 
-                foreach (var node in BuildItemTree(offer.ItemTpl, entryId, offer.UseDefaultPreset, "hideout", "hideout", upd))
-                    items.Add(node);
+                var tree = offer.Parts is { Count: > 0 }
+                    ? BuildCustomTree(offer, entryId, upd)
+                    : BuildItemTree(offer.ItemTpl, entryId, offer.UseDefaultPreset, "hideout", "hideout", upd);
+                foreach (var node in tree) items.Add(node);
 
                 barterScheme[entryId] = new JsonArray(new JsonArray(cost.Select(c => c!.DeepClone()).ToArray()));
                 if (randomIndex >= 0) RandomPrices.Add((file.Id, entryId, randomIndex, offer.PriceMin, offer.PriceMax, multiplier));
@@ -484,6 +486,22 @@ public class CustomTradersMod(
     /// weapons with <paramref name="usePreset"/> — the game's default
     /// assembled preset with fresh, deterministic ids under <paramref name="rootId"/>.
     /// </summary>
+    /// <summary>2.0.8: an offer's custom build (the parts picked in the editor), under the offer's root item.</summary>
+    private List<JsonObject> BuildCustomTree(OfferDef offer, string rootId, JsonObject upd)
+    {
+        var result = new List<JsonObject> { new() { ["_id"] = rootId, ["_tpl"] = offer.ItemTpl, ["parentId"] = "hideout", ["slotId"] = "hideout", ["upd"] = upd } };
+        var ids = new Dictionary<string, string> { ["root"] = rootId };
+        foreach (var p in offer.Parts) if (!string.IsNullOrEmpty(p.Id)) ids[p.Id] = Ids.Derive(rootId + ":part:" + p.Id);
+        int skipped = 0;
+        foreach (var p in offer.Parts)
+        {
+            if (string.IsNullOrEmpty(p.Tpl) || !templateTable.Items.ContainsKey(p.Tpl) || !ids.TryGetValue(p.ParentId, out var parent) || !ids.TryGetValue(p.Id, out var id)) { skipped++; continue; }
+            result.Add(new JsonObject { ["_id"] = id, ["_tpl"] = p.Tpl, ["parentId"] = parent, ["slotId"] = p.SlotId });
+        }
+        if (skipped > 0) logger.MeWarning($"[ModernEditor] offer {offer.Id} ({offer.BuildName}): {skipped} part(s) of its build skipped (unknown item or parent)");
+        return result;
+    }
+
     private List<JsonObject> BuildItemTree(string tpl, string rootId, bool usePreset, string? parentId, string? slotId, JsonObject? rootUpd)
     {
         var result = new List<JsonObject>();
