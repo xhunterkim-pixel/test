@@ -47,14 +47,14 @@ namespace LevelGate.Progression
             public static float NameGlowK => On ? Pct(ProgressionPlugin.TestNameShadow, 29) : 0f;
             public static float NameGlowSoft => Pct(ProgressionPlugin.TestNameShadowSoftness, 26);
             public static float NameGlowDrop => Pct(ProgressionPlugin.TestNameShadowDistance, 47);
-            public static NewTagLook NewTag => ProgressionPlugin.TestNewTag?.Value ?? NewTagLook.Mw4Dark;
+            public static NewTagLook NewTag => ProgressionPlugin.TestNewTag?.Value ?? NewTagLook.MW4; // 0.9.96: your pick
             // 0.9.95 (read live): MW4's locked blueprint, the current card's XP fill, the sweep's +XP
-            public static float BlueprintK => On ? Pct(ProgressionPlugin.TestLockedBlueprint, 100) : 0f;
-            public static float XpFillK => On ? Pct(ProgressionPlugin.TestCurrentXpFill, 100) : 0f;
+            public static float BlueprintK => On ? Pct(ProgressionPlugin.TestLockedBlueprint, 0) : 0f;
+            public static float XpFillK => On ? Pct(ProgressionPlugin.TestCurrentXpFill, 146) : 0f;
             public static bool XpFillGreen => (ProgressionPlugin.TestCurrentXpColour?.Value ?? XpFillColour.Orange) == XpFillColour.Green;
-            public static float SweepXpBacking => On ? Pct(ProgressionPlugin.TestWallXpBacking, 80) : 0f;
+            public static float SweepXpBacking => On ? Pct(ProgressionPlugin.TestWallXpBacking, 100) : 0f;
             public static float SweepXpHeight => On ? (ProgressionPlugin.TestWallXpLift?.Value ?? 44) : 44f;
-            public static bool BigXpDuringSweep => !On || (ProgressionPlugin.TestBigXpDuringSweep?.Value ?? false);
+            public static bool BigXpDuringSweep => !On || (ProgressionPlugin.TestBigXpDuringSweep?.Value ?? true);
             public static float SubtitleAlpha => Pct(ProgressionPlugin.TestHeroSubtitleOpacity, 70);
             public static float AmbientLightK => On ? Pct(ProgressionPlugin.TestAmbientLight, 140) : 1f;
             public static bool MixedLight => On && (ProgressionPlugin.TestLightHue?.Value ?? LightHue.Mixed) == LightHue.Mixed;
@@ -73,6 +73,36 @@ namespace LevelGate.Progression
         public enum LightHue { Mixed, Rank }
         public enum NewTagLook { Mw4Dark, MW4, Old }
         public enum XpFillColour { Orange, Green }
+
+        // ---------------------------------------------------------------- 0.9.96 colour theme (F12 > Graphics > Colour Theme)
+        public enum AccentTheme { Red, Amber, Green, Teal, Blue, Purple, Pink, White }
+        /// <summary>The accent colour ("orange" in the code: yours / current). Red = the original #e0562f.</summary>
+        public static string AccentHex
+        {
+            get
+            {
+                switch (ProgressionPlugin.Theme?.Value ?? AccentTheme.Red)
+                {
+                    case AccentTheme.Amber: return "#e8922c";
+                    case AccentTheme.Green: return "#5fbf5a";
+                    case AccentTheme.Teal: return "#2db3a3";
+                    case AccentTheme.Blue: return "#3d8ee6";
+                    case AccentTheme.Purple: return "#9a6ce6";
+                    case AccentTheme.Pink: return "#e0508f";
+                    case AccentTheme.White: return "#d9dde0";
+                    default: return "#e0562f";
+                }
+            }
+        }
+        /// <summary>The main menu button's (a touch deeper) accent.</summary>
+        public static string AccentDeepHex => (ProgressionPlugin.Theme?.Value ?? AccentTheme.Red) == AccentTheme.Red ? "#d8412f" : AccentHex;
+
+        internal static void ThemeChanged()
+        {
+            L.Info($"settings: colour theme = {ProgressionPlugin.Theme.Value} ({AccentHex})");
+            _mood = -1; // the corner glow is repainted
+            PolishChanged("colour theme");
+        }
 
         // ---------------------------------------------------------------- MW4 frames: strong in the middle, fading at the ends
 

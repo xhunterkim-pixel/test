@@ -364,7 +364,7 @@ namespace LevelGate.Progression
         private const float BorderWidth = 1; // MW: a thin line with a soft glow fading inward (0.9.72 and older: a flat 3 px border)
         private static readonly Color PanelLine = Ui.Hex("#7d878a", .75f);
         private static bool Perf => ProgressionPlugin.Low;
-        private const string Orange = "#e0562f";
+        private static string Orange => AccentHex; // 0.9.96: the Colour Theme (Red = the original #e0562f)
 
         /// <summary>Category order for the three card pictures.</summary>
         private static readonly string[] CardOrder = { "Weapons", "Backpacks", "Rigs", "Armor", "Headwear", "Medical", "Food", "Gear",
@@ -487,7 +487,7 @@ namespace LevelGate.Progression
             // "CURRENT LEVEL" heads the block, directly over the level square it names; the overall unlock count sits opposite
             _xpCaption = Ui.Label(Ui.Rect(xp, "CurrentLabel", new Vector2(0, 1), new Vector2(1, 1), new Vector2(0, -14), Vector2.zero), "Text", "CURRENT LEVEL", TCaps, Grey, TextAnchor.MiddleLeft, false, Caps);
             var sq = Ui.Rect(xp, "Level", new Vector2(0, 1), new Vector2(0, 1), new Vector2(0, -80), new Vector2(64, -18));
-            _xpSquare = Ui.Img(sq, Ui.Hex("#e0562f"), Ui.CutCorner());
+            _xpSquare = Ui.Img(sq, Ui.Hex(Orange), Ui.CutCorner());
             _xpLevel = Ui.Label(sq, "Text", "", TLevel, Color.white, TextAnchor.MiddleCenter, true);
             var right = Ui.Rect(xp, "Right", Vector2.zero, Vector2.one, new Vector2(64 + S4, 0), Vector2.zero);
             _xpRight = right;
@@ -617,7 +617,7 @@ namespace LevelGate.Progression
                 // Tarkov's fractions: the value big and bright, "/ needed" smaller and dimmer
                 SetXpText($"<color=#e6e8e9>{Thousands(have)}</color><size=70%><color=#7d8285> / {Thousands(need)}</color></size>");
             }
-            else if (level >= ProgData.MaxLevel && level > 0) { _xpTag.gameObject.SetActive(false); Ui.SetText(_xpText, "<color=#e0562f>MAX LEVEL</color>"); }
+            else if (level >= ProgData.MaxLevel && level > 0) { _xpTag.gameObject.SetActive(false); Ui.SetText(_xpText, $"<color={Orange}>MAX LEVEL</color>"); }
             else SetXpText("<color=#6f777a>— / —</color>"); // the game's XP table wasn't found: dashes, but the EXP tag stays
             _xpFill.anchorMax = new Vector2(frac, 1);
             _xpFrac = frac; _xpFracLevel = level; // 0.9.95: the current card's fill
@@ -3100,8 +3100,12 @@ namespace LevelGate.Progression
             // ~40% under the old strength: it supports the screen, it doesn't compete with it
             // calmer than it was (it pulled the eye to an empty corner): a hint of red, a little more while the level is locked
             float glow = ProgressionPlugin.RedGlow.Value; // F12 > Graphics > RedGlow
-            if (_bloom.Count > 0 && _bloom[0] != null) _bloom[0].color = new Color(.85f, .14f, .08f, Mathf.Clamp01(Mathf.Lerp(.07f, .1f, m) * glow));
-            if (_bloom.Count > 1 && _bloom[1] != null) _bloom[1].color = new Color(.95f, .2f, .1f, Mathf.Clamp01(Mathf.Lerp(.05f, .08f, m) * glow));
+            // 0.9.96: in the Colour Theme's accent (Red: the original .85 / .14 / .08 and .95 / .2 / .1)
+            var ac = Ui.Hex(Orange);
+            bool red = (ProgressionPlugin.Theme?.Value ?? AccentTheme.Red) == AccentTheme.Red;
+            var g0 = red ? new Color(.85f, .14f, .08f) : ac * .9f; var g1 = red ? new Color(.95f, .2f, .1f) : ac;
+            if (_bloom.Count > 0 && _bloom[0] != null) _bloom[0].color = new Color(g0.r, g0.g, g0.b, Mathf.Clamp01(Mathf.Lerp(.07f, .1f, m) * glow));
+            if (_bloom.Count > 1 && _bloom[1] != null) _bloom[1].color = new Color(g1.r, g1.g, g1.b, Mathf.Clamp01(Mathf.Lerp(.05f, .08f, m) * glow));
             var border = PanelLine; // the panel borders stay as they are (only the glow turns red)
             foreach (var f in _panelFrames) if (f != null) PaintFrame(f, border);
         }
@@ -3504,6 +3508,7 @@ namespace LevelGate.Progression
             private readonly RectTransform _xpBars;
             private readonly Image[] _xpBar = new Image[9];
             private bool _locked;
+            private readonly RectTransform _fillMask;
 
             /// <summary>0.9.95, every frame: the locked blueprint copies follow their pictures; the current card's XP fill.</summary>
             public void TickMw4()
@@ -3527,31 +3532,38 @@ namespace LevelGate.Progression
                     var rc = new Color(cold.r, cold.g, cold.b, Mathf.Clamp01(.5f * k));
                     foreach (var r in _bpRim[i]) r.color = rc;
                 }
-                // your level: the card fills from the left up to your XP towards the next level; its edge is a lit line with
-                // a little equalizer at the bottom (hidden while the XP animation's own light sweep plays)
+                // your level: the card fills from the left up to your XP towards the next level, ending softly (hidden while
+                // the XP animation's own light sweep plays)
                 float xk = Polish.XpFillK;
                 bool fill = _isCurrent && xk > .001f && !XpAnimating && _xpFracLevel == _level && _xpFillImg != null;
                 if (_xpFillImg == null) return;
-                if (_xpFillImg.enabled != fill) { _xpFillImg.enabled = _xpEdge.enabled = _xpEdgeGlow.enabled = fill; _xpBars.gameObject.SetActive(fill); }
+                if (_xpFillImg.enabled != fill) { _xpFillImg.enabled = _xpEdge.enabled = fill; _xpEdgeGlow.enabled = false; _xpBars.gameObject.SetActive(false); }
                 if (!fill) return;
                 var c = Polish.XpFillGreen ? Ui.Hex("#8fd460") : Ui.Hex(Orange);
-                float f = Mathf.Clamp(_xpFrac, .015f, 1f);
-                var fr = _xpFillImg.rectTransform; if (fr.anchorMax.x != f) { fr.anchorMax = new Vector2(f, 1); }
-                _xpFillImg.color = new Color(c.r, c.g, c.b, Mathf.Clamp01(.16f * xk));
-                float pulse = .75f + .25f * Mathf.Sin(t * 2.2f);
-                var er = _xpEdge.rectTransform; er.anchorMin = new Vector2(f, 0); er.anchorMax = new Vector2(f, 1);
-                _xpEdge.color = new Color(Mathf.Lerp(c.r, 1, .6f), Mathf.Lerp(c.g, 1, .6f), Mathf.Lerp(c.b, 1, .6f), Mathf.Clamp01(.7f * xk * pulse));
-                var gr = _xpEdgeGlow.rectTransform; gr.anchorMin = gr.anchorMax = new Vector2(f, .5f);
-                _xpEdgeGlow.color = new Color(c.r, c.g, c.b, Mathf.Clamp01(.18f * xk * pulse));
-                _xpBars.anchorMin = _xpBars.anchorMax = new Vector2(f, 0);
-                for (int i = 0; i < _xpBar.Length; i++)
+                // 0.9.96: the edge sits exactly over the rail's fill end below (your XP): at 0 XP the card's middle (its tick
+                // and diamond), moving right with the rail; past the card's right edge the card stays filled
+                float f = Mathf.Clamp(.5f + _xpFrac * .5f, .5f, 1f);
+                if (_rail != null && _railFill != null)
                 {
-                    float dx = i - (_xpBar.Length - 1) / 2f;
-                    float n = Mathf.Abs(Mathf.Sin(t * 7.3f + i * 1.9f) * Mathf.Sin(t * 3.1f + i * .7f));
-                    float h = 2 + 16 * n * Mathf.Exp(-dx * dx / 8f);
-                    var br = _xpBar[i].rectTransform; br.sizeDelta = new Vector2(1, h);
-                    _xpBar[i].color = new Color(1, .95f, .85f, Mathf.Clamp01(.55f * xk * Mathf.Exp(-dx * dx / 12f)));
+                    var rr = _rail.rect;
+                    var world = _rail.TransformPoint(new Vector3(rr.xMin + _railFill.anchorMax.x * rr.width, 0, 0));
+                    var mr = _fillMask.rect;
+                    float lx = _fillMask.InverseTransformPoint(world).x;
+                    if (mr.width > 1) f = Mathf.Clamp((lx - mr.xMin) / mr.width, .02f, 1f);
                 }
+                // 0.9.96: no hard line at the edge (MW4 has none: the light just fades out, the spike is on the waveform
+                // below, which already rides this same point): a flat fill, then a soft 60 px fade centred on the edge
+                var col = new Color(c.r, c.g, c.b, Mathf.Clamp01(.16f * xk));
+                var fr = _xpFillImg.rectTransform;
+                bool tail = f < .995f;
+                var fo = new Vector2(tail ? -30 : 0, 0);
+                if (fr.anchorMax.x != f || fr.offsetMax != fo) { fr.anchorMax = new Vector2(f, 1); fr.offsetMax = fo; }
+                if (_xpFillImg.sprite != null) _xpFillImg.sprite = null; // flat
+                _xpFillImg.color = col;
+                if (_xpEdge.enabled != tail) _xpEdge.enabled = tail;
+                var er = _xpEdge.rectTransform;
+                if (er.anchorMin.x != f) { er.anchorMin = new Vector2(f, 0); er.anchorMax = new Vector2(f, 1); er.offsetMin = new Vector2(-30, 0); er.offsetMax = new Vector2(30, 0); }
+                _xpEdge.color = col;
             }
 
             /// <summary>MW 2: every frame — fills when its level was unlocked in this visit's level up, stays lit.</summary>
@@ -3852,9 +3864,11 @@ namespace LevelGate.Progression
                 _flood.raycastTarget = _floodDots.raycastTarget = false; _flood.enabled = _floodDots.enabled = false;
                 // 0.9.95: your level's XP fill (MW4): light from the left up to your XP, a lit edge, a little equalizer at its foot
                 {
+                    _fillMask = dotsMask;
                     var xr = Ui.Rect(dotsMask, "XpFill", Vector2.zero, new Vector2(.5f, 1), Vector2.zero, Vector2.zero);
                     _xpFillImg = Ui.Img(xr, Color.clear, Ui.HorizontalFade()); _xpFillImg.raycastTarget = false; _xpFillImg.enabled = false;
-                    _xpEdge = Ui.Img(Ui.Rect(dotsMask, "XpEdge", new Vector2(.5f, 0), new Vector2(.5f, 1), new Vector2(-1, 0), new Vector2(1, 0)), Color.clear);
+                    _xpEdge = Ui.Img(Ui.Rect(dotsMask, "XpEdge", new Vector2(.5f, 0), new Vector2(.5f, 1), new Vector2(-30, 0), new Vector2(30, 0)), Color.clear, Ui.HorizontalFade());
+                    _xpEdge.rectTransform.localScale = new Vector3(-1, 1, 1); // the fill's soft end: full on the left, gone on the right
                     _xpEdge.raycastTarget = false; _xpEdge.enabled = false;
                     _xpEdgeGlow = Ui.Img(Ui.Box(dotsMask, "XpGlow", new Vector2(.5f, .5f), Vector2.zero, new Vector2(70, 220)), Color.clear, Ui.Radial());
                     _xpEdgeGlow.raycastTarget = false; _xpEdgeGlow.enabled = false;

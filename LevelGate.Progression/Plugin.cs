@@ -26,7 +26,7 @@ namespace LevelGate.Progression
         public const string Guid = "com.kkyangg.levelgate.progression";
         public const string Name = "LevelGate Progression";
         // MAJOR.MINOR.PATCH — see CHANGELOG.md
-        public const string Version = "0.9.95";
+        public const string Version = "0.9.96";
 
         internal static ProgressionPlugin Instance;
         internal static ConfigEntry<KeyboardShortcut> OpenKey;
@@ -77,6 +77,7 @@ namespace LevelGate.Progression
         internal static ConfigEntry<float> SoundVolume;
         internal static ConfigEntry<bool> GameSounds;
         internal static ConfigEntry<float> Scratches, Vignette, RedGlow;
+        internal static ConfigEntry<ProgScreen.AccentTheme> Theme;
         internal static ConfigEntry<BackgroundPattern> Pattern;
         internal static ConfigEntry<float> PatternMotion;
         internal static ConfigEntry<int> PreviewLevels;
@@ -172,6 +173,10 @@ namespace LevelGate.Progression
             PatternOpacity.SettingChanged += (_, __) => ProgScreen.ApplyLook();
             Vignette.SettingChanged += (_, __) => ProgScreen.ApplyLook();
             RedGlow.SettingChanged += (_, __) => ProgScreen.ApplyLook();
+            // 0.9.96: the screen's accent colour (everything red / orange: your level, the corner glow, the rail's diamond, EXP…)
+            Theme = Config.Bind(Gfx, "ColourTheme", ProgScreen.AccentTheme.Red, Desc(
+                "The screen's accent colour: your level (the level box, the current card's border, line and XP fill, the diamond on the line under the cards), the glow in the top-right corner, EXP and the main menu's PROGRESSION button. Red is the original. Unmet requirements stay red, NEW stays gold.", 90));
+            Theme.SettingChanged += (_, __) => ProgScreen.ThemeChanged();
             RefreshIcons = Config.Bind(Gfx, "RefreshIcons", false, Desc(
                 "Tick once to redraw every item picture: the Progression screen's own pictures are thrown away and drawn again, " +
                 "and every level-list item's stash icon is redrawn at stash size (use it if a stash icon ever looks too big). It turns itself off again. " +
@@ -296,19 +301,19 @@ namespace LevelGate.Progression
             TestCardLockedOpacity = Config.Bind(T, "CardLockedOpacity", 100, Desc(
                 "Locked level cards, in % (0.9.81 = 85; 0.9.9–0.9.91 had 72).", 202, new AcceptableValueRange<int>(40, 100)));
             // 0.9.95: a new key (NewTagLook's saved MW4 would stick): MW4 Dark is the user's MW4 crop — dark see-through box, yellow text
-            TestNewTag = Config.Bind(T, "NewTagStyle", ProgScreen.NewTagLook.Mw4Dark, Desc(
+            TestNewTag = Config.Bind(T, "NewTagStyle", ProgScreen.NewTagLook.MW4, Desc(
                 "The NEW tag: Mw4Dark (MW4's crop: a dark see-through box, bright yellow NEW, thin gold outline, soft glow), MW4 (0.9.92's gold box fading to the left) or Old (0.9.91's outlined box).", 205));
-            TestLockedBlueprint = Config.Bind(T, "LockedBlueprint", 100, Desc(
+            TestLockedBlueprint = Config.Bind(T, "LockedBlueprint", 0, Desc(
                 "Locked cards, like MW4: the item as a faint cold blueprint with its picture streaked sideways, in % (0 = 0.9.94's dimmed picture).", 199, new AcceptableValueRange<int>(0, 200)));
-            TestCurrentXpFill = Config.Bind(T, "CurrentXpFill", 100, Desc(
+            TestCurrentXpFill = Config.Bind(T, "CurrentXpFill", 146, Desc(
                 "Your current level's card fills with light from the left up to your XP towards the next level, with a moving edge, like MW4, in % (0 = off).", 198, new AcceptableValueRange<int>(0, 200)));
             TestCurrentXpColour = Config.Bind(T, "CurrentXpColour", ProgScreen.XpFillColour.Orange, Desc(
-                "That fill's colour: Orange (the screen's colour for your level) or Green (MW4's).", 197));
-            TestWallXpBacking = Config.Bind(T, "SweepXpBacking", 80, Desc(
+                "That fill's colour: Orange (the Colour Theme's accent) or Green (MW4's).", 197));
+            TestWallXpBacking = Config.Bind(T, "SweepXpBacking", 100, Desc(
                 "The +XP riding the light sweep gets a soft dark backing so it stays readable over card names, in % (0 = none, like 0.9.94).", 196, new AcceptableValueRange<int>(0, 100)));
             TestWallXpLift = Config.Bind(T, "SweepXpHeight", 44, Desc(
                 "How high the sweep's +XP sits above the line, in px (0.9.94 = 44; the card names are at about that height).", 195, new AcceptableValueRange<int>(10, 160)));
-            TestBigXpDuringSweep = Config.Bind(T, "BigXpDuringSweep", false, Desc(
+            TestBigXpDuringSweep = Config.Bind(T, "BigXpDuringSweep", true, Desc(
                 "Also show the big +XP over the item picture while the sweep plays (0.9.94 = on). MW4 shows only the one on the sweep.", 194));
             var polishDials = new HashSet<ConfigEntryBase> { TestNameShadow, TestNameShadowSoftness, TestNameShadowDistance, TestNewTag, TestPanelLight, TestCardOpacity, TestCardLockedOpacity, TestNameGlow, TestNameGlowSoftness, TestPolish, TestDecorNoise, TestMicroLabels, TestBorderFade, TestAmbient, TestQuietFx, TestFlourish, TestAmbientLight, TestLightHue,
                 TestCardRest, TestCardLocked, TestSmallText, TestNeutralPips, TestHeroSubtitle, TestHeroSubtitleOpacity, TestTipDelay,
@@ -420,7 +425,7 @@ namespace LevelGate.Progression
                 ["MW01"] = "MW 1 · Additive Glow", ["MW02"] = "MW 2 · Card Flood", ["MW03"] = "MW 3 · Level Numbers Glow", ["MW04"] = "MW 4 · XP Counter On Light Wall",
                 ["MW05"] = "MW 5 · Reactive Waveform", ["MW06"] = "MW 6 · Screen Flashes", ["MW07"] = "MW 7 · Title Glitch", ["MW08"] = "MW 8 · Row Pips",
                 ["MW09"] = "MW 9 · Locked Hologram", ["MW10"] = "MW 10 · Wave Surfaces", ["DetailAnimation"] = "Detail Animation (%)", ["PatternOpacity"] = "Background Pattern Opacity (%)",
-                ["Vignette"] = "Dark Corners", ["RedGlow"] = "Red Glow",
+                ["Vignette"] = "Dark Corners", ["RedGlow"] = "Corner Glow", ["ColourTheme"] = "Colour Theme",
                 ["Levels"] = "Levels To Play", ["PlayLevelUp"] = "Play Level Ups", ["PlayNextRank"] = "Play Next Rank", ["PlayUnlock"] = "Play Card Unlocks",
                 ["ButtonLabel"] = "Menu Button Text", ["CopyButton"] = "Copy Look Of Button", ["TopMargin"] = "Top Margin", ["BottomMargin"] = "Bottom Margin",
                 ["TileSize"] = "Tile Size", ["MaxTilesPerCategory"] = "Max Items Per Category", ["Opacity"] = "Background Opacity",
@@ -441,7 +446,8 @@ namespace LevelGate.Progression
             // 0.9.92: the 0.9.91 glow is replaced by the reflection below; being tried now: the reflection and the MW4 NEW tag
             // 0.9.91: the 0.9.9 dials are tuned (your values are the defaults: Ambient Motion 50, the line under the name off); being tried now:
             // 0.9.94: all tuned (your 0.9.93 values are the defaults)
-            var testingNow = new HashSet<string> { "NewTagStyle", "LockedBlueprint", "CurrentXpFill", "CurrentXpColour", "SweepXpBacking", "SweepXpHeight", "BigXpDuringSweep" }; // 0.9.95: from your MW4 crops
+            // 0.9.95 dials tuned in 0.9.96 (your log): NEW tag MW4, Locked Blueprint 0 (off), XP Fill 146, Orange, Sweep +XP Backing 100, Height 44, Big +XP During Sweep on
+            var testingNow = new HashSet<string>();
             var advanced = new HashSet<string> { "RefreshIcons", "UseGameSounds", "Vignette", "RedGlow", "BlurBackground", "HideMainMenu", "PatternMotion" };
             foreach (var kv in Config)
             {

@@ -8,7 +8,7 @@ no PR open). Rules and the build / tuning method are in `CLAUDE.md`.
 | Thing | Version | Status |
 |---|---|---|
 | LevelGate plugin / server | 1.6.3 | Frozen: do not touch without the user's go-ahead |
-| LevelGate Progression | **0.9.95** | Sent to the user (full package), untested in game. 0.9.94 tested: character emblem fix confirmed in their log |
+| LevelGate Progression | **0.9.96** | Sent (full package), untested in game. 0.9.95 tested: dials tuned from the log, inspect warm-up works (24 ms, background) |
 | Modern Editor (editor exe) | 2.0.6 | Sent and in use |
 | Modern Editor (server mod) | 2.0.7 | Sent: compact SPT console output |
 
@@ -51,6 +51,14 @@ Decor Noise 55, Micro Labels 60, Flourish 65, Border Fade 70, Ambient Light 140 
 - Asked the user for MW4 crops still missing: sweep leading edge, a card unlocking (flash / LEVEL_ACTIVE / check), the LEVEL UP slab,
   locked blueprint at 1:1, MW4's rank-up screen, the full-screen dot grid.
 - Cloud build: `tools/cloud-build/setup.sh` (see CLAUDE.md).
+
+## 0.9.96
+- Colour Theme (F12 › Graphics, permanent option): `ProgScreen.AccentHex` replaces the old `Orange` const; MenuWidget / Toast use it too.
+  Unmet red (`Red` #d0453a) and NEW gold are NOT themed on purpose.
+- Current card XP fill: its edge is placed at the rail fill's end in world space (so it matches the rail diamond / waveform spike);
+  no hard edge line (user: MW4 has none), a soft 60 px fade instead.
+- Rule from the user: a dial they set to 0 / off = they don't like the change.
+- Known: 545 ms hitch when the game's own Dogtag inspect window opens during the rank-up (game's 3D preview, not our code).
 
 ## In progress / open
 

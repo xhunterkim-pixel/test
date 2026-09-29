@@ -1,4 +1,4 @@
-# LevelGate Progression (0.9.95, test build)
+# LevelGate Progression (0.9.96, test build)
 
 A Call of Duty style **Progression** screen inside Tarkov's main menu. It adds a
 **PROGRESSION** button to the menu bar next to Character, Trading, Flea Market and the rest.
@@ -18,6 +18,11 @@ A Call of Duty style **Progression** screen inside Tarkov's main menu. It adds a
   - P or Esc closes the screen.
 - It works on its own and never changes LevelGate. It only **reads**
   `BepInEx\plugins\LevelGate\config\level_requirements.json`, and picks up changes to that file while the game runs.
+
+## 0.9.96
+- **New: F12 › Look & Graphics › Colour Theme**: Red (the original), Amber, Green, Teal, Blue, Purple, Pink, White. It recolours everything that was red / orange for "you": the level box, the current card's border, line, tag and XP fill, the diamond on the line under the cards, the top-right corner glow, EXP, and the main menu's PROGRESSION button (that one after a game restart). Unmet requirements stay red and NEW stays gold, since those colours carry a meaning. Changing it rebuilds the screen when you next open it.
+- **Your level's XP fill now lines up with the line under the cards**: at 0 XP it ends at the middle of the card (on its tick and diamond) and moves right with the line's fill and waveform spike. No more hard white line at its edge (MW4 has none): the light just fades out softly.
+- Your 0.9.95 picks are the defaults and the dials are hidden: NEW tag MW4, Locked Card Blueprint off, XP Fill 146%, Orange (= the theme colour), Sweep +XP Backing 100%, Big +XP During Sweep on.
 
 ## 0.9.95 (new looks in F12 › CURRENTLY TESTING, from your MW4 crops)
 - **Fix: no freeze on the first right-click / Inspect** (848 ms in your log). The game's inspect classes are now looked up in the background when the screen opens.
