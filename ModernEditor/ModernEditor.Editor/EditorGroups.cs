@@ -15,7 +15,8 @@ public static class EditorGroups
         ("Ammo", "Ammo", new[] { "5485a8684bdc2da71d8b4567" }),
         ("AmmoPacks", "Ammo Packs", new[] { "543be5cb4bdc2deb348b4568" }),
         ("WeaponParts", "Weapon Parts", new[] { "5448fe124bdc2da5018b4567" }),
-        ("Armor", "Armor", new[] { "5448e54d4bdc2dcc718b4568", "644120aa86ffbe10ee032b6f" }),
+        ("Armor", "Armor", new[] { "5448e54d4bdc2dcc718b4568" }),
+        ("ArmorPlates", "Armor Plates", new[] { "644120aa86ffbe10ee032b6f" }), // 2.0.8: plates / inserts apart from the armor itself
         ("Headwear", "Headwear", new[] { "5a341c4086f77401f2541505" }),
         ("Rigs", "Rigs", new[] { "5448e5284bdc2dcb718b4567" }),
         ("Backpacks", "Backpacks", new[] { "5448e53e4bdc2d60728b4567" }),
@@ -30,7 +31,7 @@ public static class EditorGroups
         ("Electronics", "Electronics", new[] { "57864a66245977548f04a81f" }),
         ("Barter", "Barter Items", new[] { "5448eb774bdc2d0a728b4567", "5448ecbe4bdc2d60728b4568", "616eb7aea207f41933308f46" }),
         ("Keys", "Keys", new[] { "543be5e94bdc2df1348b4568" }),
-        ("Containers", "Containers", new[] { "5795f317245977243854e041", "5671435f4bdc2d96058b4569" }),
+        ("Containers", "Containers", new[] { "5795f317245977243854e041", "5671435f4bdc2d96058b4569", "5448bf274bdc2dfc2f8b456a" }), // 2.0.8: + secure containers (were Other Gear)
         ("Special", "Special", new[] { "5447e0e74bdc2d3c308b4567", "567849dd4bdc2d150f8b456e" }),
     };
 

@@ -1344,7 +1344,7 @@ function detailsOffer() {
       ${ui.hint('<b>Stock per Restock</b> = how many the trader has after each restock (shared by everyone). <b>Buy Limit</b> = how many one player may buy per restock (0 = no limit).')}`)}
     ${card('o-price', `Price / Barter ${price ? ui.badge(price[0], price[1]) : ''}`, `
       ${values}
-      ${ui.hint('Everything listed is needed to buy it. Only money = <b>BUY</b>; any item in the list = <b>BARTER</b>. New offers start at what traders pay for the item.')}
+      ${ui.hint('Everything listed is needed to buy it. Only money = <b>BUY</b>; any item in the list = <b>BARTER</b>. New offers start at the item\'s handbook value, with Random Price on (80 to 120%).')}
       <div class="mini">${costs || '<div class="empty" style="padding:14px">No Price Yet</div>'}</div>
       ${randomPriceField(t, o)}
       <div class="toolbar" style="margin-top:8px">
@@ -1438,10 +1438,10 @@ function offerValue(o, kind) {
   if (o.useDefaultPreset && it.ph) return kind === 'p' ? Math.round(it.ph * S.traderRate / 100) : kind === 'h' ? it.ph : (it.pf || 0);
   return itemValue(o.itemTpl, kind);
 }
-/** Starting price of a new offer: what traders pay for it, in the trader's currency. */
+/** Starting price of a new offer: its handbook value (2.0.8; was what traders pay), in the trader's currency. */
 function defaultCost(o) {
   const cur = traderMoney();
-  const v = offerValue(o, 'p');
+  const v = offerValue(o, 'h') || offerValue(o, 'p');
   return v ? [{ itemTpl: cur, count: toCurrency(v, cur) }] : [{ itemTpl: CUR.RUB, count: 50000 }];
 }
 
@@ -3284,6 +3284,9 @@ const ACT = {
     if (!tpl) return;
     const o = fillOffer({ itemTpl: tpl });
     o.cost = defaultCost(o);
+    // 2.0.8: new offers start with Random Price on: 80-120% of that price, re-rolled every restock
+    const line = o.cost.find(c => isMoney(c.itemTpl));
+    if (line) { o.priceMin = Math.max(1, Math.round(line.count * 0.8)); o.priceMax = Math.max(o.priceMin, Math.round(line.count * 1.2)); }
     const list = S.t.file.offers;
     list.splice(S.offer ? list.indexOf(S.offer) + 1 : list.length, 0, o);
     S.offer = o;

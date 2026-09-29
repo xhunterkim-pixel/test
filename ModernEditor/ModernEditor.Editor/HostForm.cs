@@ -823,6 +823,7 @@ public sealed class HostForm : Form
     {
         "AmmoPacks" => "Ammo",
         "Headsets" or "FaceCovers" or "Eyewear" or "Armbands" => "Gear", // 2.0.8: split only on the item pages
+        "ArmorPlates" => "Armor",
         _ => group,
     };
 

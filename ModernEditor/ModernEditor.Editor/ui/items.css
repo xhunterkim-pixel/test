@@ -229,3 +229,10 @@ body.lg .pbadge { display: none; }
 @keyframes pfade { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
 @keyframes pglow { 0%, 100% { filter: drop-shadow(0 0 0 rgba(90, 180, 230, 0)); } 50% { filter: drop-shadow(0 0 12px rgba(90, 180, 230, .55)); } }
 @media (prefers-reduced-motion: reduce) { .ptile, .pcard, .prog-top.swap .phero, .pcard.on .pbadge { animation: none !important; } }
+
+/* 2.0.8: a category's on / off switch in the Level Limits side list */
+#lgNav .nav.cat .cat-sw { flex: none; width: 26px; height: 14px; border-radius: 8px; background: #444; position: relative; margin-left: 8px; cursor: pointer; }
+#lgNav .nav.cat .cat-sw i { position: absolute; top: 2px; left: 2px; width: 10px; height: 10px; border-radius: 50%; background: #bbb; transition: left .12s; }
+#lgNav .nav.cat .cat-sw.on { background: #1ed760; } #lgNav .nav.cat .cat-sw.on i { left: 14px; background: #fff; }
+#lgNav .nav.cat .cat-sw.mixed { background: #b38f1d; } #lgNav .nav.cat .cat-sw.mixed i { left: 8px; background: #fff; }
+#lgNav .nav.cat .cat-sw:hover { filter: brightness(1.2); }

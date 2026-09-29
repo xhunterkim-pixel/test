@@ -50,7 +50,7 @@ const host = { call: (method, args = {}) => shellHost.call(LG_METHODS.has(method
 /** Categories = the item groups of the Custom Trader Creator (key, name, color). */
 const GROUPS = [
   ['Weapons', 'Weapons', '#f15e6c'], ['Melee', 'Melee', '#ff8a65'], ['Grenades', 'Grenades', '#ffa42b'], ['Ammo', 'Ammo', '#f5cd46'], ['AmmoPacks', 'Ammo Packs', '#d9b44a'],
-  ['WeaponParts', 'Weapon Parts', '#c7a36b'], ['Armor', 'Armor', '#509bf5'], ['Headwear', 'Headwear', '#6fb3ff'], ['Rigs', 'Rigs', '#7d9cf0'],
+  ['WeaponParts', 'Weapon Parts', '#c7a36b'], ['Armor', 'Armor', '#509bf5'], ['ArmorPlates', 'Armor Plates', '#3f7fd0'], ['Headwear', 'Headwear', '#6fb3ff'], ['Rigs', 'Rigs', '#7d9cf0'],
   ['Backpacks', 'Backpacks', '#a082ff'], ['Headsets', 'Headsets', '#80cbc4'], ['FaceCovers', 'Face Covers', '#9fa8da'], ['Eyewear', 'Eyewear', '#81d4fa'],
   ['Armbands', 'Armbands', '#ce93d8'], ['Gear', 'Other Gear', '#b39ddb'], ['Medical', 'Medical', '#1ed760'], ['Food', 'Food & Drink', '#8bd66b'],
   ['Electronics', 'Electronics', '#4dd0e1'], ['Barter', 'Barter Items', '#bdbdbd'], ['Keys', 'Keys', '#e0c068'], ['Containers', 'Containers', '#90a4ae'],
@@ -316,8 +316,17 @@ function renderNav() {
     const c = catCounts(key);
     if (key !== 'all' && key !== 'modded' && !c.total) return '';
     if (key === 'modded' && !c.total && !S.mods.length) return '';
+    // 2.0.8: one switch per category: all its limits on / off at once (off = out of Level Gate's file, levels kept)
+    let sw = '';
+    if (key !== 'all' && key !== 'unknown') {
+      const dis = catItems(key).filter(it => isDisabled(it.i)).length;
+      if (c.limited || dis) {
+        const st = !dis ? 'on' : !c.limited ? 'off' : 'mixed';
+        sw = `<span class="cat-sw ${st}" data-act="catSwitch" data-arg="${key}" title="${st === 'off' ? `All ${dis} limits switched off — click: switch them back on` : st === 'mixed' ? `${c.limited} on, ${dis} switched off — click: switch all off` : `All ${c.limited} limits on — click: switch them all off (the levels are kept)`}"><i></i></span>`;
+      }
+    }
     return `<button class="nav cat ${S.page === 'items' && S.cat === key ? 'on' : ''}" data-act="cat" data-arg="${key}" title="${esc(name)}">
-      <i class="dot" style="--c:${color}"></i><span>${esc(name)}</span><em>${c.limited ? `<b>${fmt(c.limited)}</b> / ` : ''}${fmt(c.total)}</em></button>`;
+      <i class="dot" style="--c:${color}"></i><span>${esc(name)}</span><em>${c.limited ? `<b>${fmt(c.limited)}</b> / ` : ''}${fmt(c.total)}</em>${sw}</button>`;
   };
   let html = entry('all', 'All Items', '#ffffff') + GROUPS.map(([k, n, c]) => entry(k, n, c)).join('') + entry('modded', 'Modded Items', '#ff7ab6');
   if (unknownIds().length) html += `<button class="nav cat ${S.cat === 'unknown' && S.page === 'items' ? 'on' : ''}" data-act="cat" data-arg="unknown" title="Ids in the config that no loaded item has">
@@ -622,6 +631,12 @@ const ACT = {
   selOnly(id) { S.picked = new Set(); S.sel = id; S.anchor = id; markSelection(); renderDetails(); scrollToRow(id); },
   quick(n) { const ids = S.sel ? [S.sel] : []; setLevels(ids, Number(n), null); renderDetails(); },
   quickMany(n) { const k = setLevels([...S.picked], Number(n)); toast(`${k} item(s) set to level ${n}`); },
+  catSwitch(key) {
+    const ids = catItems(key).map(it => it.i), on = ids.filter(isLimited), off = ids.filter(isDisabled);
+    if (on.length) { const k = setDisabled(on, true); toast(`${catName(key)}: ${k} limit${k === 1 ? '' : 's'} switched off — Save to apply`); }
+    else if (off.length) { const k = setDisabled(off, false); toast(`${catName(key)}: ${k} limit${k === 1 ? '' : 's'} switched back on — Save to apply`); }
+    renderNav();
+  },
   disableLimits() { const k = setDisabled(pickedIds(), true); if (k) toast(`${k} limit${k === 1 ? '' : 's'} switched off — Save to take them out of Level Gate's file`); },
   enableLimits() { const k = setDisabled(pickedIds(), false); if (k) toast(`${k} limit${k === 1 ? '' : 's'} switched back on`); },
   batch() { const ids = pickedIds(); if (ids.length) batchDialog(ids.map(id => ({ id, level: levelOf(id) ?? S.disabled.get(id) ?? 1 }))); },
