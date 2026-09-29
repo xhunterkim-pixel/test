@@ -8,7 +8,7 @@ no PR open). Rules and the build / tuning method are in `CLAUDE.md`.
 | Thing | Version | Status |
 |---|---|---|
 | LevelGate plugin / server | 1.6.3 | Frozen: do not touch without the user's go-ahead |
-| LevelGate Progression | **1.0.3** | Sent (full package), untested in game. 0.9.95 tested: dials tuned from the log, inspect warm-up works (24 ms, background) |
+| LevelGate Progression | **1.0.8** | Sent (full package), untested in game. = 1.0.5 (XP anim waits for load-in, level-up sound reload, main-menu warm-up); Rank Tags (1.0.6–1.0.7) reverted |
 | Modern Editor (editor exe) | 2.0.8 | Sent, untested on Windows (UI checked in the browser mock) |
 | Modern Editor (server mod) | 2.0.7 | Sent: compact SPT console output |
 
@@ -93,6 +93,12 @@ Decor Noise 55, Micro Labels 60, Flourish 65, Border Fade 70, Ambient Light 140 
 - Long `.hint`s (> 70 chars) are auto-tucked behind an ⓘ (tools.js `tuckHints`, MutationObserver) on every page.
 - Cloud build of the editor works: `dotnet publish … -r win-x64 -p:SelfContained=false -p:PublishSingleFile=true -p:EnableWindowsTargeting=true`
   (without SelfContained=false it bundles the runtime: 118 MB).
+
+## Rank Tags: rejected (1.0.6–1.0.7, reverted in 1.0.8)
+
+Per-rank dogtag items (a server mod plus a bitcoin coin re-skinned at runtime with the animated emblem). The user said "these
+dogtags suck": everything reverted. Don't bring it back. What was learned: `EFT.ObjectsFactory.CreateItemAsync` is where every
+item model is built (loot, inspect, icon renderer); the Physical Bitcoin's shader is `p0/Reflective/Bumped Specular SMap`.
 
 ## Progression 1.0.1
 - Icon restore on close only redraws icons still big (`GameItems.StillBig`, items dropped from `_scaled` once fine); the blanket
