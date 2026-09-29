@@ -1589,7 +1589,7 @@ namespace LevelGate.Progression
                         what = "item templates"; break;
                     case 1: ProgData.ItemsAt(1); what = "per-level lists (names, categories)"; break;
                     case 2: GameItems.Warm(); what = "item class lookup"; break;
-                    case 3: GameItems.WarmInspect(); RankTags.CheckIcons(); what = "inspect classes (background), Rank Tag icons"; break;
+                    case 3: GameItems.WarmInspect(); what = "inspect classes (background)"; break;
                     default:
                         what = "screen";
                         if (_built && _canvas != null) break;

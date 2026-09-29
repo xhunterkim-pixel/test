@@ -1,4 +1,4 @@
-# LevelGate Progression (1.0.7)
+# LevelGate Progression (1.0.6)
 
 A Call of Duty style **Progression** screen inside Tarkov's main menu. It adds a
 **PROGRESSION** button to the menu bar next to Character, Trading, Flea Market and the rest.
@@ -18,17 +18,6 @@ A Call of Duty style **Progression** screen inside Tarkov's main menu. It adds a
   - P or Esc closes the screen.
 - It works on its own and never changes LevelGate. It only **reads**
   `BepInEx\plugins\LevelGate\config\level_requirements.json`, and picks up changes to that file while the game runs.
-
-## 1.0.7
-
-- **Rank Tags: steel, not gold.** 1.0.6 kept the Physical Bitcoin's gold, mirror-like shine, which washed out the emblem.
-  The coin now uses neutral steel: its gold spec and reflection colours are set to grey, and the gloss is turned down.
-  Being tuned in **F12 › 5. CURRENTLY TESTING**:
-  - **Rank Tag: Shine (%)**: 0 = matte, 100 = polished (default 20).
-  - **Rank Tag: Steel Lightness (%)**: the metal around the emblem (default 40).
-  - A coin you're looking at updates live. Stash icons are drawn again once you're back on the main menu.
-- The old gold stash icons are drawn again automatically, once.
-- The log lists the coin shader's settings (`rank tags: coin shader …`), so the next round can be exact.
 
 ## 1.0.6: Rank Tags
 
