@@ -49,5 +49,8 @@ The user's install: SPT at `C:\SPT`, server at `C:\SPT\SPT_Runtime`, Progression
 ## Building
 
 - **On Windows (desktop)**: `dotnet build LevelGate.Progression -c Release -p:SptDir=C:\SPT` (refs come from the game's `EscapeFromTarkov_Data\Managed` and `BepInEx\core`). Modern Editor: `ModernEditor\Build-Editor.bat`, `ModernEditor\Build-Server.bat`. Needs the .NET 10 SDK (and net472 targeting pack for the plugins).
-- **In a Linux cloud session**: there's no game install; the earlier sessions compiled with Roslyn `csc` against reference DLLs downloaded into the scratchpad (NuGet ref packs + Unity/BepInEx refs). Those aren't in the repo (game DLLs must not be committed). Compile to check syntax, but in-game testing is always the user's.
+- **In a Linux cloud session**: `bash tools/cloud-build/setup.sh <scratch dir>` (installs the .NET SDK via apt, gets Unity 2022.3 refs from the
+  Krafs.Rimworld.Ref NuGet package and BepInEx 5 from GitHub, into a fake SPT folder), then
+  `dotnet build LevelGate.Progression -c Release -p:SptDir=<scratch dir>/SPT`. Delete `LevelGate.Progression/bin` and `obj` after.
+  That only proves it compiles; in-game testing is always the user's.
 - Editor UI without Windows: `node tools/ui-mock/serve.mjs` then open http://localhost:8766 (Playwright + Chromium are available in cloud sessions).
