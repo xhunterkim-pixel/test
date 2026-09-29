@@ -26,7 +26,7 @@ namespace LevelGate.Progression
         public const string Guid = "com.kkyangg.levelgate.progression";
         public const string Name = "LevelGate Progression";
         // MAJOR.MINOR.PATCH — see CHANGELOG.md
-        public const string Version = "1.0.6";
+        public const string Version = "1.0.7";
 
         internal static ProgressionPlugin Instance;
         internal static ConfigEntry<KeyboardShortcut> OpenKey;
@@ -49,6 +49,7 @@ namespace LevelGate.Progression
         internal static ConfigEntry<bool> TestBigXpDuringSweep;
         internal static ConfigEntry<bool> TestFadeCardLine, TestFadeSectionHead, TestFadeMeters, TestFadeXpBar; // 0.9.97
         internal static ConfigEntry<float> TestXpStartDelay; // 1.0.4
+        internal static ConfigEntry<int> TestRankTagShine, TestRankTagSteel; // 1.0.7
         internal static bool Mw(int n) => TestMw[n]?.Value ?? true;
         internal static ConfigEntry<float> TestRevealTime;
         internal static ConfigEntry<ProgScreen.LoadInStyle> TestRevealStyle;
@@ -319,11 +320,18 @@ namespace LevelGate.Progression
             // 1.0.4: the XP animation waits for the screen to finish loading and settle, then this long before it starts
             TestXpStartDelay = Config.Bind(T, "XpStartDelay", .6f, Desc(
                 "After the loading screen is gone and the screen has settled (pictures in, no stutter), wait this long before the XP animation starts, in seconds.", 189, new AcceptableValueRange<float>(0f, 2f)));
+            // 1.0.7: the Rank Tag coin's look (1.0.6 was gold and mirror-like: the coin's own gold shine)
+            TestRankTagShine = Config.Bind(T, "RankTagShine", 20, Desc(
+                "Rank Tags: how shiny / reflective the steel coin is, in % (0 = matte, 100 = polished). Stash icons redraw on the main menu.", 188, new AcceptableValueRange<int>(0, 100)));
+            TestRankTagSteel = Config.Bind(T, "RankTagSteel", 40, Desc(
+                "Rank Tags: how light the steel around the emblem is, in % (0 = near black, 100 = bright silver).", 187, new AcceptableValueRange<int>(0, 100)));
+            TestRankTagShine.SettingChanged += (_, __) => RankTags.Retune();
+            TestRankTagSteel.SettingChanged += (_, __) => RankTags.Retune();
             var polishDials = new HashSet<ConfigEntryBase> { TestNameShadow, TestNameShadowSoftness, TestNameShadowDistance, TestNewTag, TestPanelLight, TestCardOpacity, TestCardLockedOpacity, TestNameGlow, TestNameGlowSoftness, TestPolish, TestDecorNoise, TestMicroLabels, TestBorderFade, TestAmbient, TestQuietFx, TestFlourish, TestAmbientLight, TestLightHue,
                 TestCardRest, TestCardLocked, TestSmallText, TestNeutralPips, TestHeroSubtitle, TestHeroSubtitleOpacity, TestTipDelay,
                 TestWallXpBacking, TestWallXpLift, TestBigXpDuringSweep,
-                TestFadeCardLine, TestFadeSectionHead, TestFadeMeters, TestFadeXpBar, TestXpStartDelay };
-            var liveDials = new HashSet<ConfigEntryBase> { TestTipDelay, TestAmbient, TestQuietFx, TestFlourish, TestWallXpBacking, TestWallXpLift, TestBigXpDuringSweep, TestXpStartDelay };
+                TestFadeCardLine, TestFadeSectionHead, TestFadeMeters, TestFadeXpBar, TestXpStartDelay, TestRankTagShine, TestRankTagSteel };
+            var liveDials = new HashSet<ConfigEntryBase> { TestTipDelay, TestAmbient, TestQuietFx, TestFlourish, TestWallXpBacking, TestWallXpLift, TestBigXpDuringSweep, TestXpStartDelay, TestRankTagShine, TestRankTagSteel };
             // 1.0.2: every setting change, not only the testing dials
             Config.SettingChanged += (_, a) => { var e = a?.ChangedSetting; if (e != null) L.Trace($"setting: {e.Definition.Section} › {e.Definition.Key} = {(e.BoxedValue is float f ? f.ToString("0.###") : e.BoxedValue)}"); };
             Config.SettingChanged += (_, a) =>
@@ -443,7 +451,7 @@ namespace LevelGate.Progression
                 ["AmbientMotion"] = "Ambient Motion (%)", ["QuietDuringEffects"] = "Quiet During Effects", ["Flourish"] = "Flourish (%)", ["AmbientLight"] = "Ambient Light (%)",
                 ["LightColours"] = "Ambient Light Colours", ["CardRest"] = "Card Rest Opacity (%)", ["CardLocked"] = "Card Locked Opacity (%)", ["SmallText"] = "Small Text Minimum (px)",
                 ["NeutralPips"] = "Neutral Rank Pips", ["HeroSubtitle"] = "Line Under Name", ["HeroSubtitleOpacity"] = "Line Under Name Opacity (%)", ["TooltipDelay"] = "Tooltip Delay (s)", ["NameGlow"] = "Name Glow (%)", ["NameGlowSoftness"] = "Name Glow Softness (%)",
-                ["NameReflection"] = "Name Reflection (%)", ["NameReflectionSoftness"] = "Name Reflection Softness (%)", ["NameReflectionDistance"] = "Name Reflection Distance (%)", ["NewTagLook"] = "NEW Tag Look", ["NewTagStyle"] = "NEW Tag Look", ["SweepXpBacking"] = "Sweep +XP Backing (%)", ["SweepXpHeight"] = "Sweep +XP Height (px)", ["BigXpDuringSweep"] = "Big +XP During Sweep", ["FadeCardLine"] = "Fade: Current Card Top Line", ["FadeSectionHead"] = "Fade: Category Bars", ["FadeStatMeters"] = "Fade: Stat Meters", ["FadeXpBar"] = "Fade: XP Bar", ["XpStartDelay"] = "XP Animation Start Delay (s)", ["PanelLight"] = "Panel Light (%)", ["CardOpacity"] = "Card Opacity (%)", ["CardLockedOpacity"] = "Locked Card Opacity (%)",
+                ["NameReflection"] = "Name Reflection (%)", ["NameReflectionSoftness"] = "Name Reflection Softness (%)", ["NameReflectionDistance"] = "Name Reflection Distance (%)", ["NewTagLook"] = "NEW Tag Look", ["NewTagStyle"] = "NEW Tag Look", ["SweepXpBacking"] = "Sweep +XP Backing (%)", ["SweepXpHeight"] = "Sweep +XP Height (px)", ["BigXpDuringSweep"] = "Big +XP During Sweep", ["FadeCardLine"] = "Fade: Current Card Top Line", ["FadeSectionHead"] = "Fade: Category Bars", ["FadeStatMeters"] = "Fade: Stat Meters", ["FadeXpBar"] = "Fade: XP Bar", ["XpStartDelay"] = "XP Animation Start Delay (s)", ["RankTagShine"] = "Rank Tag: Shine (%)", ["RankTagSteel"] = "Rank Tag: Steel Lightness (%)", ["PanelLight"] = "Panel Light (%)", ["CardOpacity"] = "Card Opacity (%)", ["CardLockedOpacity"] = "Locked Card Opacity (%)",
             };
             var titles = new Dictionary<string, string>
             {
@@ -457,7 +465,7 @@ namespace LevelGate.Progression
             // 0.9.95 dials tuned in 0.9.96 (your log): NEW tag MW4, Locked Blueprint 0 (off), XP Fill 146, Orange, Sweep +XP Backing 100, Height 44, Big +XP During Sweep on
             // 0.9.99: the 0.9.97 fades are tuned (all four on, from your log)
             // 1.0.4: being tried now: how long after loading the XP animation waits
-            var testingNow = new HashSet<string> { "XpStartDelay" };
+            var testingNow = new HashSet<string> { "XpStartDelay", "RankTagShine", "RankTagSteel" };
             // 0.9.98: taken out of F12 (the user: "stuff most users wouldn't use"); still in the .cfg file, their values still apply
             var hiddenSetup = new HashSet<string> { "ButtonLabel", "CopyButton", "TopMargin", "BottomMargin", "TileSize", "MaxTilesPerCategory",
                 "CameraTurnDegrees", "SortOrder", "InsideGameUi", "PerformanceReadout", "VerboseLog", "DumpKey", "UseGameSounds", "PatternMotion" };

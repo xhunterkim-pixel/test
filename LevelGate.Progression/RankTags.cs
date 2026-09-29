@@ -93,6 +93,111 @@ namespace LevelGate.Progression
 
         // ---------------------------------------------------------------- the look (built once per rank)
 
+        // ---------------------------------------------------------------- tuning (F12 › CURRENTLY TESTING)
+
+        internal static float Shine => Mathf.Clamp01((ProgressionPlugin.TestRankTagShine?.Value ?? 20) / 100f);
+        internal static float Steel => Mathf.Clamp01((ProgressionPlugin.TestRankTagSteel?.Value ?? 40) / 100f);
+        /// <summary>Goes up on every dial change: the skins shown re-apply their look.</summary>
+        internal static int TuneVersion;
+        private const int LookVersion = 2; // 1.0.7: bump when the look changes (the stash icons are drawn again once)
+
+        /// <summary>A Rank Tag dial moved: the looks are made again and the skins shown pick them up; the stash icons redraw.</summary>
+        public static void Retune()
+        {
+            foreach (var l in _looks.Values) if (l?.Sheet != null) UnityEngine.Object.Destroy(l.Sheet);
+            _looks.Clear();
+            TuneVersion++;
+            RedrawIcons("look changed");
+        }
+
+        /// <summary>The game keeps item icons in a cache on disk: when the look changed since they were drawn, draw them again.</summary>
+        public static void CheckIcons()
+        {
+            try
+            {
+                string want = $"{LookVersion}|{ProgressionPlugin.TestRankTagShine?.Value}|{ProgressionPlugin.TestRankTagSteel?.Value}";
+                string file = Path.Combine(Path.GetDirectoryName(typeof(RankTags).Assembly.Location) ?? ".", "ranktag_icons.txt");
+                if (File.Exists(file) && File.ReadAllText(file).Trim() == want) return;
+                RedrawIcons("first start with this look");
+                File.WriteAllText(file, want);
+            }
+            catch (Exception e) { L.ErrorOnce("rank tag icons", e); }
+        }
+
+        private static void RedrawIcons(string why)
+        {
+            var tpls = new List<string>();
+            for (int k = 0; k < 16; k++) tpls.Add(TplOf(k));
+            L.Info($"rank tags: stash icons redrawn ({why}; on the main menu)");
+            GameItems.RepairAll(tpls);
+        }
+
+        /// <summary>
+        /// The coin's own material is the Physical Bitcoin's: gold, and very reflective. Every property of its shader is set
+        /// by what its name says: spec / reflection colours to a neutral grey scaled by Shine, gloss / smoothness down,
+        /// emission off, tints white, maps other than the emblem neutral. Logged once per shader (what it had), so the
+        /// next log shows exactly what the game's shader offers.
+        /// </summary>
+        internal static void Tune(Material m, string mainProp)
+        {
+            var sh = m.shader;
+            if (sh == null) return;
+            bool log = _loggedShaders.Add(sh.name);
+            var seen = log ? new List<string>() : null;
+            float shine = Shine;
+            int n = sh.GetPropertyCount();
+            for (int i = 0; i < n; i++)
+            {
+                string name = sh.GetPropertyName(i), ln = name.ToLowerInvariant();
+                var type = sh.GetPropertyType(i);
+                try
+                {
+                    switch (type)
+                    {
+                        case UnityEngine.Rendering.ShaderPropertyType.Color:
+                        case UnityEngine.Rendering.ShaderPropertyType.Vector:
+                        {
+                            if (type == UnityEngine.Rendering.ShaderPropertyType.Vector && !ln.Contains("color")) break;
+                            if (log) seen.Add($"{name}={m.GetColor(name)}");
+                            if (ln.Contains("emis")) m.SetColor(name, Color.black);
+                            else if (ln.Contains("spec")) m.SetColor(name, Grey(.08f + .5f * shine));
+                            else if (ln.Contains("refl") || ln.Contains("cube") || ln.Contains("fresnel") || ln.Contains("rim") || ln.Contains("env")) m.SetColor(name, Grey(.02f + .35f * shine));
+                            else if (name == "_Color" || name == "_BaseColor" || ln.Contains("tint") || ln.Contains("diffuse") || ln.Contains("albedo")) m.SetColor(name, Color.white);
+                            break;
+                        }
+                        case UnityEngine.Rendering.ShaderPropertyType.Float:
+                        case UnityEngine.Rendering.ShaderPropertyType.Range:
+                        {
+                            if (log) seen.Add($"{name}={m.GetFloat(name):0.###}");
+                            float lo = 0, hi = 1;
+                            if (type == UnityEngine.Rendering.ShaderPropertyType.Range) { var r = sh.GetPropertyRangeLimits(i); lo = r.x; hi = r.y; }
+                            if (ln.Contains("gloss") || ln.Contains("smooth") || ln.Contains("shin")) m.SetFloat(name, Mathf.Lerp(lo, hi, .15f + .55f * shine));
+                            else if (ln.Contains("metal")) m.SetFloat(name, Mathf.Lerp(lo, hi, .3f + .5f * shine));
+                            else if (ln.Contains("refl") || ln.Contains("fresnel") || ln.Contains("env") || ln.Contains("cube")) m.SetFloat(name, Mathf.Lerp(lo, hi, .03f + .4f * shine));
+                            else if (ln.Contains("emis")) m.SetFloat(name, lo);
+                            break;
+                        }
+                        case UnityEngine.Rendering.ShaderPropertyType.Texture:
+                        {
+                            var dim = sh.GetPropertyTextureDimension(i);
+                            if (log) seen.Add($"{name}({dim})={(m.GetTexture(name) != null ? m.GetTexture(name).name : "none")}");
+                            if (name == mainProp || dim != UnityEngine.Rendering.TextureDimension.Tex2D) break; // cubemaps stay (their strength is the colour above)
+                            if (ln.Contains("bump") || ln.Contains("normal")) m.SetTexture(name, FlatNormal());
+                            else if (ln.Contains("emis")) m.SetTexture(name, Texture2D.blackTexture);
+                            else if (ln.Contains("spec") || ln.Contains("gloss") || ln.Contains("metal") || ln.Contains("smap") || ln.Contains("mask") || ln.Contains("refl")) m.SetTexture(name, Grey());
+                            else if (ln.Contains("detail")) m.SetTexture(name, null);
+                            break;
+                        }
+                    }
+                }
+                catch (Exception e) { if (log) seen.Add($"{name}: {e.GetBaseException().Message}"); }
+            }
+            if (log) L.Info($"rank tags: coin shader '{sh.name}' ({n} properties): {string.Join(", ", seen.ToArray())}");
+        }
+
+        private static readonly HashSet<string> _loggedShaders = new HashSet<string>();
+        private static Color Grey(float v) => new Color(v, v, v, 1);
+
         internal sealed class Look
         {
             public Texture2D Sheet; // the emblem sheet on steel
@@ -117,12 +222,17 @@ namespace LevelGate.Progression
                     {
                         // the emblem on the coin's steel (the art's see-through parts show the metal)
                         var px = tex.GetPixels32();
-                        var steel = new Color32(92, 96, 100, 255);
+                        int sv = Mathf.RoundToInt(Mathf.Lerp(28, 190, Steel));
+                        var steel = new Color32((byte)sv, (byte)(sv + 3), (byte)(sv + 6), 255);
+                        // alpha: many of the game's shaders read the main texture's alpha as the gloss / reflection mask (the
+                        // coin's full alpha was the 1.0.6 mirror): the emblem a bit less shiny than the steel
+                        byte gSteel = (byte)Mathf.RoundToInt(255 * Mathf.Lerp(.05f, .8f, Shine)), gArt = (byte)Mathf.RoundToInt(255 * Mathf.Lerp(.03f, .55f, Shine));
                         for (int i = 0; i < px.Length; i++)
                         {
                             var c = px[i];
                             int a = c.a;
-                            px[i] = new Color32((byte)((c.r * a + steel.r * (255 - a)) / 255), (byte)((c.g * a + steel.g * (255 - a)) / 255), (byte)((c.b * a + steel.b * (255 - a)) / 255), 255);
+                            px[i] = new Color32((byte)((c.r * a + steel.r * (255 - a)) / 255), (byte)((c.g * a + steel.g * (255 - a)) / 255), (byte)((c.b * a + steel.b * (255 - a)) / 255),
+                                                (byte)((gArt * a + gSteel * (255 - a)) / 255));
                         }
                         tex.SetPixels32(px);
                         tex.wrapMode = TextureWrapMode.Clamp;
@@ -261,9 +371,8 @@ namespace LevelGate.Progression
                 _mat.SetTextureScale(_texProp, new Vector2(1f / _look.Columns, 1f / _look.Rows));
                 if (_mat.HasProperty("_Color")) _mat.SetColor("_Color", Color.white);
             }
-            foreach (var p in new[] { "_BumpMap", "_NormalMap", "_DetailNormalMap" }) if (_mat.HasProperty(p)) _mat.SetTexture(p, RankTags.FlatNormal());
-            foreach (var p in new[] { "_SpecMap", "_SpecGlossMap", "_MetallicGlossMap", "_GlossMap" }) if (_mat.HasProperty(p)) _mat.SetTexture(p, RankTags.Grey());
-            foreach (var p in new[] { "_DetailAlbedoMap", "_EmissionMap" }) if (_mat.HasProperty(p)) _mat.SetTexture(p, null);
+            RankTags.Tune(_mat, _texProp);
+            _tuned = RankTags.TuneVersion;
             mr.sharedMaterial = _mat;
             _rank = rank;
             _shown = -1;
@@ -295,8 +404,19 @@ namespace LevelGate.Progression
             _mat.SetTextureOffset(_texProp, new Vector2(col / (float)_look.Columns, 1f - (row + 1) / (float)_look.Rows));
         }
 
+        private int _tuned;
+
         private void Update()
         {
+            if (_mat != null && _tuned != RankTags.TuneVersion)
+            {
+                // an F12 dial moved: the new look, live
+                _tuned = RankTags.TuneVersion;
+                _look = RankTags.LookOf(_rank);
+                if (_look != null) { _mat.SetTexture(_texProp, _look.Sheet); _mat.SetTextureScale(_texProp, new Vector2(1f / _look.Columns, 1f / _look.Rows)); }
+                RankTags.Tune(_mat, _texProp);
+                _shown = -1;
+            }
             if (_look == null || _mat == null) return;
             if (ProgressionPlugin.Low || Time.unscaledTime < _playFrom) { ShowFrame(_look.Frames - 1); return; } // Performance Mode: stands still
             ShowFrame((int)((Time.unscaledTime - _playFrom) * 1000f / _look.Ms) % _look.Frames);
