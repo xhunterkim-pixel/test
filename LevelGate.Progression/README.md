@@ -1,4 +1,4 @@
-# LevelGate Progression (1.0.22)
+# LevelGate Progression (1.0.23)
 
 A Call of Duty style **Progression** screen inside Tarkov's main menu. It adds a
 **PROGRESSION** button to the menu bar next to Character, Trading, Flea Market and the rest.
@@ -18,6 +18,13 @@ A Call of Duty style **Progression** screen inside Tarkov's main menu. It adds a
   - P or Esc closes the screen.
 - It works on its own and never changes LevelGate. It only **reads**
   `BepInEx\plugins\LevelGate\config\level_requirements.json`, and picks up changes to that file while the game runs.
+
+## 1.0.23
+
+- **A / Q swipe from the middle to the left, D / E from the middle to the right.** Each sound now starts centred (each file's
+  own slight lean evened out first) and eases toward its side over its length, ending 6 dB to that side: noticeable, not
+  hard-panned. The fixed 35 % pan of 1.0.21–1.0.22 is gone.
+- The four stay at the same loudness (−21.9 dB).
 
 ## 1.0.22
 
