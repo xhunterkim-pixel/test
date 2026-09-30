@@ -2354,7 +2354,7 @@ namespace LevelGate.Progression
             v.Frame.type = Image.Type.Sliced;
             FadeEdges(v.Frame, 1, Ui.Cut, Polish.DirectionalBorders ? EdgeLook.TopRight : EdgeLook.Ends); // 1.0.10: MW4's rows: only the top-right lit // 1.0.9: the fading edges follow the cut corners
             var inner = Ui.Fill(rt, "Inner", 1);
-            v.Face = Ui.Img(inner, Face, Ui.Chamfer());
+            v.Face = Ui.Img(inner, Face, Ui.Chamfer(Ui.InnerCut(1, 1))); // 1.0.11: its cut lines up with the frame's diagonal
             v.Face.type = Image.Type.Sliced;
             // like a stash cell / the prestige reward tiles: the picture using the whole tile, its short name top-right over it
             // (no per-item background tint: removed on request)
@@ -2386,7 +2386,7 @@ namespace LevelGate.Progression
             {
                 // MW 9: locked — a cold, scanlined hologram over the picture (after it: on top)
                 // 1.0.3: over the whole tile, in its cut shape (it stopped above the foot and ran square past the cut corners)
-                var hs = Ui.Img(Ui.Fill(inner, "HoloScan"), new Color(.7f, .86f, .95f, .22f), Ui.ChamferScanlines()); hs.type = Image.Type.Tiled; hs.raycastTarget = false;
+                var hs = Ui.Img(Ui.Fill(inner, "HoloScan"), new Color(.7f, .86f, .95f, .22f), Ui.ChamferScanlines(Ui.InnerCut(1, 1))); hs.type = Image.Type.Tiled; hs.raycastTarget = false;
                 Ui.Img(Ui.Rect(inner, "HoloNoise", Vector2.zero, Vector2.one, new Vector2(3, 3), new Vector2(-3, -TileTop)), new Color(.7f, .86f, .95f, .14f), Ui.HStreaks()).raycastTarget = false;
             }
             // selection: a 2 px light bar along the top (so selected isn't told by colour alone)
@@ -3796,7 +3796,7 @@ namespace LevelGate.Progression
                     float o = 4 * k;
                     var st = Ui.Rect(_body, "Stack" + k, Vector2.zero, Vector2.one, new Vector2(o, -o), new Vector2(o, -HeadH - 4 - o));
                     var se = Ui.Img(st, Ui.Hex("#2b3438", k == 1 ? .75f : .45f), Ui.Chamfer()); se.type = Image.Type.Sliced; se.raycastTarget = false;
-                    var sf = Ui.Img(Ui.Fill(st, "In", 1), Ui.Hex("#0c0f11", .95f), Ui.Chamfer()); sf.type = Image.Type.Sliced; sf.raycastTarget = false;
+                    var sf = Ui.Img(Ui.Fill(st, "In", 1), Ui.Hex("#0c0f11", .95f), Ui.Chamfer(Ui.InnerCut(1, 1))); sf.type = Image.Type.Sliced; sf.raycastTarget = false;
                     _stack[k - 1] = st.gameObject;
                     _stackEdge[k - 1] = se;
                     st.gameObject.SetActive(false);
@@ -3807,7 +3807,7 @@ namespace LevelGate.Progression
                 _frame.type = Image.Type.Sliced;
                 FadeEdges(_frame, 2, Ui.Cut, Polish.DirectionalBorders); // 1.0.9: the fading edges follow the cut corners (they squared them off)
                 var inner = Ui.Fill(card, "In", 2);
-                _bg = Ui.Img(inner, Ui.Hex("#12181b", .88f), Ui.Chamfer(), true);
+                _bg = Ui.Img(inner, Ui.Hex("#12181b", .88f), Ui.Chamfer(Ui.InnerCut(2, 2)), true); // 1.0.11: lines up with the frame's diagonal
                 _bg.type = Image.Type.Sliced;
                 // Arena-style warm glow in the top-right corner of the picked card
                 var glow = Ui.Box(inner, "Glow", new Vector2(1, 1), Vector2.zero, new Vector2(260, 260));
@@ -3830,7 +3830,7 @@ namespace LevelGate.Progression
                 _top.enabled = false;
                 // selected: a fine dot-matrix fill over the face (MW's picked card), under the pictures
                 var dotsMask = Ui.Fill(inner, "SelDotsMask");
-                var dm = Ui.Img(dotsMask, Color.white, Ui.Chamfer()); dm.type = Image.Type.Sliced; dm.raycastTarget = false;
+                var dm = Ui.Img(dotsMask, Color.white, Ui.Chamfer(Ui.InnerCut(2, 2))); dm.type = Image.Type.Sliced; dm.raycastTarget = false;
                 dotsMask.gameObject.AddComponent<Mask>().showMaskGraphic = false; // the dots follow the card's cut corners
                 dotsMask.SetSiblingIndex(1);
                 _handled = Ui.Handled(dotsMask, _gritSeed++, .07f).gameObject; // fingerprints / smudges, clipped to the card's cut shape
@@ -3846,7 +3846,7 @@ namespace LevelGate.Progression
                 _flood.raycastTarget = _floodDots.raycastTarget = false; _flood.enabled = _floodDots.enabled = false;
                 // MW 9: locked — a cold, scanlined hologram over the pictures
                 _holo = Ui.Fill(inner, "Holo").gameObject; // brought to the top when shown (over the pictures)
-                var hs = Ui.Img(Ui.Fill(_holo.transform, "Scan"), new Color(.7f, .86f, .95f, .2f), Ui.ChamferScanlines()); hs.type = Image.Type.Tiled; hs.raycastTarget = false; // 1.0.3: in the card's cut shape
+                var hs = Ui.Img(Ui.Fill(_holo.transform, "Scan"), new Color(.7f, .86f, .95f, .2f), Ui.ChamferScanlines(Ui.InnerCut(2, 2))); hs.type = Image.Type.Tiled; hs.raycastTarget = false; // 1.0.3: in the card's cut shape
                 Ui.Img(Ui.Fill(_holo.transform, "Noise"), new Color(.7f, .86f, .95f, .12f), Ui.HStreaks()).raycastTarget = false;
                 _holo.SetActive(false);
                 // picked: a bloom in the rank's colour and a light made of dots under the pictures, both drifting a little

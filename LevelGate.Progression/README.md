@@ -1,4 +1,4 @@
-# LevelGate Progression (1.0.10)
+# LevelGate Progression (1.0.11)
 
 A Call of Duty style **Progression** screen inside Tarkov's main menu. It adds a
 **PROGRESSION** button to the menu bar next to Character, Trading, Flea Market and the rest.
@@ -18,6 +18,16 @@ A Call of Duty style **Progression** screen inside Tarkov's main menu. It adds a
   - P or Esc closes the screen.
 - It works on its own and never changes LevelGate. It only **reads**
   `BepInEx\plugins\LevelGate\config\level_requirements.json`, and picks up changes to that file while the game runs.
+
+## 1.0.11
+
+- **The insides line up with the cut corners.** The card and tile backgrounds, the locked scan lines, the selected dot
+  fill and the stacked cards behind used the same 8 px cut as the frame. But they sit 1–2 px inside it, so their diagonal
+  landed up to about 1 px further in, leaving a sliver of gap along the frame's diagonal. Each inner cut is now worked out
+  from the line's thickness and the inset, so it starts exactly where the frame's diagonal ends.
+- **No bright knot where the diagonal meets the straight edges.** The two overlapped by almost a pixel; they now barely touch.
+- **Your picks are now the defaults** (1.0.9 log): Card Borders Fade One Way (MW4) is on and Picked Card Pink Light is
+  off. Both switches are hidden from F12. XP Animation Start Delay is still being tried.
 
 ## 1.0.10
 

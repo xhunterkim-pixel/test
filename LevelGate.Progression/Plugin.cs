@@ -26,7 +26,7 @@ namespace LevelGate.Progression
         public const string Guid = "com.kkyangg.levelgate.progression";
         public const string Name = "LevelGate Progression";
         // MAJOR.MINOR.PATCH — see CHANGELOG.md
-        public const string Version = "1.0.10";
+        public const string Version = "1.0.11";
 
         internal static ProgressionPlugin Instance;
         internal static ConfigEntry<KeyboardShortcut> OpenKey;
@@ -462,7 +462,8 @@ namespace LevelGate.Progression
             // 0.9.95 dials tuned in 0.9.96 (your log): NEW tag MW4, Locked Blueprint 0 (off), XP Fill 146, Orange, Sweep +XP Backing 100, Height 44, Big +XP During Sweep on
             // 0.9.99: the 0.9.97 fades are tuned (all four on, from your log)
             // 1.0.4: being tried now: how long after loading the XP animation waits
-            var testingNow = new HashSet<string> { "XpStartDelay", "DirectionalBorders", "CardAccentLight" };
+            // 1.0.11: DirectionalBorders on / CardAccentLight off — your picks (1.0.9 log), now the defaults (hidden)
+            var testingNow = new HashSet<string> { "XpStartDelay" };
             // 0.9.98: taken out of F12 (the user: "stuff most users wouldn't use"); still in the .cfg file, their values still apply
             var hiddenSetup = new HashSet<string> { "ButtonLabel", "CopyButton", "TopMargin", "BottomMargin", "TileSize", "MaxTilesPerCategory",
                 "CameraTurnDegrees", "SortOrder", "InsideGameUi", "PerformanceReadout", "VerboseLog", "DumpKey", "UseGameSounds", "PatternMotion" };

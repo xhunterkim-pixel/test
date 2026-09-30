@@ -224,7 +224,7 @@ namespace LevelGate.Progression
         private static Sprite _hatch;
 
         /// <summary>Diagonal stripes like the game's empty slots (a 16 px tile, white; tint it faint and tile it).</summary>
-        private static Sprite _chamfer, _plate, _leader, _grain, _hollowTick, _dither;
+        private static Sprite _plate, _leader, _grain, _hollowTick, _dither;
 
         /// <summary>
         /// CoD's pixel dissolve: white dots on an ordered (Bayer) dither, dense on the left and thinning out to nothing on the
@@ -717,16 +717,23 @@ namespace LevelGate.Progression
             return _scan = Sprite.Create(tex, new Rect(0, 0, 2, 3), new Vector2(.5f, .5f), 100, 0, SpriteMeshType.FullRect);
         }
 
-        private static Sprite _chamferScan;
         /// <summary>
         /// 1.0.3: Scanlines in the shape of <see cref="Chamfer"/> (the tiles' and cards' cut corners), as one 9-sliced sprite:
         /// used Tiled, the lines repeat across the middle and the cut corners stay cut, so a locked tile's hologram covers the
         /// whole tile without spilling past its corners (no Mask needed). 33 px: a 15 px middle keeps the 3 px line rhythm.
         /// </summary>
-        public static Sprite ChamferScanlines()
+        public static Sprite ChamferScanlines() => ChamferScanlines(Cut);
+
+        private static readonly Dictionary<int, Sprite> _chamferScans = new Dictionary<int, Sprite>();
+
+        /// <summary>1.0.11: with its own cut (px) — the inside of a frame uses <see cref="InnerCut"/> so its cut lines up
+        /// with the frame's diagonal (a cut of 8 on a rect 1–2 px inside sat up to 1.2 px further in: a sliver of gap).</summary>
+        public static Sprite ChamferScanlines(float c)
         {
-            if (_chamferScan != null) return _chamferScan;
-            const int n = 33, c = 8, b = 9;
+            int key = Mathf.RoundToInt(c * 100);
+            if (_chamferScans.TryGetValue(key, out var have)) return have;
+            const int n = 33;
+            int b = Mathf.CeilToInt(c) + 1;
             var tex = new Texture2D(n, n, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Clamp, filterMode = FilterMode.Point };
             var px = new Color32[n * n];
             for (int y = 0; y < n; y++)
@@ -739,7 +746,7 @@ namespace LevelGate.Progression
                 }
             tex.SetPixels32(px);
             tex.Apply(false, true);
-            return _chamferScan = Sprite.Create(tex, new Rect(0, 0, n, n), new Vector2(.5f, .5f), 100, 0, SpriteMeshType.FullRect, new Vector4(b, b, b, b));
+            return _chamferScans[key] = Sprite.Create(tex, new Rect(0, 0, n, n), new Vector2(.5f, .5f), 100, 0, SpriteMeshType.FullRect, new Vector4(b, b, b, b));
         }
 
         /// <summary>Registration marks: a small "+" just outside each corner of a panel (CoD's HUD framing).</summary>
@@ -822,10 +829,21 @@ namespace LevelGate.Progression
         /// <summary>The cards' and tiles' cut corners (Chamfer's cut), in UI px.</summary>
         public const float Cut = 8;
 
-        public static Sprite Chamfer()
+        /// <summary>
+        /// 1.0.11: the cut for a shape <paramref name="inset"/> px inside a frame whose line is <paramref name="line"/> px thick:
+        /// its diagonal then starts exactly where the frame's diagonal line ends (same cut on both left a sliver between them).
+        /// </summary>
+        public static float InnerCut(float line, float inset) => Cut + line * 1.41421f - 2 * inset;
+
+        public static Sprite Chamfer() => Chamfer(Cut);
+
+        private static readonly Dictionary<int, Sprite> _chamfers = new Dictionary<int, Sprite>();
+
+        public static Sprite Chamfer(float c)
         {
-            if (_chamfer != null) return _chamfer;
-            const int n = 32, c = 8;
+            int key = Mathf.RoundToInt(c * 100);
+            if (_chamfers.TryGetValue(key, out var have)) return have;
+            const int n = 32;
             var tex = new Texture2D(n, n, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Clamp, filterMode = FilterMode.Bilinear };
             var px = new Color32[n * n];
             for (int y = 0; y < n; y++)
@@ -837,8 +855,8 @@ namespace LevelGate.Progression
                 }
             tex.SetPixels32(px);
             tex.Apply(false, true);
-            _chamfer = Sprite.Create(tex, new Rect(0, 0, n, n), new Vector2(.5f, .5f), 100, 0, SpriteMeshType.FullRect, new Vector4(c + 1, c + 1, c + 1, c + 1));
-            return _chamfer;
+            float bb = Mathf.Ceil(c) + 1;
+            return _chamfers[key] = Sprite.Create(tex, new Rect(0, 0, n, n), new Vector2(.5f, .5f), 100, 0, SpriteMeshType.FullRect, new Vector4(bb, bb, bb, bb));
         }
 
         /// <summary>

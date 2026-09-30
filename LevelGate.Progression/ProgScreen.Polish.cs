@@ -174,7 +174,7 @@ namespace LevelGate.Progression
             };
             if (cut > 0)
             {
-                float len = cut * 1.41421f + thickness * .8f, inset = cut / 2 + thickness * .3536f; // centred half a line in from the cut
+                float len = cut * 1.41421f + thickness * .2f, inset = cut / 2 + thickness * .3536f; // centred half a line in from the cut
                 foreach (var (anchor, pos, sp) in new[] { (new Vector2(0, 1), new Vector2(inset, -inset), tr ? _ghost : directional ? _rampLow : _fadeEnd), (new Vector2(1, 0), new Vector2(-inset, inset), tr ? _ghost : directional ? _rampLow : _fadeEnd) })
                 {
                     var d = Ui.Box(rt, "EdgeCut", anchor, pos, new Vector2(len, thickness));
