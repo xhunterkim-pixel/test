@@ -107,13 +107,27 @@ namespace LevelGate.Progression
                 _closedGroups[rep.Tpl] = p.Items; // 1.0.1: clicking it clears NEW on the whole group
                 _groupMembers[gk] = p.Items;
                 if (!_tileViews.TryGetValue(rep.Tpl, out var v)) continue;
-                // 1.0.15: no stacked edges behind a group's tile (two square lines outside its right and bottom edges read as
-                // extra borders and ignored its cut corner); the +N box and the group's name say it's a group
-                if (look == GroupLook.Stack) { }
+                if (look == GroupLook.Stack) StackEdges(v.Rt);
                 else FolderPictures(v, p.Items.Where(i => i != rep).Take(3).ToList());
                 CountBox(v.Rt, $"+{p.Items.Count - 1}", gk, $"{p.Label} · {p.Items.Count}");
                 var cap = Ui.Label(Ui.Rect(v.Rt, "GroupName", new Vector2(0, 0), new Vector2(1, 0), new Vector2(8, 22), new Vector2(-40, 34)), "Text", p.Label.ToUpperInvariant(), 9, Ui.Hex("#9aa3a6"), TextAnchor.MiddleLeft, true, 1.5f, true);
                 ((Graphic)cap).raycastTarget = false;
+            }
+        }
+
+        /// <summary>Stack: two cards' edges peeking out behind the tile, bottom-right (drawn outside it, so they never cover it).
+        /// 1.0.16: 2.5 / 5 px out (7 px reached past the category box's 6 px padding onto its border on the bottom row).</summary>
+        private static void StackEdges(RectTransform rt)
+        {
+            for (int k = 2; k >= 1; k--)
+            {
+                float o = 2.5f * k;
+                var layer = Ui.Rect(rt, "Stack" + k, Vector2.zero, Vector2.one, new Vector2(o, -o), new Vector2(o, -o));
+                layer.SetAsFirstSibling();
+                var c = Ui.Hex("#5a6468", k == 1 ? .8f : .45f);
+                // only the right and bottom edges (outside the tile) show: the others fall under its face
+                Ui.Img(Ui.Rect(layer, "R", new Vector2(1, 0), Vector2.one, new Vector2(-1, 0), Vector2.zero), c).raycastTarget = false;
+                Ui.Img(Ui.Rect(layer, "B", Vector2.zero, new Vector2(1, 0), Vector2.zero, new Vector2(0, 1)), c).raycastTarget = false;
             }
         }
 
