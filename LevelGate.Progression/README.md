@@ -1,4 +1,4 @@
-# LevelGate Progression (1.0.11)
+# LevelGate Progression (1.0.12)
 
 A Call of Duty style **Progression** screen inside Tarkov's main menu. It adds a
 **PROGRESSION** button to the menu bar next to Character, Trading, Flea Market and the rest.
@@ -18,6 +18,12 @@ A Call of Duty style **Progression** screen inside Tarkov's main menu. It adds a
   - P or Esc closes the screen.
 - It works on its own and never changes LevelGate. It only **reads**
   `BepInEx\plugins\LevelGate\config\level_requirements.json`, and picks up changes to that file while the game runs.
+
+## 1.0.12
+
+- **No second border line on selected tiles and cards.** A picked tile or card had a thin "glossy" line running down
+  inside its right edge, about 3 px in, which read as a double border (your PP-9 Klin close-up). It's gone. The border
+  itself already brightens toward the top-right, and the soft sheen on the picked item stays.
 
 ## 1.0.11
 

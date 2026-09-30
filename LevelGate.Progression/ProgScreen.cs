@@ -2458,7 +2458,8 @@ namespace LevelGate.Progression
             FadeTo(v.Face, sel ? FaceSelect : v.Hover ? FaceHover : Face, instant);
             v.Top.enabled = sel;
             if (v.Dither != null) v.Dither.enabled = false; // 1.0.9: no dither band under the top line (a third layer on one edge)
-            if (v.Sheen != null) { v.Sheen.enabled = sel; v.Gloss.enabled = sel; }
+            // 1.0.12: no glossy line down the right edge: 3 px inside the border it read as a second border line
+            if (v.Sheen != null) { v.Sheen.enabled = sel; v.Gloss.enabled = false; }
             v.Pic.rectTransform.localScale = Vector3.one * (v.Hover ? 1.04f : 1f); // a slight lift on hover
             float pa = v.Locked ? (v.Hover || sel ? .8f : .6f) : 1f;
             FadeTo(v.Pic, v.Locked && Mw(9) ? new Color(.72f, .86f, .96f, pa * .9f) : new Color(1, 1, 1, pa), instant); // MW 9: cold hologram tint
@@ -4017,7 +4018,7 @@ namespace LevelGate.Progression
                 FadeTo(_frame, sel ? (Ui.DetailK > 0 ? Border : Select) : _hover ? HoverEdge : Border); // picked: the selection border is the outline
                 _top.enabled = sel && !current;
                 _cardDither.enabled = false; // 1.0.9: no dither band under the top line
-                _sheen.enabled = _gloss.enabled = sel; // a very light reflection on the picked card
+                _sheen.enabled = sel; _gloss.enabled = false; // a very light reflection on the picked card (1.0.12: no glossy edge line: a second border)
                 if (sel && Slot >= 0)
                 {
                     // the lit edge faces the middle of the row: right edge for the left cards, left edge for the right ones
@@ -4026,7 +4027,7 @@ namespace LevelGate.Progression
                     float x = right ? 0 : 1;
                     gr.anchorMin = new Vector2(x, .12f); gr.anchorMax = new Vector2(x, .88f);
                     gr.offsetMin = new Vector2(right ? 3 : -4, 0); gr.offsetMax = new Vector2(right ? 4 : -3, 0);
-                    _gloss.enabled = left || right;
+                    _gloss.enabled = false;
                     _sheen.rectTransform.anchorMin = _sheen.rectTransform.anchorMax = new Vector2(right ? .4f : left ? .6f : .5f, .7f);
                 }
                 _cur.enabled = current;       // a thin orange line: your level
