@@ -1,4 +1,4 @@
-# LevelGate Progression (1.0.12)
+# LevelGate Progression (1.0.13)
 
 A Call of Duty style **Progression** screen inside Tarkov's main menu. It adds a
 **PROGRESSION** button to the menu bar next to Character, Trading, Flea Market and the rest.
@@ -18,6 +18,15 @@ A Call of Duty style **Progression** screen inside Tarkov's main menu. It adds a
   - P or Esc closes the screen.
 - It works on its own and never changes LevelGate. It only **reads**
   `BepInEx\plugins\LevelGate\config\level_requirements.json`, and picks up changes to that file while the game runs.
+
+## 1.0.13
+
+- **Your level's card, selected** (your MBSS close-up):
+  - **No second border on the right and bottom.** The stacked cards behind (levels with more than 3 rewards) were offset
+    along the whole right and bottom edges, which read as a second border, very plainly in orange. They now only peek out
+    toward the bottom-right corner, and in fainter orange.
+  - **One colour along the top.** The white selection outline sat on the orange "your level" line, so the top edge was
+    two-tone. On your own level the outline is now orange too; the light "CURRENT" tag still shows it's the one selected.
 
 ## 1.0.12
 

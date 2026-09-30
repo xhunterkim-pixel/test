@@ -3792,10 +3792,13 @@ namespace LevelGate.Progression
                 }
                 _ticks.gameObject.SetActive(false);
                 // more than the three pictures: one or two cards stacked behind, their edges peeking out bottom-right
+                // 1.0.13: only toward the bottom-right corner (offset along the whole right and bottom edges they read as a
+                // second border, very plainly once orange on your level)
+                var stackArea = Ui.Rect(_body, "StackArea", Vector2.zero, Vector2.one, Vector2.zero, new Vector2(0, -HeadH - 4));
                 for (int k = 2; k >= 1; k--)
                 {
                     float o = 4 * k;
-                    var st = Ui.Rect(_body, "Stack" + k, Vector2.zero, Vector2.one, new Vector2(o, -o), new Vector2(o, -HeadH - 4 - o));
+                    var st = Ui.Rect(stackArea, "Stack" + k, new Vector2(.5f, 0), new Vector2(1, .5f), new Vector2(o, -o), new Vector2(o, -o));
                     var se = Ui.Img(st, Ui.Hex("#2b3438", k == 1 ? .75f : .45f), Ui.Chamfer()); se.type = Image.Type.Sliced; se.raycastTarget = false;
                     var sf = Ui.Img(Ui.Fill(st, "In", 1), Ui.Hex("#0c0f11", .95f), Ui.Chamfer(Ui.InnerCut(1, 1))); sf.type = Image.Type.Sliced; sf.raycastTarget = false;
                     _stack[k - 1] = st.gameObject;
@@ -4052,6 +4055,7 @@ namespace LevelGate.Progression
                 if (_selLights.activeSelf != sel) _selLights.SetActive(sel);
                 if (sel && !_wasSel) PlayShine(_bg.rectTransform); // picked: one soft shine across it
                 if (_selFx == null) _selFx = MakeSelFrame((RectTransform)_frame.transform, 2); // on the outline itself
+                _selFx.SetTint(current ? Ui.Hex(Orange) : Color.white); // 1.0.13: your level's outline stays orange (one colour along the top)
                 _selFx.On = sel;
                 _wasSel = sel; _isCurrent = current;
                 if (sel)
@@ -4063,7 +4067,7 @@ namespace LevelGate.Progression
                 if (_handled.activeSelf != (sel || current)) _handled.SetActive(sel || current); // detail only on the focal cards
                 if (current && !sel) FadeTo(_frame, Ui.Hex(Orange, .85f)); // its border glows orange
                 for (int k = 0; k < 2; k++)
-                    if (_stackEdge[k] != null) _stackEdge[k].color = current ? Ui.Hex(Orange, k == 0 ? .4f : .24f) : Ui.Hex("#2b3438", k == 0 ? .75f : .45f);
+                    if (_stackEdge[k] != null) _stackEdge[k].color = current ? Ui.Hex(Orange, k == 0 ? .26f : .14f) : Ui.Hex("#2b3438", k == 0 ? .75f : .45f);
                 _cardBadge.Still = !(sel || current); // five emblems playing at once was busy (and cost frames)
                 _cardBadge.Bloom = sel || current; // a soft glow behind the emblem: only the focal cards
                 _selDots.enabled = sel;       // the picked card's dot-matrix fill

@@ -129,6 +129,15 @@ namespace LevelGate.Progression
             public Image Strip;
             public float Shown;                        // 0–1: how far it has drawn in (the dots follow it)
             private bool _on;
+            private Color _tint = Color.white;
+            /// <summary>1.0.13: the outline's colour — orange on your own level (a white outline over its orange top line
+            /// made the top edge two-tone).</summary>
+            public void SetTint(Color c)
+            {
+                if (_tint == c) return;
+                _tint = c;
+                if (Img != null) Img.color = new Color(c.r, c.g, c.b, Img.color.a);
+            }
             public bool On
             {
                 set
@@ -142,7 +151,7 @@ namespace LevelGate.Progression
                         if (img.enabled != show) img.enabled = show;
                         Shown = a;
                         if (Bush != null && Bush.gameObject.activeSelf != show) Bush.gameObject.SetActive(show);
-                        img.color = new Color(1, 1, 1, .85f * a);
+                        img.color = new Color(_tint.r, _tint.g, _tint.b, .85f * a);
                         float sc = 1 + .035f * (1 - a); // draws in from a little outside
                         img.rectTransform.localScale = new Vector3(sc, sc, 1);
                     });
