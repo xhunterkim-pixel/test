@@ -1775,7 +1775,7 @@ namespace LevelGate.Progression
             for (int i = 0; i < PerPage; i++) _cards[i].Show(_first + i);
             _cardsDir = dir;
             _cardsStart = dir != 0 && !Calm ? Time.unscaledTime : -10;
-            if (changed && dir != 0) { Sounds.Page(); if (_xpPaging) UpdateSelection(); else ShowLevel(_level); }
+            if (changed && dir != 0) { Sounds.Page(dir); if (_xpPaging) UpdateSelection(); else ShowLevel(_level); }
             else UpdateSelection();
         }
 

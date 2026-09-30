@@ -98,7 +98,14 @@ namespace LevelGate.Progression
         /// <summary>A reward picked (clicked, or W / S).</summary>
         public static void SelectItem() { if (!Own("select_level_item")) Play("MenuContextMenu", "ButtonClick"); }
         /// <summary>A page of cards turned (Q / E, the wheel, the page bar).</summary>
-        public static void Page() { if (!Own("pressing_q_or_e_for_next_pages")) Play("MenuDropdownSelect", "ButtonClick", "Click"); }
+        /// <summary>1.0.22: its own sound each way — page_left_q.wav (Q, back) / page_right_e.wav (E, on), panned like A / D;
+        /// then the older shared pressing_q_or_e_for_next_pages.wav, then the game's.</summary>
+        public static void Page(int dir = 0)
+        {
+            if (dir < 0 && Own("page_left_q")) return;
+            if (dir > 0 && Own("page_right_e")) return;
+            if (!Own("pressing_q_or_e_for_next_pages")) Play("MenuDropdownSelect", "ButtonClick", "Click");
+        }
         /// <summary>1.0.20, XP animation: a level's card unlocking.</summary>
         public static void CardUnlocked() { if (!Own("card_unlocked")) Play("ButtonOver", "ButtonClick"); }
         /// <summary>1.0.20, XP animation: the bar passing each seventh of a level — xp_bar_tick_1..7, rising as it fills.</summary>

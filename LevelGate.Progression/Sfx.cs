@@ -64,7 +64,7 @@ namespace LevelGate.Progression
         /// on its first sound (no silence before it) and levelled against each other. A missing one: the game's sound instead.</summary>
         public static readonly string[] UiSounds =
         {
-            "hover", "hover_over_progression_menu", "enter_progression_ui", "select_level_card", "using_a_or_d_for_level_card", "level_card_left_a", "level_card_right_d",
+            "hover", "hover_over_progression_menu", "enter_progression_ui", "select_level_card", "using_a_or_d_for_level_card", "level_card_left_a", "level_card_right_d", "page_left_q", "page_right_e",
             "select_level_item", "pressing_q_or_e_for_next_pages", "going_before_level_1_or_level_79", "expand_group_items", "collapse_group_items",
             "card_unlocked", "xp_bar_tick_1", "xp_bar_tick_2", "xp_bar_tick_3", "xp_bar_tick_4", "xp_bar_tick_5", "xp_bar_tick_6", "xp_bar_tick_7",
         };
