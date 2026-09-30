@@ -2387,7 +2387,7 @@ namespace LevelGate.Progression
                 // MW 9: locked — a cold, scanlined hologram over the picture (after it: on top)
                 // 1.0.3: over the whole tile, in its cut shape (it stopped above the foot and ran square past the cut corners)
                 var hs = Ui.Img(Ui.Fill(inner, "HoloScan"), new Color(.7f, .86f, .95f, .22f), Ui.ChamferScanlines(Ui.InnerCut(1, 1))); hs.type = Image.Type.Tiled; hs.raycastTarget = false;
-                Ui.Img(Ui.Rect(inner, "HoloNoise", Vector2.zero, Vector2.one, new Vector2(3, 3), new Vector2(-3, -TileTop)), new Color(.7f, .86f, .95f, .14f), Ui.HStreaks()).raycastTarget = false;
+                // 1.0.15: no streak noise over the scan lines (two line patterns on top of each other read as interference)
             }
             // selection: a 2 px light bar along the top (so selected isn't told by colour alone)
             // 1.0.9: ON the frame's top line (it sat 1 px under it: two stacked lines), from where the cut corner ends
@@ -3852,7 +3852,7 @@ namespace LevelGate.Progression
                 // MW 9: locked — a cold, scanlined hologram over the pictures
                 _holo = Ui.Fill(inner, "Holo").gameObject; // brought to the top when shown (over the pictures)
                 var hs = Ui.Img(Ui.Fill(_holo.transform, "Scan"), new Color(.7f, .86f, .95f, .2f), Ui.ChamferScanlines(Ui.InnerCut(2, 2))); hs.type = Image.Type.Tiled; hs.raycastTarget = false; // 1.0.3: in the card's cut shape
-                Ui.Img(Ui.Fill(_holo.transform, "Noise"), new Color(.7f, .86f, .95f, .12f), Ui.HStreaks()).raycastTarget = false;
+                // 1.0.15: clean scan lines only — the streak noise on top read as a second, broken set of lines
                 _holo.SetActive(false);
                 // picked: a bloom in the rank's colour and a light made of dots under the pictures, both drifting a little
                 // (their own canvas: moving them redraws only them), clipped to the card's cut shape

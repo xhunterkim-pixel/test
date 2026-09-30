@@ -1436,7 +1436,21 @@ namespace LevelGate.Progression
             return Mathf.Abs(a.x - r.xMin) < .01f ? 'l' : 'r';
         }
 
+        /// <summary>1.0.15: the cut corners' strength on Corners / TopRight frames, easing into the sides over a few px — at
+        /// their faint ends the cuts were nearly invisible, so the cards and tiles looked square-cornered.</summary>
+        public float CutAlpha = .55f;
+
         private float Alpha(char side, Vector2 p, Rect r)
+        {
+            float a = BaseAlpha(side, p, r);
+            if (Cut <= 0 || (Mode != Look.Corners && Mode != Look.TopRight)) return a;
+            if (side == 'd') return Mathf.Max(a, CutAlpha);
+            float dist = side == 't' ? p.x - (r.xMin + Cut) : side == 'l' ? (r.yMax - Cut) - p.y : side == 'r' ? p.y - (r.yMin + Cut) : (r.xMax - Cut) - p.x;
+            float k = Mathf.Clamp01(dist / 36f);
+            return Mathf.Max(a, CutAlpha * (1 - k * k * (3 - 2 * k)));
+        }
+
+        private float BaseAlpha(char side, Vector2 p, Rect r)
         {
             float u = Mathf.Clamp01((p.x - r.xMin) / Mathf.Max(1, r.width)), w = Mathf.Clamp01((p.y - r.yMin) / Mathf.Max(1, r.height));
             switch (Mode)
