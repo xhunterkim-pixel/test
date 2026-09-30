@@ -530,40 +530,6 @@ namespace LevelGate.Progression
             return _innerGlow = Sprite.Create(tex, new Rect(0, 0, n, n), new Vector2(.5f, .5f), 100, 0, SpriteMeshType.FullRect, new Vector4(b, b, b, b));
         }
 
-        private static readonly Sprite[] _dashFrames = new Sprite[3];
-
-        /// <summary>
-        /// MW's selection border: a steady 1 px line on top, left and right; the bottom broken into dashes of random length
-        /// with stray dots below it.
-        /// 9-sliced with tiled edges (Image.Type.Tiled), so the pattern repeats along any size. Three variants to swap
-        /// between (the border "crawls"). White.
-        /// </summary>
-        public static Sprite DashFrame(int variant)
-        {
-            variant = ((variant % 3) + 3) % 3;
-            if (_dashFrames[variant] != null) return _dashFrames[variant];
-            // the cards' / tiles' own shape: the line runs 2 px in from the sprite's edge (use it 2 px outside the outline so
-            // they coincide), with the same 8 px cuts top-left and bottom-right as Chamfer (0.9.72–0.9.74 drew a plain
-            // rectangle 3–4 px outside: two borders that didn't agree at the cut corners — "broken")
-            const int n = 48, L = 2, c = 8, b = L + c + 2;
-            var tex = new Texture2D(n, n, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Clamp, filterMode = FilterMode.Point, name = "LevelGate dashframe" };
-            var px = new Color32[n * n];
-            var rnd = new System.Random(71 + variant * 13);
-            void Put(int x, int y, float a) { if (x >= 0 && x < n && y >= 0 && y < n) px[y * n + x] = new Color32(255, 255, 255, (byte)Mathf.Max(px[y * n + x].a, 255 * a)); }
-            int top = n - 1 - L, right = n - 1 - L;
-            for (int x = L + c; x <= right; x++) Put(x, top, .92f);                       // top (after the top-left cut)
-            for (int y = L; y <= top - c; y++) Put(L, y, .92f);                           // left (below the cut)
-            for (int y = L + c; y <= top; y++) Put(right, y, .92f);                       // right (above the bottom-right cut)
-            // the cuts: a stepped 1 px diagonal reads thinner and dimmer than the straight sides (1.0.9) — a softer second
-            // pixel on the inside gives it the same weight
-            for (int k = 0; k <= c; k++) { Put(L + k, top - c + k, .92f); Put(L + k + 1, top - c + k, .5f); }          // the top-left cut
-            for (int k = 0; k <= c; k++) { Put(right - c + k, L + k, .7f); Put(right - c + k - 1, L + k, .38f); }      // the bottom-right cut (part of the broken bottom)
-            for (int x = L; x <= right - c; x++) Put(x, L, .35f);                          // bottom: a faint steady line (the breathing dots live on it)
-            tex.SetPixels32(px);
-            tex.Apply(false, true);
-            return _dashFrames[variant] = Sprite.Create(tex, new Rect(0, 0, n, n), new Vector2(.5f, .5f), 100, 0, SpriteMeshType.FullRect, new Vector4(b, b, b, b));
-        }
-
         private static Sprite _hstreaks;
         private static readonly Sprite[] _vstreaks = new Sprite[4];
 
@@ -1404,40 +1370,101 @@ namespace LevelGate.Progression
     }
 
     /// <summary>
-    /// 1.0.9: MW4's card borders on an outline graphic (the selection frame): each vertex's alpha by the edge it's on —
-    /// top brighter to the right, right brighter upward, bottom brighter to the left, left brighter downward (the two square
-    /// corners bright, the cut corners faint). The frame's sliced / tiled mesh has a vertex every few px along its edges.
+    /// 1.0.14: a frame's line as ONE mesh: the rect's outline (with the cards' / tiles' cut corners when Cut > 0), mitred at
+    /// every corner, so nothing overlaps (1.0.9–1.0.13 drew four strips and two rotated diagonals: knots and steps where they
+    /// met) and every side, the diagonals included, is exactly Thickness thick. Its fade is in the vertex colours, each side
+    /// cut into short segments: Ends (bright in the middle of each side, the panels), Corners (MW4's cards: each side brighter
+    /// toward the two square corners), TopRight (MW4's rows / tiles: the top brighter to the right, the right side brighter
+    /// upward, the rest almost gone).
     /// </summary>
-    internal sealed class DirectionalFx : BaseMeshEffect
+    internal sealed class ChamferFrame : MaskableGraphic
     {
+        public enum Look { Ends, Corners, TopRight, Solid }
+        public float Thickness = 1, Cut;
+        public Look Mode = Look.Ends;
+        /// <summary>Ends: what the ends of a side keep (1 - Border Fade). Corners / TopRight: the faint end's strength.</summary>
         public float Low = .3f;
-        /// <summary>MW4's rows / tiles: only the top-right lit (left and bottom almost gone).</summary>
-        public bool TopRight;
 
-        public override void ModifyMesh(VertexHelper vh)
+        private static readonly List<Vector2> _p = new List<Vector2>(), _q = new List<Vector2>();
+
+        protected override void OnPopulateMesh(VertexHelper vh)
         {
-            if (!IsActive() || vh.currentVertCount == 0) return;
-            var r = ((RectTransform)transform).rect;
-            if (r.width <= 0 || r.height <= 0) return;
-            var v = new UIVertex();
-            for (int i = 0; i < vh.currentVertCount; i++)
+            vh.Clear();
+            var r = GetPixelAdjustedRect();
+            float t = Mathf.Min(Thickness, Mathf.Min(r.width, r.height) / 2), c = Mathf.Clamp(Cut, 0, Mathf.Min(r.width, r.height) / 2 - t);
+            _p.Clear();
+            // counter-clockwise from the bottom-left (square) corner; the cuts top-left and bottom-right
+            _p.Add(new Vector2(r.xMin, r.yMin));
+            if (c > 0) { _p.Add(new Vector2(r.xMax - c, r.yMin)); _p.Add(new Vector2(r.xMax, r.yMin + c)); } else _p.Add(new Vector2(r.xMax, r.yMin));
+            _p.Add(new Vector2(r.xMax, r.yMax));
+            if (c > 0) { _p.Add(new Vector2(r.xMin + c, r.yMax)); _p.Add(new Vector2(r.xMin, r.yMax - c)); } else _p.Add(new Vector2(r.xMin, r.yMax));
+            int n = _p.Count;
+            // the inner outline: each side moved in by t, corners where the moved sides meet (mitred)
+            _q.Clear();
+            for (int i = 0; i < n; i++)
             {
-                vh.PopulateUIVertex(ref v, i);
-                float u = Mathf.Clamp01((v.position.x - r.xMin) / r.width), w = Mathf.Clamp01((v.position.y - r.yMin) / r.height);
-                float dl = v.position.x - r.xMin, dr = r.xMax - v.position.x, db = v.position.y - r.yMin, dt = r.yMax - v.position.y;
-                float m = Mathf.Min(Mathf.Min(dl, dr), Mathf.Min(db, dt)), t;
-                float k;
-                if (TopRight) k = m == dt ? Mathf.Lerp(.06f, 1f, Mathf.Pow(u, 1.5f)) : m == dr ? Mathf.Lerp(.06f, 1f, Mathf.Pow(w, 1.5f)) : .06f;
-                else
+                Vector2 a = _p[(i + n - 1) % n], b = _p[i], d = _p[(i + 1) % n];
+                Vector2 e1 = (b - a).normalized, e2 = (d - b).normalized;
+                Vector2 n1 = new Vector2(-e1.y, e1.x), n2 = new Vector2(-e2.y, e2.x); // inward (counter-clockwise path)
+                Vector2 p1 = b + n1 * t, p2 = b + n2 * t;
+                float den = e1.x * e2.y - e1.y * e2.x;
+                _q.Add(Mathf.Abs(den) < 1e-5f ? p1 : p1 + e1 * (((p2 - p1).x * e2.y - (p2 - p1).y * e2.x) / den));
+            }
+            var col = (Color32)color;
+            for (int i = 0; i < n; i++)
+            {
+                Vector2 o0 = _p[i], o1 = _p[(i + 1) % n], i0 = _q[i], i1 = _q[(i + 1) % n];
+                var side = SideOf(o0, o1, r);
+                int seg = side == 'd' ? 1 : Mathf.Clamp(Mathf.CeilToInt((o1 - o0).magnitude / 12f), 2, 48);
+                for (int k = 0; k < seg; k++)
                 {
-                    if (m == dt) t = u; else if (m == dr) t = w; else if (m == db) t = 1 - u; else t = 1 - w;
-                    k = Mathf.Lerp(Low, 1f, Mathf.Pow(t, 1.25f));
+                    float s0 = k / (float)seg, s1 = (k + 1) / (float)seg;
+                    int v = vh.currentVertCount;
+                    vh.AddVert(Vector2.Lerp(o0, o1, s0), Tint(col, Alpha(side, Vector2.Lerp(o0, o1, s0), r)), Vector2.zero);
+                    vh.AddVert(Vector2.Lerp(i0, i1, s0), Tint(col, Alpha(side, Vector2.Lerp(o0, o1, s0), r)), Vector2.zero);
+                    vh.AddVert(Vector2.Lerp(i0, i1, s1), Tint(col, Alpha(side, Vector2.Lerp(o0, o1, s1), r)), Vector2.zero);
+                    vh.AddVert(Vector2.Lerp(o0, o1, s1), Tint(col, Alpha(side, Vector2.Lerp(o0, o1, s1), r)), Vector2.zero);
+                    vh.AddTriangle(v, v + 1, v + 2); vh.AddTriangle(v + 2, v + 3, v);
                 }
-                v.color.a = (byte)(v.color.a * k);
-                vh.SetUIVertex(v, i);
             }
         }
+
+        private static char SideOf(Vector2 a, Vector2 b, Rect r)
+        {
+            if (Mathf.Abs(a.x - b.x) > .01f && Mathf.Abs(a.y - b.y) > .01f) return 'd'; // a cut corner
+            if (Mathf.Abs(a.y - b.y) <= .01f) return Mathf.Abs(a.y - r.yMin) < .01f ? 'b' : 't';
+            return Mathf.Abs(a.x - r.xMin) < .01f ? 'l' : 'r';
+        }
+
+        private float Alpha(char side, Vector2 p, Rect r)
+        {
+            float u = Mathf.Clamp01((p.x - r.xMin) / Mathf.Max(1, r.width)), w = Mathf.Clamp01((p.y - r.yMin) / Mathf.Max(1, r.height));
+            switch (Mode)
+            {
+                case Look.Solid: return 1;
+                case Look.Corners:
+                {
+                    float k = side == 't' ? u : side == 'r' ? w : side == 'b' ? 1 - u : side == 'l' ? 1 - w : 0;
+                    return Mathf.Lerp(Low, 1f, Mathf.Pow(k, 1.25f));
+                }
+                case Look.TopRight:
+                {
+                    if (side == 't') return Mathf.Lerp(Low, 1f, Mathf.Pow(u, 1.5f));
+                    if (side == 'r') return Mathf.Lerp(Low, 1f, Mathf.Pow(w, 1.5f));
+                    return Low;
+                }
+                default:
+                {
+                    if (side == 'd') return Low;
+                    float along = side == 't' || side == 'b' ? u : w, d = Mathf.Clamp01(Mathf.Min(along, 1 - along) / .3f);
+                    return Mathf.Lerp(Low, 1f, d * d * (3 - 2 * d));
+                }
+            }
+        }
+
+        private static Color32 Tint(Color32 c, float a) { c.a = (byte)Mathf.Clamp(c.a * a, 0, 255); return c; }
     }
+
 
     /// <summary>An Arena-style dotted line: short dashes, bright by the label and fading out toward a small tick
     /// at the far end. Drawn as its own mesh, so the dashes stay evenly spaced at any size (a stretched sprite didn't).</summary>

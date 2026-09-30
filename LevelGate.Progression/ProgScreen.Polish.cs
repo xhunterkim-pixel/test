@@ -80,113 +80,48 @@ namespace LevelGate.Progression
 
         // ---------------------------------------------------------------- MW4 frames: strong in the middle, fading at the ends
 
-        /// <summary>Frames drawn as four fading edges: the frame graphic itself stays (hover hits it) but is invisible.</summary>
-        private static readonly Dictionary<Graphic, Image[]> _edges = new Dictionary<Graphic, Image[]>();
-        private static Sprite _fadeV, _fadeH, _fadeEnd, _rampUpV, _rampDownV, _rampRightH, _rampLeftH, _rampLow, _cornerUpV, _cornerRightH, _ghost;
-        private static float _fadeBuiltFor = -1;
+        /// <summary>Frames drawn as one fading outline (<see cref="ChamferFrame"/>): the frame graphic itself stays (hover hits
+        /// it) but is invisible.</summary>
+        private static readonly Dictionary<Graphic, Graphic[]> _edges = new Dictionary<Graphic, Graphic[]>();
 
-        private static void BuildFadeSprites()
-        {
-            float fade = Polish.BorderFade;
-            if (_fadeV != null && Mathf.Abs(_fadeBuiltFor - fade) < .001f) return;
-            _fadeBuiltFor = fade;
-            const int n = 64;
-            float Curve(int i)
-            {
-                // 30% of the length at each end fades; the ends keep (1 - fade) of the strength
-                float u = (i + .5f) / n, d = Mathf.Min(u, 1 - u) / .3f;
-                float s = Mathf.Clamp01(d); s = s * s * (3 - 2 * s);
-                return Mathf.Lerp(1 - fade, 1f, s);
-            }
-            var tv = new Texture2D(1, n, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Clamp, filterMode = FilterMode.Bilinear };
-            var th = new Texture2D(n, 1, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Clamp, filterMode = FilterMode.Bilinear };
-            for (int i = 0; i < n; i++) { var c = new Color(1, 1, 1, Curve(i)); tv.SetPixel(0, i, c); th.SetPixel(i, 0, c); }
-            tv.Apply(); th.Apply();
-            _fadeV = Sprite.Create(tv, new Rect(0, 0, 1, n), new Vector2(.5f, .5f));
-            _fadeH = Sprite.Create(th, new Rect(0, 0, n, 1), new Vector2(.5f, .5f));
-            // 1.0.9: the cut corners' diagonals: the strength the edges have at their ends, so the line runs on unbroken
-            var te = new Texture2D(1, 1, TextureFormat.RGBA32, false);
-            te.SetPixel(0, 0, new Color(1, 1, 1, Curve(0))); te.Apply();
-            _fadeEnd = Sprite.Create(te, new Rect(0, 0, 1, 1), new Vector2(.5f, .5f));
-            // 1.0.9, MW4's cards: each edge a one-way ramp toward the two square corners (top: brighter right, right: brighter
-            // up, bottom: brighter left, left: brighter down); the cut corners are the faint ends, at a third of the strength
-            float lo = Mathf.Lerp(1f, .3f, Mathf.Clamp01(fade * 1.4f));
-            float Ramp(int i) { float u = (i + .5f) / n; return Mathf.Lerp(lo, 1f, Mathf.Pow(u, 1.25f)); }
-            var up = new Texture2D(1, n, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Clamp, filterMode = FilterMode.Bilinear };
-            var down = new Texture2D(1, n, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Clamp, filterMode = FilterMode.Bilinear };
-            var right = new Texture2D(n, 1, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Clamp, filterMode = FilterMode.Bilinear };
-            var left = new Texture2D(n, 1, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Clamp, filterMode = FilterMode.Bilinear };
-            for (int i = 0; i < n; i++)
-            {
-                up.SetPixel(0, i, new Color(1, 1, 1, Ramp(i)));
-                down.SetPixel(0, i, new Color(1, 1, 1, Ramp(n - 1 - i)));
-                right.SetPixel(i, 0, new Color(1, 1, 1, Ramp(i)));
-                left.SetPixel(i, 0, new Color(1, 1, 1, Ramp(n - 1 - i)));
-            }
-            up.Apply(); down.Apply(); right.Apply(); left.Apply();
-            _rampUpV = Sprite.Create(up, new Rect(0, 0, 1, n), new Vector2(.5f, .5f));
-            _rampDownV = Sprite.Create(down, new Rect(0, 0, 1, n), new Vector2(.5f, .5f));
-            _rampRightH = Sprite.Create(right, new Rect(0, 0, n, 1), new Vector2(.5f, .5f));
-            _rampLeftH = Sprite.Create(left, new Rect(0, 0, n, 1), new Vector2(.5f, .5f));
-            Sprite Solid(float a) { var t = new Texture2D(1, 1, TextureFormat.RGBA32, false); t.SetPixel(0, 0, new Color(1, 1, 1, a)); t.Apply(); return Sprite.Create(t, new Rect(0, 0, 1, 1), new Vector2(.5f, .5f)); }
-            _rampLow = Solid(lo); // both cuts: the faint ends meet there
-            // MW4's rows / tiles: only the top-right corner is lit — the top brightens to the right, the right edge upward,
-            // the left and bottom edges almost gone
-            float lo2 = Mathf.Lerp(1f, .06f, Mathf.Clamp01(fade * 1.4f));
-            var cu = new Texture2D(1, n, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Clamp, filterMode = FilterMode.Bilinear };
-            var cr = new Texture2D(n, 1, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Clamp, filterMode = FilterMode.Bilinear };
-            for (int i = 0; i < n; i++) { float a = Mathf.Lerp(lo2, 1f, Mathf.Pow((i + .5f) / n, 1.5f)); cu.SetPixel(0, i, new Color(1, 1, 1, a)); cr.SetPixel(i, 0, new Color(1, 1, 1, a)); }
-            cu.Apply(); cr.Apply();
-            _cornerUpV = Sprite.Create(cu, new Rect(0, 0, 1, n), new Vector2(.5f, .5f));
-            _cornerRightH = Sprite.Create(cr, new Rect(0, 0, n, 1), new Vector2(.5f, .5f));
-            _ghost = Solid(lo2);
-        }
-
-        /// <summary>Gives a frame graphic fading edges (thickness px) — only with Polish on and Border Fade above 0.</summary>
-        /// <summary>How a frame's edges fade: Ends (both ends, the panels), Corners (MW4's cards: toward the two square
+        /// <summary>How a frame's line fades: Ends (both ends, the panels), Corners (MW4's cards: toward the two square
         /// corners), TopRight (MW4's rows / tiles: only the top-right lit, left and bottom almost gone).</summary>
         internal enum EdgeLook { Ends, Corners, TopRight }
+
+        /// <summary>The faint end's strength for a look (Border Fade % sets how far it fades).</summary>
+        private static float LowOf(EdgeLook look)
+        {
+            float fade = Mathf.Clamp01(Polish.BorderFade);
+            return look == EdgeLook.Corners ? Mathf.Lerp(1f, .3f, Mathf.Clamp01(fade * 1.4f))
+                 : look == EdgeLook.TopRight ? Mathf.Lerp(1f, .06f, Mathf.Clamp01(fade * 1.4f))
+                 : 1 - fade;
+        }
+
+        private static ChamferFrame.Look ModeOf(EdgeLook look) => look == EdgeLook.Corners ? ChamferFrame.Look.Corners : look == EdgeLook.TopRight ? ChamferFrame.Look.TopRight : ChamferFrame.Look.Ends;
+
+        /// <summary>A fading outline on a rect (thickness px, the cut corners when cut > 0), in a colour (the selection outline).</summary>
+        internal static ChamferFrame Outline(RectTransform rt, float thickness, float cut, EdgeLook look, Color color)
+        {
+            var line = Ui.Fill(rt, "Line");
+            line.gameObject.AddComponent<LayoutElement>().ignoreLayout = true; // (a frame on a layout group: not laid out)
+            var g = line.gameObject.AddComponent<ChamferFrame>();
+            g.Thickness = thickness; g.Cut = cut; g.Mode = Polish.BorderFade <= .001f ? ChamferFrame.Look.Solid : ModeOf(look); g.Low = LowOf(look);
+            g.color = color; g.raycastTarget = false;
+            return g;
+        }
 
         private static void FadeEdges(Graphic frame, float thickness, float cut = 0, bool directional = false) =>
             FadeEdges(frame, thickness, cut, directional ? EdgeLook.Corners : EdgeLook.Ends);
 
+        /// <summary>
+        /// 1.0.14: the frame's line becomes one mitred outline mesh (no overlapping pieces, the diagonals as thick as the sides),
+        /// fading by <paramref name="look"/>; the frame graphic stays, invisible, for hover.
+        /// </summary>
         private static void FadeEdges(Graphic frame, float thickness, float cut, EdgeLook look)
         {
-            bool directional = look == EdgeLook.Corners, tr = look == EdgeLook.TopRight;
             if (frame == null || Polish.BorderFade <= .001f) return;
-            BuildFadeSprites();
-            var rt = frame.rectTransform;
-            Image Edge(string name, Vector2 aMin, Vector2 aMax, Vector2 oMin, Vector2 oMax, Sprite sp)
-            {
-                var img = Ui.Img(Ui.Rect(rt, name, aMin, aMax, oMin, oMax), frame.color, sp);
-                img.type = Image.Type.Simple; img.preserveAspect = false; img.raycastTarget = false;
-                img.gameObject.AddComponent<LayoutElement>().ignoreLayout = true; // (a frame on a layout group: not laid out)
-                return img;
-            }
-            // cut: frames with the cards' / tiles' cut corners (top-left, bottom-right) — the edges stop where the cut starts and
-            // a diagonal of the same thickness joins them (1.0.9; the four straight edges squared the corners off)
-            var list = new List<Image>
-            {
-                Edge("EdgeL", new Vector2(0, 0), new Vector2(0, 1), Vector2.zero, new Vector2(thickness, -cut), tr ? _ghost : directional ? _rampDownV : _fadeV),
-                Edge("EdgeR", new Vector2(1, 0), new Vector2(1, 1), new Vector2(-thickness, cut), Vector2.zero, tr ? _cornerUpV : directional ? _rampUpV : _fadeV),
-                Edge("EdgeT", new Vector2(0, 1), new Vector2(1, 1), new Vector2(cut, -thickness), Vector2.zero, tr ? _cornerRightH : directional ? _rampRightH : _fadeH),
-                Edge("EdgeB", new Vector2(0, 0), new Vector2(1, 0), Vector2.zero, new Vector2(-cut, thickness), tr ? _ghost : directional ? _rampLeftH : _fadeH),
-            };
-            if (cut > 0)
-            {
-                float len = cut * 1.41421f + thickness * .2f, inset = cut / 2 + thickness * .3536f; // centred half a line in from the cut
-                foreach (var (anchor, pos, sp) in new[] { (new Vector2(0, 1), new Vector2(inset, -inset), tr ? _ghost : directional ? _rampLow : _fadeEnd), (new Vector2(1, 0), new Vector2(-inset, inset), tr ? _ghost : directional ? _rampLow : _fadeEnd) })
-                {
-                    var d = Ui.Box(rt, "EdgeCut", anchor, pos, new Vector2(len, thickness));
-                    d.localEulerAngles = new Vector3(0, 0, 45);
-                    d.gameObject.AddComponent<LayoutElement>().ignoreLayout = true;
-                    var img = Ui.Img(d, frame.color, sp);
-                    img.type = Image.Type.Simple; img.raycastTarget = false;
-                    list.Add(img);
-                }
-            }
-            var edges = list.ToArray();
-            _edges[frame] = edges;
+            var line = Outline(frame.rectTransform, thickness, cut, look, frame.color);
+            _edges[frame] = new Graphic[] { line };
             frame.canvasRenderer.cullTransparentMesh = false; // still drawn (invisibly): hover hit-testing keeps working on it
             PaintFrame(frame, frame.color);
         }

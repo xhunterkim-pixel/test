@@ -1,4 +1,4 @@
-# LevelGate Progression (1.0.13)
+# LevelGate Progression (1.0.14)
 
 A Call of Duty style **Progression** screen inside Tarkov's main menu. It adds a
 **PROGRESSION** button to the menu bar next to Character, Trading, Flea Market and the rest.
@@ -18,6 +18,21 @@ A Call of Duty style **Progression** screen inside Tarkov's main menu. It adds a
   - P or Esc closes the screen.
 - It works on its own and never changes LevelGate. It only **reads**
   `BepInEx\plugins\LevelGate\config\level_requirements.json`, and picks up changes to that file while the game runs.
+
+## 1.0.14: borders rebuilt
+
+- **Every border line is now one piece.** Panels, level cards, reward tiles and category boxes used to draw their line as
+  four straight strips plus two rotated diagonals for the cut corners, and those overlapped where they met (your
+  "overlapping border" close-up). Now each line is drawn as one outline with proper mitred corners: nothing overlaps, and
+  the cut diagonals are exactly as thick as the sides. The fade is built into the same line.
+- **The selection outline fades the same way as the border under it** and sits exactly on it. It used to be a separate
+  dashed frame 2 px outside with its own fade. Cards fade toward their two square corners, tiles are lit at the top-right,
+  and on your own level the outline is orange.
+- **A selected locked card stays calm.** No dot fill, dot lights or sheen on top of its scan lines; just the outline, the
+  top line and "VIEWING".
+- **No stray red pixels under your card.** The small orange tick marks under your level's card are gone.
+- **No stacked cards peeking out** behind levels with many rewards. Offset along the right and bottom edges, they always
+  read as a second border. "+N ITEMS" already says there's more.
 
 ## 1.0.13
 

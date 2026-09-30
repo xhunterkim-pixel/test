@@ -2450,7 +2450,7 @@ namespace LevelGate.Progression
             bool sel = v.Item.Tpl == _featTpl;
             if (sel && !v.WasSel && !instant) PlayShine(v.Face.rectTransform); // picked: one soft shine across it
             v.WasSel = sel;
-            if (sel && v.SelFx == null) v.SelFx = MakeSelFrame(v.Rt, 2, true); // on the outline itself (the sprite's line is 2 px in)
+            if (sel && v.SelFx == null) v.SelFx = MakeSelFrame(v.Rt, 1, true); // on the outline itself (the sprite's line is 2 px in)
             if (sel && v.NewTag != null && v.NewTag.transform.GetSiblingIndex() != v.NewTag.transform.parent.childCount - 1) v.NewTag.transform.SetAsLastSibling(); // the NEW tag stays on top of the border
             if (v.SelFx != null) v.SelFx.On = sel;
             // picked: the selection border takes over the outline (one border, not two); the outline itself steps back
@@ -2459,7 +2459,7 @@ namespace LevelGate.Progression
             v.Top.enabled = sel;
             if (v.Dither != null) v.Dither.enabled = false; // 1.0.9: no dither band under the top line (a third layer on one edge)
             // 1.0.12: no glossy line down the right edge: 3 px inside the border it read as a second border line
-            if (v.Sheen != null) { v.Sheen.enabled = sel; v.Gloss.enabled = false; }
+            if (v.Sheen != null) { v.Sheen.enabled = sel && !v.Locked; v.Gloss.enabled = false; }
             v.Pic.rectTransform.localScale = Vector3.one * (v.Hover ? 1.04f : 1f); // a slight lift on hover
             float pa = v.Locked ? (v.Hover || sel ? .8f : .6f) : 1f;
             FadeTo(v.Pic, v.Locked && Mw(9) ? new Color(.72f, .86f, .96f, pa * .9f) : new Color(1, 1, 1, pa), instant); // MW 9: cold hologram tint
@@ -3794,11 +3794,12 @@ namespace LevelGate.Progression
                 // more than the three pictures: one or two cards stacked behind, their edges peeking out bottom-right
                 // 1.0.13: only toward the bottom-right corner (offset along the whole right and bottom edges they read as a
                 // second border, very plainly once orange on your level)
-                var stackArea = Ui.Rect(_body, "StackArea", Vector2.zero, Vector2.one, Vector2.zero, new Vector2(0, -HeadH - 4));
+                // 1.0.14: full size again (1.0.13's half-size stack showed its own corner under the card), grey and faint on
+                // every card — orange made the offset edge read as a second border
                 for (int k = 2; k >= 1; k--)
                 {
-                    float o = 4 * k;
-                    var st = Ui.Rect(stackArea, "Stack" + k, new Vector2(.5f, 0), new Vector2(1, .5f), new Vector2(o, -o), new Vector2(o, -o));
+                    float o = 3 * k;
+                    var st = Ui.Rect(_body, "Stack" + k, Vector2.zero, Vector2.one, new Vector2(o, -o), new Vector2(o, -HeadH - 4 - o));
                     var se = Ui.Img(st, Ui.Hex("#2b3438", k == 1 ? .75f : .45f), Ui.Chamfer()); se.type = Image.Type.Sliced; se.raycastTarget = false;
                     var sf = Ui.Img(Ui.Fill(st, "In", 1), Ui.Hex("#0c0f11", .95f), Ui.Chamfer(Ui.InnerCut(1, 1))); sf.type = Image.Type.Sliced; sf.raycastTarget = false;
                     _stack[k - 1] = st.gameObject;
@@ -3977,7 +3978,9 @@ namespace LevelGate.Progression
                 Ui.SetText(_head, level.ToString());
                 _cardBadge.Set(level, items.Count == 0);
                 // cards stacked behind: more than the three pictures (one), a lot more (two)
-                _stack[0].SetActive(items.Count > 3); _stack[1].SetActive(items.Count > 12);
+                // 1.0.14: no stacked cards peeking out behind: offset along the right and bottom edges they always read as a
+                // second border (the "+N ITEMS" line already says there's more)
+                _stack[0].SetActive(false); _stack[1].SetActive(false);
                 // one emblem per page: on its first card, with the rank's name (the header shows yours)
                 _badge.Set(level, items.Count == 0);
                 _badge.Visible = _first;
@@ -4021,7 +4024,7 @@ namespace LevelGate.Progression
                 FadeTo(_frame, sel ? (Ui.DetailK > 0 ? Border : Select) : _hover ? HoverEdge : Border); // picked: the selection border is the outline
                 _top.enabled = sel && !current;
                 _cardDither.enabled = false; // 1.0.9: no dither band under the top line
-                _sheen.enabled = sel; _gloss.enabled = false; // a very light reflection on the picked card (1.0.12: no glossy edge line: a second border)
+                _sheen.enabled = sel && !locked; _gloss.enabled = false; // a very light reflection on the picked card (1.0.12: no glossy edge line: a second border)
                 if (sel && Slot >= 0)
                 {
                     // the lit edge faces the middle of the row: right edge for the left cards, left edge for the right ones
@@ -4051,8 +4054,9 @@ namespace LevelGate.Progression
                 // the bloom around the border: orange on yours, the rank's colour on the picked one (CoD's coloured selection)
                 var rank = Ui.Hex(TierOf(_level).Rim);
                 var bc = current ? Ui.Hex(Orange) : Color.Lerp(rank, Color.white, .15f); bc.a = _bloomFrame.color.a; _bloomFrame.color = bc;
-                _bloomFrame.enabled = current || (sel && !locked); _curScan.enabled = current; _ticks.gameObject.SetActive(current);
-                if (_selLights.activeSelf != sel) _selLights.SetActive(sel);
+                _bloomFrame.enabled = current || (sel && !locked); _curScan.enabled = current; _ticks.gameObject.SetActive(false); // 1.0.14: no orange ticks under your card (read as stray red pixels)
+                bool lit = sel && !locked; // 1.0.14: a picked locked card stays calm (the dots, lights and sheen over its scan lines were a mess)
+                if (_selLights.activeSelf != lit) _selLights.SetActive(lit);
                 if (sel && !_wasSel) PlayShine(_bg.rectTransform); // picked: one soft shine across it
                 if (_selFx == null) _selFx = MakeSelFrame((RectTransform)_frame.transform, 2); // on the outline itself
                 _selFx.SetTint(current ? Ui.Hex(Orange) : Color.white); // 1.0.13: your level's outline stays orange (one colour along the top)
@@ -4067,10 +4071,10 @@ namespace LevelGate.Progression
                 if (_handled.activeSelf != (sel || current)) _handled.SetActive(sel || current); // detail only on the focal cards
                 if (current && !sel) FadeTo(_frame, Ui.Hex(Orange, .85f)); // its border glows orange
                 for (int k = 0; k < 2; k++)
-                    if (_stackEdge[k] != null) _stackEdge[k].color = current ? Ui.Hex(Orange, k == 0 ? .26f : .14f) : Ui.Hex("#2b3438", k == 0 ? .75f : .45f);
+                    if (_stackEdge[k] != null) _stackEdge[k].color = Ui.Hex("#2b3438", k == 0 ? .55f : .3f);
                 _cardBadge.Still = !(sel || current); // five emblems playing at once was busy (and cost frames)
                 _cardBadge.Bloom = sel || current; // a soft glow behind the emblem: only the focal cards
-                _selDots.enabled = sel;       // the picked card's dot-matrix fill
+                _selDots.enabled = sel && !locked; // the picked card's dot-matrix fill (not over a locked card's scan lines)
                 _cardLock.enabled = locked && ProgData.CountAt(_level) > 0;
                 FadeTo(_bg, sel ? Ui.Hex("#1b1d1e", .92f) : _hover ? Ui.Hex("#161718", .9f) : locked ? Ui.Hex("#08090a", .94f) : Ui.Hex("#111213", .88f));
                 _glow.color = new Color(0, 0, 0, 0);
