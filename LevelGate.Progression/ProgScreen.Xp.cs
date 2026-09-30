@@ -169,7 +169,7 @@ namespace LevelGate.Progression
             // ---- 3. UNLOCK: every new level's card, left to right, page by page (quicker over many pages)
             int pages = (lb - 1) / PerPage - la / PerPage + 1;
             bool many = pages > 2;
-            float each = many ? .21f : levels <= 5 ? .4f : .28f, turn = many ? .35f : .55f; // 1.0.21: each card a little longer (was .18 / .34 / .24)
+            float each = many ? .27f : levels <= 5 ? .52f : .36f, turn = many ? .35f : .55f; // 1.0.24: each card slower again (1.0.21: .21 / .4 / .28; before: .18 / .34 / .24)
             int page = (la - 1) / PerPage;
             for (int l = la + 1; l <= lb; l++)
             {
