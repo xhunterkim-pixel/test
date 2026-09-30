@@ -383,11 +383,13 @@ namespace LevelGate.Progression
             // light catches the border that faces the middle of the screen: the left panel's right edge, the right panel's
             // left edge, the centre panel's top edge (a glossy line fading out at both ends)
             float mid = (aMin.x + aMax.x) / 2;
-            RectTransform edge = mid < .4f ? Ui.Rect(frame, "EdgeLight", new Vector2(1, .08f), new Vector2(1, .92f), new Vector2(-2, 0), new Vector2(0, 0))
-                : mid > .6f ? Ui.Rect(frame, "EdgeLight", new Vector2(0, .08f), new Vector2(0, .92f), new Vector2(0, 0), new Vector2(2, 0))
+            // 1.0.9: the side panels' lit edge runs the full height and fades out at both ends like the centre panel's
+            // (it was a one-way fade from 8 % to 92 %: a hard cut near the top)
+            RectTransform edge = mid < .4f ? Ui.Rect(frame, "EdgeLight", new Vector2(1, 0), new Vector2(1, 1), new Vector2(-2, 0), new Vector2(0, 0))
+                : mid > .6f ? Ui.Rect(frame, "EdgeLight", new Vector2(0, 0), new Vector2(0, 1), new Vector2(0, 0), new Vector2(2, 0))
                 : Ui.Rect(frame, "EdgeLight", new Vector2(.08f, 1), new Vector2(.92f, 1), new Vector2(0, -2), new Vector2(0, 0));
             if (mid >= .4f && mid <= .6f) edge.localEulerAngles = Vector3.zero;
-            var el = Ui.Detail(Ui.Img(edge, new Color(1, 1, 1, .16f), mid >= .4f && mid <= .6f ? Ui.Radial() : Ui.VerticalFade()), .16f * Polish.PanelLight, false); // 0.9.92: Panel Light, not Decor Noise
+            var el = Ui.Detail(Ui.Img(edge, new Color(1, 1, 1, .16f), mid >= .4f && mid <= .6f ? Ui.Radial() : Ui.EndsFadeV()), .16f * Polish.PanelLight, false); // 0.9.92: Panel Light, not Decor Noise
             el.raycastTarget = false; el.type = Image.Type.Simple; el.preserveAspect = false;
             var inner = Ui.Fill(frame, "In", BorderWidth);
             Ui.Img(inner, PanelBg);
@@ -2341,7 +2343,7 @@ namespace LevelGate.Progression
             var v = new TileView { Item = it, Rt = rt, Locked = !reached };
             v.Frame = Ui.Img(rt, Border, Ui.Chamfer(), true); // cut corners, like the game's prestige reward tiles
             v.Frame.type = Image.Type.Sliced;
-            FadeEdges(v.Frame, 1);
+            FadeEdges(v.Frame, 1, Ui.Cut, Polish.DirectionalBorders); // 1.0.9: the fading edges follow the cut corners
             var inner = Ui.Fill(rt, "Inner", 1);
             v.Face = Ui.Img(inner, Face, Ui.Chamfer());
             v.Face.type = Image.Type.Sliced;
@@ -2379,7 +2381,8 @@ namespace LevelGate.Progression
                 Ui.Img(Ui.Rect(inner, "HoloNoise", Vector2.zero, Vector2.one, new Vector2(3, 3), new Vector2(-3, -TileTop)), new Color(.7f, .86f, .95f, .14f), Ui.HStreaks()).raycastTarget = false;
             }
             // selection: a 2 px light bar along the top (so selected isn't told by colour alone)
-            v.Top = Ui.Img(Ui.Rect(inner, "Top", new Vector2(0, 1), Vector2.one, new Vector2(9, -2), Vector2.zero), Select); // clear of the cut corner
+            // 1.0.9: ON the frame's top line (it sat 1 px under it: two stacked lines), from where the cut corner ends
+            v.Top = Ui.Img(Ui.Rect(rt, "Top", new Vector2(0, 1), Vector2.one, new Vector2(Ui.Cut, -2), Vector2.zero), Select, Polish.DirectionalBorders ? Ui.RampFade() : null); // brighter to the right, like the edge under it
             v.Top.enabled = false;
             // texture: light from above and a fine grit on the face; picked: a pixel dissolve along the top edge
             Ui.Img(Ui.Rect(inner, "TopLight", new Vector2(0, .5f), Vector2.one, Vector2.zero, Vector2.zero), new Color(1, 1, 1, .025f), Ui.VerticalFade()).raycastTarget = false;
@@ -2388,7 +2391,7 @@ namespace LevelGate.Progression
             // picked: a very light reflection (a soft sheen over the upper half, a glossy line down the right edge), like CoD's
             v.Sheen = Ui.Img(Ui.Box(inner, "Sheen", new Vector2(.62f, .66f), Vector2.zero, new Vector2(170, 110)), new Color(1, 1, 1, .07f), Ui.Radial());
             v.Sheen.raycastTarget = false; v.Sheen.enabled = false; Ui.Detail(v.Sheen, .07f * Polish.PanelLight, false);
-            v.Gloss = Ui.Img(Ui.Rect(inner, "Gloss", new Vector2(1, .1f), new Vector2(1, .9f), new Vector2(-3, 0), new Vector2(-2, 0)), new Color(1, 1, 1, .22f), Ui.VerticalFade());
+            v.Gloss = Ui.Img(Ui.Rect(inner, "Gloss", new Vector2(1, .1f), new Vector2(1, .9f), new Vector2(-3, 0), new Vector2(-2, 0)), new Color(1, 1, 1, .22f), Ui.EndsFadeV()); // 1.0.9: fades at both ends (was one-way: a hard cut at the top)
             v.Gloss.raycastTarget = false; v.Gloss.enabled = false; Ui.Detail(v.Gloss, .22f * Polish.PanelLight, false);
             // the short name, top-right like the game's cells (two lines at most; look-alikes say what sets them apart)
             // a soft dark fade under the name, so two-line names stay readable over the picture
@@ -2445,7 +2448,7 @@ namespace LevelGate.Progression
             FadeTo(v.Frame, sel ? (Ui.DetailK > 0 ? Border : Select) : v.Hover ? HoverEdge : Border, instant);
             FadeTo(v.Face, sel ? FaceSelect : v.Hover ? FaceHover : Face, instant);
             v.Top.enabled = sel;
-            if (v.Dither != null) v.Dither.enabled = sel;
+            if (v.Dither != null) v.Dither.enabled = false; // 1.0.9: no dither band under the top line (a third layer on one edge)
             if (v.Sheen != null) { v.Sheen.enabled = sel; v.Gloss.enabled = sel; }
             v.Pic.rectTransform.localScale = Vector3.one * (v.Hover ? 1.04f : 1f); // a slight lift on hover
             float pa = v.Locked ? (v.Hover || sel ? .8f : .6f) : 1f;
@@ -3525,6 +3528,7 @@ namespace LevelGate.Progression
             private readonly Image _frame, _bg, _glow, _top, _stateLock, _selDots, _cur, _tagPlate, _cardLock, _stamp, _cardDither, _sheen, _gloss, _bloomFrame, _curScan;
             private readonly RectTransform _ticks;
             private readonly GameObject[] _stack = new GameObject[2];
+            private readonly Image[] _stackEdge = new Image[2]; // 1.0.9: faint orange on your card (grey edges peeked out of an orange card)
             private readonly Component _activeTag;
             private readonly GameObject _activeMark;
             private readonly Image _unlockDots;
@@ -3581,7 +3585,7 @@ namespace LevelGate.Progression
                 if (_selTint != null)
                 {
                     // Mixed: a soft accent drifting between purple and pink on the other side of the card from the main bloom
-                    float on = Polish.MixedLight ? 1f : 0f;
+                    float on = Polish.MixedLight && Polish.CardAccentLight ? 1f : 0f; // 1.0.9: F12 switch (the pink cast behind the name)
                     var tc = Color.Lerp(new Color(.62f, .42f, 1f), new Color(1f, .45f, .72f), .5f + .5f * Mathf.Sin(t * .13f));
                     tc.a = Mathf.Clamp01(.075f * Polish.AmbientLightK * Ui.DetailK * on);
                     if (_selTint.color != tc) _selTint.color = tc;
@@ -3785,13 +3789,14 @@ namespace LevelGate.Progression
                     var se = Ui.Img(st, Ui.Hex("#2b3438", k == 1 ? .75f : .45f), Ui.Chamfer()); se.type = Image.Type.Sliced; se.raycastTarget = false;
                     var sf = Ui.Img(Ui.Fill(st, "In", 1), Ui.Hex("#0c0f11", .95f), Ui.Chamfer()); sf.type = Image.Type.Sliced; sf.raycastTarget = false;
                     _stack[k - 1] = st.gameObject;
+                    _stackEdge[k - 1] = se;
                     st.gameObject.SetActive(false);
                 }
                 var card = Ui.Rect(_body, "Box", Vector2.zero, Vector2.one, Vector2.zero, new Vector2(0, -HeadH - 4));
                 // cut top-left / bottom-right corners like the game's prestige tiles (frame + face 2 px in = a cut outline)
                 _frame = Ui.Img(card, Border, Ui.Chamfer(), true);
                 _frame.type = Image.Type.Sliced;
-                FadeEdges(_frame, 2);
+                FadeEdges(_frame, 2, Ui.Cut, Polish.DirectionalBorders); // 1.0.9: the fading edges follow the cut corners (they squared them off)
                 var inner = Ui.Fill(card, "In", 2);
                 _bg = Ui.Img(inner, Ui.Hex("#12181b", .88f), Ui.Chamfer(), true);
                 _bg.type = Image.Type.Sliced;
@@ -3811,7 +3816,8 @@ namespace LevelGate.Progression
                 var pics = Ui.Rect(inner, "Pics", Vector2.zero, Vector2.one, new Vector2(Pad, Foot), new Vector2(-Pad, -Pad));
                 _picsArea = pics;
                 // selected: a 2 px light bar along the top edge (shape, not only colour)
-                _top = Ui.Img(Ui.Rect(inner, "Top", new Vector2(0, 1), Vector2.one, new Vector2(10, -2), Vector2.zero), Select); // clear of the cut corner
+                // 1.0.9: ON the frame's top line (it sat under it: two stacked lines), from where the cut corner ends
+                _top = Ui.Img(Ui.Rect(card, "Top", new Vector2(0, 1), Vector2.one, new Vector2(Ui.Cut, -2), Vector2.zero), Select, Polish.DirectionalBorders ? Ui.RampFade() : null); // brighter to the right, like the edge under it
                 _top.enabled = false;
                 // selected: a fine dot-matrix fill over the face (MW's picked card), under the pictures
                 var dotsMask = Ui.Fill(inner, "SelDotsMask");
@@ -3860,11 +3866,12 @@ namespace LevelGate.Progression
                 _cardDither.raycastTarget = false; _cardDither.enabled = false; Ui.Detail(_cardDither, .12f);
                 _sheen = Ui.Img(Ui.Box(inner, "Sheen", new Vector2(.6f, .7f), Vector2.zero, new Vector2(320, 170)), new Color(1, 1, 1, .06f), Ui.Radial());
                 _sheen.raycastTarget = false; _sheen.enabled = false; Ui.Detail(_sheen, .06f * Polish.PanelLight, false);
-                _gloss = Ui.Img(Ui.Rect(inner, "Gloss", new Vector2(1, .12f), new Vector2(1, .88f), new Vector2(-4, 0), new Vector2(-3, 0)), new Color(1, 1, 1, .2f), Ui.VerticalFade());
+                _gloss = Ui.Img(Ui.Rect(inner, "Gloss", new Vector2(1, .12f), new Vector2(1, .88f), new Vector2(-4, 0), new Vector2(-3, 0)), new Color(1, 1, 1, .2f), Ui.EndsFadeV()); // 1.0.9: fades at both ends
                 _gloss.raycastTarget = false; _gloss.enabled = false; Ui.Detail(_gloss, .2f * Polish.PanelLight, false);
                 _curScan = Ui.Img(Ui.Fill(inner, "Scan"), Ui.Hex(Orange, .045f), Ui.Scanlines());
                 _curScan.type = Image.Type.Tiled; _curScan.raycastTarget = false; _curScan.enabled = false; Ui.Detail(_curScan, .045f);
-                _cur = Ui.Img(Ui.Rect(inner, "Current", new Vector2(0, 1), Vector2.one, new Vector2(10, -3), Vector2.zero), Ui.Hex(Orange), Polish.FadeCardLine ? Ui.RampFade() : null); // 0.9.97: fades out to the left
+                // 1.0.9: ON the frame's top line (3 px under the orange frame read as a second line)
+                _cur = Ui.Img(Ui.Rect(card, "Current", new Vector2(0, 1), Vector2.one, new Vector2(Ui.Cut, -2), Vector2.zero), Ui.Hex(Orange), Polish.FadeCardLine ? Ui.RampFade() : null); // 0.9.97: fades out to the left
                 // your level: MW's "LEVEL_ACTIVE" system tag top-right, and a crosshair tick on the card's left edge
                 _activeTag = Ui.Label(Ui.Rect(inner, "Active", new Vector2(.45f, 1), Vector2.one, new Vector2(0, -12), new Vector2(-12, -3)), "Text", "", 8.5f, Ui.Hex(Orange, .85f * Polish.MicroK), TextAnchor.MiddleRight, false, 1.5f);
                 ((Graphic)_activeTag).raycastTarget = false;
@@ -3882,11 +3889,12 @@ namespace LevelGate.Progression
                 {
                     // Arena item preview: thin frame, dark face, the item, a soft dark fade around the edges, lock bottom-right
                     var picSlot = _picRects[i];
-                    var edge = Ui.Img(picSlot, Ui.Hex("#2a3134"), null, true);
+                    // 1.0.9: quieter than the card's own border (they outshone it)
+                    var edge = Ui.Img(picSlot, Ui.Hex("#2a3134", .55f), null, true);
                     int k = i;
                     HoverHook.Add(edge, on =>
                     {
-                        FadeTo(edge, on ? HoverEdge : Ui.Hex("#2a3134"));
+                        FadeTo(edge, on ? HoverEdge : Ui.Hex("#2a3134", .55f));
                         ShowTip(on ? _picRects[k] : null, on && _picItems[k] != null ? _picItems[k].Name : null, true);
                     });
                     var face = Ui.Fill(picSlot, "Face", 2);
@@ -3999,7 +4007,7 @@ namespace LevelGate.Progression
                 _fresh = fresh;
                 FadeTo(_frame, sel ? (Ui.DetailK > 0 ? Border : Select) : _hover ? HoverEdge : Border); // picked: the selection border is the outline
                 _top.enabled = sel && !current;
-                _cardDither.enabled = sel;
+                _cardDither.enabled = false; // 1.0.9: no dither band under the top line
                 _sheen.enabled = _gloss.enabled = sel; // a very light reflection on the picked card
                 if (sel && Slot >= 0)
                 {
@@ -4044,6 +4052,8 @@ namespace LevelGate.Progression
                 }
                 if (_handled.activeSelf != (sel || current)) _handled.SetActive(sel || current); // detail only on the focal cards
                 if (current && !sel) FadeTo(_frame, Ui.Hex(Orange, .85f)); // its border glows orange
+                for (int k = 0; k < 2; k++)
+                    if (_stackEdge[k] != null) _stackEdge[k].color = current ? Ui.Hex(Orange, k == 0 ? .4f : .24f) : Ui.Hex("#2b3438", k == 0 ? .75f : .45f);
                 _cardBadge.Still = !(sel || current); // five emblems playing at once was busy (and cost frames)
                 _cardBadge.Bloom = sel || current; // a soft glow behind the emblem: only the focal cards
                 _selDots.enabled = sel;       // the picked card's dot-matrix fill

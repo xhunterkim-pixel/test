@@ -8,7 +8,7 @@ no PR open). Rules and the build / tuning method are in `CLAUDE.md`.
 | Thing | Version | Status |
 |---|---|---|
 | LevelGate plugin / server | 1.6.3 | Frozen: do not touch without the user's go-ahead |
-| LevelGate Progression | **1.0.8** | Sent (full package), untested in game. = 1.0.5 (XP anim waits for load-in, level-up sound reload, main-menu warm-up); Rank Tags (1.0.6–1.0.7) reverted |
+| LevelGate Progression | **1.0.9** | Sent (full package), untested in game. 1.0.9: card/tile cut corners, single top line, panel edge fades, MW4 one-way borders + pink light switches (testing) |
 | Modern Editor (editor exe) | 2.0.8 | Sent, untested on Windows (UI checked in the browser mock) |
 | Modern Editor (server mod) | 2.0.7 | Sent: compact SPT console output |
 

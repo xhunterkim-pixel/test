@@ -1,4 +1,4 @@
-# LevelGate Progression (1.0.8)
+# LevelGate Progression (1.0.9)
 
 A Call of Duty style **Progression** screen inside Tarkov's main menu. It adds a
 **PROGRESSION** button to the menu bar next to Character, Trading, Flea Market and the rest.
@@ -18,6 +18,23 @@ A Call of Duty style **Progression** screen inside Tarkov's main menu. It adds a
   - P or Esc closes the screen.
 - It works on its own and never changes LevelGate. It only **reads**
   `BepInEx\plugins\LevelGate\config\level_requirements.json`, and picks up changes to that file while the game runs.
+
+## 1.0.9: borders and corners (from your close-ups)
+
+- **Cut corners everywhere.** The fading border lines were four straight strips that squared the corners off, so only
+  the selected card kept its cuts. Now every card and reward tile keeps its cut top-left and bottom-right corners, with the
+  diagonal as thick as the sides. The shapes behind (stacked cards, glow, dot fill) now match the front.
+- **One top line, not two.** The selected card or tile's light top bar and your level's orange line now sit *on* the frame's
+  top line instead of just under it. The dither band under it is gone.
+- **Panel edges fade at both ends** like the centre panel. The level list and item info panels' lit inner edge used to stop
+  with a hard cut near the top. Same fix for the glossy edge on selected cards and tiles.
+- **Your level's stacked cards** (shown when it has more than 3 rewards) are faint orange instead of grey.
+- **Quieter inner picture outlines** on the cards, so the card's own border leads.
+- **The twinkling dot line** under selected cards fades out at both ends.
+- Being tried, **F12 › 5. CURRENTLY TESTING**:
+  - **Card Borders Fade One Way (MW4)** (on): each card and tile border line fades one way, toward the two square corners
+    (top brighter to the right, right brighter upward, bottom brighter to the left, left brighter downward).
+  - **Picked Card Pink Light** (off): the pink/purple accent light behind a picked card's name. 1.0.8 had it on.
 
 ## 1.0.8
 

@@ -554,8 +554,10 @@ namespace LevelGate.Progression
             for (int x = L + c; x <= right; x++) Put(x, top, .92f);                       // top (after the top-left cut)
             for (int y = L; y <= top - c; y++) Put(L, y, .92f);                           // left (below the cut)
             for (int y = L + c; y <= top; y++) Put(right, y, .92f);                       // right (above the bottom-right cut)
-            for (int k = 0; k <= c; k++) { Put(L + k, top - c + k, .92f); }                // the top-left cut
-            for (int k = 0; k <= c; k++) { Put(right - c + k, L + k, .7f); }               // the bottom-right cut (part of the broken bottom)
+            // the cuts: a stepped 1 px diagonal reads thinner and dimmer than the straight sides (1.0.9) — a softer second
+            // pixel on the inside gives it the same weight
+            for (int k = 0; k <= c; k++) { Put(L + k, top - c + k, .92f); Put(L + k + 1, top - c + k, .5f); }          // the top-left cut
+            for (int k = 0; k <= c; k++) { Put(right - c + k, L + k, .7f); Put(right - c + k - 1, L + k, .38f); }      // the bottom-right cut (part of the broken bottom)
             for (int x = L; x <= right - c; x++) Put(x, L, .35f);                          // bottom: a faint steady line (the breathing dots live on it)
             tex.SetPixels32(px);
             tex.Apply(false, true);
@@ -817,6 +819,9 @@ namespace LevelGate.Progression
         /// A white shape with its top-left and bottom-right corners cut at 45° (Tarkov's prestige tiles, its tabs): 9-sliced,
         /// so any size keeps the same cut. Two of them (frame + face 1 px in) make a cut-corner outline.
         /// </summary>
+        /// <summary>The cards' and tiles' cut corners (Chamfer's cut), in UI px.</summary>
+        public const float Cut = 8;
+
         public static Sprite Chamfer()
         {
             if (_chamfer != null) return _chamfer;
@@ -1302,6 +1307,23 @@ namespace LevelGate.Progression
         }
 
         /// <summary>White at the top fading to see-through at the bottom (tint it with the Image color).</summary>
+        /// <summary>1.0.9: a vertical line's light: full in the middle, fading smoothly to nothing at both ends (the side
+        /// panels' lit inner edge used VerticalFade, one-way, and stopped with a hard cut near the top).</summary>
+        public static Sprite EndsFadeV()
+        {
+            if (_endsV != null) return _endsV;
+            const int n = 128;
+            var tex = new Texture2D(1, n, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Clamp, filterMode = FilterMode.Bilinear };
+            for (int y = 0; y < n; y++)
+            {
+                float u = (y + .5f) / n, d = Mathf.Clamp01(Mathf.Min(u, 1 - u) / .42f);
+                tex.SetPixel(0, y, new Color(1, 1, 1, d * d * (3 - 2 * d)));
+            }
+            tex.Apply(false, true);
+            return _endsV = Sprite.Create(tex, new Rect(0, 0, 1, n), new Vector2(.5f, .5f));
+        }
+        private static Sprite _endsV;
+
         public static Sprite VerticalFade()
         {
             if (_vgrad != null) return _vgrad;
@@ -1312,6 +1334,84 @@ namespace LevelGate.Progression
             return _vgrad;
         }
 
+    }
+
+    /// <summary>
+    /// 1.0.9: fades a (tiled) image out toward its left and right ends: its quads are cut into narrow slices (UVs carried
+    /// along, so a tiled or repeating texture still lines up) and each slice's alpha follows the distance to the nearer end.
+    /// </summary>
+    internal sealed class EndsFadeFx : BaseMeshEffect
+    {
+        public float Length = 60, Slice = 10;
+        private static readonly List<UIVertex> _q = new List<UIVertex>();
+
+        public override void ModifyMesh(VertexHelper vh)
+        {
+            if (!IsActive() || vh.currentVertCount < 4 || vh.currentVertCount % 4 != 0) return;
+            _q.Clear();
+            var v = new UIVertex();
+            for (int i = 0; i < vh.currentVertCount; i++) { vh.PopulateUIVertex(ref v, i); _q.Add(v); }
+            float x0 = float.MaxValue, x1 = float.MinValue;
+            foreach (var q in _q) { x0 = Mathf.Min(x0, q.position.x); x1 = Mathf.Max(x1, q.position.x); }
+            float len = Mathf.Min(Length, (x1 - x0) / 2);
+            if (len <= 0) return;
+            vh.Clear();
+            for (int k = 0; k < _q.Count; k += 4)
+            {
+                // Image quads: 0 bottom-left, 1 top-left, 2 top-right, 3 bottom-right
+                UIVertex bl = _q[k], tl = _q[k + 1], tr = _q[k + 2], br = _q[k + 3];
+                float qx0 = bl.position.x, qx1 = br.position.x, w = qx1 - qx0;
+                int n = Mathf.Max(1, Mathf.CeilToInt(Mathf.Abs(w) / Slice));
+                for (int j = 0; j < n; j++)
+                {
+                    float a = j / (float)n, b = (j + 1) / (float)n;
+                    int start = vh.currentVertCount;
+                    vh.AddVert(Lerp(bl, br, a, x0, x1, len)); vh.AddVert(Lerp(tl, tr, a, x0, x1, len));
+                    vh.AddVert(Lerp(tl, tr, b, x0, x1, len)); vh.AddVert(Lerp(bl, br, b, x0, x1, len));
+                    vh.AddTriangle(start, start + 1, start + 2); vh.AddTriangle(start + 2, start + 3, start);
+                }
+            }
+        }
+
+        private static UIVertex Lerp(UIVertex p, UIVertex q, float t, float x0, float x1, float len)
+        {
+            var r = p;
+            r.position = Vector3.Lerp(p.position, q.position, t);
+            r.uv0 = Vector4.Lerp(p.uv0, q.uv0, t);
+            r.color = Color32.Lerp(p.color, q.color, t);
+            float d = Mathf.Clamp01(Mathf.Min(r.position.x - x0, x1 - r.position.x) / len);
+            r.color.a = (byte)(r.color.a * d * d * (3 - 2 * d));
+            return r;
+        }
+    }
+
+    /// <summary>
+    /// 1.0.9: MW4's card borders on an outline graphic (the selection frame): each vertex's alpha by the edge it's on —
+    /// top brighter to the right, right brighter upward, bottom brighter to the left, left brighter downward (the two square
+    /// corners bright, the cut corners faint). The frame's sliced / tiled mesh has a vertex every few px along its edges.
+    /// </summary>
+    internal sealed class DirectionalFx : BaseMeshEffect
+    {
+        public float Low = .3f;
+        private static readonly List<UIVertex> _v = new List<UIVertex>();
+
+        public override void ModifyMesh(VertexHelper vh)
+        {
+            if (!IsActive() || vh.currentVertCount == 0) return;
+            var r = ((RectTransform)transform).rect;
+            if (r.width <= 0 || r.height <= 0) return;
+            var v = new UIVertex();
+            for (int i = 0; i < vh.currentVertCount; i++)
+            {
+                vh.PopulateUIVertex(ref v, i);
+                float u = Mathf.Clamp01((v.position.x - r.xMin) / r.width), w = Mathf.Clamp01((v.position.y - r.yMin) / r.height);
+                float dl = v.position.x - r.xMin, dr = r.xMax - v.position.x, db = v.position.y - r.yMin, dt = r.yMax - v.position.y;
+                float m = Mathf.Min(Mathf.Min(dl, dr), Mathf.Min(db, dt)), t;
+                if (m == dt) t = u; else if (m == dr) t = w; else if (m == db) t = 1 - u; else t = 1 - w;
+                v.color.a = (byte)(v.color.a * Mathf.Lerp(Low, 1f, Mathf.Pow(t, 1.25f)));
+                vh.SetUIVertex(v, i);
+            }
+        }
     }
 
     /// <summary>An Arena-style dotted line: short dashes, bright by the label and fading out toward a small tick

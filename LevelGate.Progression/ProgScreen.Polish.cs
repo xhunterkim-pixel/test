@@ -57,6 +57,8 @@ namespace LevelGate.Progression
             public static bool FadeMeters => On && (ProgressionPlugin.TestFadeMeters?.Value ?? true);
             public static bool FadeXpBar => On && (ProgressionPlugin.TestFadeXpBar?.Value ?? true);
             public static float XpStartDelay => Mathf.Clamp(ProgressionPlugin.TestXpStartDelay?.Value ?? .6f, 0f, 2f); // 1.0.4
+            public static bool DirectionalBorders => On && (ProgressionPlugin.TestDirectionalBorders?.Value ?? true); // 1.0.9
+            public static bool CardAccentLight => !On || (ProgressionPlugin.TestCardAccentLight?.Value ?? false);   // 1.0.9
             public static bool BigXpDuringSweep => !On || (ProgressionPlugin.TestBigXpDuringSweep?.Value ?? true);
             public static float SubtitleAlpha => Pct(ProgressionPlugin.TestHeroSubtitleOpacity, 70);
             public static float AmbientLightK => On ? Pct(ProgressionPlugin.TestAmbientLight, 140) : 1f;
@@ -80,7 +82,7 @@ namespace LevelGate.Progression
 
         /// <summary>Frames drawn as four fading edges: the frame graphic itself stays (hover hits it) but is invisible.</summary>
         private static readonly Dictionary<Graphic, Image[]> _edges = new Dictionary<Graphic, Image[]>();
-        private static Sprite _fadeV, _fadeH;
+        private static Sprite _fadeV, _fadeH, _fadeEnd, _rampUpV, _rampDownV, _rampRightH, _rampLeftH, _rampLow;
         private static float _fadeBuiltFor = -1;
 
         private static void BuildFadeSprites()
@@ -102,10 +104,36 @@ namespace LevelGate.Progression
             tv.Apply(); th.Apply();
             _fadeV = Sprite.Create(tv, new Rect(0, 0, 1, n), new Vector2(.5f, .5f));
             _fadeH = Sprite.Create(th, new Rect(0, 0, n, 1), new Vector2(.5f, .5f));
+            // 1.0.9: the cut corners' diagonals: the strength the edges have at their ends, so the line runs on unbroken
+            var te = new Texture2D(1, 1, TextureFormat.RGBA32, false);
+            te.SetPixel(0, 0, new Color(1, 1, 1, Curve(0))); te.Apply();
+            _fadeEnd = Sprite.Create(te, new Rect(0, 0, 1, 1), new Vector2(.5f, .5f));
+            // 1.0.9, MW4's cards: each edge a one-way ramp toward the two square corners (top: brighter right, right: brighter
+            // up, bottom: brighter left, left: brighter down); the cut corners are the faint ends, at a third of the strength
+            float lo = Mathf.Lerp(1f, .3f, Mathf.Clamp01(fade * 1.4f));
+            float Ramp(int i) { float u = (i + .5f) / n; return Mathf.Lerp(lo, 1f, Mathf.Pow(u, 1.25f)); }
+            var up = new Texture2D(1, n, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Clamp, filterMode = FilterMode.Bilinear };
+            var down = new Texture2D(1, n, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Clamp, filterMode = FilterMode.Bilinear };
+            var right = new Texture2D(n, 1, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Clamp, filterMode = FilterMode.Bilinear };
+            var left = new Texture2D(n, 1, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Clamp, filterMode = FilterMode.Bilinear };
+            for (int i = 0; i < n; i++)
+            {
+                up.SetPixel(0, i, new Color(1, 1, 1, Ramp(i)));
+                down.SetPixel(0, i, new Color(1, 1, 1, Ramp(n - 1 - i)));
+                right.SetPixel(i, 0, new Color(1, 1, 1, Ramp(i)));
+                left.SetPixel(i, 0, new Color(1, 1, 1, Ramp(n - 1 - i)));
+            }
+            up.Apply(); down.Apply(); right.Apply(); left.Apply();
+            _rampUpV = Sprite.Create(up, new Rect(0, 0, 1, n), new Vector2(.5f, .5f));
+            _rampDownV = Sprite.Create(down, new Rect(0, 0, 1, n), new Vector2(.5f, .5f));
+            _rampRightH = Sprite.Create(right, new Rect(0, 0, n, 1), new Vector2(.5f, .5f));
+            _rampLeftH = Sprite.Create(left, new Rect(0, 0, n, 1), new Vector2(.5f, .5f));
+            Sprite Solid(float a) { var t = new Texture2D(1, 1, TextureFormat.RGBA32, false); t.SetPixel(0, 0, new Color(1, 1, 1, a)); t.Apply(); return Sprite.Create(t, new Rect(0, 0, 1, 1), new Vector2(.5f, .5f)); }
+            _rampLow = Solid(lo); // both cuts: the faint ends meet there
         }
 
         /// <summary>Gives a frame graphic fading edges (thickness px) — only with Polish on and Border Fade above 0.</summary>
-        private static void FadeEdges(Graphic frame, float thickness)
+        private static void FadeEdges(Graphic frame, float thickness, float cut = 0, bool directional = false)
         {
             if (frame == null || Polish.BorderFade <= .001f) return;
             BuildFadeSprites();
@@ -116,13 +144,28 @@ namespace LevelGate.Progression
                 img.type = Image.Type.Simple; img.preserveAspect = false; img.raycastTarget = false;
                 return img;
             }
-            var edges = new[]
+            // cut: frames with the cards' / tiles' cut corners (top-left, bottom-right) — the edges stop where the cut starts and
+            // a diagonal of the same thickness joins them (1.0.9; the four straight edges squared the corners off)
+            var list = new List<Image>
             {
-                Edge("EdgeL", new Vector2(0, 0), new Vector2(0, 1), Vector2.zero, new Vector2(thickness, 0), _fadeV),
-                Edge("EdgeR", new Vector2(1, 0), new Vector2(1, 1), new Vector2(-thickness, 0), Vector2.zero, _fadeV),
-                Edge("EdgeT", new Vector2(0, 1), new Vector2(1, 1), new Vector2(0, -thickness), Vector2.zero, _fadeH),
-                Edge("EdgeB", new Vector2(0, 0), new Vector2(1, 0), Vector2.zero, new Vector2(0, thickness), _fadeH),
+                Edge("EdgeL", new Vector2(0, 0), new Vector2(0, 1), Vector2.zero, new Vector2(thickness, -cut), directional ? _rampDownV : _fadeV),
+                Edge("EdgeR", new Vector2(1, 0), new Vector2(1, 1), new Vector2(-thickness, cut), Vector2.zero, directional ? _rampUpV : _fadeV),
+                Edge("EdgeT", new Vector2(0, 1), new Vector2(1, 1), new Vector2(cut, -thickness), Vector2.zero, directional ? _rampRightH : _fadeH),
+                Edge("EdgeB", new Vector2(0, 0), new Vector2(1, 0), Vector2.zero, new Vector2(-cut, thickness), directional ? _rampLeftH : _fadeH),
             };
+            if (cut > 0)
+            {
+                float len = cut * 1.41421f + thickness * .8f, inset = cut / 2 + thickness * .3536f; // centred half a line in from the cut
+                foreach (var (anchor, pos, sp) in new[] { (new Vector2(0, 1), new Vector2(inset, -inset), directional ? _rampLow : _fadeEnd), (new Vector2(1, 0), new Vector2(-inset, inset), directional ? _rampLow : _fadeEnd) })
+                {
+                    var d = Ui.Box(rt, "EdgeCut", anchor, pos, new Vector2(len, thickness));
+                    d.localEulerAngles = new Vector3(0, 0, 45);
+                    var img = Ui.Img(d, frame.color, sp);
+                    img.type = Image.Type.Simple; img.raycastTarget = false;
+                    list.Add(img);
+                }
+            }
+            var edges = list.ToArray();
             _edges[frame] = edges;
             frame.canvasRenderer.cullTransparentMesh = false; // still drawn (invisibly): hover hit-testing keeps working on it
             PaintFrame(frame, frame.color);

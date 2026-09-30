@@ -194,6 +194,7 @@ namespace LevelGate.Progression
         {
             var img = Ui.Img(Ui.Rect(around, "SelFrame", Vector2.zero, Vector2.one, new Vector2(-outset, -outset), new Vector2(outset, outset)), new Color(1, 1, 1, 0), Ui.DashFrame(0));
             img.type = Image.Type.Tiled; img.raycastTarget = false; img.enabled = false;
+            if (Polish.DirectionalBorders) img.gameObject.AddComponent<DirectionalFx>(); // 1.0.9: fades one way, like the card's own edges
             var f = new SelFrame { Img = img };
             // MW's bottom edge: a dense strip of tiny dots and dashes packed around the line, twinkling (frames cycled on the
             // shared clock) — one tiled image on its own canvas
@@ -202,6 +203,7 @@ namespace LevelGate.Progression
             f.Bush = bush;
             f.Strip = Ui.Img(bush, new Color(1, 1, 1, 0), DotStrip(0));
             f.Strip.type = Image.Type.Tiled; f.Strip.raycastTarget = false;
+            f.Strip.gameObject.AddComponent<EndsFadeFx>().Length = 70; // 1.0.9: fades out at both ends (it stopped hard)
             bush.gameObject.SetActive(false);
             _selFrames.Add(f);
             return f;
