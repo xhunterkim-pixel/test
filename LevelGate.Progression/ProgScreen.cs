@@ -2382,12 +2382,14 @@ namespace LevelGate.Progression
             prt.anchorMin = new Vector2(.05f, .04f); prt.anchorMax = new Vector2(.95f, .96f); prt.offsetMin = prt.offsetMax = Vector2.zero;
             v.Pic.preserveAspect = true;
             v.Pic.enabled = false;
+            Image holoScan = null;
             if (Mw(9) && !reached)
             {
                 // MW 9: locked — a cold, scanlined hologram over the picture (after it: on top)
                 // 1.0.3: over the whole tile, in its cut shape (it stopped above the foot and ran square past the cut corners)
                 var hs = Ui.Img(Ui.Fill(inner, "HoloScan"), new Color(.7f, .86f, .95f, .22f), Ui.ChamferScanlines(Ui.InnerCut(1, 1))); hs.type = Image.Type.Tiled; hs.raycastTarget = false;
                 Ui.Crisp(hs); // 1.0.17: no moiré bands
+                holoScan = hs;
                 // 1.0.15: no streak noise over the scan lines (two line patterns on top of each other read as interference)
             }
             // selection: a 2 px light bar along the top (so selected isn't told by colour alone)
@@ -2407,6 +2409,9 @@ namespace LevelGate.Progression
             // a soft dark fade under the name, so two-line names stay readable over the picture
             var nameFade = Ui.Img(Ui.Rect(inner, "NameFade", new Vector2(0, 1), Vector2.one, new Vector2(0, -40), Vector2.zero), new Color(0, 0, 0, .5f), Ui.VerticalFade());
             nameFade.raycastTarget = false;
+            // 1.0.18: not on locked tiles — over their scan lines it left a gap around the top of the name with no lines and
+            // hardly any background (their picture is dim anyway, the name reads without it)
+            if (holoScan != null) nameFade.enabled = false;
             // two lines when needed ("ACHHC (Coyote Brown)" was cut to one line "ACHHC (Coyote B…")
             string nm = shownName ?? it.Short;
             v.Name = Ui.Label(Ui.Rect(inner, "Name", new Vector2(0, 1), Vector2.one, new Vector2(S2, -TileTop - 22), new Vector2(-S1 - 2, -S1)), "Text",
@@ -4083,7 +4088,7 @@ namespace LevelGate.Progression
                 _cardBadge.Bloom = sel || current; // a soft glow behind the emblem: only the focal cards
                 _selDots.enabled = sel && !locked; // the picked card's dot-matrix fill (not over a locked card's scan lines)
                 _cardLock.enabled = locked && ProgData.CountAt(_level) > 0;
-                FadeTo(_bg, sel ? Ui.Hex("#1b1d1e", .92f) : _hover ? Ui.Hex("#161718", .9f) : locked ? Ui.Hex("#08090a", .94f) : Ui.Hex("#111213", .88f));
+                FadeTo(_bg, sel ? Ui.Hex("#1b1d1e", .92f) : _hover ? Ui.Hex("#161718", .9f) : locked ? Ui.Hex("#101417", .94f) : Ui.Hex("#111213", .88f)); // 1.0.18: locked: the picture boxes' tone (the darker strip above them made its scan lines stand out)
                 _glow.color = new Color(0, 0, 0, 0);
                 Ui.SetColor(_tier, locked ? Dim : Grey);
                 Ui.SetColor(_count, sel || current ? Text : locked ? Dim : Grey);

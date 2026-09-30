@@ -1,4 +1,4 @@
-# LevelGate Progression (1.0.17)
+# LevelGate Progression (1.0.18)
 
 A Call of Duty style **Progression** screen inside Tarkov's main menu. It adds a
 **PROGRESSION** button to the menu bar next to Character, Trading, Flea Market and the rest.
@@ -18,6 +18,14 @@ A Call of Duty style **Progression** screen inside Tarkov's main menu. It adds a
   - P or Esc closes the screen.
 - It works on its own and never changes LevelGate. It only **reads**
   `BepInEx\plugins\LevelGate\config\level_requirements.json`, and picks up changes to that file while the game runs.
+
+## 1.0.18
+
+- **Locked tiles: no gap around the name.** The dark fade behind each tile's name was drawn over the scan lines, so around
+  the top of the name there was a band with no lines and hardly any background. It's off on locked tiles; their picture is
+  dim anyway, so the name reads fine.
+- **Locked cards: the strip above the pictures matches them.** It had a darker background than the picture boxes, so its
+  scan lines stood out more. It now uses the same tone.
 
 ## 1.0.17
 
