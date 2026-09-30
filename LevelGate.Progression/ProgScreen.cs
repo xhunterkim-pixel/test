@@ -2332,10 +2332,10 @@ namespace LevelGate.Progression
         private static void StepTile(int dir)
         {
             var shown = _tileOrder.Where(t => t?.Rt != null && t.Rt.gameObject.activeInHierarchy).ToList();
-            if (shown.Count == 0) return;
+            if (shown.Count == 0) { Sounds.Edge(); return; } // 1.0.25: nothing to move to: the "end of the line" sound (as A / Q)
             int at = shown.FindIndex(t => t.Item.Tpl == _featTpl);
             int to = Mathf.Clamp(at < 0 ? 0 : at + dir, 0, shown.Count - 1);
-            if (to == at) return;
+            if (to == at) { Sounds.Edge(); return; } // 1.0.25: first / last reward: the "end of the line" sound
             var v = shown[to];
             ClickedNew(v.Item);
             Feature(v.Item);
