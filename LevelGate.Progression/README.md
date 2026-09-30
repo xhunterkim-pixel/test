@@ -1,4 +1,4 @@
-# LevelGate Progression (1.0.19)
+# LevelGate Progression (1.0.20)
 
 A Call of Duty style **Progression** screen inside Tarkov's main menu. It adds a
 **PROGRESSION** button to the menu bar next to Character, Trading, Flea Market and the rest.
@@ -18,6 +18,20 @@ A Call of Duty style **Progression** screen inside Tarkov's main menu. It adds a
   - P or Esc closes the screen.
 - It works on its own and never changes LevelGate. It only **reads**
   `BepInEx\plugins\LevelGate\config\level_requirements.json`, and picks up changes to that file while the game runs.
+
+## 1.0.20: more of your sounds
+
+- **A and D have their own sounds:** `level_card_left_a.wav` (A, ←, ‹) and `level_card_right_d.wav` (D, →, ›). Holding and
+  wheeling use them too. Dragging keeps the shared one.
+- **New level-up sound** `level_up.wav` (replaces levelup.mp3). It has a quiet lead-in and the main hit at 0.225 s after the
+  trim, so the level-up pop now lands on that hit. The pause after the last level up is timed to where it rings out (~1 s).
+- **New prestige sound** `new_rank_prestige.wav` (replaces 1.0.19's). The glow pulses on its early hits (0.03 s and 0.235 s)
+  and the emblem swaps as the big swell starts (0.80 s).
+- **XP bar ticks** `xp_bar_tick_1.wav` … `xp_bar_tick_7.wav`: as the bar fills, each seventh of a level plays the next tick,
+  1 → 7, so they climb with the bar; 7 lands on the level up.
+- **Card unlocked** `card_unlocked.wav`: each new level's card lighting up in the animation.
+- All trimmed to their first sound, tail-trimmed with short fades, and levelled against the rest (ticks quietest,
+  level-up and prestige loudest, nothing above −1 dB).
 
 ## 1.0.19: your sound effects
 

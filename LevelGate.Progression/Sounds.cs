@@ -78,13 +78,24 @@ namespace LevelGate.Progression
         /// <summary>A level card clicked.</summary>
         public static void SelectCard() { if (!Own("select_level_card")) Click(); }
         /// <summary>One level left / right (A / D, the arrows, the ‹ › buttons, holding, dragging).</summary>
-        public static void StepLevel() { if (!Own("using_a_or_d_for_level_card")) Click(); }
+        /// <summary>1.0.20: its own sound each way — level_card_left_a.wav (A, left) / level_card_right_d.wav (D, right); then
+        /// the older shared using_a_or_d_for_level_card.wav, then the game's click.</summary>
+        public static void StepLevel(int dir = 0)
+        {
+            if (dir < 0 && Own("level_card_left_a")) return;
+            if (dir > 0 && Own("level_card_right_d")) return;
+            if (!Own("using_a_or_d_for_level_card")) Click();
+        }
         /// <summary>Trying to go before level 1 or past the last level.</summary>
         public static void Edge() { if (!Own("going_before_level_1_or_level_79")) Play("ErrorMessage", "ButtonClick"); }
         /// <summary>A reward picked (clicked, or W / S).</summary>
         public static void SelectItem() { if (!Own("select_level_item")) Play("MenuContextMenu", "ButtonClick"); }
         /// <summary>A page of cards turned (Q / E, the wheel, the page bar).</summary>
         public static void Page() { if (!Own("pressing_q_or_e_for_next_pages")) Play("MenuDropdownSelect", "ButtonClick", "Click"); }
+        /// <summary>1.0.20, XP animation: a level's card unlocking.</summary>
+        public static void CardUnlocked() { if (!Own("card_unlocked")) Play("ButtonOver", "ButtonClick"); }
+        /// <summary>1.0.20, XP animation: the bar passing each seventh of a level — xp_bar_tick_1..7, rising as it fills.</summary>
+        public static void XpTick(int k) { if (!Own("xp_bar_tick_" + UnityEngine.Mathf.Clamp(k, 1, 7))) { } }
         /// <summary>A group of rewards opened / closed (its +N box).</summary>
         public static void Group(bool open) { if (!Own(open ? "expand_group_items" : "collapse_group_items")) Click(); }
     }

@@ -15,15 +15,19 @@ namespace LevelGate.Progression
     internal static class Sfx
     {
         // where each sound hits hardest (measured from the files' waveforms), in seconds from its start
-        public const float LevelUpPeak = .45f, LevelUpLength = 1.46f;
-        /// <summary>1.0.19: the rank-up sound is sounds\new_rank_prestige.wav when it's there (peak 0.29 s, hits at 0 and
-        /// 0.1 s, 1.31 s long — measured from the trimmed file), else the old emblemup.mp3 (peak 1.45 s).</summary>
+        /// <summary>1.0.20: sounds\level_up.wav when it's there (its main hit at 0.225 s, rings out to ~1 s — measured from the
+        /// trimmed file), else the old levelup.mp3 (peak 0.45 s, 1.46 s).</summary>
+        private static bool _levelWav;
+        public static float LevelUpPeak => _levelWav ? .225f : .45f;
+        public static float LevelUpLength => _levelWav ? 1.0f : 1.46f;
+        /// <summary>The rank-up sound is sounds\new_rank_prestige.wav when it's there (1.0.20's: early hits at 0.03 and 0.235 s,
+        /// the big swell from 0.80 s, rings out to ~2.8 s — measured from the trimmed file), else the old emblemup.mp3.</summary>
         private static bool _prestige;
-        public static float EmblemPeak => _prestige ? .29f : 1.45f;
-        public static float EmblemLength => _prestige ? 1.31f : 4.28f;
+        public static float EmblemPeak => _prestige ? .80f : 1.45f;
+        public static float EmblemLength => _prestige ? 2.8f : 4.28f;
         /// <summary>Emblemup.mp3's two early hits (the glow pulses on them).</summary>
         public static float[] EmblemHits => _prestige ? PrestigeHits : OldHits;
-        private static readonly float[] PrestigeHits = { .0f, .095f }, OldHits = { .25f, 1.05f };
+        private static readonly float[] PrestigeHits = { .03f, .235f }, OldHits = { .25f, 1.05f };
 
         // where the sound starts in the file (first sample over 0.02), measured with ffmpeg: Unity's decoder can put silence in
         // front of it (encoder delay), which would make every peak land late — measured again at load and made up for
@@ -45,7 +49,10 @@ namespace LevelGate.Progression
         {
             if (_started) return;
             _started = true;
-            LoadOne("levelup");
+            var dir0 = Path.Combine(Path.GetDirectoryName(typeof(Sfx).Assembly.Location) ?? ".", "sounds");
+            _levelWav = File.Exists(Path.Combine(dir0, "level_up.wav"));
+            if (_levelWav) { _refOnset["levelup"] = .002f; LoadOne("levelup", true, "level_up"); }
+            else LoadOne("levelup");
             var dir = Path.Combine(Path.GetDirectoryName(typeof(Sfx).Assembly.Location) ?? ".", "sounds");
             _prestige = File.Exists(Path.Combine(dir, "new_rank_prestige.wav"));
             if (_prestige) { _refOnset["emblemup"] = .002f; LoadOne("emblemup", true, "new_rank_prestige"); }
@@ -57,8 +64,9 @@ namespace LevelGate.Progression
         /// on its first sound (no silence before it) and levelled against each other. A missing one: the game's sound instead.</summary>
         public static readonly string[] UiSounds =
         {
-            "hover", "hover_over_progression_menu", "enter_progression_ui", "select_level_card", "using_a_or_d_for_level_card",
+            "hover", "hover_over_progression_menu", "enter_progression_ui", "select_level_card", "using_a_or_d_for_level_card", "level_card_left_a", "level_card_right_d",
             "select_level_item", "pressing_q_or_e_for_next_pages", "going_before_level_1_or_level_79", "expand_group_items", "collapse_group_items",
+            "card_unlocked", "xp_bar_tick_1", "xp_bar_tick_2", "xp_bar_tick_3", "xp_bar_tick_4", "xp_bar_tick_5", "xp_bar_tick_6", "xp_bar_tick_7",
         };
 
         private static void LoadOne(string name, bool wav = false, string file = null)
@@ -91,10 +99,10 @@ namespace LevelGate.Progression
                 if (clip != null && clip.loadState == AudioDataLoadState.Unloaded && clip.LoadAudioData()) { L.Info($"sounds: {name} was unloaded by the game — loading its audio again"); continue; }
                 if (clip != null && clip.loadState == AudioDataLoadState.Loading) continue;
                 if (clip == null && !_clips.ContainsKey(name)) continue; // never loaded (missing file: already said at start)
-                bool prestige = name == "emblemup" && _prestige, wav = prestige || !_refOnset.ContainsKey(name);
+                bool prestige = name == "emblemup" && _prestige, lvl = name == "levelup" && _levelWav, wav = prestige || lvl || !_refOnset.ContainsKey(name);
                 L.Info($"sounds: {name} is {(clip == null ? "gone" : clip.loadState.ToString())} — reading it from disk again");
                 _clips.Remove(name);
-                LoadOne(name, wav, prestige ? "new_rank_prestige" : null);
+                LoadOne(name, wav, prestige ? "new_rank_prestige" : lvl ? "level_up" : null);
             }
         }
 
@@ -115,7 +123,8 @@ namespace LevelGate.Progression
                     _clips[name] = clip;
                     float onset = Onset(clip);
                     if (onset >= 0 && _refOnset.TryGetValue(name, out var reference)) _extra[name] = Mathf.Clamp(onset - reference, 0, .2f);
-                    if (name == "emblemup" && _prestige) L.Info($"sounds: new_rank_prestige.wav loaded as the rank-up sound ({clip.length:0.00} s; peak at {EmblemPeak:0.00} s)");
+                    if (name == "levelup" && _levelWav) L.Info($"sounds: level_up.wav loaded as the level-up sound ({clip.length:0.00} s; main hit at {LevelUpPeak:0.000} s)");
+                    else if (name == "emblemup" && _prestige) L.Info($"sounds: new_rank_prestige.wav loaded as the rank-up sound ({clip.length:0.00} s; peak at {EmblemPeak:0.00} s)");
                     else if (_refOnset.ContainsKey(name)) L.Info($"sounds: {name}.mp3 loaded ({clip.length:0.00} s; starts at {onset:0.000} s, {Extra(name) * 1000:0} ms later than in the file — timing adjusted)");
                     else L.Info($"sounds: {name}.wav loaded ({clip.length:0.00} s, sound starts at {Math.Max(0, onset) * 1000:0} ms)");
                 }

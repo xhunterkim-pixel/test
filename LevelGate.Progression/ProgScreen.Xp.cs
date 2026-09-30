@@ -294,7 +294,7 @@ namespace LevelGate.Progression
             {
                 case StepKind.Fill:
                 {
-                    if (enter) { _xpCued = false; _xpRolled = false; }
+                    if (enter) { _xpCued = false; _xpRolled = false; _tickSeg = Mathf.FloorToInt(st.From * 7 + .001f); }
                     // a fill into a level up starts its sound so the peak lands on the pop
                     if (!quiet && st.Loud && !_xpCued && !Sfx.UseGame && st.Dur - _xpT <= Sfx.Lead("levelup", st.Pitch)) { _xpCued = true; PlayLevelUp(st.Pitch); }
                     bool intoLevelUp = _xpStep + 1 < _xpSteps.Count && _xpSteps[_xpStep + 1].Kind == StepKind.LevelUp;
@@ -312,6 +312,13 @@ namespace LevelGate.Progression
                     }
                     _xpFill.anchorMax = new Vector2(frac, 1);
                     if (!quiet) BarFx(st.From, frac);
+                    // 1.0.20: a tick each seventh of the level the bar passes, rising (xp_bar_tick_1..7)
+                    int seg = Mathf.FloorToInt(frac * 7 + .001f);
+                    if (!quiet && seg > _tickSeg)
+                    {
+                        _tickSeg = seg;
+                        if (Time.unscaledTime - _tickAt > .045f) { _tickAt = Time.unscaledTime; Sounds.XpTick(seg); }
+                    }
                     PlaceGain();
                     break;
                 }
@@ -385,7 +392,7 @@ namespace LevelGate.Progression
                         foreach (var c in _cards) if (c.Level == st.Level) c.Flash(); // (no "+N ITEMS" float: barely visible, looked cheap)
                         _flooded.Add(st.Level); // MW 2: stays lit until the screen closes
                         ScreenFlash(Ui.Hex(TierOf(st.Level).Light), .1f, Motion.D(Motion.Base)); // MW 6: a softer wash per card
-                        if (Time.unscaledTime - _xpTickAt > .15f) { _xpTickAt = Time.unscaledTime; Sounds.Play("ButtonOver", "ButtonClick"); }
+                        if (Time.unscaledTime - _xpTickAt > .15f) { _xpTickAt = Time.unscaledTime; Sounds.CardUnlocked(); } // 1.0.20
                     }
                     break;
                 case StepKind.Banner:
@@ -537,6 +544,8 @@ namespace LevelGate.Progression
         }
 
         private static bool _xpCued, _xpRankFallback, _xpRolled;
+        private static int _tickSeg;
+        private static float _tickAt = -1;
         private static float _xpBump = -1;
 
         private static CanvasGroup HeadText()

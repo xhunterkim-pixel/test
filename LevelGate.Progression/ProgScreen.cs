@@ -106,18 +106,19 @@ namespace LevelGate.Progression
             int to = Mathf.Clamp(_level + _holdDir, 1, ProgData.MaxLevel);
             if (to == _level) return; // at the end: stays
             _skim = every < .2f;
-            ShineWay(_holdDir); ShowLevel(to); ClickSoon(now); _stepAt = now;
+            ShineWay(_holdDir); ShowLevel(to); ClickSoon(now, _holdDir); _stepAt = now;
             _skim = false;
         }
 
         /// <summary>The click, but not more than ~12 a second (fast holds / wheels were a buzz).</summary>
-        private static void ClickSoon(float now) { if (now - _clickAt < .08f) return; _clickAt = now; Sounds.StepLevel(); }
+        private static void ClickSoon(float now, int dir = 0) { if (now - _clickAt < .08f) return; _clickAt = now; Sounds.StepLevel(dir); }
 
         /// <summary>1.0.19: one level left / right with its sound — or the "end of the line" sound before level 1 / past the last.</summary>
         private static void StepTo(int to)
         {
             if (to < 1 || to > ProgData.MaxLevel) { Sounds.Edge(); return; }
-            ShowLevel(to); Sounds.StepLevel();
+            int dir = Math.Sign(to - _level); // (before the move)
+            ShowLevel(to); Sounds.StepLevel(dir);
         }
         private static int _cardsDir;
         private static readonly List<(CanvasGroup Group, RectTransform Rt, float Delay)> _tiles = new List<(CanvasGroup, RectTransform, float)>();
@@ -522,7 +523,7 @@ namespace LevelGate.Progression
             var b = next.gameObject.AddComponent<Button>();
             b.targetGraphic = hit;
             b.transition = Selectable.Transition.None;
-            b.onClick.AddListener(() => { int p = ProgData.PlayerLevel(); if (p > 0 && p < ProgData.MaxLevel) { Sounds.StepLevel(); ShowLevel(p + 1); } });
+            b.onClick.AddListener(() => { int p = ProgData.PlayerLevel(); if (p > 0 && p < ProgData.MaxLevel) { Sounds.StepLevel(1); ShowLevel(p + 1); } });
             // it's a link: brightens and underlines on hover
             HoverHook.Add(next, on => { _xpNextHover = on; UpdateXpNext(); if (on) Sounds.Hover(); });
         }
@@ -3338,7 +3339,7 @@ namespace LevelGate.Progression
                 _wheelAcc -= Mathf.Sign(_wheelAcc);
                 int to = Mathf.Clamp(_level + dir, 1, ProgData.MaxLevel);
                 _skim = Mathf.Abs(_wheelAcc) >= 1; // more notches queued: skim
-                if (to != _level) { ShineWay(dir); ShowLevel(to); ClickSoon(now); _stepAt = now; }
+                if (to != _level) { ShineWay(dir); ShowLevel(to); ClickSoon(now, dir); _stepAt = now; }
                 _skim = false;
             }
             // settled (key let go, wheel drained): the list catches up with the card you're on
