@@ -169,7 +169,7 @@ namespace LevelGate.Progression
             // ---- 3. UNLOCK: every new level's card, left to right, page by page (quicker over many pages)
             int pages = (lb - 1) / PerPage - la / PerPage + 1;
             bool many = pages > 2;
-            float each = many ? .18f : levels <= 5 ? .34f : .24f, turn = many ? .35f : .55f;
+            float each = many ? .21f : levels <= 5 ? .4f : .28f, turn = many ? .35f : .55f; // 1.0.21: each card a little longer (was .18 / .34 / .24)
             int page = (la - 1) / PerPage;
             for (int l = la + 1; l <= lb; l++)
             {
@@ -184,7 +184,10 @@ namespace LevelGate.Progression
         }
 
         /// <summary>From the emblem sound's start to the moment the emblem starts to shrink (its swap then lands on the peak).</summary>
-        private static float RankLead => Mathf.Max(0, Sfx.EmblemPeak - .2f);
+        /// <summary>1.0.21: a longer build-up before the new rank — the glow gathers this long before the prestige sound starts.</summary>
+        private const float RankPre = .45f;
+        private static float RankLead => RankPre + Mathf.Max(0, Sfx.EmblemPeak - .2f);
+        private static bool _xpRankSound;
 
         private static void PlayLevelUp(float pitch)
         {
@@ -344,9 +347,14 @@ namespace LevelGate.Progression
                     RankMoment(st.Level, _xpT, st.Dur, RankLead + Sfx.Extra("emblemup")); // the new-rank moment in the F12 style (Full = MW4's splash)
                     if (enter)
                     {
-                        _xpRankSwapped = false;
-                        if (Sfx.UseGame || !Sfx.Play("emblemup")) _xpRankFallback = true; // game sound: plays at the swap
+                        _xpRankSwapped = false; _xpRankSound = false;
                         L.Info($"xp: new rank {TierOf(st.Level).Name}");
+                    }
+                    // the sound starts after the first part of the build-up (1.0.21), so its swell still lands on the swap
+                    if (!_xpRankSound && _xpT >= RankPre)
+                    {
+                        _xpRankSound = true;
+                        if (Sfx.UseGame || !Sfx.Play("emblemup")) _xpRankFallback = true; // game sound: plays at the swap
                     }
                     float lead = RankLead + Sfx.Extra("emblemup");
                     if (_xpRankPop < 0 && _xpT >= lead && !_xpRankSwapped)
@@ -360,7 +368,7 @@ namespace LevelGate.Progression
                         float u = _xpT / lead, pulse = 0;
                         foreach (var hit in Sfx.EmblemHits)
                         {
-                            float d = _xpT - hit - Sfx.Extra("emblemup");
+                            float d = _xpT - RankPre - hit - Sfx.Extra("emblemup");
                             if (d >= 0 && d < .18f) pulse = Mathf.Max(pulse, Mathf.Sin(d / .18f * Mathf.PI));
                         }
                         _headBadge.Root.localScale = Vector3.one * (1 - .05f * u * u + .03f * pulse);

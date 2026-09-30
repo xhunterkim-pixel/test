@@ -87,7 +87,14 @@ namespace LevelGate.Progression
             if (!Own("using_a_or_d_for_level_card")) Click();
         }
         /// <summary>Trying to go before level 1 or past the last level.</summary>
-        public static void Edge() { if (!Own("going_before_level_1_or_level_79")) Play("ErrorMessage", "ButtonClick"); }
+        public static void Edge()
+        {
+            float now = UnityEngine.Time.unscaledTime;
+            if (now - _edgeAt < .3f) return; // (a wheel at the end: once, not once per notch)
+            _edgeAt = now;
+            if (!Own("going_before_level_1_or_level_79")) Play("ErrorMessage", "ButtonClick");
+        }
+        private static float _edgeAt = -1;
         /// <summary>A reward picked (clicked, or W / S).</summary>
         public static void SelectItem() { if (!Own("select_level_item")) Play("MenuContextMenu", "ButtonClick"); }
         /// <summary>A page of cards turned (Q / E, the wheel, the page bar).</summary>

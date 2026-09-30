@@ -1,4 +1,4 @@
-# LevelGate Progression (1.0.20)
+# LevelGate Progression (1.0.21)
 
 A Call of Duty style **Progression** screen inside Tarkov's main menu. It adds a
 **PROGRESSION** button to the menu bar next to Character, Trading, Flea Market and the rest.
@@ -18,6 +18,18 @@ A Call of Duty style **Progression** screen inside Tarkov's main menu. It adds a
   - P or Esc closes the screen.
 - It works on its own and never changes LevelGate. It only **reads**
   `BepInEx\plugins\LevelGate\config\level_requirements.json`, and picks up changes to that file while the game runs.
+
+## 1.0.21
+
+- **A / D hit right away, like selecting.** Their loudest moment was the blade landing at 0.3 s, where select hits at once.
+  They're now cut to 35 ms of the slide into that hit (about 0.1 s long), with the same peak level as the select sound.
+- **More stereo on A / D:** the left one sits mostly in the left speaker and the right one in the right. The far side is at
+  35 %, on top of the slight lean the files already had.
+- **A longer build-up before a new rank:** the glow gathers 0.45 s longer before the prestige sound starts. The swap still
+  lands on its swell.
+- **Each card unlocking in the animation takes a little longer:** 0.4 s instead of 0.34 s (0.28 / 0.21 over many levels).
+- **Q / E at the first or last page** plays the same "end of the line" sound as A at level 1 / D at level 79. A mouse wheel
+  at the end plays it once, not once per notch.
 
 ## 1.0.20: more of your sounds
 

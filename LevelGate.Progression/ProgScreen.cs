@@ -1754,7 +1754,12 @@ namespace LevelGate.Progression
             int want = page;
             page = Mathf.Clamp(page, 0, Pages - 1);
             bool changed = page != _page || _first != page * PerPage + 1; // a dragged row (44–48) re-aligns to its page
-            if (!changed && dir != 0) { L.Debug($"page {want + 1}: already at the {(want < 0 ? "first" : "last")} page"); return; }
+            if (!changed && dir != 0)
+            {
+                L.Debug($"page {want + 1}: already at the {(want < 0 ? "first" : "last")} page");
+                if (!_xpPaging) Sounds.Edge(); // 1.0.21: Q / E at the first / last page: the same "end of the line" as A / D at 1 / 79
+                return;
+            }
             _page = page;
             _first = page * PerPage + 1;
             _shiftStart = -10; SetCardOffset(0);
