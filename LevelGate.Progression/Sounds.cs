@@ -55,8 +55,37 @@ namespace LevelGate.Progression
             catch (Exception e) { L.ErrorOnce("playing a sound", e); }
         }
 
-        public static void Open() => Play("ButtonBottomBarClick", "ButtonClick", "Click");
         public static void Click() => Play("ButtonClick", "Click");
-        public static void Page() => Play("MenuDropdownSelect", "ButtonClick", "Click");
+
+        // ---- 1.0.19: the screen's own UI sounds (sounds\<name>.wav, named for when they play); the game's sound if missing
+
+        private static float _hoverAt = -1;
+
+        private static bool Own(string name) => !Sfx.UseGame && Sfx.Play(name);
+
+        /// <summary>Opening the screen (the tab, the shortcut, P).</summary>
+        public static void Open() { if (!Own("enter_progression_ui")) Play("ButtonBottomBarClick", "ButtonClick", "Click"); }
+        /// <summary>The pointer onto anything in the screen (tiles, cards, buttons); not more than ~25 a second.</summary>
+        public static void Hover()
+        {
+            float now = UnityEngine.Time.unscaledTime;
+            if (now - _hoverAt < .04f) return;
+            _hoverAt = now;
+            if (!Own("hover")) Play("ButtonOver");
+        }
+        /// <summary>The pointer onto the PROGRESSION tab / shortcut on the game's main menu.</summary>
+        public static void MenuHover() { if (!Own("hover_over_progression_menu")) Play("ButtonOver"); }
+        /// <summary>A level card clicked.</summary>
+        public static void SelectCard() { if (!Own("select_level_card")) Click(); }
+        /// <summary>One level left / right (A / D, the arrows, the ‹ › buttons, holding, dragging).</summary>
+        public static void StepLevel() { if (!Own("using_a_or_d_for_level_card")) Click(); }
+        /// <summary>Trying to go before level 1 or past the last level.</summary>
+        public static void Edge() { if (!Own("going_before_level_1_or_level_79")) Play("ErrorMessage", "ButtonClick"); }
+        /// <summary>A reward picked (clicked, or W / S).</summary>
+        public static void SelectItem() { if (!Own("select_level_item")) Play("MenuContextMenu", "ButtonClick"); }
+        /// <summary>A page of cards turned (Q / E, the wheel, the page bar).</summary>
+        public static void Page() { if (!Own("pressing_q_or_e_for_next_pages")) Play("MenuDropdownSelect", "ButtonClick", "Click"); }
+        /// <summary>A group of rewards opened / closed (its +N box).</summary>
+        public static void Group(bool open) { if (!Own(open ? "expand_group_items" : "collapse_group_items")) Click(); }
     }
 }

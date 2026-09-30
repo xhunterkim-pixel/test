@@ -142,7 +142,7 @@ namespace LevelGate.Progression
         {
             public void OnPointerEnter(PointerEventData e)
             {
-                Sounds.Play("ButtonOver");
+                Sounds.MenuHover(); // 1.0.19
                 if (_title != null) Ui.SetColor(_title, Ui.Hex("#ff6a52"));
                 if (_glow != null) _glow.color = Ui.Hex(Red, .42f);
             }

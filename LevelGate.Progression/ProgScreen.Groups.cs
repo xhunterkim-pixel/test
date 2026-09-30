@@ -159,7 +159,7 @@ namespace LevelGate.Progression
             b.targetGraphic = face; b.transition = Selectable.Transition.None;
             b.onClick.AddListener(() =>
             {
-                Sounds.Click();
+                Sounds.Group(!_openGroups.Contains(groupKey)); // 1.0.19: expand / collapse sounds
                 if (!_openGroups.Remove(groupKey)) _openGroups.Add(groupKey);
                 // 1.0.1: opening a group counts as seeing it: NEW goes from all of its items
                 if (_groupMembers.TryGetValue(groupKey, out var members)) foreach (var m in members) NewTags.ClearItem(m.Tpl, m.Level);

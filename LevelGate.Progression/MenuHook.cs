@@ -546,9 +546,17 @@ namespace LevelGate.Progression
 namespace LevelGate.Progression
 {
     /// <summary>Catches the click on our copied menu tab (the game's own tab code doesn't tell us).</summary>
-    internal sealed class TabClick : MonoBehaviour, UnityEngine.EventSystems.IPointerClickHandler
+    internal sealed class TabClick : MonoBehaviour, UnityEngine.EventSystems.IPointerClickHandler, UnityEngine.EventSystems.IPointerEnterHandler
     {
-        private static int _lastFrame = -1;
+        private static int _lastFrame = -1, _hoverFrame = -1;
+
+        /// <summary>1.0.19: the pointer onto the PROGRESSION tab: its own hover sound (once, though every part of the tab catches it).</summary>
+        public void OnPointerEnter(UnityEngine.EventSystems.PointerEventData e)
+        {
+            if (Time.frameCount == _hoverFrame || ProgScreen.IsOpen) return;
+            _hoverFrame = Time.frameCount;
+            Sounds.MenuHover();
+        }
 
         public void OnPointerClick(UnityEngine.EventSystems.PointerEventData e)
         {

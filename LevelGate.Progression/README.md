@@ -1,4 +1,4 @@
-# LevelGate Progression (1.0.18)
+# LevelGate Progression (1.0.19)
 
 A Call of Duty style **Progression** screen inside Tarkov's main menu. It adds a
 **PROGRESSION** button to the menu bar next to Character, Trading, Flea Market and the rest.
@@ -18,6 +18,31 @@ A Call of Duty style **Progression** screen inside Tarkov's main menu. It adds a
   - P or Esc closes the screen.
 - It works on its own and never changes LevelGate. It only **reads**
   `BepInEx\plugins\LevelGate\config\level_requirements.json`, and picks up changes to that file while the game runs.
+
+## 1.0.19: your sound effects
+
+- **New UI sounds** in `sounds\` (the file name says when each plays):
+  | File | Plays when |
+  |---|---|
+  | `hover.wav` | the pointer moves onto anything in the screen (tiles, cards, buttons) |
+  | `hover_over_progression_menu.wav` | the pointer moves onto the PROGRESSION tab or shortcut on the main menu |
+  | `enter_progression_ui.wav` | the screen opens |
+  | `select_level_card.wav` | you click a level card |
+  | `using_a_or_d_for_level_card.wav` | one level left / right: A / D, the arrow keys, ‹ ›, holding, dragging |
+  | `going_before_level_1_or_level_79.wav` | you try to go before level 1 or past the last level |
+  | `select_level_item.wav` | you pick a reward (click, or W / S) |
+  | `pressing_q_or_e_for_next_pages.wav` | a page of cards turns (Q / E, the wheel, the page bar) |
+  | `expand_group_items.wav` / `collapse_group_items.wav` | a group (+N box) or a category opens / closes |
+  | `new_rank_prestige.wav` | a new rank in the level-up animation (replaces emblemup.mp3) |
+- **Each sound was measured and prepared:**
+  - The silence at the start (about 20 ms, 57 ms on the level-1/79 one) is cut, so it hits the moment you act.
+  - The silent tails are cut, with a tiny fade at both ends so nothing clicks.
+  - Volumes are levelled against each other by their own loudness, never above −1 dB peak. Hover sounds sit a bit quieter
+    than clicks.
+  - The prestige sound peaks at 0.29 s, and the rank-up is re-timed so the emblem swaps exactly on that peak (it used to be
+    timed for emblemup.mp3's peak at 1.45 s).
+- Hovers are limited to about 25 a second (sweeping across tiles no longer buzzes).
+- **Missing a file?** That moment plays the game's own sound, as before. Swap in your own by giving the file the same name.
 
 ## 1.0.18
 

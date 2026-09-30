@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using UnityEngine;
 using UnityEngine.Networking;
 
@@ -15,9 +16,14 @@ namespace LevelGate.Progression
     {
         // where each sound hits hardest (measured from the files' waveforms), in seconds from its start
         public const float LevelUpPeak = .45f, LevelUpLength = 1.46f;
-        public const float EmblemPeak = 1.45f, EmblemLength = 4.28f;
+        /// <summary>1.0.19: the rank-up sound is sounds\new_rank_prestige.wav when it's there (peak 0.29 s, hits at 0 and
+        /// 0.1 s, 1.31 s long — measured from the trimmed file), else the old emblemup.mp3 (peak 1.45 s).</summary>
+        private static bool _prestige;
+        public static float EmblemPeak => _prestige ? .29f : 1.45f;
+        public static float EmblemLength => _prestige ? 1.31f : 4.28f;
         /// <summary>Emblemup.mp3's two early hits (the glow pulses on them).</summary>
-        public static readonly float[] EmblemHits = { .25f, 1.05f };
+        public static float[] EmblemHits => _prestige ? PrestigeHits : OldHits;
+        private static readonly float[] PrestigeHits = { .0f, .095f }, OldHits = { .25f, 1.05f };
 
         // where the sound starts in the file (first sample over 0.02), measured with ffmpeg: Unity's decoder can put silence in
         // front of it (encoder delay), which would make every peak land late — measured again at load and made up for
@@ -39,17 +45,30 @@ namespace LevelGate.Progression
         {
             if (_started) return;
             _started = true;
-            foreach (var name in new[] { "levelup", "emblemup" }) LoadOne(name);
+            LoadOne("levelup");
+            var dir = Path.Combine(Path.GetDirectoryName(typeof(Sfx).Assembly.Location) ?? ".", "sounds");
+            _prestige = File.Exists(Path.Combine(dir, "new_rank_prestige.wav"));
+            if (_prestige) { _refOnset["emblemup"] = .002f; LoadOne("emblemup", true, "new_rank_prestige"); }
+            else LoadOne("emblemup");
+            foreach (var name in UiSounds) LoadOne(name, true); // 1.0.19: the screen's own UI sounds (.wav)
         }
 
-        private static void LoadOne(string name)
+        /// <summary>1.0.19: the UI sounds (sounds\&lt;name&gt;.wav): the file name says when each plays. Trimmed so each starts
+        /// on its first sound (no silence before it) and levelled against each other. A missing one: the game's sound instead.</summary>
+        public static readonly string[] UiSounds =
+        {
+            "hover", "hover_over_progression_menu", "enter_progression_ui", "select_level_card", "using_a_or_d_for_level_card",
+            "select_level_item", "pressing_q_or_e_for_next_pages", "going_before_level_1_or_level_79", "expand_group_items", "collapse_group_items",
+        };
+
+        private static void LoadOne(string name, bool wav = false, string file = null)
         {
             var dir = Path.Combine(Path.GetDirectoryName(typeof(Sfx).Assembly.Location) ?? ".", "sounds");
-            var path = Path.Combine(dir, name + ".mp3");
+            var path = Path.Combine(dir, (file ?? name) + (wav ? ".wav" : ".mp3"));
             if (!File.Exists(path)) { L.Warn($"sounds: {path} not found — the game's own sound is used instead"); return; }
             try
             {
-                var req = UnityWebRequestMultimedia.GetAudioClip(new Uri(path).AbsoluteUri, AudioType.MPEG);
+                var req = UnityWebRequestMultimedia.GetAudioClip(new Uri(path).AbsoluteUri, wav ? AudioType.WAV : AudioType.MPEG);
                 ((DownloadHandlerAudioClip)req.downloadHandler).streamAudio = false; // decoded into memory: nothing is read from disk when it plays
                 req.SendWebRequest();
                 _loading.Add((name, req));
@@ -64,17 +83,18 @@ namespace LevelGate.Progression
         public static void Check()
         {
             if (!_started) return;
-            foreach (var name in new[] { "levelup", "emblemup" })
+            foreach (var name in new[] { "levelup", "emblemup" }.Concat(UiSounds))
             {
                 if (_loading.Exists(l => l.Name == name)) continue;
                 _clips.TryGetValue(name, out var clip);
                 if (clip != null && clip.loadState == AudioDataLoadState.Loaded) continue;
-                if (clip != null && clip.loadState == AudioDataLoadState.Unloaded && clip.LoadAudioData()) { L.Info($"sounds: {name}.mp3 was unloaded by the game — loading its audio again"); continue; }
+                if (clip != null && clip.loadState == AudioDataLoadState.Unloaded && clip.LoadAudioData()) { L.Info($"sounds: {name} was unloaded by the game — loading its audio again"); continue; }
                 if (clip != null && clip.loadState == AudioDataLoadState.Loading) continue;
                 if (clip == null && !_clips.ContainsKey(name)) continue; // never loaded (missing file: already said at start)
-                L.Info($"sounds: {name}.mp3 is {(clip == null ? "gone" : clip.loadState.ToString())} — reading it from disk again");
+                bool prestige = name == "emblemup" && _prestige, wav = prestige || !_refOnset.ContainsKey(name);
+                L.Info($"sounds: {name} is {(clip == null ? "gone" : clip.loadState.ToString())} — reading it from disk again");
                 _clips.Remove(name);
-                LoadOne(name);
+                LoadOne(name, wav, prestige ? "new_rank_prestige" : null);
             }
         }
 
@@ -95,7 +115,9 @@ namespace LevelGate.Progression
                     _clips[name] = clip;
                     float onset = Onset(clip);
                     if (onset >= 0 && _refOnset.TryGetValue(name, out var reference)) _extra[name] = Mathf.Clamp(onset - reference, 0, .2f);
-                    L.Info($"sounds: {name}.mp3 loaded ({clip.length:0.00} s; starts at {onset:0.000} s, {Extra(name) * 1000:0} ms later than in the file — timing adjusted)");
+                    if (name == "emblemup" && _prestige) L.Info($"sounds: new_rank_prestige.wav loaded as the rank-up sound ({clip.length:0.00} s; peak at {EmblemPeak:0.00} s)");
+                    else if (_refOnset.ContainsKey(name)) L.Info($"sounds: {name}.mp3 loaded ({clip.length:0.00} s; starts at {onset:0.000} s, {Extra(name) * 1000:0} ms later than in the file — timing adjusted)");
+                    else L.Info($"sounds: {name}.wav loaded ({clip.length:0.00} s, sound starts at {Math.Max(0, onset) * 1000:0} ms)");
                 }
                 catch (Exception e) { L.Error("sound " + name, e); }
                 finally { req.Dispose(); }
@@ -121,7 +143,7 @@ namespace LevelGate.Progression
             return -1;
         }
 
-        private static readonly AudioSource[] _pool = new AudioSource[4];
+        private static readonly AudioSource[] _pool = new AudioSource[8]; // 1.0.19: 8 (UI sounds overlap: hover over hover)
         private static int _next;
 
         /// <summary>Plays one of our sounds (pitch: higher and shorter); false if it isn't loaded (the caller can fall back).</summary>

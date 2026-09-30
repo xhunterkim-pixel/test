@@ -111,7 +111,14 @@ namespace LevelGate.Progression
         }
 
         /// <summary>The click, but not more than ~12 a second (fast holds / wheels were a buzz).</summary>
-        private static void ClickSoon(float now) { if (now - _clickAt < .08f) return; _clickAt = now; Sounds.Click(); }
+        private static void ClickSoon(float now) { if (now - _clickAt < .08f) return; _clickAt = now; Sounds.StepLevel(); }
+
+        /// <summary>1.0.19: one level left / right with its sound — or the "end of the line" sound before level 1 / past the last.</summary>
+        private static void StepTo(int to)
+        {
+            if (to < 1 || to > ProgData.MaxLevel) { Sounds.Edge(); return; }
+            ShowLevel(to); Sounds.StepLevel();
+        }
         private static int _cardsDir;
         private static readonly List<(CanvasGroup Group, RectTransform Rt, float Delay)> _tiles = new List<(CanvasGroup, RectTransform, float)>();
         private static readonly List<(RectTransform Rect, ProgItem Item)> _hits = new List<(RectTransform, ProgItem)>();
@@ -515,9 +522,9 @@ namespace LevelGate.Progression
             var b = next.gameObject.AddComponent<Button>();
             b.targetGraphic = hit;
             b.transition = Selectable.Transition.None;
-            b.onClick.AddListener(() => { int p = ProgData.PlayerLevel(); if (p > 0 && p < ProgData.MaxLevel) { Sounds.Click(); ShowLevel(p + 1); } });
+            b.onClick.AddListener(() => { int p = ProgData.PlayerLevel(); if (p > 0 && p < ProgData.MaxLevel) { Sounds.StepLevel(); ShowLevel(p + 1); } });
             // it's a link: brightens and underlines on hover
-            HoverHook.Add(next, on => { _xpNextHover = on; UpdateXpNext(); if (on) Sounds.Play("ButtonOver"); });
+            HoverHook.Add(next, on => { _xpNextHover = on; UpdateXpNext(); if (on) Sounds.Hover(); });
         }
 
         private static bool _xpNextHover;
@@ -920,7 +927,7 @@ namespace LevelGate.Progression
             b.onClick.AddListener(() => { if (_featTpl != null) InspectSoon(_featTpl); });
             HoverHook.Add(bimg, on =>
             {
-                if (on) Sounds.Play("ButtonOver");
+                if (on) Sounds.Hover();
                 FadeTo(bimg, on ? bFaceOn : bFace, true);
                 FadeTo(bTop, on ? Ui.Hex("#e1e5e6") : Ui.Hex("#465155"), true);
                 FadeTo(bText as Graphic, on ? bInkOn : bInk, true);
@@ -1274,11 +1281,11 @@ namespace LevelGate.Progression
         private static void BuildBottom(RectTransform bottom)
         {
             // the arrows move one level, like the A / D keycaps under them (pages: Q / E and the page bar)
-            _prev = Arrow(bottom, "Prev", "‹", 0, () => { ShowLevel(_level - 1); Sounds.Click(); });
-            _next = Arrow(bottom, "Next", "›", 1, () => { ShowLevel(_level + 1); Sounds.Click(); });
+            _prev = Arrow(bottom, "Prev", "‹", 0, () => StepTo(_level - 1));
+            _next = Arrow(bottom, "Next", "›", 1, () => StepTo(_level + 1));
             // A / D move one level (like ← →): shown as keycaps under the arrows, like Q / E at the page bar
-            LevelKey(_prev.GetComponent<RectTransform>(), "A", () => { ShowLevel(_level - 1); Sounds.Click(); });
-            LevelKey(_next.GetComponent<RectTransform>(), "D", () => { ShowLevel(_level + 1); Sounds.Click(); });
+            LevelKey(_prev.GetComponent<RectTransform>(), "A", () => StepTo(_level - 1));
+            LevelKey(_next.GetComponent<RectTransform>(), "D", () => StepTo(_level + 1));
 
             // cards share the panels' left/right guides (the slots' inner 8 px sit on the margin); arrows live outside, in the margin
             var cards = Ui.Rect(bottom, "Cards", Vector2.zero, Vector2.one, new Vector2(Margin - Gutter / 2, 84), new Vector2(-Margin + Gutter / 2, -S3));
@@ -1342,7 +1349,7 @@ namespace LevelGate.Progression
                 var btn = hit.gameObject.AddComponent<Button>();
                 btn.targetGraphic = hitImg;
                 btn.onClick.AddListener(() => ShowPage(page, page > _page ? 1 : -1));
-                HoverHook.Add(hit, on => { _segHover = on ? page : (_segHover == page ? -1 : _segHover); if (on) Sounds.Play("ButtonOver"); UpdatePageBar(); });
+                HoverHook.Add(hit, on => { _segHover = on ? page : (_segHover == page ? -1 : _segHover); if (on) Sounds.Hover(); UpdatePageBar(); });
                 _segments.Add(img);
                 // thin divider between the page numbers, like Arena
                 if (i > 0) Ui.Img(Ui.Rect(track, "Div" + i, new Vector2(a0, 0), new Vector2(a0, 0), new Vector2(-1, 4), new Vector2(1, 22)), Ui.Hex("#3a4245"));
@@ -1445,7 +1452,7 @@ namespace LevelGate.Progression
                 if (!InWindow(mine)) { int pg = (mine - 1) / PerPage; ShowPage(pg, pg >= _page ? 1 : -1, mine); } // bring its card back into the row
                 ShowLevel(mine);
             });
-            HoverHook.Add(rt, on => { _homeHover = on; PaintHome(); if (on && _homeAway) Sounds.Play("ButtonOver"); });
+            HoverHook.Add(rt, on => { _homeHover = on; PaintHome(); if (on && _homeAway) Sounds.Hover(); });
             _homeBtn = rt.gameObject;
             _homeBtn.SetActive(false);
         }
@@ -1828,7 +1835,7 @@ namespace LevelGate.Progression
         {
             if (!_dragging || Time.unscaledTime - _dragTickAt < .15f) return; // none while a flick coasts; at most ~6 a second
             _dragTickAt = Time.unscaledTime;
-            Sounds.Play("ButtonOver");
+            Sounds.StepLevel();
         }
 
         private static void DragCards(BepInEx.IInputSystem input, bool blocked)
@@ -2172,13 +2179,13 @@ namespace LevelGate.Progression
             hb.onClick.AddListener(() =>
             {
                 if (!_foldedCats.Remove(catKey)) _foldedCats.Add(catKey);
-                Sounds.Click();
+                Sounds.Group(!_foldedCats.Contains(catKey)); // 1.0.19: a category opening / folding: the group sounds
                 ShowFolded();
                 L.Debug($"category {catKey} {(_foldedCats.Contains(catKey) ? "folded" : "opened")}");
             });
             HoverHook.Add(tabFace, on =>
             {
-                if (on) Sounds.Play("ButtonOver");
+                if (on) Sounds.Hover();
                 FadeTo(tabFace, on ? faceHover : face, true);
                 FadeTo(top, on ? Ui.Hex("#e1e5e6") : Ui.Hex("#3f494d"), true);
                 FadeTo(shade, new Color(0, 0, 0, on ? .08f : .18f), true);
@@ -2326,7 +2333,7 @@ namespace LevelGate.Progression
             var v = shown[to];
             ClickedNew(v.Item);
             Feature(v.Item);
-            Sounds.Play("ButtonOver");
+            Sounds.SelectItem();
             ScrollIntoView(v.Rt);
         }
 
@@ -2437,7 +2444,7 @@ namespace LevelGate.Progression
             {
                 if (v.Hover == on) return;
                 v.Hover = on;
-                if (on) { Sounds.Play("ButtonOver"); PlayGlitch(v.Face.rectTransform); }
+                if (on) { Sounds.Hover(); PlayGlitch(v.Face.rectTransform); }
                 ApplyTile(v);
                 ShowTip(on ? v : null);
             });
@@ -3302,8 +3309,8 @@ namespace LevelGate.Progression
             {
                 bool typing = ProgressionPlugin.Typing();
                 if (typing) { }
-                else if (input.GetKeyDown(KeyCode.RightArrow) || input.GetKeyDown(KeyCode.D)) { StartHold(1); ShineWay(1); ShowLevel(_level + 1); Sounds.Click(); }
-                else if (input.GetKeyDown(KeyCode.LeftArrow) || input.GetKeyDown(KeyCode.A)) { StartHold(-1); ShineWay(-1); ShowLevel(_level - 1); Sounds.Click(); }
+                else if (input.GetKeyDown(KeyCode.RightArrow) || input.GetKeyDown(KeyCode.D)) { StartHold(1); ShineWay(1); StepTo(_level + 1); }
+                else if (input.GetKeyDown(KeyCode.LeftArrow) || input.GetKeyDown(KeyCode.A)) { StartHold(-1); ShineWay(-1); StepTo(_level - 1); }
                 else if (input.GetKeyDown(KeyCode.E) || input.GetKeyDown(KeyCode.PageDown)) ShowPage(_page + 1, 1);
                 else if (input.GetKeyDown(KeyCode.Q) || input.GetKeyDown(KeyCode.PageUp)) ShowPage(_page - 1, -1);
                 else if (input.GetKeyDown(KeyCode.Home)) { int me = ProgData.PlayerLevel(); ShowLevel(me > 0 ? Mathf.Min(me, ProgData.MaxLevel) : 1); } // your level
@@ -3386,7 +3393,7 @@ namespace LevelGate.Progression
                 if (input.GetMouseButtonDown(0) && over != null && over.Level == _level)
                 {
                     ClickedNew(over); // its NEW tag goes (the item shown first can be clicked for that too)
-                    if (over.Tpl != _featTpl) { Sounds.Play("MenuContextMenu", "ButtonClick"); Feature(over); }
+                    if (over.Tpl != _featTpl) { Sounds.SelectItem(); Feature(over); }
                 }
                 if (input.GetMouseButtonDown(1))
                 {
@@ -3962,12 +3969,12 @@ namespace LevelGate.Progression
                 {
                     if (_dragging || Time.unscaledTime < _dragSuppressUntil) return; // that was the end of a drag
                     L.Debug($"card level {_level} clicked");
-                    Sounds.Click();
+                    Sounds.SelectCard();
                     if (NewTags.ClearLevel(_level)) L.Debug($"NEW: level {_level} card clicked");
                     ShowLevel(_level);
                     UpdateSelection();
                 });
-                HoverHook.Add(_frame, on => { if (_hover == on) return; _hover = on; if (on) { Sounds.Play("ButtonOver"); PlayGlitch(_bg.rectTransform); } Mark(_picked, _player); });
+                HoverHook.Add(_frame, on => { if (_hover == on) return; _hover = on; if (on) { Sounds.Hover(); PlayGlitch(_bg.rectTransform); } Mark(_picked, _player); });
                 // XP animation: a warm flash over the whole card when it unlocks (on top of everything in it)
                 _flash = Ui.Img(Ui.Fill(card, "Flash"), new Color(0, 0, 0, 0), Ui.Radial());
                 _flash.raycastTarget = false;

@@ -184,7 +184,7 @@ namespace LevelGate.Progression
         }
 
         /// <summary>From the emblem sound's start to the moment the emblem starts to shrink (its swap then lands on the peak).</summary>
-        private const float RankLead = Sfx.EmblemPeak - .2f;
+        private static float RankLead => Mathf.Max(0, Sfx.EmblemPeak - .2f);
 
         private static void PlayLevelUp(float pitch)
         {
