@@ -688,6 +688,9 @@ namespace LevelGate.Progression
         /// used Tiled, the lines repeat across the middle and the cut corners stay cut, so a locked tile's hologram covers the
         /// whole tile without spilling past its corners (no Mask needed). 33 px: a 15 px middle keeps the 3 px line rhythm.
         /// </summary>
+        /// <summary>1.0.17: a fine tiled pattern drawn one texture pixel per screen pixel (no moiré bands).</summary>
+        public static Image Crisp(Image img) { if (img != null && img.GetComponent<ScreenPixels>() == null) img.gameObject.AddComponent<ScreenPixels>(); return img; }
+
         public static Sprite ChamferScanlines() => ChamferScanlines(Cut);
 
         private static readonly Dictionary<int, Sprite> _chamferScans = new Dictionary<int, Sprite>();
@@ -698,8 +701,9 @@ namespace LevelGate.Progression
         {
             int key = Mathf.RoundToInt(c * 100);
             if (_chamferScans.TryGetValue(key, out var have)) return have;
-            const int n = 33;
             int b = Mathf.CeilToInt(c) + 1;
+            int n = 2 * b + 15; // 1.0.17: the tiled middle must be a multiple of the 3 px line spacing (17 rows at a cut of
+                                // 6.83 made every 17th gap 2 px: bands across locked cards)
             var tex = new Texture2D(n, n, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Clamp, filterMode = FilterMode.Point };
             var px = new Color32[n * n];
             for (int y = 0; y < n; y++)
@@ -1366,6 +1370,34 @@ namespace LevelGate.Progression
             float d = Mathf.Clamp01(Mathf.Min(r.position.x - x0, x1 - r.position.x) / len);
             r.color.a = (byte)(r.color.a * d * d * (3 - 2 * d));
             return r;
+        }
+    }
+
+    /// <summary>
+    /// 1.0.17: keeps a fine tiled pattern (scan lines, dot grids, hatching) at one texture pixel per SCREEN pixel. The UI is
+    /// drawn at the canvas's scale (about 1.04 at 2000x1125), so a 1 px line every 3 px landed on 1 or 2 screen pixels by
+    /// turns: bands of stronger and weaker lines across a locked card (moiré). Sets the image's pixels-per-unit multiplier to
+    /// the canvas scale, and again whenever that changes.
+    /// </summary>
+    internal sealed class ScreenPixels : MonoBehaviour
+    {
+        private Image _img;
+        private Canvas _canvas;
+        private float _for = -1;
+
+        private void OnEnable() { _for = -1; Apply(); }
+        private void LateUpdate() { Apply(); }
+
+        private void Apply()
+        {
+            if (_img == null) _img = GetComponent<Image>();
+            if (_canvas == null) _canvas = GetComponentInParent<Canvas>();
+            if (_img == null || _canvas == null) return;
+            float sf = _canvas.rootCanvas != null ? _canvas.rootCanvas.scaleFactor : _canvas.scaleFactor;
+            if (sf <= 0 || Mathf.Abs(sf - _for) < .0001f) return;
+            _for = sf;
+            _img.pixelsPerUnitMultiplier = sf;
+            _img.SetVerticesDirty();
         }
     }
 

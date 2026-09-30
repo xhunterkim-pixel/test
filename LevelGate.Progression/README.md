@@ -1,4 +1,4 @@
-# LevelGate Progression (1.0.16)
+# LevelGate Progression (1.0.17)
 
 A Call of Duty style **Progression** screen inside Tarkov's main menu. It adds a
 **PROGRESSION** button to the menu bar next to Character, Trading, Flea Market and the rest.
@@ -18,6 +18,16 @@ A Call of Duty style **Progression** screen inside Tarkov's main menu. It adds a
   - P or Esc closes the screen.
 - It works on its own and never changes LevelGate. It only **reads**
   `BepInEx\plugins\LevelGate\config\level_requirements.json`, and picks up changes to that file while the game runs.
+
+## 1.0.17
+
+- **Locked cards: even scan lines, no bands.** Two causes of the bands of stronger and weaker lines:
+  - **My 1.0.11 change:** the locked scan line texture repeats in tiles. Since 1.0.11 the tile was 17 px tall with a line
+    every 3 px, so every 17 px one gap was 2 px instead of 3. The tile is now a multiple of 3.
+  - **Moiré:** the UI is drawn at your screen's scale (about 1.04×), so a 1 px line every 3 px landed on one or two screen
+    pixels by turns. Scan lines, dot grids and hatching are now drawn at exactly one texture pixel per screen pixel, and
+    kept that way if the scale changes.
+  - Same fix for locked tiles, your level's orange scan lines, the selected dot fill and the rank-up / splash scan lines.
 
 ## 1.0.16
 

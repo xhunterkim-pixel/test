@@ -90,6 +90,7 @@ namespace LevelGate.Progression
             var band = Ui.Rect(layer, "Band", new Vector2(0, .22f), new Vector2(1, .22f), new Vector2(0, -38), new Vector2(0, 38));
             _spBand = Ui.Img(band, new Color(1, 1, 1, 0), Ui.HorizontalFade());
             _spBandScan = Ui.Img(Ui.Fill(band, "Scan"), new Color(1, 1, 1, 0), Ui.Scanlines());
+            Ui.Crisp(_spBandScan); // 1.0.17: no moiré bands
             _spBandScan.type = Image.Type.Tiled;
             _spBandStripes = Ui.Img(Ui.Fill(band, "Stripes"), new Color(1, 1, 1, 0), Ui.VStripes());
             _spBandStripes.type = Image.Type.Tiled;
@@ -111,6 +112,7 @@ namespace LevelGate.Progression
             var tint = new Color(.85f, .9f, .92f, 1);
             // faint scanlines over everything
             var scan = Ui.Img(Ui.Fill(hud, "Scan"), new Color(1, 1, 1, .05f), Ui.Scanlines()); scan.type = Image.Type.Tiled;
+            Ui.Crisp(scan); // 1.0.17: no moiré bands
             // crosshair lines through the emblem out to the edges, a gap around it
             var c = new Vector2(.5f, .6f);
             foreach (var (aMin, aMax, oMin, oMax) in new[] {

@@ -172,6 +172,7 @@ namespace LevelGate.Progression
                     Ui.Img(Ui.Rect(band, "Top", new Vector2(0, 1), Vector2.one, new Vector2(0, -1), Vector2.zero), new Color(1, 1, 1, .35f));
                     Ui.Img(Ui.Rect(band, "Bottom", Vector2.zero, new Vector2(1, 0), Vector2.zero, new Vector2(0, 1)), new Color(1, 1, 1, .2f));
                     var scan = Ui.Img(Ui.Fill(band, "Scan"), new Color(1, 1, 1, .04f), Ui.Scanlines()); scan.type = Image.Type.Tiled;
+                    Ui.Crisp(scan); // 1.0.17: no moiré bands
                     var box = Ui.Rect(band, "EmblemBox", new Vector2(.5f, .5f), new Vector2(.5f, .5f), new Vector2(-330, -54), new Vector2(-222, 54));
                     Ui.Img(box, Ui.Hex("#11161a", .9f));
                     Ui.Brackets(box, 0, 14, new Color(1, 1, 1, .8f));
@@ -221,6 +222,7 @@ namespace LevelGate.Progression
                     Ui.Img(Ui.Rect(box, "Top", new Vector2(0, 1), Vector2.one, new Vector2(0, -1), Vector2.zero), new Color(1, 1, 1, .3f));
                     Ui.Label(Ui.Rect(box, "Head", new Vector2(0, 1), new Vector2(1, 1), new Vector2(16, -26), new Vector2(-16, -6)), "Text", "COMMS  //  RANK_SERVICE  //  CH 04", 10, Ui.Hex("#7d8588"), TextAnchor.MiddleLeft, false, 2);
                     var scan = Ui.Img(Ui.Fill(box, "Scan"), new Color(1, 1, 1, .05f), Ui.Scanlines()); scan.type = Image.Type.Tiled;
+                    Ui.Crisp(scan); // 1.0.17: no moiré bands
                     v.Log = Ui.Label(Ui.Rect(box, "Log", new Vector2(0, 0), new Vector2(1, 1), new Vector2(16, 14), new Vector2(-190, -32)), "Text", "", 15, Color.white, TextAnchor.UpperLeft, false, 1.5f);
                     Refl.Set(v.Log, "lineSpacing", 14f);
                     var eb = Ui.Rect(box, "EmblemBox", new Vector2(1, .5f), new Vector2(1, .5f), new Vector2(-176, -70), new Vector2(-16, 60));

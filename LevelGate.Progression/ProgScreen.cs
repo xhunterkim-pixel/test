@@ -2387,6 +2387,7 @@ namespace LevelGate.Progression
                 // MW 9: locked — a cold, scanlined hologram over the picture (after it: on top)
                 // 1.0.3: over the whole tile, in its cut shape (it stopped above the foot and ran square past the cut corners)
                 var hs = Ui.Img(Ui.Fill(inner, "HoloScan"), new Color(.7f, .86f, .95f, .22f), Ui.ChamferScanlines(Ui.InnerCut(1, 1))); hs.type = Image.Type.Tiled; hs.raycastTarget = false;
+                Ui.Crisp(hs); // 1.0.17: no moiré bands
                 // 1.0.15: no streak noise over the scan lines (two line patterns on top of each other read as interference)
             }
             // selection: a 2 px light bar along the top (so selected isn't told by colour alone)
@@ -3841,17 +3842,21 @@ namespace LevelGate.Progression
                 _handled = Ui.Handled(dotsMask, _gritSeed++, .07f).gameObject; // fingerprints / smudges, clipped to the card's cut shape
                 _handled.SetActive(false);
                 _selDots = Ui.Img(Ui.Fill(dotsMask, "SelDots"), new Color(1, 1, 1, .13f), Ui.DotGrid());
+                Ui.Crisp(_selDots); // 1.0.17: no moiré bands
                 _selDots.type = Image.Type.Tiled; _selDots.raycastTarget = false; _selDots.enabled = false;
                 _unlockDots = Ui.Img(Ui.Fill(dotsMask, "UnlockDots"), new Color(1, 1, 1, 0), Ui.DotGrid());
+                Ui.Crisp(_unlockDots); // 1.0.17: no moiré bands
                 _unlockDots.type = Image.Type.Tiled; _unlockDots.raycastTarget = false; _unlockDots.enabled = false;
                 // MW 2: unlocked in this level up — the card fills with its rank's colour and a dot matrix, and stays lit
                 _flood = Ui.Img(Ui.Fill(dotsMask, "Flood"), new Color(1, 1, 1, 0));
                 _floodDots = Ui.Img(Ui.Fill(dotsMask, "FloodDots"), new Color(1, 1, 1, 0), Ui.DotGrid());
+                Ui.Crisp(_floodDots); // 1.0.17: no moiré bands
                 _floodDots.type = Image.Type.Tiled;
                 _flood.raycastTarget = _floodDots.raycastTarget = false; _flood.enabled = _floodDots.enabled = false;
                 // MW 9: locked — a cold, scanlined hologram over the pictures
                 _holo = Ui.Fill(inner, "Holo").gameObject; // brought to the top when shown (over the pictures)
                 var hs = Ui.Img(Ui.Fill(_holo.transform, "Scan"), new Color(.7f, .86f, .95f, .2f), Ui.ChamferScanlines(Ui.InnerCut(2, 2))); hs.type = Image.Type.Tiled; hs.raycastTarget = false; // 1.0.3: in the card's cut shape
+                Ui.Crisp(hs); // 1.0.17: no moiré bands
                 // 1.0.15: clean scan lines only — the streak noise on top read as a second, broken set of lines
                 _holo.SetActive(false);
                 // picked: a bloom in the rank's colour and a light made of dots under the pictures, both drifting a little
@@ -3883,6 +3888,7 @@ namespace LevelGate.Progression
                 _gloss = Ui.Img(Ui.Rect(inner, "Gloss", new Vector2(1, .12f), new Vector2(1, .88f), new Vector2(-4, 0), new Vector2(-3, 0)), new Color(1, 1, 1, .2f), Ui.EndsFadeV()); // 1.0.9: fades at both ends
                 _gloss.raycastTarget = false; _gloss.enabled = false; Ui.Detail(_gloss, .2f * Polish.PanelLight, false);
                 _curScan = Ui.Img(Ui.Fill(inner, "Scan"), Ui.Hex(Orange, .045f), Ui.Scanlines());
+                Ui.Crisp(_curScan); // 1.0.17: no moiré bands
                 _curScan.type = Image.Type.Tiled; _curScan.raycastTarget = false; _curScan.enabled = false; Ui.Detail(_curScan, .045f);
                 // 1.0.9: ON the frame's top line (3 px under the orange frame read as a second line)
                 _cur = Ui.Img(Ui.Rect(card, "Current", new Vector2(0, 1), Vector2.one, new Vector2(Ui.Cut, -2), Vector2.zero), Ui.Hex(Orange), Polish.FadeCardLine ? Ui.RampFade() : null); // 0.9.97: fades out to the left
@@ -3931,6 +3937,7 @@ namespace LevelGate.Progression
 
                 // a level with nothing on it: a quiet line in the picture area instead of empty boxes
                 _emptyHatch = Ui.Img(Ui.Fill(pics, "Hatch"), new Color(1, 1, 1, .045f), Ui.Hatch());
+                Ui.Crisp(_emptyHatch); // 1.0.17: no moiré bands
                 _emptyHatch.type = Image.Type.Tiled; _emptyHatch.raycastTarget = false;
                 _emptyHatch.gameObject.SetActive(false);
                 _empty = Ui.Label(pics, "Empty", "NO NEW ITEMS", TCaps, Dim, TextAnchor.MiddleCenter, false, Caps);
