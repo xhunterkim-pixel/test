@@ -2132,8 +2132,17 @@ namespace LevelGate.Progression
 
             // the box: a 1 px frame, a darker inside, 6 px in from it
             var body = Ui.Rect(section, "Box", Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
-            Ui.Img(body, Ui.Hex("#2b3438", .9f));
+            var boxFrame = Ui.Img(body, Ui.Hex("#2b3438", .9f));
             var boxIn = Ui.Img(Ui.Fill(body, "In", 1), Ui.Hex("#0a0e10", .7f));
+            if (Polish.DirectionalBorders)
+            {
+                // 1.0.10: MW4's rows — the box's line lit only toward the top-right (left and bottom almost gone); the inside
+                // keeps the tone it had over the old solid frame
+                FadeEdges(boxFrame, 1, 0, EdgeLook.TopRight);
+                boxFrame.color = new Color(0, 0, 0, 0);
+                PaintFrame(boxFrame, Ui.Hex("#3a4549", .95f));
+                boxIn.color = Ui.Hex("#12181b", .95f);
+            }
             boxIn.gameObject.AddComponent<LayoutElement>().ignoreLayout = true;
             var boxLit = Ui.Img(Ui.Fill(body, "Lit", 1), new Color(1, 1, 1, 0), Ui.HorizontalFade());
             boxLit.rectTransform.localScale = new Vector3(-1, 1, 1); boxLit.raycastTarget = false;
@@ -2343,7 +2352,7 @@ namespace LevelGate.Progression
             var v = new TileView { Item = it, Rt = rt, Locked = !reached };
             v.Frame = Ui.Img(rt, Border, Ui.Chamfer(), true); // cut corners, like the game's prestige reward tiles
             v.Frame.type = Image.Type.Sliced;
-            FadeEdges(v.Frame, 1, Ui.Cut, Polish.DirectionalBorders); // 1.0.9: the fading edges follow the cut corners
+            FadeEdges(v.Frame, 1, Ui.Cut, Polish.DirectionalBorders ? EdgeLook.TopRight : EdgeLook.Ends); // 1.0.10: MW4's rows: only the top-right lit // 1.0.9: the fading edges follow the cut corners
             var inner = Ui.Fill(rt, "Inner", 1);
             v.Face = Ui.Img(inner, Face, Ui.Chamfer());
             v.Face.type = Image.Type.Sliced;
@@ -2441,7 +2450,7 @@ namespace LevelGate.Progression
             bool sel = v.Item.Tpl == _featTpl;
             if (sel && !v.WasSel && !instant) PlayShine(v.Face.rectTransform); // picked: one soft shine across it
             v.WasSel = sel;
-            if (sel && v.SelFx == null) v.SelFx = MakeSelFrame(v.Rt, 2); // on the outline itself (the sprite's line is 2 px in)
+            if (sel && v.SelFx == null) v.SelFx = MakeSelFrame(v.Rt, 2, true); // on the outline itself (the sprite's line is 2 px in)
             if (sel && v.NewTag != null && v.NewTag.transform.GetSiblingIndex() != v.NewTag.transform.parent.childCount - 1) v.NewTag.transform.SetAsLastSibling(); // the NEW tag stays on top of the border
             if (v.SelFx != null) v.SelFx.On = sel;
             // picked: the selection border takes over the outline (one border, not two); the outline itself steps back

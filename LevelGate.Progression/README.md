@@ -1,4 +1,4 @@
-# LevelGate Progression (1.0.9)
+# LevelGate Progression (1.0.10)
 
 A Call of Duty style **Progression** screen inside Tarkov's main menu. It adds a
 **PROGRESSION** button to the menu bar next to Character, Trading, Flea Market and the rest.
@@ -18,6 +18,15 @@ A Call of Duty style **Progression** screen inside Tarkov's main menu. It adds a
   - P or Esc closes the screen.
 - It works on its own and never changes LevelGate. It only **reads**
   `BepInEx\plugins\LevelGate\config\level_requirements.json`, and picks up changes to that file while the game runs.
+
+## 1.0.10
+
+- **Reward tiles and the list's category boxes** use MW4's row border (your FSS TAC90 GRIP close-up): the left and bottom
+  lines are almost invisible, the top brightens to the right and the right edge brightens upward, so only the top-right
+  corner is lit. The selected tile's outline does the same.
+- Level cards keep 1.0.9's look (edges brighten toward the two square corners).
+- Both are part of the **Card Borders Fade One Way (MW4)** switch in F12 › 5. CURRENTLY TESTING. Off = both ends fade, as
+  in 1.0.8.
 
 ## 1.0.9: borders and corners (from your close-ups)
 

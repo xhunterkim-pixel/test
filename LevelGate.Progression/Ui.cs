@@ -1393,7 +1393,8 @@ namespace LevelGate.Progression
     internal sealed class DirectionalFx : BaseMeshEffect
     {
         public float Low = .3f;
-        private static readonly List<UIVertex> _v = new List<UIVertex>();
+        /// <summary>MW4's rows / tiles: only the top-right lit (left and bottom almost gone).</summary>
+        public bool TopRight;
 
         public override void ModifyMesh(VertexHelper vh)
         {
@@ -1407,8 +1408,14 @@ namespace LevelGate.Progression
                 float u = Mathf.Clamp01((v.position.x - r.xMin) / r.width), w = Mathf.Clamp01((v.position.y - r.yMin) / r.height);
                 float dl = v.position.x - r.xMin, dr = r.xMax - v.position.x, db = v.position.y - r.yMin, dt = r.yMax - v.position.y;
                 float m = Mathf.Min(Mathf.Min(dl, dr), Mathf.Min(db, dt)), t;
-                if (m == dt) t = u; else if (m == dr) t = w; else if (m == db) t = 1 - u; else t = 1 - w;
-                v.color.a = (byte)(v.color.a * Mathf.Lerp(Low, 1f, Mathf.Pow(t, 1.25f)));
+                float k;
+                if (TopRight) k = m == dt ? Mathf.Lerp(.06f, 1f, Mathf.Pow(u, 1.5f)) : m == dr ? Mathf.Lerp(.06f, 1f, Mathf.Pow(w, 1.5f)) : .06f;
+                else
+                {
+                    if (m == dt) t = u; else if (m == dr) t = w; else if (m == db) t = 1 - u; else t = 1 - w;
+                    k = Mathf.Lerp(Low, 1f, Mathf.Pow(t, 1.25f));
+                }
+                v.color.a = (byte)(v.color.a * k);
                 vh.SetUIVertex(v, i);
             }
         }

@@ -190,11 +190,11 @@ namespace LevelGate.Progression
             return _dotStrip[f] = Sprite.Create(tex, new Rect(0, 0, w, h), new Vector2(.5f, .5f), 100, 0, SpriteMeshType.FullRect);
         }
 
-        private static SelFrame MakeSelFrame(RectTransform around, float outset)
+        private static SelFrame MakeSelFrame(RectTransform around, float outset, bool topRight = false)
         {
             var img = Ui.Img(Ui.Rect(around, "SelFrame", Vector2.zero, Vector2.one, new Vector2(-outset, -outset), new Vector2(outset, outset)), new Color(1, 1, 1, 0), Ui.DashFrame(0));
             img.type = Image.Type.Tiled; img.raycastTarget = false; img.enabled = false;
-            if (Polish.DirectionalBorders) img.gameObject.AddComponent<DirectionalFx>(); // 1.0.9: fades one way, like the card's own edges
+            if (Polish.DirectionalBorders) img.gameObject.AddComponent<DirectionalFx>().TopRight = topRight; // 1.0.9: fades one way, like the frame's own edges
             var f = new SelFrame { Img = img };
             // MW's bottom edge: a dense strip of tiny dots and dashes packed around the line, twinkling (frames cycled on the
             // shared clock) — one tiled image on its own canvas

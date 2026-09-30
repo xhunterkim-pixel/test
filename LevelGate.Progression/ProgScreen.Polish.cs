@@ -82,7 +82,7 @@ namespace LevelGate.Progression
 
         /// <summary>Frames drawn as four fading edges: the frame graphic itself stays (hover hits it) but is invisible.</summary>
         private static readonly Dictionary<Graphic, Image[]> _edges = new Dictionary<Graphic, Image[]>();
-        private static Sprite _fadeV, _fadeH, _fadeEnd, _rampUpV, _rampDownV, _rampRightH, _rampLeftH, _rampLow;
+        private static Sprite _fadeV, _fadeH, _fadeEnd, _rampUpV, _rampDownV, _rampRightH, _rampLeftH, _rampLow, _cornerUpV, _cornerRightH, _ghost;
         private static float _fadeBuiltFor = -1;
 
         private static void BuildFadeSprites()
@@ -130,11 +130,29 @@ namespace LevelGate.Progression
             _rampLeftH = Sprite.Create(left, new Rect(0, 0, n, 1), new Vector2(.5f, .5f));
             Sprite Solid(float a) { var t = new Texture2D(1, 1, TextureFormat.RGBA32, false); t.SetPixel(0, 0, new Color(1, 1, 1, a)); t.Apply(); return Sprite.Create(t, new Rect(0, 0, 1, 1), new Vector2(.5f, .5f)); }
             _rampLow = Solid(lo); // both cuts: the faint ends meet there
+            // MW4's rows / tiles: only the top-right corner is lit — the top brightens to the right, the right edge upward,
+            // the left and bottom edges almost gone
+            float lo2 = Mathf.Lerp(1f, .06f, Mathf.Clamp01(fade * 1.4f));
+            var cu = new Texture2D(1, n, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Clamp, filterMode = FilterMode.Bilinear };
+            var cr = new Texture2D(n, 1, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Clamp, filterMode = FilterMode.Bilinear };
+            for (int i = 0; i < n; i++) { float a = Mathf.Lerp(lo2, 1f, Mathf.Pow((i + .5f) / n, 1.5f)); cu.SetPixel(0, i, new Color(1, 1, 1, a)); cr.SetPixel(i, 0, new Color(1, 1, 1, a)); }
+            cu.Apply(); cr.Apply();
+            _cornerUpV = Sprite.Create(cu, new Rect(0, 0, 1, n), new Vector2(.5f, .5f));
+            _cornerRightH = Sprite.Create(cr, new Rect(0, 0, n, 1), new Vector2(.5f, .5f));
+            _ghost = Solid(lo2);
         }
 
         /// <summary>Gives a frame graphic fading edges (thickness px) — only with Polish on and Border Fade above 0.</summary>
-        private static void FadeEdges(Graphic frame, float thickness, float cut = 0, bool directional = false)
+        /// <summary>How a frame's edges fade: Ends (both ends, the panels), Corners (MW4's cards: toward the two square
+        /// corners), TopRight (MW4's rows / tiles: only the top-right lit, left and bottom almost gone).</summary>
+        internal enum EdgeLook { Ends, Corners, TopRight }
+
+        private static void FadeEdges(Graphic frame, float thickness, float cut = 0, bool directional = false) =>
+            FadeEdges(frame, thickness, cut, directional ? EdgeLook.Corners : EdgeLook.Ends);
+
+        private static void FadeEdges(Graphic frame, float thickness, float cut, EdgeLook look)
         {
+            bool directional = look == EdgeLook.Corners, tr = look == EdgeLook.TopRight;
             if (frame == null || Polish.BorderFade <= .001f) return;
             BuildFadeSprites();
             var rt = frame.rectTransform;
@@ -142,24 +160,26 @@ namespace LevelGate.Progression
             {
                 var img = Ui.Img(Ui.Rect(rt, name, aMin, aMax, oMin, oMax), frame.color, sp);
                 img.type = Image.Type.Simple; img.preserveAspect = false; img.raycastTarget = false;
+                img.gameObject.AddComponent<LayoutElement>().ignoreLayout = true; // (a frame on a layout group: not laid out)
                 return img;
             }
             // cut: frames with the cards' / tiles' cut corners (top-left, bottom-right) — the edges stop where the cut starts and
             // a diagonal of the same thickness joins them (1.0.9; the four straight edges squared the corners off)
             var list = new List<Image>
             {
-                Edge("EdgeL", new Vector2(0, 0), new Vector2(0, 1), Vector2.zero, new Vector2(thickness, -cut), directional ? _rampDownV : _fadeV),
-                Edge("EdgeR", new Vector2(1, 0), new Vector2(1, 1), new Vector2(-thickness, cut), Vector2.zero, directional ? _rampUpV : _fadeV),
-                Edge("EdgeT", new Vector2(0, 1), new Vector2(1, 1), new Vector2(cut, -thickness), Vector2.zero, directional ? _rampRightH : _fadeH),
-                Edge("EdgeB", new Vector2(0, 0), new Vector2(1, 0), Vector2.zero, new Vector2(-cut, thickness), directional ? _rampLeftH : _fadeH),
+                Edge("EdgeL", new Vector2(0, 0), new Vector2(0, 1), Vector2.zero, new Vector2(thickness, -cut), tr ? _ghost : directional ? _rampDownV : _fadeV),
+                Edge("EdgeR", new Vector2(1, 0), new Vector2(1, 1), new Vector2(-thickness, cut), Vector2.zero, tr ? _cornerUpV : directional ? _rampUpV : _fadeV),
+                Edge("EdgeT", new Vector2(0, 1), new Vector2(1, 1), new Vector2(cut, -thickness), Vector2.zero, tr ? _cornerRightH : directional ? _rampRightH : _fadeH),
+                Edge("EdgeB", new Vector2(0, 0), new Vector2(1, 0), Vector2.zero, new Vector2(-cut, thickness), tr ? _ghost : directional ? _rampLeftH : _fadeH),
             };
             if (cut > 0)
             {
                 float len = cut * 1.41421f + thickness * .8f, inset = cut / 2 + thickness * .3536f; // centred half a line in from the cut
-                foreach (var (anchor, pos, sp) in new[] { (new Vector2(0, 1), new Vector2(inset, -inset), directional ? _rampLow : _fadeEnd), (new Vector2(1, 0), new Vector2(-inset, inset), directional ? _rampLow : _fadeEnd) })
+                foreach (var (anchor, pos, sp) in new[] { (new Vector2(0, 1), new Vector2(inset, -inset), tr ? _ghost : directional ? _rampLow : _fadeEnd), (new Vector2(1, 0), new Vector2(-inset, inset), tr ? _ghost : directional ? _rampLow : _fadeEnd) })
                 {
                     var d = Ui.Box(rt, "EdgeCut", anchor, pos, new Vector2(len, thickness));
                     d.localEulerAngles = new Vector3(0, 0, 45);
+                    d.gameObject.AddComponent<LayoutElement>().ignoreLayout = true;
                     var img = Ui.Img(d, frame.color, sp);
                     img.type = Image.Type.Simple; img.raycastTarget = false;
                     list.Add(img);
